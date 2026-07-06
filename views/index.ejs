@@ -8,17 +8,23 @@
 </head>
 <body>
   <nav>
-    <h1 style="display:flex;flex-direction:column;align-items:center;line-height:1.1">SIRENA <span style="font-family:'Segoe Script','Brush Script MT',cursive;font-weight:400;font-size:1rem;text-transform:none">DE JUAN</span></h1>
-    <div class="tabs">
-      <button class="tab" data-tab="ingresos">Ingresos</button>
-      <button class="tab" data-tab="salidas">Salidas</button>
-      <button class="tab" data-tab="ventas">Ventas</button>
-      <button class="tab active" data-tab="almacenes">Almacenes</button>
-      <button class="tab" data-tab="stocks">Stocks</button>
-      <button class="tab" data-tab="reportes">Reportes</button>
-      <button class="tab" data-tab="precios">Precios</button>
-      <button class="tab" data-tab="barra">Barra</button>
-      <button class="tab" data-tab="cocina">Cocina</button>
+    <div class="nav-left">
+      <h1 class="nav-logo">SIRENA <span class="nav-logo-sub">DE JUAN</span></h1>
+      <div class="tabs">
+        <button class="tab" data-tab="ingresos">Ingresos</button>
+        <button class="tab" data-tab="salidas">Salidas</button>
+        <button class="tab" data-tab="ventas">Ventas</button>
+        <button class="tab active" data-tab="almacenes">Almacenes</button>
+        <button class="tab" data-tab="stocks">Stocks</button>
+        <button class="tab" data-tab="reportes">Reportes</button>
+        <button class="tab" data-tab="precios">Precios</button>
+        <button class="tab" data-tab="barra">Barra</button>
+        <button class="tab" data-tab="cocina">Cocina</button>
+      </div>
+    </div>
+    <div id="user-info" class="user-info" style="display:none">
+      <span id="user-email" class="user-email"></span>
+      <button id="btn-salir" class="btn-salir">Salir</button>
     </div>
   </nav>
 

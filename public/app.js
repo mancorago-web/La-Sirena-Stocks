@@ -28,13 +28,22 @@ function getInventario(fecha) {
 }
 
 firebase.auth().onAuthStateChanged(user => {
+  const info = document.getElementById('user-info');
+  const email = document.getElementById('user-email');
   if (!user) {
     window.location.href = '/login.html';
     return;
   }
+  if (info) info.style.display = '';
+  if (email) email.textContent = user.email;
   authReady = true;
   authResolve.forEach(r => r());
   authResolve.length = 0;
+});
+document.addEventListener('click', e => {
+  if (e.target.id === 'btn-salir') {
+    firebase.auth().signOut();
+  }
 });
 
 document.querySelectorAll('.tab').forEach(tab => {
