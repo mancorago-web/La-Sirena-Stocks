@@ -479,7 +479,8 @@ function verDetallesSalidas() {
       html += '<table><thead><tr><th>Item</th><th>Salida</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
       itemsConSalida.forEach(i => {
         const t = i.updated_at ? new Date(i.updated_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
-        html += '<tr><td>' + i.nombre + '</td><td>' + (i.salida_almacen || 0) + '</td><td>' + (i.saved_by || '-') + '</td><td>' + t + '</td></tr>';
+        const u = DISPLAY_NAMES[i.saved_by] || i.saved_by || '-';
+        html += '<tr><td>' + i.nombre + '</td><td>' + (i.salida_almacen || 0) + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
       });
       html += '</tbody></table></div></div>';
     });
@@ -508,7 +509,8 @@ function verDetallesVentas() {
       html += '<table><thead><tr><th>Item</th><th>Total Ventas</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
       itemsConVentas.forEach(i => {
         const t = i.updated_at ? new Date(i.updated_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
-        html += '<tr><td>' + i.nombre + '</td><td>' + (i.total_ventas || 0) + '</td><td>' + (i.saved_by || '-') + '</td><td>' + t + '</td></tr>';
+        const u = DISPLAY_NAMES[i.saved_by] || i.saved_by || '-';
+        html += '<tr><td>' + i.nombre + '</td><td>' + (i.total_ventas || 0) + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
       });
       html += '</tbody></table></div></div>';
     });
@@ -780,7 +782,8 @@ function verDetallesIngresos() {
       html += '<table><thead><tr><th>Item</th><th>Ingreso</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
       itemsConIngreso.forEach(i => {
         const t = i.updated_at ? new Date(i.updated_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
-        html += '<tr><td>' + i.nombre + '</td><td>' + (i.stock_ingreso || 0) + '</td><td>' + (i.saved_by || '-') + '</td><td>' + t + '</td></tr>';
+        const u = DISPLAY_NAMES[i.saved_by] || i.saved_by || '-';
+        html += '<tr><td>' + i.nombre + '</td><td>' + (i.stock_ingreso || 0) + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
       });
       html += '</tbody></table></div></div>';
     });
