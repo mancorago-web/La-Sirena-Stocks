@@ -100,9 +100,17 @@ function col(name) { return db.collection(name); }
 
 function docId(name, ...parts) { return parts.join('_'); }
 
+// Simple in-memory cache (per Vercel instance, better than nothing)
+const _cache = {};
+function cached(key, ttlMs, fetchFn) {
+  const now = Date.now();
+  if (_cache[key] && now - _cache[key].ts < ttlMs) return _cache[key].data;
+  return fetchFn().then(data => { _cache[key] = { data, ts: now }; return data; });
+}
+
 // --- ALMACENES ---
 app.get('/api/almacenes', async (req, res) => {
-  const snap = await col('almacenes').orderBy('orden').get();
+  const snap = await cached('almacenes', 60000, () => col('almacenes').orderBy('orden').get());
   const almacenes = snap.docs.map(d => ({ id: Number(d.id), ...d.data() }));
   res.json(almacenes);
 });
@@ -111,8 +119,8 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
   const fecha = req.query.fecha;
   if (!fecha) return res.json([]);
   const [almsSnap, allItemsSnap] = await Promise.all([
-    col('almacenes').orderBy('orden').get(),
-    col('inventario').get(),
+    cached('almacenes', 60000, () => col('almacenes').orderBy('orden').get()),
+    cached('inventario', 60000, () => col('inventario').get()),
   ]);
   const itemsByAl = {};
   allItemsSnap.docs.forEach(d => {
@@ -262,8 +270,8 @@ app.put('/api/inventario/minimos', async (req, res) => {
 app.get('/api/precios', async (req, res) => {
   const fecha = req.query.fecha;
   const [almsSnap, allInvSnap, allDiasSnap] = await Promise.all([
-    col('almacenes').orderBy('orden').get(),
-    col('inventario').get(),
+    cached('almacenes', 60000, () => col('almacenes').orderBy('orden').get()),
+    cached('inventario', 60000, () => col('inventario').get()),
     fecha ? col('inventario_diario').where('fecha', '==', fecha).get() : { docs: [] },
   ]);
   const invByAl = {};
@@ -482,8 +490,8 @@ app.get('/api/reportes/diferencias', async (req, res) => {
   const fecha = req.query.fecha;
   if (!fecha) return res.json([]);
   const [almsSnap, allInvSnap, allDiasSnap] = await Promise.all([
-    col('almacenes').orderBy('orden').get(),
-    col('inventario').get(),
+    cached('almacenes', 60000, () => col('almacenes').orderBy('orden').get()),
+    cached('inventario', 60000, () => col('inventario').get()),
     col('inventario_diario').where('fecha', '==', fecha).get(),
   ]);
   const invByAl = {};

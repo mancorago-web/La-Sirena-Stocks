@@ -14,6 +14,19 @@ function todayStr() {
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
+// Shared cache for con-inventario data (reused across tabs)
+let _invCache = { fecha: null, data: null, pending: null };
+function getInventario(fecha) {
+  if (_invCache.fecha === fecha && _invCache.data) return Promise.resolve(_invCache.data);
+  if (_invCache.fecha === fecha && _invCache.pending) return _invCache.pending;
+  const p = getInventario(fecha).then(data => {
+    _invCache = { fecha, data, pending: null };
+    return data;
+  }).catch(err => { _invCache = { fecha: null, data: null, pending: null }; throw err; });
+  _invCache.pending = p;
+  return p;
+}
+
 firebase.auth().onAuthStateChanged(user => {
   if (!user) {
     window.location.href = '/login.html';
@@ -152,8 +165,7 @@ function cargarAlmacenes(fecha) {
     if (item) openIds.push(item.dataset.almacenId);
   });
   if (!fecha) fecha = document.getElementById('fecha-almacenes').value;
-  const url = '/api/almacenes/con-inventario' + (fecha ? '?fecha=' + fecha : '');
-  api('GET', url).then(data => {
+  getInventario(fecha).then(data => {
     const categoriasPorAlmacen = {
       1: [
         { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
@@ -265,8 +277,7 @@ async function guardarItemAlmacen() {
 function cargarSalidas(fecha) {
   if (!fecha) fecha = document.getElementById('fecha-salidas').value;
   if (!fecha) return;
-  const url = '/api/almacenes/con-inventario' + (fecha ? '?fecha=' + fecha : '');
-  api('GET', url).then(data => {
+  getInventario(fecha).then(data => {
     data = data.filter(a => a.id === 4 || a.id === 8);
     const categoriasPorAlmacen = {};
     const defaultCategorias = [
@@ -386,7 +397,7 @@ function guardarSalidas() {
 function verDetallesSalidas() {
   const fecha = document.getElementById('fecha-salidas').value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
-  api('GET', '/api/almacenes/con-inventario?fecha=' + fecha).then(data => {
+  getInventario(fecha).then(data => {
     data = data.filter(a => a.id === 4 || a.id === 8);
     let html = '<h3>Detalle de Salidas — ' + fecha + '</h3>';
     let totalItems = 0;
@@ -414,7 +425,7 @@ function verDetallesSalidas() {
 function verDetallesVentas() {
   const fecha = document.getElementById('fecha-ventas').value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
-  api('GET', '/api/almacenes/con-inventario?fecha=' + fecha).then(data => {
+  getInventario(fecha).then(data => {
     data = data.filter(a => a.id !== 3 && a.id !== 9 && a.id !== 16);
     let html = '<h3>Detalle de Ventas — ' + fecha + '</h3>';
     let totalItems = 0;
@@ -441,8 +452,7 @@ function verDetallesVentas() {
 
 function cargarVentas(fecha) {
   if (!fecha) fecha = document.getElementById('fecha-ventas').value;
-  const url = '/api/almacenes/con-inventario' + (fecha ? '?fecha=' + fecha : '');
-  api('GET', url).then(data => {
+  getInventario(fecha).then(data => {
     data = data.filter(a => a.id !== 3 && a.id !== 9 && a.id !== 16);
     const categoriasPorAlmacen = {};
     const defaultCategorias = [
@@ -564,8 +574,7 @@ function guardarVentas() {
 
 function cargarIngresos(fecha) {
   if (!fecha) fecha = document.getElementById('fecha-ingresos').value;
-  const url = '/api/almacenes/con-inventario' + (fecha ? '?fecha=' + fecha : '');
-  api('GET', url).then(data => {
+  getInventario(fecha).then(data => {
     data = data.filter(a => a.id !== 3 && a.id !== 9 && a.id !== 16);
     const defaultCategorias = [
       { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
@@ -687,7 +696,7 @@ function guardarIngresos() {
 function verDetallesIngresos() {
   const fecha = document.getElementById('fecha-ingresos').value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
-  api('GET', '/api/almacenes/con-inventario?fecha=' + fecha).then(data => {
+  getInventario(fecha).then(data => {
     data = data.filter(a => a.id !== 3 && a.id !== 9 && a.id !== 16);
     let html = '<h3>Detalle de Ingresos — ' + fecha + '</h3>';
     let totalItems = 0;
@@ -804,7 +813,7 @@ function guardarMinimosStocks() {
 function verReporteStocksBajos() {
   const fecha = document.getElementById('fecha-stocks').value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
-  api('GET', '/api/almacenes/con-inventario?fecha=' + fecha).then(data => {
+  getInventario(fecha).then(data => {
     data = data.filter(a => a.id === 4 || a.id === 8);
     let html = '<h3>Productos con Stock Bajo — ' + fecha + '</h3>';
     let totalItems = 0;
@@ -835,8 +844,7 @@ function verReporteStocksBajos() {
 function cargarStocks() {
   const fecha = document.getElementById('fecha-stocks').value;
   if (!fecha) return;
-  const url = '/api/almacenes/con-inventario' + (fecha ? '?fecha=' + fecha : '');
-  api('GET', url).then(data => {
+  getInventario(fecha).then(data => {
     data = data.filter(a => a.id === 4 || a.id === 8);
     const categoriasPorAlmacen = {
       1: [
@@ -918,7 +926,7 @@ function cargarStocks() {
     container.innerHTML = html || '<p>Sin datos para esta fecha.</p>';
 
     // Botellas Abiertas: items with decimal stock_cierre
-    api('GET', '/api/almacenes/con-inventario?fecha=' + fecha).then(fullData => {
+    getInventario(fecha).then(fullData => {
       fullData = fullData.filter(a => a.id === 1 || a.id === 5 || a.id === 6);
       const botellas = [];
       fullData.forEach(a => {
