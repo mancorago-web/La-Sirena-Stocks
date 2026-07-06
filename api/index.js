@@ -90,22 +90,32 @@ app.get('/api/almacenes', async (req, res) => {
 app.get('/api/almacenes/con-inventario', async (req, res) => {
   const fecha = req.query.fecha;
   if (!fecha) return res.json([]);
-  const almsSnap = await col('almacenes').orderBy('orden').get();
-  const result = [];
-  for (const alDoc of almsSnap.docs) {
+  // Fetch all data in parallel (3 queries total instead of N+1)
+  const [almsSnap, allItemsSnap, allDiasSnap] = await Promise.all([
+    col('almacenes').orderBy('orden').get(),
+    col('inventario').get(),
+    col('inventario_diario').where('fecha', '==', fecha).get(),
+  ]);
+  // Index by almacen_id
+  const itemsByAl = {};
+  allItemsSnap.docs.forEach(d => {
+    const inv = d.data();
+    const alId = inv.almacen_id;
+    if (!itemsByAl[alId]) itemsByAl[alId] = [];
+    itemsByAl[alId].push(inv);
+  });
+  const diasByAl = {};
+  allDiasSnap.docs.forEach(d => {
+    const dd = d.data();
+    const alId = dd.almacen_id;
+    if (!diasByAl[alId]) diasByAl[alId] = {};
+    diasByAl[alId][dd.item_id] = dd;
+  });
+  const result = almsSnap.docs.map(alDoc => {
     const alId = Number(alDoc.id);
-    const itemsSnap = await col('inventario').where('almacen_id', '==', alId).get();
-    const diasSnap = await col('inventario_diario')
-      .where('fecha', '==', fecha)
-      .where('almacen_id', '==', alId)
-      .get();
-    const diaMap = {};
-    diasSnap.docs.forEach(d => {
-      const dData = d.data();
-      diaMap[dData.item_id] = dData;
-    });
-    const items = itemsSnap.docs.map(d => {
-      const inv = d.data();
+    const invItems = itemsByAl[alId] || [];
+    const diaMap = diasByAl[alId] || {};
+    const items = invItems.map(inv => {
       const dia = diaMap[inv.item_id] || {};
       const apertura = dia.stock_apertura ?? inv.stock_apertura ?? 0;
       const ingreso = dia.stock_ingreso ?? 0;
@@ -116,7 +126,7 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
       return {
         id: inv.item_id,
         nombre: inv.nombre,
-        categoria: inv.categoria || '',
+        categoria: '',
         stock_apertura: apertura,
         stock_ingreso: ingreso,
         salida_almacen: salida,
@@ -127,8 +137,8 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
         fecha_apertura: inv.fecha_apertura || '',
       };
     });
-    result.push({ id: alId, nombre: alDoc.data().nombre, items });
-  }
+    return { id: alId, nombre: alDoc.data().nombre, items };
+  });
   res.json(result);
 });
 
@@ -230,36 +240,39 @@ app.put('/api/inventario/minimos', async (req, res) => {
 // --- PRECIOS ---
 app.get('/api/precios', async (req, res) => {
   const fecha = req.query.fecha;
-  const almsSnap = await col('almacenes').orderBy('orden').get();
-  const result = [];
-  for (const alDoc of almsSnap.docs) {
+  const [almsSnap, allInvSnap, allDiasSnap] = await Promise.all([
+    col('almacenes').orderBy('orden').get(),
+    col('inventario').get(),
+    fecha ? col('inventario_diario').where('fecha', '==', fecha).get() : { docs: [] },
+  ]);
+  const invByAl = {};
+  allInvSnap.docs.forEach(d => {
+    const inv = d.data();
+    if (!invByAl[inv.almacen_id]) invByAl[inv.almacen_id] = [];
+    invByAl[inv.almacen_id].push(inv);
+  });
+  const diasByAl = {};
+  allDiasSnap.docs.forEach(d => {
+    const dd = d.data();
+    if (!diasByAl[dd.almacen_id]) diasByAl[dd.almacen_id] = {};
+    diasByAl[dd.almacen_id][dd.item_id] = dd;
+  });
+  const result = almsSnap.docs.map(alDoc => {
     const alId = Number(alDoc.id);
-    const invSnap = await col('inventario').where('almacen_id', '==', alId).get();
-    const items = [];
-    let stockMap = {};
-    if (fecha) {
-      const diaSnap = await col('inventario_diario')
-        .where('fecha', '==', fecha)
-        .where('almacen_id', '==', alId)
-        .get();
-      diaSnap.docs.forEach(d => {
-        const d2 = d.data();
-        stockMap[d2.item_id] = d2;
-      });
-    }
-    for (const d of invSnap.docs) {
-      const inv = d.data();
+    const invItems = invByAl[alId] || [];
+    const stockMap = diasByAl[alId] || {};
+    const items = invItems.map(inv => {
       const dia = stockMap[inv.item_id] || {};
       const cierre = (dia.stock_apertura ?? inv.stock_apertura ?? 0) + (dia.stock_ingreso ?? 0) - (dia.salida_almacen ?? 0) - (dia.total_ventas ?? 0) - (dia.falta_almacen ?? 0);
-      items.push({
+      return {
         id: inv.item_id,
         nombre: inv.nombre,
         precio: inv.precio || 0,
         stock_cierre: Math.round(cierre * 100) / 100,
-      });
-    }
-    result.push({ id: alId, nombre: alDoc.data().nombre, items });
-  }
+      };
+    });
+    return { id: alId, nombre: alDoc.data().nombre, items };
+  });
   res.json(result);
 });
 
@@ -447,19 +460,28 @@ app.delete('/api/barra/precios/:id', async (req, res) => {
 app.get('/api/reportes/diferencias', async (req, res) => {
   const fecha = req.query.fecha;
   if (!fecha) return res.json([]);
-  const almsSnap = await col('almacenes').orderBy('orden').get();
+  const [almsSnap, allInvSnap, allDiasSnap] = await Promise.all([
+    col('almacenes').orderBy('orden').get(),
+    col('inventario').get(),
+    col('inventario_diario').where('fecha', '==', fecha).get(),
+  ]);
+  const invByAl = {};
+  allInvSnap.docs.forEach(d => {
+    const inv = d.data();
+    if (!invByAl[inv.almacen_id]) invByAl[inv.almacen_id] = [];
+    invByAl[inv.almacen_id].push(inv);
+  });
+  const diasByAl = {};
+  allDiasSnap.docs.forEach(d => {
+    const dd = d.data();
+    if (!diasByAl[dd.almacen_id]) diasByAl[dd.almacen_id] = {};
+    diasByAl[dd.almacen_id][dd.item_id] = dd;
+  });
   const result = [];
   for (const alDoc of almsSnap.docs) {
     const alId = Number(alDoc.id);
-    const invSnap = await col('inventario').where('almacen_id', '==', alId).get();
-    const diaSnap = await col('inventario_diario')
-      .where('fecha', '==', fecha)
-      .where('almacen_id', '==', alId)
-      .get();
-    const diaMap = {};
-    diaSnap.docs.forEach(d => { const dd = d.data(); diaMap[dd.item_id] = dd; });
-    for (const d of invSnap.docs) {
-      const inv = d.data();
+    const diaMap = diasByAl[alId] || {};
+    for (const inv of (invByAl[alId] || [])) {
       const dia = diaMap[inv.item_id] || {};
       const apertura = dia.stock_apertura ?? 0;
       const ingreso = dia.stock_ingreso ?? 0;
