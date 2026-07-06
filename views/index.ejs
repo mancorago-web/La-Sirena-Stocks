@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sirena - Control de Inventario</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav>
+    <h1 style="display:flex;flex-direction:column;align-items:center;line-height:1.1">SIRENA <span style="font-family:'Segoe Script','Brush Script MT',cursive;font-weight:400;font-size:1rem;text-transform:none">DE JUAN</span></h1>
+    <div class="tabs">
+      <button class="tab" data-tab="ingresos">Ingresos</button>
+      <button class="tab" data-tab="salidas">Salidas</button>
+      <button class="tab" data-tab="ventas">Ventas</button>
+      <button class="tab active" data-tab="almacenes">Almacenes</button>
+      <button class="tab" data-tab="stocks">Stocks</button>
+      <button class="tab" data-tab="reportes">Reportes</button>
+      <button class="tab" data-tab="precios">Precios</button>
+      <button class="tab" data-tab="barra">Barra</button>
+      <button class="tab" data-tab="cocina">Cocina</button>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div id="tab-almacenes" class="tab-content active">
+      <div class="header-actions">
+        <h2>Almacenes</h2>
+        <div class="controles-dia">
+          <label>Fecha: <input type="date" id="fecha-almacenes" onchange="cargarAlmacenes(this.value)"></label>
+          <input type="text" id="buscar-item" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-almacenes')">
+          <button class="btn-guardar-dia" onclick="guardarDia()">💾 GUARDAR</button>
+          <button class="btn-detalles" onclick="exportarExcel()">Exportar</button>
+        </div>
+      </div>
+      <div id="accordion-almacenes"></div>
+    </div>
+
+    <div id="tab-ingresos" class="tab-content">
+      <div class="header-actions">
+        <h2>Ingresos</h2>
+        <div class="controles-dia">
+          <label>Fecha: <input type="date" id="fecha-ingresos" onchange="cargarIngresos(this.value)"></label>
+          <input type="text" id="buscar-ingreso" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-ingresos')">
+          <button class="btn-guardar-dia" onclick="guardarIngresos()">💾 GUARDAR INGRESOS</button>
+          <button class="btn-detalles" onclick="verDetallesIngresos()">📋 DETALLES</button>
+        </div>
+      </div>
+      <div id="accordion-ingresos"></div>
+    </div>
+
+    <div id="tab-salidas" class="tab-content">
+      <div class="header-actions">
+        <h2>Salidas</h2>
+        <div class="controles-dia">
+          <label>Fecha: <input type="date" id="fecha-salidas" onchange="cargarSalidas(this.value)"></label>
+          <input type="text" id="buscar-salida" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-salidas')">
+          <button class="btn-guardar-dia" onclick="guardarSalidas()">💾 GUARDAR SALIDAS</button>
+          <button class="btn-detalles" onclick="verDetallesSalidas()">📋 DETALLES</button>
+        </div>
+      </div>
+      <div id="accordion-salidas"></div>
+    </div>
+
+    <div id="tab-ventas" class="tab-content">
+      <div class="header-actions">
+        <h2>Ventas</h2>
+        <div class="controles-dia">
+          <label>Fecha: <input type="date" id="fecha-ventas" onchange="cargarVentas(this.value)"></label>
+          <input type="text" id="buscar-venta" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-ventas')">
+          <button class="btn-guardar-dia" onclick="guardarVentas()">💾 GUARDAR VENTAS</button>
+          <button class="btn-detalles" onclick="verDetallesVentas()">📋 DETALLES</button>
+        </div>
+      </div>
+      <div id="accordion-ventas"></div>
+    </div>
+
+    <div id="tab-stocks" class="tab-content">
+      <div class="header-actions">
+        <h2>Stocks</h2>
+        <div class="controles-dia">
+          <label>Fecha: <input type="date" id="fecha-stocks" onchange="cargarStocks()"></label>
+          <input type="text" id="buscar-stock" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-stocks')">
+          <button class="btn-guardar-dia" onclick="guardarMinimosStocks()">💾 GUARDAR MINIMOS</button>
+          <button class="btn-detalles" onclick="verReporteStocksBajos()">📋 REPORTES</button>
+        </div>
+      </div>
+      <div id="accordion-stocks"></div>
+      <div class="accordion-item" style="margin-top:1.5rem">
+        <div class="accordion-header" onclick="toggleAcordeon(this)">
+          <span class="accordion-title">🍾 BOTELLAS ABIERTAS</span>
+          <span class="accordion-arrow">▶</span>
+        </div>
+        <div class="accordion-body">
+          <div id="botellas-container"><p>Sin registros aún.</p></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-reportes" class="tab-content">
+      <div class="header-actions">
+        <h2>Reportes</h2>
+        <div class="controles-dia">
+          <label>Fecha: <input type="date" id="reporte-fecha-dif" onchange="cargarReporteDiferencias()"></label>
+          <button onclick="exportarDiferencias()">Exportar</button>
+        </div>
+      </div>
+      <div id="reporte-diferencias"></div>
+    </div>
+
+    <div id="tab-precios" class="tab-content">
+      <div class="header-actions">
+        <h2>Precios</h2>
+        <div class="controles-dia">
+          <input type="text" id="buscar-precio-item" placeholder="Buscar item..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:250px;" oninput="buscarEnTabla(this.value, 'accordion-precios')">
+          <button class="btn-guardar-dia" onclick="guardarPreciosAlmacen()">💾 GUARDAR PRECIOS</button>
+          <button class="btn-detalles" onclick="exportarPrecios()">Exportar</button>
+        </div>
+      </div>
+      <div id="accordion-precios"></div>
+    </div>
+
+    <div id="tab-barra" class="tab-content">
+      <div class="sub-tabs">
+        <button class="sub-tab active" data-subtab="recetas" onclick="cambiarSubTab('recetas')">📋 RECETAS</button>
+        <button class="sub-tab" data-subtab="stock" onclick="cambiarSubTab('stock')">🍷 STOCK</button>
+        <button class="sub-tab" data-subtab="basedatos" onclick="cambiarSubTab('basedatos')">📦 BASE DE DATOS</button>
+      </div>
+
+      <div id="sub-barra-recetas" class="sub-tab-content active">
+        <div class="header-actions">
+          <h2>Recetas</h2>
+          <div class="controles-dia" style="display:flex;align-items:center;gap:0.5rem;">
+            <input type="text" id="buscar-receta" placeholder="Buscar receta..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:250px;" oninput="buscarReceta(this.value)">
+            <button onclick="exportarRecetas()">EXPORTAR</button>
+          </div>
+        </div>
+        <div id="recetas-container"></div>
+      </div>
+
+      <div id="sub-barra-stock" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>Stock Barra</h2>
+          <div class="controles-dia" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+            <input type="text" id="buscar-stock-barra" placeholder="Buscar en stock..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:250px;" oninput="buscarTablaBarra(this.value, 'barra-stock-container', 'tr[data-stock-id]')">
+            <input type="text" id="nuevo-stock-input" placeholder="Ingrediente" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:180px;">
+            <input type="number" id="nuevo-stock-cant" placeholder="Cant." step="0.01" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:90px;">
+            <input type="text" id="nuevo-stock-uni" placeholder="Unidad" value="ml" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:80px;">
+            <button onclick="agregarStockBarra()">AGREGAR ITEM</button>
+          </div>
+        </div>
+        <div id="barra-stock-container"></div>
+      </div>
+
+      <div id="sub-barra-basedatos" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>Base de Datos</h2>
+          <div class="controles-dia">
+            <input type="text" id="buscar-precios" placeholder="Buscar en base de datos..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:250px;" oninput="buscarTablaBarra(this.value, 'barra-precios-container', 'tr[data-precio-id]')">
+          </div>
+        </div>
+        <div id="barra-precios-container"></div>
+      </div>
+    </div>
+
+    <div id="tab-cocina" class="tab-content">
+      <div class="sub-tabs">
+        <button class="sub-tab active" data-subtab="recetas" onclick="cambiarSubTab('recetas','cocina')">📋 RECETAS</button>
+        <button class="sub-tab" data-subtab="stock" onclick="cambiarSubTab('stock','cocina')">🍷 STOCK</button>
+        <button class="sub-tab" data-subtab="basedatos" onclick="cambiarSubTab('basedatos','cocina')">📦 BASE DE DATOS</button>
+      </div>
+
+      <div id="sub-cocina-recetas" class="sub-tab-content active">
+        <div class="header-actions">
+          <h2>Recetas</h2>
+          <div class="controles-dia">
+            <button class="btn-guardar-dia" onclick="alert('Próximamente')">➕ AGREGAR RECETA</button>
+          </div>
+        </div>
+        <div id="cocina-recetas-container"><p>Sin recetas aún.</p></div>
+      </div>
+
+      <div id="sub-cocina-stock" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>Stock Cocina</h2>
+          <div class="controles-dia">
+            <input type="text" id="nuevo-cocina-stock-input" placeholder="Nuevo ingrediente..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:200px;">
+            <input type="number" id="nuevo-cocina-stock-cant" placeholder="Cantidad" step="0.01" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:100px;">
+            <select id="nuevo-cocina-stock-uni" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
+              <option value="unidad">unidad</option>
+              <option value="kg">kg</option>
+              <option value="lt">lt</option>
+              <option value="gr">gr</option>
+              <option value="ml">ml</option>
+              <option value="und">und</option>
+            </select>
+            <button class="btn-guardar-dia" onclick="alert('Próximamente')">➕ AGREGAR</button>
+          </div>
+        </div>
+        <div id="cocina-stock-container"><p>Sin stock aún.</p></div>
+      </div>
+
+      <div id="sub-cocina-basedatos" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>Base de Datos</h2>
+          <div class="controles-dia">
+            <input type="text" id="nuevo-cocina-precio-input" placeholder="Nuevo ingrediente..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:200px;">
+            <select id="nuevo-cocina-precio-uni" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
+              <option value="unidad">unidad</option>
+              <option value="kg">kg</option>
+              <option value="lt">lt</option>
+              <option value="gr">gr</option>
+              <option value="und">und</option>
+            </select>
+            <input type="number" id="nuevo-cocina-precio-precio" placeholder="Precio" step="0.01" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:100px;">
+            <button class="btn-guardar-dia" onclick="alert('Próximamente')">➕ AGREGAR</button>
+          </div>
+        </div>
+        <div id="cocina-precios-container"><p>Sin datos aún.</p></div>
+      </div>
+    </div>
+
+    <div id="modal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="cerrarModal()">&times;</span>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyArHIucq8Asn3dF8egTor_p3EOmxVWA9Bs",
+      authDomain: "la-sirena-stocks.firebaseapp.com",
+      projectId: "la-sirena-stocks",
+      storageBucket: "la-sirena-stocks.firebasestorage.app",
+      messagingSenderId: "511759764045",
+      appId: "1:511759764045:web:2ec3009aa950b55dc56a04",
+      measurementId: "G-SEB0S1G3FF"
+    };
+    firebase.initializeApp(firebaseConfig);
+  </script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

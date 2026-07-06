@@ -1,0 +1,8 @@
+node_modules/
+sirena.db
+.env
+*.log
+.DS_Store
+service-account.json
+_*.js
+check_*_temp.js

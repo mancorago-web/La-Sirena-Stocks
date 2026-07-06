@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SIRENA - Login</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .login-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 2.5rem 2rem;
+      width: 380px;
+      max-width: 90vw;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      text-align: center;
+    }
+    .login-card h1 {
+      font-size: 2.2rem;
+      letter-spacing: 4px;
+      color: #1a1a2e;
+      margin-bottom: 0;
+    }
+    .login-card .subtitle {
+      font-family: 'Segoe Script', 'Brush Script MT', cursive;
+      font-size: 1.2rem;
+      color: #888;
+      margin-bottom: 1.5rem;
+    }
+    .login-card input {
+      width: 100%;
+      padding: 0.8rem 1rem;
+      margin-bottom: 0.8rem;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border 0.2s;
+    }
+    .login-card input:focus { border-color: #0f3460; }
+    .login-card button {
+      width: 100%;
+      padding: 0.8rem;
+      background: #0f3460;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-top: 0.5rem;
+    }
+    .login-card button:hover { background: #1a5276; }
+    .login-card .error { color: #e74c3c; font-size: 0.85rem; margin-top: 0.5rem; min-height: 1.2rem; }
+    .login-card .toggle-link {
+      display: block;
+      margin-top: 1rem;
+      color: #0f3460;
+      font-size: 0.85rem;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .login-card .toggle-link:hover { color: #1a5276; }
+    .login-card .loader { display: none; margin: 0.5rem auto; border: 3px solid #f3f3f3; border-top: 3px solid #0f3460; border-radius: 50%; width: 24px; height: 24px; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .msg { margin-top: 1rem; font-size: 0.85rem; }
+    .msg.ok { color: #27ae60; }
+    .msg.err { color: #e74c3c; }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <h1>SIRENA</h1>
+    <div class="subtitle">DE JUAN</div>
+    <div id="login-form">
+      <input type="email" id="email" placeholder="Correo electrónico" autocomplete="email">
+      <input type="password" id="password" placeholder="Contraseña" autocomplete="current-password">
+      <button onclick="iniciarSesion()">INICIAR SESIÓN</button>
+      <div class="error" id="login-error"></div>
+      <div class="loader" id="login-loader"></div>
+      <span class="toggle-link" onclick="mostrarRegistro()">¿No tienes cuenta? Regístrate</span>
+    </div>
+    <div id="register-form" style="display:none">
+      <input type="email" id="reg-email" placeholder="Correo electrónico" autocomplete="email">
+      <input type="password" id="reg-password" placeholder="Contraseña (mín. 6 caracteres)" autocomplete="new-password">
+      <button onclick="registrar()">REGISTRARSE</button>
+      <div class="error" id="reg-error"></div>
+      <div class="loader" id="reg-loader"></div>
+      <span class="toggle-link" onclick="mostrarLogin()">Ya tengo cuenta</span>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyArHIucq8Asn3dF8egTor_p3EOmxVWA9Bs",
+      authDomain: "la-sirena-stocks.firebaseapp.com",
+      projectId: "la-sirena-stocks",
+      storageBucket: "la-sirena-stocks.firebasestorage.app",
+      messagingSenderId: "511759764045",
+      appId: "1:511759764045:web:2ec3009aa950b55dc56a04",
+      measurementId: "G-SEB0S1G3FF"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+
+    function mostrarRegistro() {
+      document.getElementById('login-form').style.display = 'none';
+      document.getElementById('register-form').style.display = 'block';
+      document.getElementById('msg').textContent = '';
+    }
+    function mostrarLogin() {
+      document.getElementById('register-form').style.display = 'none';
+      document.getElementById('login-form').style.display = 'block';
+      document.getElementById('msg').textContent = '';
+    }
+
+    function setLoading(formId, loading) {
+      document.getElementById(formId === 'login' ? 'login-loader' : 'reg-loader').style.display = loading ? 'block' : 'none';
+    }
+    function setError(formId, msg) {
+      document.getElementById(formId === 'login' ? 'login-error' : 'reg-error').textContent = msg;
+    }
+
+    function iniciarSesion() {
+      const email = document.getElementById('email').value.trim();
+      const pass = document.getElementById('password').value;
+      if (!email || !pass) { setError('login', 'Completa todos los campos'); return; }
+      setError('login', '');
+      setLoading('login', true);
+      auth.signInWithEmailAndPassword(email, pass)
+        .then(() => { window.location.href = '/'; })
+        .catch(err => { setError('login', err.message); setLoading('login', false); });
+    }
+
+    function registrar() {
+      const email = document.getElementById('reg-email').value.trim();
+      const pass = document.getElementById('reg-password').value;
+      if (!email || !pass) { setError('register', 'Completa todos los campos'); return; }
+      if (pass.length < 6) { setError('register', 'La contraseña debe tener al menos 6 caracteres'); return; }
+      setError('register', '');
+      setLoading('register', true);
+      auth.createUserWithEmailAndPassword(email, pass)
+        .then(() => {
+          document.getElementById('msg').className = 'msg ok';
+          document.getElementById('msg').textContent = 'Cuenta creada. Redirigiendo...';
+          setTimeout(() => window.location.href = '/', 1000);
+        })
+        .catch(err => { setError('register', err.message); setLoading('register', false); });
+    }
+
+    // If already logged in, go to app
+    auth.onAuthStateChanged(user => {
+      if (user) window.location.href = '/';
+    });
+  </script>
+</body>
+</html>
