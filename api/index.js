@@ -126,7 +126,7 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
       return {
         id: inv.item_id,
         nombre: inv.nombre,
-        categoria: '',
+        categoria: inv.categoria || '',
         stock_apertura: apertura,
         stock_ingreso: ingreso,
         salida_almacen: salida,

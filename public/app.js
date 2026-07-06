@@ -1,9 +1,17 @@
 // Auth state - set by Firebase on load
 let authReady = false;
 const authResolve = [];
+let authError = null;
 function waitForAuth() {
+  if (authError) return Promise.reject(authError);
   if (authReady) return Promise.resolve();
   return new Promise(resolve => authResolve.push(resolve));
+}
+
+// Helper: format date for input[type=date]
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
 firebase.auth().onAuthStateChanged(user => {
@@ -51,8 +59,12 @@ function api(method, url, data) {
       body: data ? JSON.stringify(data) : undefined
     }).then(r => {
       if (r.status === 401) { window.location.href = '/login.html'; throw new Error('No autorizado'); }
+      if (!r.ok) throw new Error('Error del servidor: ' + r.status);
       return r.json();
     });
+  }).catch(err => {
+    console.error('API error:', url, err);
+    throw err;
   });
 }
 
@@ -701,17 +713,9 @@ function verDetallesIngresos() {
 }
 
 function cargarReportes() {
-  api('GET', '/api/reportes/resumen').then(data => {
-    let html = '<table><thead><tr><th>Almacén</th><th>Items</th></tr></thead><tbody>';
-    data.forEach(r => {
-      html += `<tr><td>${r.nombre}</td><td>${r.total_items || 0}</td></tr>`;
-    });
-    html += '</tbody></table>';
-    document.getElementById('reporte-resumen').innerHTML = html;
-  });
   const picker = document.getElementById('reporte-fecha-dif');
-  if (picker) {
-    picker.valueAsDate = new Date();
+  if (picker && !picker.value) {
+    picker.value = todayStr();
     cargarReporteDiferencias();
   }
 }
@@ -1138,31 +1142,19 @@ function exportarSalidaAlmacen(almacenId) {
   XLSX.writeFile(libro, `Salidas_${almacen}_${fecha}.xlsx`);
 }
 
-const picker = document.getElementById('fecha-almacenes');
-if (picker) {
-  picker.valueAsDate = new Date();
-  cargarAlmacenes(picker.value);
+function initPicker(id, fn) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.value = todayStr();
+    if (fn) fn(el.value);
+  }
 }
-const pickerSalidas = document.getElementById('fecha-salidas');
-if (pickerSalidas) {
-  pickerSalidas.valueAsDate = new Date();
-  cargarSalidas(pickerSalidas.value);
-}
-const pickerVentas = document.getElementById('fecha-ventas');
-if (pickerVentas) {
-  pickerVentas.valueAsDate = new Date();
-  cargarVentas(pickerVentas.value);
-}
-const pickerIngresos = document.getElementById('fecha-ingresos');
-if (pickerIngresos) {
-  pickerIngresos.valueAsDate = new Date();
-  cargarIngresos(pickerIngresos.value);
-}
-const pickerStocks = document.getElementById('fecha-stocks');
-if (pickerStocks) {
-  pickerStocks.valueAsDate = new Date();
-  cargarStocks();
-}
+initPicker('fecha-almacenes', cargarAlmacenes);
+initPicker('fecha-salidas', cargarSalidas);
+initPicker('fecha-ventas', cargarVentas);
+initPicker('fecha-ingresos', cargarIngresos);
+initPicker('fecha-stocks', function() { cargarStocks(); });
+initPicker('reporte-fecha-dif', cargarReporteDiferencias);
 cargarReportes();
 cargarRecetas();
 cargarStockBarra();
