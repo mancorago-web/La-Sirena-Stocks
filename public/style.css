@@ -216,3 +216,149 @@ td button.danger { border-color: #c62828; color: #c62828; }
 .stock-bajo { background-color: #fff3e0 !important; }
 .stock-bajo td:first-child { font-weight: 600; color: #e65100; }
 .stock-bajo td:last-child { font-weight: 600; color: #e65100; }
+
+/* ===== Responsive / Mobile ===== */
+@media (max-width: 768px) {
+  /* Nav: stack title above scrolling tabs */
+  nav {
+    flex-direction: column;
+    padding: 0.75rem 0.5rem;
+    gap: 0.5rem;
+  }
+  nav h1 { font-size: 1.2rem; }
+  .tabs {
+    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    gap: 0.25rem;
+    padding-bottom: 0.25rem;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    flex-shrink: 0;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
+  /* Container */
+  .container { padding: 0.75rem 0.5rem; }
+
+  /* Header actions: stack vertically */
+  .header-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .header-actions h2 { font-size: 1.1rem; text-align: center; }
+  .controles-dia {
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .controles-dia label { font-size: 0.8rem; }
+  .controles-dia input[type="date"] { font-size: 0.8rem; padding: 0.35rem; }
+  .controles-dia button, .header-actions button {
+    flex: 1 1 auto;
+    min-width: 80px;
+    padding: 0.6rem 0.5rem;
+    font-size: 0.8rem;
+    text-align: center;
+  }
+  #buscar-item, #buscar-salida, #buscar-venta, #buscar-ingreso, #buscar-stock {
+    width: 100%;
+    font-size: 0.85rem;
+    padding: 0.6rem;
+  }
+  #buscar-precio-item { width: 100% !important; }
+
+  /* Sub-tabs */
+  .sub-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 0.25rem;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .sub-tabs::-webkit-scrollbar { display: none; }
+  .sub-tab {
+    flex-shrink: 0;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
+  /* Tables: ensure scrolling */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table-wrap table { min-width: 500px; }
+  th, td { padding: 0.4rem 0.5rem; font-size: 0.75rem; }
+  .input-num { width: 55px; font-size: 0.75rem; padding: 0.3rem; }
+
+  /* Accordion */
+  .accordion-header { padding: 0.7rem 0.75rem; }
+  .accordion-title { font-size: 0.9rem; }
+  .accordion-body { padding: 0.5rem 0.5rem; }
+  .accordion-body table th { font-size: 0.7rem; padding: 0.3rem 0.4rem; }
+  .accordion-body table td { font-size: 0.75rem; padding: 0.3rem 0.4rem; }
+
+  /* Accordion actions buttons */
+  .accordion-actions { flex-wrap: wrap; gap: 0.15rem; }
+  .accordion-actions button {
+    padding: 0.35rem 0.5rem;
+    font-size: 0.7rem;
+    white-space: nowrap;
+  }
+
+  /* Modal */
+  .modal-content {
+    margin: 0.5rem;
+    padding: 1rem;
+    max-width: none;
+    width: auto;
+  }
+  .modal-content h3 { font-size: 1rem; }
+  .modal-content input, .modal-content select {
+    font-size: 0.85rem;
+    padding: 0.6rem;
+  }
+  .modal-content button {
+    padding: 0.6rem;
+    font-size: 0.85rem;
+  }
+
+  /* Reportes grid */
+  .reportes-grid { grid-template-columns: 1fr; }
+
+  /* Diff headers */
+  .diff-header { padding: 0.4rem 0.5rem; font-size: 0.85rem; }
+
+  /* Section header */
+  .section-header td { font-size: 0.75rem; padding: 0.3rem; }
+
+  /* Categoria titulo */
+  .categoria-titulo { font-size: 1rem; }
+
+  /* Botellas table inputs */
+  .input-fecha-apertura { width: 120px !important; font-size: 0.75rem !important; }
+}
+
+/* Override inline width on mobile for controls */
+@media (max-width: 768px) {
+  #buscar-receta, #buscar-stock-barra, #buscar-precios,
+  #nuevo-stock-input, #nuevo-stock-cant, #nuevo-stock-uni,
+  #nuevo-precio-input, #nuevo-precio-precio,
+  #nuevo-cocina-stock-input, #nuevo-cocina-stock-cant,
+  #nuevo-cocina-precio-input, #nuevo-cocina-precio-precio {
+    width: 100% !important;
+  }
+  #nuevo-stock-input, #nuevo-stock-cant, #nuevo-stock-uni { max-width: none !important; }
+}
+
+@media (max-width: 480px) {
+  .tab { font-size: 0.7rem; padding: 0.35rem 0.4rem; }
+  .sub-tab { font-size: 0.7rem; padding: 0.35rem 0.4rem; }
+  th, td { padding: 0.3rem 0.35rem; font-size: 0.7rem; }
+  .accordion-title { font-size: 0.82rem; }
+  .input-num { width: 48px; font-size: 0.7rem; }
+  .accordion-actions button { font-size: 0.65rem; padding: 0.3rem 0.4rem; }
+}
