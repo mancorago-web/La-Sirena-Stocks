@@ -131,7 +131,7 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
   });
   let allDiasSnap = { docs: [] };
   if (fecha) {
-    allDiasSnap = await col('inventario_diario').where('fecha', '==', fecha).get();
+    allDiasSnap = await cached('inv_diario_' + fecha, 30000, () => col('inventario_diario').where('fecha', '==', fecha).get());
   }
   const diasByAl = {};
   allDiasSnap.docs.forEach(d => {
@@ -272,7 +272,7 @@ app.get('/api/precios', async (req, res) => {
   const [almsSnap, allInvSnap, allDiasSnap] = await Promise.all([
     cached('almacenes', 60000, () => col('almacenes').orderBy('orden').get()),
     cached('inventario', 60000, () => col('inventario').get()),
-    fecha ? col('inventario_diario').where('fecha', '==', fecha).get() : { docs: [] },
+    fecha ? cached('inv_diario_' + fecha, 30000, () => col('inventario_diario').where('fecha', '==', fecha).get()) : Promise.resolve({ docs: [] }),
   ]);
   const invByAl = {};
   allInvSnap.docs.forEach(d => {
@@ -492,7 +492,7 @@ app.get('/api/reportes/diferencias', async (req, res) => {
   const [almsSnap, allInvSnap, allDiasSnap] = await Promise.all([
     cached('almacenes', 60000, () => col('almacenes').orderBy('orden').get()),
     cached('inventario', 60000, () => col('inventario').get()),
-    col('inventario_diario').where('fecha', '==', fecha).get(),
+    cached('inv_diario_' + fecha, 30000, () => col('inventario_diario').where('fecha', '==', fecha).get()),
   ]);
   const invByAl = {};
   allInvSnap.docs.forEach(d => {
