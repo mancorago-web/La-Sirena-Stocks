@@ -187,6 +187,7 @@ function compararCierre(el) {
 }
 
 function recargarTodo(fecha) {
+  _invCache = { fecha: null, data: null, pending: null };
   cargarAlmacenes(fecha);
   cargarIngresos(fecha);
   cargarSalidas(fecha);
