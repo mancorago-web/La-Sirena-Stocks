@@ -320,14 +320,22 @@ app.put('/api/precios', async (req, res) => {
 
 // --- RECETAS ---
 app.get('/api/recetas', async (req, res) => {
-  const recSnap = await col('recetas').orderBy('categoria').orderBy('nombre').get();
-  const precSnap = await col('barra_precios').get();
+  const [recSnap, precSnap, ingSnap] = await Promise.all([
+    cached('recetas', 60000, () => col('recetas').orderBy('categoria').orderBy('nombre').get()),
+    cached('barra_precios_all', 60000, () => col('barra_precios').get()),
+    cached('receta_ingredientes', 60000, () => col('receta_ingredientes').orderBy('id').get()),
+  ]);
   const precios = precSnap.docs.map(d => d.data());
-  const result = [];
-  for (const d of recSnap.docs) {
+  const ingByRec = {};
+  ingSnap.docs.forEach(idoc => {
+    const ing = { id: Number(idoc.id), ...idoc.data() };
+    const rid = ing.receta_id;
+    if (!ingByRec[rid]) ingByRec[rid] = [];
+    ingByRec[rid].push(ing);
+  });
+  const result = recSnap.docs.map(d => {
     const r = { id: Number(d.id), ...d.data() };
-    const ingSnap = await col('receta_ingredientes').where('receta_id', '==', r.id).orderBy('id').get();
-    const ingredientes = ingSnap.docs.map(idoc => ({ id: Number(idoc.id), ...idoc.data() }));
+    const ingredientes = ingByRec[r.id] || [];
     let costoTotal = 0;
     const ingredientesConPrecio = ingredientes.map(ing => {
       const match = precios.find(p => p.ingrediente && p.ingrediente.toLowerCase() === ing.ingrediente.toLowerCase());
@@ -336,8 +344,8 @@ app.get('/api/recetas', async (req, res) => {
       costoTotal += costo;
       return { ...ing, precioUnidad, costo, precioMatch: !!match };
     });
-    result.push({ ...r, ingredientes: ingredientesConPrecio, costoTotal });
-  }
+    return { ...r, ingredientes: ingredientesConPrecio, costoTotal };
+  });
   res.json(result);
 });
 
@@ -423,7 +431,7 @@ app.put('/api/recetas/:id/with-ingredientes', async (req, res) => {
 
 // --- BARRA STOCK ---
 app.get('/api/barra/stock', async (req, res) => {
-  const snap = await col('barra_stock').orderBy('ingrediente').get();
+  const snap = await cached('barra_stock', 60000, () => col('barra_stock').orderBy('ingrediente').get());
   res.json(snap.docs.map(d => ({ id: Number(d.id), ...d.data() })));
 });
 
@@ -456,7 +464,7 @@ app.delete('/api/barra/stock/:id', async (req, res) => {
 
 // --- BARRA PRECIOS ---
 app.get('/api/barra/precios', async (req, res) => {
-  const snap = await col('barra_precios').orderBy('ingrediente').get();
+  const snap = await cached('barra_precios', 60000, () => col('barra_precios').orderBy('ingrediente').get());
   res.json(snap.docs.map(d => ({ id: Number(d.id), ...d.data() })));
 });
 
