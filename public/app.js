@@ -19,7 +19,7 @@ let _invCache = { fecha: null, data: null, pending: null };
 function getInventario(fecha) {
   if (_invCache.fecha === fecha && _invCache.data) return Promise.resolve(_invCache.data);
   if (_invCache.fecha === fecha && _invCache.pending) return _invCache.pending;
-  const p = getInventario(fecha).then(data => {
+  const p = api('GET', '/api/almacenes/con-inventario?fecha=' + fecha).then(data => {
     _invCache = { fecha, data, pending: null };
     return data;
   }).catch(err => { _invCache = { fecha: null, data: null, pending: null }; throw err; });
