@@ -27,6 +27,7 @@ function getInventario(fecha) {
   return p;
 }
 
+const DISPLAY_NAMES = { 'davejs@gmail.com': 'David' };
 firebase.auth().onAuthStateChanged(user => {
   const info = document.getElementById('user-info');
   const el = document.getElementById('user-email');
@@ -35,22 +36,18 @@ firebase.auth().onAuthStateChanged(user => {
     return;
   }
   if (info) info.style.display = '';
-  if (el) el.textContent = user.displayName || user.email;
+  const name = DISPLAY_NAMES[user.email] || user.displayName || user.email;
+  if (el) el.textContent = name;
   authReady = true;
   authResolve.forEach(r => r());
   authResolve.length = 0;
-  // Set displayName for David on first visit
-  if (!user.displayName && user.email === 'davejs@gmail.com' && !localStorage.getItem('dn_set')) {
+  // Persist displayName via API (runs once per session)
+  if (DISPLAY_NAMES[user.email] && !user.displayName) {
     user.getIdToken().then(token => {
       fetch('/api/setup/display-name', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({ displayName: 'David' })
-      }).then(r => r.json()).then(d => {
-        if (d.ok) {
-          localStorage.setItem('dn_set', '1');
-          user.reload().then(() => { if (el) el.textContent = 'David'; });
-        }
+        body: JSON.stringify({ displayName: DISPLAY_NAMES[user.email] })
       }).catch(() => {});
     });
   }
