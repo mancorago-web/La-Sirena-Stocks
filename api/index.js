@@ -515,6 +515,26 @@ app.get('/api/check-auth', authMiddleware, (req, res) => {
   res.json({ ok: true });
 });
 
+// --- DIAGNOSTIC (no auth) ---
+app.get('/api/diag', async (req, res) => {
+  try {
+    const alms = await col('almacenes').get();
+    const inv = await col('inventario').get();
+    const dia = await col('inventario_diario').limit(1).get();
+    const rec = await col('recetas').get();
+    res.json({
+      almacenes: alms.size,
+      inventario: inv.size,
+      inventario_diario_exists: dia.size > 0,
+      inventario_diario_sample: dia.docs.length ? Object.keys(dia.docs[0].data()) : null,
+      recetas: rec.size,
+      fecha_sample: dia.docs.length ? dia.docs[0].data().fecha : null,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message, stack: e.stack?.split('\n').slice(0,3).join('; ') });
+  }
+});
+
 // --- Cron-like propagation on startup ---
 // On Vercel, we can't run cron jobs the same way. Will handle via guardar-dia.
 
