@@ -14,6 +14,14 @@ function todayStr() {
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
 // Shared cache for con-inventario data (reused across tabs)
 let _invCache = { fecha: null, data: null, pending: null };
 function getInventario(fecha) {
@@ -207,8 +215,8 @@ function guardarDia() {
   const btn = document.querySelector('.btn-guardar-dia');
   btn.disabled = true; btn.textContent = 'Guardando...';
   api('POST', '/api/almacenes/guardar-dia', { fecha, registros }).then(() => {
-    btn.textContent = '✓ Guardado';
-    setTimeout(() => { btn.disabled = false; btn.textContent = '💾 GUARDAR'; }, 2000);
+    btn.disabled = false; btn.textContent = '💾 GUARDAR';
+    showToast('Datos Guardados');
     recargarTodo(fecha);
   }).catch(() => {
     btn.disabled = false; btn.textContent = '💾 GUARDAR';
@@ -443,8 +451,8 @@ function guardarSalidas() {
   const btn = document.querySelector('#tab-salidas .btn-guardar-dia');
   btn.disabled = true; btn.textContent = 'Guardando...';
   api('POST', '/api/almacenes/guardar-dia', { fecha, registros }).then(() => {
-    btn.textContent = '✓ Guardado';
-    setTimeout(() => { btn.disabled = false; btn.textContent = '💾 GUARDAR SALIDAS'; }, 2000);
+    btn.disabled = false; btn.textContent = '💾 GUARDAR SALIDAS';
+    showToast('Salida Guardada');
     recargarTodo(fecha);
   }).catch(() => {
     btn.disabled = false; btn.textContent = '💾 GUARDAR SALIDAS';
@@ -621,8 +629,8 @@ function guardarVentas() {
   const btn = document.querySelector('#tab-ventas .btn-guardar-dia');
   btn.disabled = true; btn.textContent = 'Guardando...';
   api('POST', '/api/almacenes/guardar-dia', { fecha, registros }).then(() => {
-    btn.textContent = '✓ Guardado';
-    setTimeout(() => { btn.disabled = false; btn.textContent = '💾 GUARDAR VENTAS'; }, 2000);
+    btn.disabled = false; btn.textContent = '💾 GUARDAR VENTAS';
+    showToast('Venta Guardada');
     recargarTodo(fecha);
   }).catch(() => {
     btn.disabled = false; btn.textContent = '💾 GUARDAR VENTAS';
@@ -742,8 +750,8 @@ function guardarIngresos() {
   const btn = document.querySelector('#tab-ingresos .btn-guardar-dia');
   btn.disabled = true; btn.textContent = 'Guardando...';
   api('POST', '/api/almacenes/guardar-dia', { fecha, registros }).then(() => {
-    btn.textContent = '✓ Guardado';
-    setTimeout(() => { btn.disabled = false; btn.textContent = '💾 GUARDAR INGRESOS'; }, 2000);
+    btn.disabled = false; btn.textContent = '💾 GUARDAR INGRESOS';
+    showToast('Ingreso Guardado');
     recargarTodo(fecha);
   }).catch(() => {
     btn.disabled = false; btn.textContent = '💾 GUARDAR INGRESOS';

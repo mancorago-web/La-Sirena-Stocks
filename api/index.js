@@ -218,35 +218,40 @@ app.post('/api/almacenes/guardar-dia', async (req, res) => {
   }
   await batch.commit();
 
-  // Propagation: copy cierre to next working day's apertura
-  const nextDay = getNextWorkingDay(fecha);
-  const oldSnap = await col('inventario_diario').where('fecha', '==', fecha).get();
-  const nextBatch = db.batch();
-  let hasChanges = false;
-  for (const doc of oldSnap.docs) {
-    const d = doc.data();
-    const nextId = docId('invdiario', nextDay, d.almacen_id, d.item_id);
-    const nextRef = col('inventario_diario').doc(nextId);
-    const nextDoc = await nextRef.get();
-    if (!nextDoc.exists) {
-      nextBatch.set(nextRef, {
-        fecha: nextDay,
-        item_id: d.item_id,
-        almacen_id: d.almacen_id,
-        stock_apertura: d.stock_cierre ?? 0,
-        stock_ingreso: 0,
-        salida_almacen: 0,
-        total_ventas: 0,
-        falta_almacen: 0,
-        stock_cierre: d.stock_cierre ?? 0,
-        updated_at: new Date().toISOString(),
-      });
-      hasChanges = true;
-    }
-  }
-  if (hasChanges) await nextBatch.commit();
-
   res.json({ ok: true });
+
+  // Async propagation (respond first, propagate in background)
+  try {
+    const nextDay = getNextWorkingDay(fecha);
+    const oldSnap = await col('inventario_diario').where('fecha', '==', fecha).get();
+    const nextDocs = await Promise.all(oldSnap.docs.map(doc => {
+      const d = doc.data();
+      const nextId = docId('invdiario', nextDay, d.almacen_id, d.item_id);
+      return col('inventario_diario').doc(nextId).get().then(snap => ({ d, exists: snap.exists }));
+    }));
+    const nextBatch = db.batch();
+    let hasChanges = false;
+    for (const { d, exists } of nextDocs) {
+      if (!exists) {
+        nextBatch.set(col('inventario_diario').doc(docId('invdiario', nextDay, d.almacen_id, d.item_id)), {
+          fecha: nextDay,
+          item_id: d.item_id,
+          almacen_id: d.almacen_id,
+          stock_apertura: d.stock_cierre ?? 0,
+          stock_ingreso: 0,
+          salida_almacen: 0,
+          total_ventas: 0,
+          falta_almacen: 0,
+          stock_cierre: d.stock_cierre ?? 0,
+          updated_at: new Date().toISOString(),
+        });
+        hasChanges = true;
+      }
+    }
+    if (hasChanges) await nextBatch.commit();
+  } catch (e) {
+    console.error('Async propagation error:', e.message);
+  }
 });
 
 function getNextWorkingDay(fecha) {
