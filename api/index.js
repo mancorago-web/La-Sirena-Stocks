@@ -90,13 +90,10 @@ app.get('/api/almacenes', async (req, res) => {
 app.get('/api/almacenes/con-inventario', async (req, res) => {
   const fecha = req.query.fecha;
   if (!fecha) return res.json([]);
-  // Fetch all data in parallel (3 queries total instead of N+1)
-  const [almsSnap, allItemsSnap, allDiasSnap] = await Promise.all([
+  const [almsSnap, allItemsSnap] = await Promise.all([
     col('almacenes').orderBy('orden').get(),
     col('inventario').get(),
-    col('inventario_diario').where('fecha', '==', fecha).get(),
   ]);
-  // Index by almacen_id
   const itemsByAl = {};
   allItemsSnap.docs.forEach(d => {
     const inv = d.data();
@@ -104,6 +101,10 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
     if (!itemsByAl[alId]) itemsByAl[alId] = [];
     itemsByAl[alId].push(inv);
   });
+  let allDiasSnap = { docs: [] };
+  if (fecha) {
+    allDiasSnap = await col('inventario_diario').where('fecha', '==', fecha).get();
+  }
   const diasByAl = {};
   allDiasSnap.docs.forEach(d => {
     const dd = d.data();
