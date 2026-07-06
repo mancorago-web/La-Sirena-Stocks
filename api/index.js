@@ -78,7 +78,8 @@ async function authMiddleware(req, res, next) {
   }
   try {
     const token = authHeader.split('Bearer ')[1];
-    await admin.auth().verifyIdToken(token);
+    const decoded = await admin.auth().verifyIdToken(token);
+    req.user = decoded;
     next();
   } catch (e) {
     return res.status(401).json({ error: 'Token inválido' });
@@ -181,9 +182,10 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
 });
 
 // --- GUARDAR DÍA ---
-app.put('/api/inventario/guardar-dia', async (req, res) => {
+app.post('/api/almacenes/guardar-dia', async (req, res) => {
   const { fecha, registros } = req.body;
   if (!fecha || !registros) return res.status(400).json({ error: 'fecha y registros requeridos' });
+  const savedBy = req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown';
   const batch = db.batch();
   for (const r of registros) {
     const id = docId('invdiario', fecha, r.almacen_id, r.item_id);
@@ -205,6 +207,7 @@ app.put('/api/inventario/guardar-dia', async (req, res) => {
       falta_almacen: falta,
       stock_cierre: Math.round(cierre * 100) / 100,
       updated_at: new Date().toISOString(),
+      saved_by: savedBy,
     }, { merge: true });
     // Update permanent stock_apertura in inventario
     const invId = docId('inventario', r.item_id, r.almacen_id);
@@ -557,7 +560,19 @@ app.get('/api/reportes/diferencias', async (req, res) => {
 
 // --- AUTH CHECK ---
 app.get('/api/check-auth', authMiddleware, (req, res) => {
-  res.json({ ok: true });
+  res.json({ ok: true, name: req.user.name || null, email: req.user.email });
+});
+
+// --- SET DISPLAY NAME (one-time use per user) ---
+app.post('/api/setup/display-name', authMiddleware, async (req, res) => {
+  try {
+    const { displayName } = req.body;
+    if (!displayName) return res.status(400).json({ error: 'displayName requerido' });
+    await admin.auth().updateUser(req.user.uid, { displayName });
+    res.json({ ok: true, displayName });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // --- Cron-like propagation on startup ---

@@ -29,16 +29,31 @@ function getInventario(fecha) {
 
 firebase.auth().onAuthStateChanged(user => {
   const info = document.getElementById('user-info');
-  const email = document.getElementById('user-email');
+  const el = document.getElementById('user-email');
   if (!user) {
     window.location.href = '/login.html';
     return;
   }
   if (info) info.style.display = '';
-  if (email) email.textContent = user.email;
+  if (el) el.textContent = user.displayName || user.email;
   authReady = true;
   authResolve.forEach(r => r());
   authResolve.length = 0;
+  // Set displayName for David on first visit
+  if (!user.displayName && user.email === 'davejs@gmail.com' && !localStorage.getItem('dn_set')) {
+    user.getIdToken().then(token => {
+      fetch('/api/setup/display-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ displayName: 'David' })
+      }).then(r => r.json()).then(d => {
+        if (d.ok) {
+          localStorage.setItem('dn_set', '1');
+          user.reload().then(() => { if (el) el.textContent = 'David'; });
+        }
+      }).catch(() => {});
+    });
+  }
 });
 document.addEventListener('click', e => {
   if (e.target.id === 'btn-salir') {
