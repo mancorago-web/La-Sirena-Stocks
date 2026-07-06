@@ -70,9 +70,39 @@ document.querySelectorAll('.tab').forEach(tab => {
     _loaded[name] = true;
     if (name === 'reportes') cargarReportes();
     if (name === 'precios') cargarPreciosAlmacen();
-    if (name === 'barra') { cargarRecetas(); cargarStockBarra(); cargarPrecios(); }
   });
 });
+
+// --- Navigation: main menu / categories ---
+function irACategoria(cat) {
+  document.getElementById('main-menu').style.display = 'none';
+  document.getElementById('container').style.display = 'block';
+  document.getElementById('btn-back').style.display = '';
+  // Show/hide tabs bar based on category
+  const tabsBar = document.getElementById('tabs-bar');
+  if (cat === 'stocks') {
+    tabsBar.style.display = '';
+    // Reset to first tab (almacenes)
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+    document.querySelector('.tab[data-tab="almacenes"]').classList.add('active');
+    document.getElementById('tab-almacenes').classList.add('active');
+  } else {
+    tabsBar.style.display = 'none';
+    document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+    document.getElementById('tab-' + cat).classList.add('active');
+    if (!_loaded[cat]) {
+      _loaded[cat] = true;
+      if (cat === 'barra') { cargarRecetas(); cargarStockBarra(); cargarPrecios(); }
+    }
+  }
+}
+function volverMenu() {
+  document.getElementById('main-menu').style.display = '';
+  document.getElementById('container').style.display = 'none';
+  document.getElementById('tabs-bar').style.display = 'none';
+  document.getElementById('btn-back').style.display = 'none';
+}
 
 const vinosOrder = [
   'Montgrass Merlot 2022',

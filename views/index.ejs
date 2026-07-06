@@ -9,18 +9,8 @@
 <body>
   <nav>
     <div class="nav-left">
+      <button id="btn-back" class="btn-back" style="display:none" onclick="volverMenu()">←</button>
       <h1 class="nav-logo">SIRENA <span class="nav-logo-sub">DE JUAN</span></h1>
-      <div class="tabs">
-        <button class="tab" data-tab="ingresos">Ingresos</button>
-        <button class="tab" data-tab="salidas">Salidas</button>
-        <button class="tab" data-tab="ventas">Ventas</button>
-        <button class="tab active" data-tab="almacenes">Almacenes</button>
-        <button class="tab" data-tab="stocks">Stocks</button>
-        <button class="tab" data-tab="reportes">Reportes</button>
-        <button class="tab" data-tab="precios">Precios</button>
-        <button class="tab" data-tab="barra">Barra</button>
-        <button class="tab" data-tab="cocina">Cocina</button>
-      </div>
     </div>
     <div id="user-info" class="user-info" style="display:none">
       <span id="user-email" class="user-email"></span>
@@ -28,7 +18,41 @@
     </div>
   </nav>
 
-  <div class="container">
+  <!-- Main menu: 3 category buttons -->
+  <div id="main-menu" class="main-menu">
+    <div class="main-menu-grid">
+      <button class="category-btn" onclick="irACategoria('stocks')">
+        <span class="category-icon">📦</span>
+        <span class="category-label">STOCKS</span>
+        <span class="category-desc">Ingresos, Salidas, Ventas, Almacenes, Stocks, Reportes, Precios</span>
+      </button>
+      <button class="category-btn" onclick="irACategoria('barra')">
+        <span class="category-icon">🍸</span>
+        <span class="category-label">BARRA</span>
+        <span class="category-desc">Recetas, Stock y Base de Datos de la Barra</span>
+      </button>
+      <button class="category-btn" onclick="irACategoria('cocina')">
+        <span class="category-icon">🍳</span>
+        <span class="category-label">COCINA</span>
+        <span class="category-desc">Recetas, Stock y Base de Datos de la Cocina</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Tabs bar (solo visible en STOCKS) -->
+  <div id="tabs-bar" class="tabs-bar" style="display:none">
+    <div class="tabs">
+      <button class="tab" data-tab="ingresos">Ingresos</button>
+      <button class="tab" data-tab="salidas">Salidas</button>
+      <button class="tab" data-tab="ventas">Ventas</button>
+      <button class="tab active" data-tab="almacenes">Almacenes</button>
+      <button class="tab" data-tab="stocks">Stocks</button>
+      <button class="tab" data-tab="reportes">Reportes</button>
+      <button class="tab" data-tab="precios">Precios</button>
+    </div>
+  </div>
+
+  <div class="container" id="container">
     <div id="tab-almacenes" class="tab-content active">
       <div class="header-actions">
         <h2>Almacenes</h2>
