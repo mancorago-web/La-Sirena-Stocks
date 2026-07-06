@@ -104,8 +104,17 @@ function docId(name, ...parts) { return parts.join('_'); }
 const _cache = {};
 function cached(key, ttlMs, fetchFn) {
   const now = Date.now();
-  if (_cache[key] && now - _cache[key].ts < ttlMs) return _cache[key].data;
-  return fetchFn().then(data => { _cache[key] = { data, ts: now }; return data; });
+  if (_cache[key] && _cache[key].data && now - _cache[key].ts < ttlMs) return Promise.resolve(_cache[key].data);
+  if (_cache[key] && _cache[key].pending) return _cache[key].pending;
+  const p = fetchFn().then(data => {
+    _cache[key] = { data, ts: now, pending: null };
+    return data;
+  }).catch(err => {
+    _cache[key] = { data: null, ts: 0, pending: null };
+    throw err;
+  });
+  _cache[key] = { pending: p };
+  return p;
 }
 
 // --- ALMACENES ---
@@ -322,7 +331,7 @@ app.put('/api/precios', async (req, res) => {
 app.get('/api/recetas', async (req, res) => {
   const [recSnap, precSnap, ingSnap] = await Promise.all([
     cached('recetas', 60000, () => col('recetas').orderBy('categoria').orderBy('nombre').get()),
-    cached('barra_precios_all', 60000, () => col('barra_precios').get()),
+    cached('barra_precios', 60000, () => col('barra_precios').orderBy('ingrediente').get()),
     cached('receta_ingredientes', 60000, () => col('receta_ingredientes').orderBy('id').get()),
   ]);
   const precios = precSnap.docs.map(d => d.data());
