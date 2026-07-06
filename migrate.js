@@ -45,34 +45,46 @@ async function migrate() {
 
   // Migrate inventario
   console.log('Migrating inventario...');
-  const inv = sqlDb.exec('SELECT * FROM inventario ORDER BY id');
+  const itemsMap = {};
+  const itemsData = sqlDb.exec('SELECT id, nombre FROM items');
+  for (const r of itemsData[0]?.values || []) itemsMap[r[0]] = r[1];
+  const inv = sqlDb.exec('SELECT inv.item_id, inv.almacen_id, inv.cantidad_minima, inv.stock_apertura, inv.fecha_apertura, inv.precio FROM inventario inv ORDER BY inv.id');
   for (const row of inv[0]?.values || []) {
-    const id = row[1] + '_' + row[2]; // item_id_almacen_id
+    const itemId = row[0], alId = row[1];
+    const id = itemId + '_' + alId;
     await db.collection('inventario').doc(id).set({
-      item_id: row[1], almacen_id: row[2],
-      nombre: row[7] || '', categoria: row[8] || '',
-      cantidad_minima: row[11] || 0, stock_apertura: row[9] || 0,
-      fecha_apertura: row[12] || '', precio: row[13] || 0,
-      falta_almacen: row[10] || 0,
+      item_id: itemId, almacen_id: alId,
+      nombre: itemsMap[itemId] || '',
+      cantidad_minima: row[2] || 0,
+      stock_apertura: row[3] || 0,
+      fecha_apertura: row[4] || '',
+      precio: row[5] || 0,
     });
   }
   console.log('  Done: ' + (inv[0]?.values?.length || 0) + ' registros');
 
-  // Migrate inventario_diario
+  // Migrate inventario_diario (batched)
   console.log('Migrating inventario_diario...');
   const diario = sqlDb.exec('SELECT * FROM inventario_diario ORDER BY id');
   let dCount = 0;
-  for (const row of diario[0]?.values || []) {
-    const id = row[1] + '_' + row[3] + '_' + row[2]; // fecha_almacen_id_item_id
-    await db.collection('inventario_diario').doc(id).set({
-      fecha: row[1], item_id: row[2], almacen_id: row[3],
-      stock_apertura: row[4] || 0, salida_almacen: row[5] || 0,
-      total_ventas: row[6] || 0, stock_cierre: row[7] || 0,
-      stock_ingreso: row[10] || 0, falta_almacen: row[11] || 0,
-      created_at: row[8] || '', updated_at: row[9] || ''
-    });
-    dCount++;
-    if (dCount % 100 === 0) process.stdout.write('.');
+  const rows = diario[0]?.values || [];
+  for (let i = 0; i < rows.length; i += 500) {
+    const batch = db.batch();
+    const chunk = rows.slice(i, i + 500);
+    for (const row of chunk) {
+      const id = row[1] + '_' + row[3] + '_' + row[2];
+      const ref = db.collection('inventario_diario').doc(id);
+      batch.set(ref, {
+        fecha: row[1], item_id: row[2], almacen_id: row[3],
+        stock_apertura: row[4] || 0, salida_almacen: row[5] || 0,
+        total_ventas: row[6] || 0, stock_cierre: row[7] || 0,
+        stock_ingreso: row[10] || 0, falta_almacen: row[11] || 0,
+        created_at: row[8] || '', updated_at: row[9] || ''
+      });
+    }
+    await batch.commit();
+    dCount += chunk.length;
+    process.stdout.write('.');
   }
   console.log('\n  Done: ' + dCount + ' registros');
 

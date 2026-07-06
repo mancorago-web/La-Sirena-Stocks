@@ -159,7 +159,7 @@ app.put('/api/inventario/guardar-dia', async (req, res) => {
       updated_at: new Date().toISOString(),
     }, { merge: true });
     // Update permanent stock_apertura in inventario
-    const invId = docId('inventario', r.almacen_id, r.item_id);
+    const invId = docId('inventario', r.item_id, r.almacen_id);
     const invRef = col('inventario').doc(invId);
     batch.set(invRef, {
       stock_apertura: apertura,
@@ -211,14 +211,14 @@ app.put('/api/inventario/minimos', async (req, res) => {
   const batch = db.batch();
   if (minimos) {
     for (const m of minimos) {
-      const id = docId('inventario', m.almacen_id, m.item_id);
+      const id = docId('inventario', m.item_id, m.almacen_id);
       const ref = col('inventario').doc(id);
       batch.update(ref, { cantidad_minima: parseFloat(m.cantidad_minima) || 0 });
     }
   }
   if (botellas) {
     for (const b of botellas) {
-      const id = docId('inventario', b.almacen_id, b.item_id);
+      const id = docId('inventario', b.item_id, b.almacen_id);
       const ref = col('inventario').doc(id);
       batch.set(ref, { fecha_apertura: b.fecha_apertura || '' }, { merge: true });
     }
@@ -268,7 +268,7 @@ app.put('/api/precios', async (req, res) => {
   if (!precios) return res.status(400).json({ error: 'precios requerido' });
   const batch = db.batch();
   for (const p of precios) {
-    const id = docId('inventario', p.almacen_id, p.item_id);
+    const id = docId('inventario', p.item_id, p.almacen_id);
     const ref = col('inventario').doc(id);
     batch.update(ref, { precio: parseFloat(p.precio) || 0 });
   }
