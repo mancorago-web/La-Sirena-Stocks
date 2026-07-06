@@ -46,12 +46,19 @@ document.addEventListener('click', e => {
   }
 });
 
+const _loaded = {};
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
     tab.classList.add('active');
-    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    const name = tab.dataset.tab;
+    document.getElementById('tab-' + name).classList.add('active');
+    if (_loaded[name]) return;
+    _loaded[name] = true;
+    if (name === 'reportes') cargarReportes();
+    if (name === 'precios') cargarPreciosAlmacen();
+    if (name === 'barra') { cargarRecetas(); cargarStockBarra(); cargarPrecios(); }
   });
 });
 
@@ -732,8 +739,8 @@ function verDetallesIngresos() {
 
 function cargarReportes() {
   const picker = document.getElementById('reporte-fecha-dif');
-  if (picker && !picker.value) {
-    picker.value = todayStr();
+  if (picker) {
+    if (!picker.value) picker.value = todayStr();
     cargarReporteDiferencias();
   }
 }
@@ -978,13 +985,7 @@ function cargarStocks() {
   });
 }
 
-function cargarReportes() {
-  const picker = document.getElementById('reporte-fecha-dif');
-  if (picker) {
-    picker.valueAsDate = new Date();
-    cargarReporteDiferencias();
-  }
-}
+
 
 function renderReporteTabla(items, titulo) {
   if (!items.length) return '';
@@ -1171,12 +1172,8 @@ initPicker('fecha-salidas', cargarSalidas);
 initPicker('fecha-ventas', cargarVentas);
 initPicker('fecha-ingresos', cargarIngresos);
 initPicker('fecha-stocks', function() { cargarStocks(); });
-initPicker('reporte-fecha-dif', cargarReporteDiferencias);
-cargarReportes();
-cargarRecetas();
-cargarStockBarra();
-cargarPrecios();
-cargarPreciosAlmacen();
+// reportes, precios, barra loaded lazily on first tab click
+initPicker('reporte-fecha-dif');
 window.addEventListener('click', e => { if (e.target === document.getElementById('modal')) cerrarModal(); });
 
 // --- BARRA: Recetas ---
