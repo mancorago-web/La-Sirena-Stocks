@@ -187,7 +187,7 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
 app.post('/api/almacenes/guardar-dia', async (req, res) => {
   const { fecha, registros } = req.body;
   if (!fecha || !registros) return res.status(400).json({ error: 'fecha y registros requeridos' });
-  const savedBy = req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown';
+  const savedBy = req.body.saved_by || (req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown');
   const batch = db.batch();
   for (const r of registros) {
     const id = docId('invdiario', fecha, r.almacen_id, r.item_id);

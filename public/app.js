@@ -36,6 +36,7 @@ function getInventario(fecha) {
 }
 
 const DISPLAY_NAMES = { 'davejs@gmail.com': 'David' };
+let currentUserName = '';
 firebase.auth().onAuthStateChanged(user => {
   const info = document.getElementById('user-info');
   const el = document.getElementById('user-email');
@@ -45,6 +46,7 @@ firebase.auth().onAuthStateChanged(user => {
   }
   if (info) info.style.display = '';
   const name = DISPLAY_NAMES[user.email] || user.displayName || user.email;
+  currentUserName = name;
   if (el) el.textContent = name;
   authReady = true;
   authResolve.forEach(r => r());
@@ -214,7 +216,7 @@ function guardarDia() {
   });
   const btn = document.querySelector('.btn-guardar-dia');
   btn.disabled = true; btn.textContent = 'Guardando...';
-  api('POST', '/api/almacenes/guardar-dia', { fecha, registros }).then(() => {
+  api('POST', '/api/almacenes/guardar-dia', { fecha, registros, saved_by: currentUserName }).then(() => {
     btn.disabled = false; btn.textContent = '💾 GUARDAR';
     showToast('Datos Guardados');
     recargarTodo(fecha);
@@ -450,7 +452,7 @@ function guardarSalidas() {
   });
   const btn = document.querySelector('#tab-salidas .btn-guardar-dia');
   btn.disabled = true; btn.textContent = 'Guardando...';
-  api('POST', '/api/almacenes/guardar-dia', { fecha, registros }).then(() => {
+  api('POST', '/api/almacenes/guardar-dia', { fecha, registros, saved_by: currentUserName }).then(() => {
     btn.disabled = false; btn.textContent = '💾 GUARDAR SALIDAS';
     showToast('Salida Guardada');
     recargarTodo(fecha);
@@ -630,7 +632,7 @@ function guardarVentas() {
   });
   const btn = document.querySelector('#tab-ventas .btn-guardar-dia');
   btn.disabled = true; btn.textContent = 'Guardando...';
-  api('POST', '/api/almacenes/guardar-dia', { fecha, registros }).then(() => {
+  api('POST', '/api/almacenes/guardar-dia', { fecha, registros, saved_by: currentUserName }).then(() => {
     btn.disabled = false; btn.textContent = '💾 GUARDAR VENTAS';
     showToast('Venta Guardada');
     recargarTodo(fecha);
@@ -751,7 +753,7 @@ function guardarIngresos() {
   });
   const btn = document.querySelector('#tab-ingresos .btn-guardar-dia');
   btn.disabled = true; btn.textContent = 'Guardando...';
-  api('POST', '/api/almacenes/guardar-dia', { fecha, registros }).then(() => {
+  api('POST', '/api/almacenes/guardar-dia', { fecha, registros, saved_by: currentUserName }).then(() => {
     btn.disabled = false; btn.textContent = '💾 GUARDAR INGRESOS';
     showToast('Ingreso Guardado');
     recargarTodo(fecha);
