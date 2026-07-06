@@ -49,6 +49,26 @@ const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+// --- DIAGNOSTIC (no auth, must be BEFORE auth middleware) ---
+app.get('/api/diag', async (req, res) => {
+  try {
+    const alms = await col('almacenes').get();
+    const inv = await col('inventario').get();
+    const dia = await col('inventario_diario').limit(1).get();
+    const rec = await col('recetas').get();
+    res.json({
+      almacenes: alms.size,
+      inventario: inv.size,
+      inventario_diario_exists: dia.size > 0,
+      inventario_diario_fields: dia.docs.length ? Object.keys(dia.docs[0].data()) : null,
+      inventario_diario_fecha: dia.docs.length ? dia.docs[0].data().fecha : null,
+      recetas: rec.size,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message, stack: e.stack?.split('\n').slice(0,3).join('; ') });
+  }
+});
+
 // Auth middleware
 async function authMiddleware(req, res, next) {
   if (req.path === '/login.html' || req.path === '/app.js' || req.path === '/style.css') return next();
@@ -513,26 +533,6 @@ app.get('/api/reportes/diferencias', async (req, res) => {
 // --- AUTH CHECK ---
 app.get('/api/check-auth', authMiddleware, (req, res) => {
   res.json({ ok: true });
-});
-
-// --- DIAGNOSTIC (no auth) ---
-app.get('/api/diag', async (req, res) => {
-  try {
-    const alms = await col('almacenes').get();
-    const inv = await col('inventario').get();
-    const dia = await col('inventario_diario').limit(1).get();
-    const rec = await col('recetas').get();
-    res.json({
-      almacenes: alms.size,
-      inventario: inv.size,
-      inventario_diario_exists: dia.size > 0,
-      inventario_diario_sample: dia.docs.length ? Object.keys(dia.docs[0].data()) : null,
-      recetas: rec.size,
-      fecha_sample: dia.docs.length ? dia.docs[0].data().fecha : null,
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message, stack: e.stack?.split('\n').slice(0,3).join('; ') });
-  }
 });
 
 // --- Cron-like propagation on startup ---
