@@ -2,21 +2,48 @@ const admin = require('firebase-admin');
 const express = require('express');
 const path = require('path');
 
-// Load service account: from env (Vercel) or local file (development)
-let serviceAccount;
-if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-} else {
-  serviceAccount = require(path.join(__dirname, '..', 'service-account.json'));
+console.log('=== Sirena API starting ===');
+console.log('CWD:', process.cwd());
+console.log('__dirname:', __dirname);
+console.log('FIREBASE_SERVICE_ACCOUNT env present:', !!process.env.FIREBASE_SERVICE_ACCOUNT);
+
+function loadServiceAccount() {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    try {
+      const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+      console.log('FIREBASE_SERVICE_ACCOUNT length:', raw.length);
+      return JSON.parse(raw);
+    } catch (e) {
+      console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT env:', e.message);
+      throw e;
+    }
+  }
+  const localPath = path.join(__dirname, '..', 'service-account.json');
+  console.log('Loading service account from local file:', localPath);
+  return require(localPath);
 }
 
-if (admin.apps.length === 0) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+let db;
+try {
+  const serviceAccount = loadServiceAccount();
+  if (admin.apps.length === 0) {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+    });
+  }
+  db = admin.firestore();
+  console.log('Firebase initialized successfully');
+} catch (e) {
+  console.error('FATAL: Firebase initialization failed:', e.message, e.stack);
+  // Create minimal Express app that shows error
+  const app = express();
+  app.get('*', (req, res) => {
+    res.status(500).send('Error de configuración: Firebase no se pudo inicializar. Verifica la variable FIREBASE_SERVICE_ACCOUNT en Vercel.');
   });
+  module.exports = app;
+  return;
 }
 
-const db = admin.firestore();
 const app = express();
 
 app.use(express.json());
