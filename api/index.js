@@ -174,6 +174,8 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
         stock_cierre: Math.round(cierre * 100) / 100,
         cantidad_minima: inv.cantidad_minima || 0,
         fecha_apertura: inv.fecha_apertura || '',
+        saved_by: dia.saved_by || null,
+        updated_at: dia.updated_at || null,
       };
     });
     return { id: alId, nombre: alDoc.data().nombre, items };
@@ -217,6 +219,9 @@ app.post('/api/almacenes/guardar-dia', async (req, res) => {
     }, { merge: true });
   }
   await batch.commit();
+
+  // Invalidate cache so next GET sees fresh saved_by / updated_at
+  delete _cache['inv_diario_' + fecha];
 
   res.json({ ok: true });
 

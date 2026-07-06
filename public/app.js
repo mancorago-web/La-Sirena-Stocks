@@ -474,9 +474,10 @@ function verDetallesSalidas() {
       html += '<div class="accordion-item">';
       html += '<div class="accordion-header" onclick="toggleAcordeon(this)"><span class="accordion-title">' + a.nombre + '</span><span class="accordion-arrow">▶</span></div>';
       html += '<div class="accordion-body open">';
-      html += '<table><thead><tr><th>Item</th><th>Salida</th></tr></thead><tbody>';
+      html += '<table><thead><tr><th>Item</th><th>Salida</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
       itemsConSalida.forEach(i => {
-        html += '<tr><td>' + i.nombre + '</td><td>' + (i.salida_almacen || 0) + '</td></tr>';
+        const t = i.updated_at ? new Date(i.updated_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
+        html += '<tr><td>' + i.nombre + '</td><td>' + (i.salida_almacen || 0) + '</td><td>' + (i.saved_by || '-') + '</td><td>' + t + '</td></tr>';
       });
       html += '</tbody></table></div></div>';
     });
@@ -502,9 +503,10 @@ function verDetallesVentas() {
       html += '<div class="accordion-item">';
       html += '<div class="accordion-header" onclick="toggleAcordeon(this)"><span class="accordion-title">' + a.nombre + '</span><span class="accordion-arrow">▶</span></div>';
       html += '<div class="accordion-body open">';
-      html += '<table><thead><tr><th>Item</th><th>Total Ventas</th></tr></thead><tbody>';
+      html += '<table><thead><tr><th>Item</th><th>Total Ventas</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
       itemsConVentas.forEach(i => {
-        html += '<tr><td>' + i.nombre + '</td><td>' + (i.total_ventas || 0) + '</td></tr>';
+        const t = i.updated_at ? new Date(i.updated_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
+        html += '<tr><td>' + i.nombre + '</td><td>' + (i.total_ventas || 0) + '</td><td>' + (i.saved_by || '-') + '</td><td>' + t + '</td></tr>';
       });
       html += '</tbody></table></div></div>';
     });
@@ -773,9 +775,10 @@ function verDetallesIngresos() {
       html += '<div class="accordion-item">';
       html += '<div class="accordion-header" onclick="toggleAcordeon(this)"><span class="accordion-title">' + a.nombre + '</span><span class="accordion-arrow">▶</span></div>';
       html += '<div class="accordion-body open">';
-      html += '<table><thead><tr><th>Item</th><th>Ingreso</th></tr></thead><tbody>';
+      html += '<table><thead><tr><th>Item</th><th>Ingreso</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
       itemsConIngreso.forEach(i => {
-        html += '<tr><td>' + i.nombre + '</td><td>' + (i.stock_ingreso || 0) + '</td></tr>';
+        const t = i.updated_at ? new Date(i.updated_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
+        html += '<tr><td>' + i.nombre + '</td><td>' + (i.stock_ingreso || 0) + '</td><td>' + (i.saved_by || '-') + '</td><td>' + t + '</td></tr>';
       });
       html += '</tbody></table></div></div>';
     });
