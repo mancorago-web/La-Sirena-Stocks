@@ -140,8 +140,23 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
     itemsByAl[alId].push(inv);
   });
   let allDiasSnap = { docs: [] };
+  let searchFecha = fecha;
   if (fecha) {
     allDiasSnap = await cached('inv_diario_' + fecha, 30000, () => col('inventario_diario').where('fecha', '==', fecha).get());
+    // If no data for requested fecha, walk backwards up to 10 days
+    if (allDiasSnap.empty) {
+      let prev = new Date(fecha + 'T12:00:00');
+      for (let tries = 0; tries < 10; tries++) {
+        prev.setDate(prev.getDate() - 1);
+        const prevStr = prev.toISOString().split('T')[0];
+        const prevSnap = await col('inventario_diario').where('fecha', '==', prevStr).get();
+        if (!prevSnap.empty) {
+          allDiasSnap = prevSnap;
+          searchFecha = prevStr;
+          break;
+        }
+      }
+    }
   }
   const diasByAl = {};
   allDiasSnap.docs.forEach(d => {
@@ -150,17 +165,19 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
     if (!diasByAl[alId]) diasByAl[alId] = {};
     diasByAl[alId][dd.item_id] = dd;
   });
+  const isFallback = searchFecha !== fecha;
   const result = almsSnap.docs.map(alDoc => {
     const alId = Number(alDoc.id);
     const invItems = itemsByAl[alId] || [];
     const diaMap = diasByAl[alId] || {};
     const items = invItems.map(inv => {
       const dia = diaMap[inv.item_id] || {};
-      const apertura = dia.stock_apertura ?? inv.stock_apertura ?? 0;
-      const ingreso = dia.stock_ingreso ?? 0;
-      const salida = dia.salida_almacen ?? 0;
-      const ventas = dia.total_ventas ?? 0;
-      const falta = dia.falta_almacen ?? inv.falta_almacen ?? 0;
+      // When falling back to previous day's data, use its stock_cierre as apertura (0 for missing)
+      const apertura = isFallback ? (dia.stock_cierre ?? 0) : (dia.stock_apertura ?? inv.stock_apertura ?? 0);
+      const ingreso = isFallback ? 0 : (dia.stock_ingreso ?? 0);
+      const salida = isFallback ? 0 : (dia.salida_almacen ?? 0);
+      const ventas = isFallback ? 0 : (dia.total_ventas ?? 0);
+      const falta = isFallback ? 0 : (dia.falta_almacen ?? inv.falta_almacen ?? 0);
       const cierre = apertura + ingreso - salida - ventas - falta;
       return {
         id: inv.item_id,
@@ -269,38 +286,39 @@ app.post('/api/repair/propagar', async (req, res) => {
   try {
     const targetFecha = req.body.fecha;
     if (!targetFecha) return res.status(400).json({ error: 'fecha requerida' });
-    // Find the last working day before targetFecha with data
-    const lastSnap = await col('inventario_diario')
-      .where('fecha', '<', targetFecha)
-      .orderBy('fecha', 'desc')
-      .limit(1).get();
-    if (lastSnap.empty) return res.json({ ok: true, msg: 'No hay data anterior' });
-    const lastFecha = lastSnap.docs[0].data().fecha;
-    const oldSnap = await col('inventario_diario').where('fecha', '==', lastFecha).get();
-    if (oldSnap.empty) return res.json({ ok: true, msg: 'No hay data en ' + lastFecha });
-    // Check if targetFecha already has docs
+    // Check if targetFecha already has data
     const existing = await col('inventario_diario').where('fecha', '==', targetFecha).get();
     if (!existing.empty) return res.json({ ok: true, msg: targetFecha + ' ya tiene datos' });
+    // Walk backwards up to 10 days to find data
+    let sourceFecha = null;
+    let sourceSnap = null;
+    const d = new Date(targetFecha + 'T12:00:00');
+    for (let tries = 0; tries < 10; tries++) {
+      d.setDate(d.getDate() - 1);
+      const prevStr = d.toISOString().split('T')[0];
+      const snap = await col('inventario_diario').where('fecha', '==', prevStr).get();
+      if (!snap.empty) { sourceFecha = prevStr; sourceSnap = snap; break; }
+    }
+    if (!sourceFecha) return res.json({ ok: true, msg: 'No hay data anterior' });
     const batch = db.batch();
-    const nextDay = targetFecha;
-    for (const doc of oldSnap.docs) {
-      const d = doc.data();
-      const nextId = docId('invdiario', nextDay, d.almacen_id, d.item_id);
+    for (const doc of sourceSnap.docs) {
+      const dd = doc.data();
+      const nextId = docId('invdiario', targetFecha, dd.almacen_id, dd.item_id);
       batch.set(col('inventario_diario').doc(nextId), {
-        fecha: nextDay,
-        item_id: d.item_id,
-        almacen_id: d.almacen_id,
-        stock_apertura: d.stock_cierre ?? 0,
+        fecha: targetFecha,
+        item_id: dd.item_id,
+        almacen_id: dd.almacen_id,
+        stock_apertura: dd.stock_cierre ?? 0,
         stock_ingreso: 0,
         salida_almacen: 0,
         total_ventas: 0,
         falta_almacen: 0,
-        stock_cierre: d.stock_cierre ?? 0,
+        stock_cierre: dd.stock_cierre ?? 0,
         updated_at: new Date().toISOString(),
       });
     }
     await batch.commit();
-    res.json({ ok: true, msg: 'Propagado ' + lastFecha + ' → ' + nextDay + ' (' + oldSnap.docs.length + ' docs)' });
+    res.json({ ok: true, msg: 'Propagado ' + sourceFecha + ' → ' + targetFecha + ' (' + sourceSnap.docs.length + ' docs)' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
