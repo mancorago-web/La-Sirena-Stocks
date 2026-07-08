@@ -184,8 +184,8 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
     const diaMap = diasByAl[alId] || {};
     const items = invItems.map(inv => {
       const dia = diaMap[inv.item_id] || {};
-      // When falling back to previous day's data, use its stock_cierre as apertura (0 for missing)
-      const apertura = isFallback ? (dia.stock_cierre ?? 0) : (dia.stock_apertura ?? inv.stock_apertura ?? 0);
+      // When falling back to previous day's data, use its stock_cierre as apertura (fallback to inv.stock_apertura if no diario data)
+      const apertura = isFallback ? (dia.stock_cierre ?? inv.stock_apertura ?? 0) : (dia.stock_apertura ?? inv.stock_apertura ?? 0);
       const ingreso = isFallback ? 0 : (dia.stock_ingreso ?? 0);
       const salida = isFallback ? 0 : (dia.salida_almacen ?? 0);
       const ventas = isFallback ? 0 : (dia.total_ventas ?? 0);
