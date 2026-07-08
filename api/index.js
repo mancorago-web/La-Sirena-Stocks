@@ -154,14 +154,15 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
   let searchFecha = fecha;
   if (fecha) {
     allDiasSnap = await cached('inv_diario_' + fecha, 30000, () => col('inventario_diario').where('fecha', '==', fecha).get());
-    // If no data for requested fecha, walk backwards up to 10 days
-    if (allDiasSnap.empty) {
+    // If no meaningful data (empty or all apertura=0), walk backwards up to 10 days
+    const hasData = !allDiasSnap.empty && allDiasSnap.docs.some(d => (d.data().stock_apertura || 0) > 0);
+    if (!hasData) {
       let prev = new Date(fecha + 'T12:00:00');
       for (let tries = 0; tries < 10; tries++) {
         prev.setDate(prev.getDate() - 1);
         const prevStr = prev.toISOString().split('T')[0];
         const prevSnap = await col('inventario_diario').where('fecha', '==', prevStr).get();
-        if (!prevSnap.empty) {
+        if (!prevSnap.empty && prevSnap.docs.some(d => (d.data().stock_cierre || 0) > 0)) {
           allDiasSnap = prevSnap;
           searchFecha = prevStr;
           break;
