@@ -219,13 +219,9 @@ app.post('/api/almacenes/guardar-dia', async (req, res) => {
     }, { merge: true });
   }
   await batch.commit();
-
-  // Invalidate cache so next GET sees fresh saved_by / updated_at
   delete _cache['inv_diario_' + fecha];
 
-  res.json({ ok: true });
-
-  // Async propagation (respond first, propagate in background)
+  // Propagation: copy cierre to next working day's apertura (parallel reads)
   try {
     const nextDay = getNextWorkingDay(fecha);
     const oldSnap = await col('inventario_diario').where('fecha', '==', fecha).get();
@@ -255,8 +251,10 @@ app.post('/api/almacenes/guardar-dia', async (req, res) => {
     }
     if (hasChanges) await nextBatch.commit();
   } catch (e) {
-    console.error('Async propagation error:', e.message);
+    console.error('Propagation error:', e.message);
   }
+
+  res.json({ ok: true });
 });
 
 function getNextWorkingDay(fecha) {
@@ -265,6 +263,48 @@ function getNextWorkingDay(fecha) {
   while (d.getDay() === 2) d.setDate(d.getDate() + 1);
   return d.toISOString().split('T')[0];
 }
+
+// --- REPAIR: propagate last known data to a target fecha ---
+app.post('/api/repair/propagar', async (req, res) => {
+  try {
+    const targetFecha = req.body.fecha;
+    if (!targetFecha) return res.status(400).json({ error: 'fecha requerida' });
+    // Find the last working day before targetFecha with data
+    const lastSnap = await col('inventario_diario')
+      .where('fecha', '<', targetFecha)
+      .orderBy('fecha', 'desc')
+      .limit(1).get();
+    if (lastSnap.empty) return res.json({ ok: true, msg: 'No hay data anterior' });
+    const lastFecha = lastSnap.docs[0].data().fecha;
+    const oldSnap = await col('inventario_diario').where('fecha', '==', lastFecha).get();
+    if (oldSnap.empty) return res.json({ ok: true, msg: 'No hay data en ' + lastFecha });
+    // Check if targetFecha already has docs
+    const existing = await col('inventario_diario').where('fecha', '==', targetFecha).get();
+    if (!existing.empty) return res.json({ ok: true, msg: targetFecha + ' ya tiene datos' });
+    const batch = db.batch();
+    const nextDay = targetFecha;
+    for (const doc of oldSnap.docs) {
+      const d = doc.data();
+      const nextId = docId('invdiario', nextDay, d.almacen_id, d.item_id);
+      batch.set(col('inventario_diario').doc(nextId), {
+        fecha: nextDay,
+        item_id: d.item_id,
+        almacen_id: d.almacen_id,
+        stock_apertura: d.stock_cierre ?? 0,
+        stock_ingreso: 0,
+        salida_almacen: 0,
+        total_ventas: 0,
+        falta_almacen: 0,
+        stock_cierre: d.stock_cierre ?? 0,
+        updated_at: new Date().toISOString(),
+      });
+    }
+    await batch.commit();
+    res.json({ ok: true, msg: 'Propagado ' + lastFecha + ' → ' + nextDay + ' (' + oldSnap.docs.length + ' docs)' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // --- MINIMOS ---
 app.put('/api/inventario/minimos', async (req, res) => {

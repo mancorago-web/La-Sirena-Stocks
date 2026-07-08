@@ -61,6 +61,14 @@ firebase.auth().onAuthStateChanged(user => {
       }).catch(() => {});
     });
   }
+  // Auto-repair propagation for today
+  user.getIdToken().then(token => {
+    fetch('/api/repair/propagar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ fecha: todayStr() })
+    }).catch(() => {});
+  });
 });
 document.addEventListener('click', e => {
   if (e.target.id === 'btn-salir') {
