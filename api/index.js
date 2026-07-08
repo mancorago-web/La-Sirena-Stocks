@@ -56,23 +56,12 @@ app.get('/api/diag', async (req, res) => {
     const inv = await col('inventario').get();
     const dia = await col('inventario_diario').limit(1).get();
     const rec = await col('recetas').get();
-    // Check recent dates in inventario_diario (just existence)
-    const dates = ['2026-07-08','2026-07-06','2026-07-03'];
-    const dateCounts = {};
-    for (const d of dates) {
-      const snap = await col('inventario_diario').where('fecha','==',d).limit(1).get();
-      dateCounts[d] = snap.size > 0 ? 'has_data' : 'empty';
-    }
-    // Sample non-zero stock_apertura from inventario
-    const samples = inv.docs.filter(d => (d.data().stock_apertura || 0) > 0).slice(0, 3).map(d => d.data().nombre + '=' + d.data().stock_apertura);
     res.json({
       almacenes: alms.size,
       inventario: inv.size,
-      inventario_nonzero_sample: samples.length ? samples : 'ALL ZERO',
       inventario_diario_exists: dia.size > 0,
       inventario_diario_fields: dia.docs.length ? Object.keys(dia.docs[0].data()) : null,
       inventario_diario_fecha: dia.docs.length ? dia.docs[0].data().fecha : null,
-      date_counts: dateCounts,
       recetas: rec.size,
     });
   } catch (e) {
