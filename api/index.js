@@ -140,22 +140,24 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
     itemsByAl[alId].push(inv);
   });
   let allDiasSnap = { docs: [] };
-  let searchFecha = fecha;
+  let prevDiasByAl = {};
   if (fecha) {
     allDiasSnap = await cached('inv_diario_' + fecha, 30000, () => col('inventario_diario').where('fecha', '==', fecha).get());
-    // If no meaningful data (empty or all apertura=0), walk backwards up to 10 days
-    const hasData = !allDiasSnap.empty && allDiasSnap.docs.some(d => (d.data().stock_apertura || 0) > 0);
-    if (!hasData) {
-      let prev = new Date(fecha + 'T12:00:00');
-      for (let tries = 0; tries < 10; tries++) {
-        prev.setDate(prev.getDate() - 1);
-        const prevStr = prev.toISOString().split('T')[0];
-        const prevSnap = await col('inventario_diario').where('fecha', '==', prevStr).get();
-        if (!prevSnap.empty && prevSnap.docs.some(d => (d.data().stock_cierre || 0) > 0)) {
-          allDiasSnap = prevSnap;
-          searchFecha = prevStr;
-          break;
-        }
+    // Always walk back to find the last day with real stock_cierre data
+    let prev = new Date(fecha + 'T12:00:00');
+    for (let tries = 0; tries < 10; tries++) {
+      prev.setDate(prev.getDate() - 1);
+      const prevStr = prev.toISOString().split('T')[0];
+      const prevSnap = await col('inventario_diario').where('fecha', '==', prevStr).get();
+      if (!prevSnap.empty && prevSnap.docs.some(d => (d.data().stock_cierre || 0) > 0)) {
+        // Build a lookup map for previous day data
+        prevSnap.docs.forEach(d => {
+          const dd = d.data();
+          const alId = dd.almacen_id;
+          if (!prevDiasByAl[alId]) prevDiasByAl[alId] = {};
+          prevDiasByAl[alId][dd.item_id] = dd;
+        });
+        break;
       }
     }
   }
@@ -166,24 +168,22 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
     if (!diasByAl[alId]) diasByAl[alId] = {};
     diasByAl[alId][dd.item_id] = dd;
   });
-  const isFallback = searchFecha !== fecha;
   const result = almsSnap.docs.map(alDoc => {
     const alId = Number(alDoc.id);
     const invItems = itemsByAl[alId] || [];
     const diaMap = diasByAl[alId] || {};
+    const prevMap = prevDiasByAl[alId] || {};
     const items = invItems.map(inv => {
       const dia = diaMap[inv.item_id] || {};
-      // If this item's diario doc was created by propagation (no saved_by), 
-      // a stock_apertura of 0 is unreliable — fall back to inventario collection value
-      const apertura = isFallback
-        ? (dia.stock_cierre ?? inv.stock_apertura ?? 0)
-        : (dia.saved_by != null
-            ? (dia.stock_apertura ?? inv.stock_apertura ?? 0)
-            : (dia.stock_apertura || inv.stock_apertura || 0));
-      const ingreso = isFallback ? 0 : (dia.stock_ingreso ?? 0);
-      const salida = isFallback ? 0 : (dia.salida_almacen ?? 0);
-      const ventas = isFallback ? 0 : (dia.total_ventas ?? 0);
-      const falta = isFallback ? 0 : (dia.falta_almacen ?? inv.falta_almacen ?? 0);
+      const prevDia = prevMap[inv.item_id] || {};
+      // If the current day's doc was saved by a user (has saved_by), trust its values
+      // Otherwise, use the last working day's stock_cierre as apertura (movements = 0)
+      const userSaved = dia.saved_by != null;
+      const apertura = userSaved ? (dia.stock_apertura ?? inv.stock_apertura ?? 0) : (prevDia.stock_cierre ?? inv.stock_apertura ?? 0);
+      const ingreso = userSaved ? (dia.stock_ingreso ?? 0) : 0;
+      const salida = userSaved ? (dia.salida_almacen ?? 0) : 0;
+      const ventas = userSaved ? (dia.total_ventas ?? 0) : 0;
+      const falta = userSaved ? (dia.falta_almacen ?? inv.falta_almacen ?? 0) : 0;
       const cierre = apertura + ingreso - salida - ventas - falta;
       return {
         id: inv.item_id,
