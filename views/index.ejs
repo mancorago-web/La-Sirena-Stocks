@@ -3,6 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Sirena">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <title>Sirena - Control de Inventario</title>
   <link rel="stylesheet" href="/style.css">
 </head>
@@ -46,6 +51,7 @@
       <button class="tab" data-tab="ingresos">Ingresos</button>
       <button class="tab" data-tab="salidas">Salidas</button>
       <button class="tab" data-tab="ventas">Ventas</button>
+      <button class="tab" data-tab="bajas">Bajas</button>
       <button class="tab active" data-tab="almacenes">Almacenes</button>
       <button class="tab" data-tab="stocks">Stocks</button>
       <button class="tab" data-tab="reportes">Reportes</button>
@@ -104,6 +110,19 @@
         </div>
       </div>
       <div id="accordion-ventas"></div>
+    </div>
+
+    <div id="tab-bajas" class="tab-content">
+      <div class="header-actions">
+        <h2>Bajas</h2>
+        <div class="controles-dia">
+          <label>Fecha: <input type="date" id="fecha-bajas" onchange="cargarBajas(this.value)"></label>
+          <input type="text" id="buscar-baja" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-bajas')">
+          <button class="btn-guardar-dia" onclick="guardarBajas()">💾 GUARDAR BAJAS</button>
+          <button class="btn-detalles" onclick="verDetallesBajas()">📋 DETALLES</button>
+        </div>
+      </div>
+      <div id="accordion-bajas"></div>
     </div>
 
     <div id="tab-stocks" class="tab-content">

@@ -44,6 +44,7 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .category-desc { font-size: 0.75rem; color: #888; text-align: center; text-transform: none; line-height: 1.3; }
 
 .user-info {
+  margin-left: auto;
   flex-shrink: 0;
   text-align: right;
   font-size: 0.8rem;
@@ -78,8 +79,8 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .header-actions h2 { font-size: 1.3rem; }
 .header-actions button, .filtros button { background: #1a237e; color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; }
 .header-actions button:hover { background: #283593; }
-#buscar-item, #buscar-salida, #buscar-venta, #buscar-ingreso, #buscar-stock { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; width: 200px; }
-#buscar-item:focus, #buscar-salida:focus, #buscar-venta:focus, #buscar-ingreso:focus, #buscar-stock:focus { border-color: #1a237e; outline: none; box-shadow: 0 0 0 2px rgba(26,35,126,0.15); }
+#buscar-item, #buscar-salida, #buscar-venta, #buscar-ingreso, #buscar-stock, #buscar-baja { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; width: 200px; }
+#buscar-item:focus, #buscar-salida:focus, #buscar-venta:focus, #buscar-ingreso:focus, #buscar-stock:focus, #buscar-baja:focus { border-color: #1a237e; outline: none; box-shadow: 0 0 0 2px rgba(26,35,126,0.15); }
 .filtros { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 .filtros select, .filtros input { padding: 0.4rem; border: 1px solid #ccc; border-radius: 4px; }
 
@@ -343,7 +344,7 @@ td button.danger { border-color: #c62828; color: #c62828; }
     font-size: 0.8rem;
     text-align: center;
   }
-  #buscar-item, #buscar-salida, #buscar-venta, #buscar-ingreso, #buscar-stock {
+  #buscar-item, #buscar-salida, #buscar-venta, #buscar-ingreso, #buscar-stock, #buscar-baja {
     width: 100%;
     font-size: 0.85rem;
     padding: 0.6rem;

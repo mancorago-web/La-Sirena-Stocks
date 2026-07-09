@@ -40,7 +40,32 @@ try {
   app.get('*', (req, res) => {
     res.status(500).send('Error de configuración: Firebase no se pudo inicializar. Verifica la variable FIREBASE_SERVICE_ACCOUNT en Vercel.');
   });
-  module.exports = app;
+// --- DEBUG: check fallback data ---
+app.get('/api/debug/fallback', async (req, res) => {
+  const fecha = req.query.fecha;
+  if (!fecha) return res.status(400).json({ error: 'fecha requerida' });
+  const snap = await col('inventario_diario').where('fecha', '==', fecha).get();
+  const info = { fecha, hasData: !snap.empty, count: snap.docs.length, walks: [] };
+  let prev = new Date(fecha + 'T12:00:00');
+  for (let tries = 0; tries < 10; tries++) {
+    prev.setDate(prev.getDate() - 1);
+    const prevStr = prev.toISOString().split('T')[0];
+    const prevSnap = await col('inventario_diario').where('fecha', '==', prevStr).get();
+    const entry = { fecha: prevStr, hasData: !prevSnap.empty, count: prevSnap.docs.length };
+    if (!prevSnap.empty) {
+      entry.someCierreGT0 = prevSnap.docs.some(d => (d.data().stock_cierre || 0) > 0);
+      // Find gas butano (item_id=66, almacen_id=4)
+      const gas = prevSnap.docs.find(d => d.data().item_id === 66 && d.data().almacen_id === 4);
+      entry.gasButano = gas ? gas.data() : null;
+      info.walks.push(entry);
+      break;
+    }
+    info.walks.push(entry);
+  }
+  res.json(info);
+});
+
+module.exports = app;
   return;
 }
 
@@ -67,6 +92,35 @@ app.get('/api/diag', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message, stack: e.stack?.split('\n').slice(0,3).join('; ') });
   }
+});
+
+// --- DEBUG: check fallback data (no auth) ---
+app.get('/api/debug/fallback', async (req, res) => {
+  const fecha = req.query.fecha;
+  if (!fecha) return res.status(400).json({ error: 'fecha requerida' });
+  const snap = await col('inventario_diario').where('fecha', '==', fecha).get();
+  const info = { fecha, hasData: !snap.empty, count: snap.docs.length, walks: [], prevDay: prevWorkingDay(fecha) };
+  const firstPrevStr = prevWorkingDay(fecha);
+  let pSnap = await col('inventario_diario').where('fecha', '==', firstPrevStr).get();
+  info.firstPrev = { fecha: firstPrevStr, hasData: !pSnap.empty, count: pSnap.docs.length };
+  if (pSnap.empty) {
+    // Walk further back
+    let prev = new Date(firstPrevStr + 'T12:00:00');
+    for (let tries = 0; tries < 10; tries++) {
+      prev.setDate(prev.getDate() - 1);
+      const prevStr = prev.toISOString().split('T')[0];
+      pSnap = await col('inventario_diario').where('fecha', '==', prevStr).get();
+      info.walks.push({ fecha: prevStr, hasData: !pSnap.empty, count: pSnap.docs.length });
+      if (!pSnap.empty) break;
+    }
+  }
+  // Check gas butano (item 66, almacen 4)
+  const gasSnap = await col('inventario_diario').where('fecha', '==', firstPrevStr).where('item_id', '==', 66).where('almacen_id', '==', 4).limit(1).get();
+  info.gasButanoOnPrev = gasSnap.empty ? null : gasSnap.docs[0].data();
+  // Also check it on the requested fecha
+  const gasToday = await col('inventario_diario').where('fecha', '==', fecha).where('item_id', '==', 66).where('almacen_id', '==', 4).limit(1).get();
+  info.gasButanoToday = gasToday.empty ? null : gasToday.docs[0].data();
+  res.json(info);
 });
 
 // Auth middleware
@@ -120,7 +174,7 @@ function cached(key, ttlMs, fetchFn) {
 
 // --- ALMACENES ---
 app.get('/api/almacenes', async (req, res) => {
-  const snap = await cached('almacenes', 60000, () => col('almacenes').orderBy('orden').get());
+  const snap = await col('almacenes').orderBy('orden').get();
   const almacenes = snap.docs.map(d => ({ id: Number(d.id), ...d.data() }));
   res.json(almacenes);
 });
@@ -129,8 +183,8 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
   const fecha = req.query.fecha;
   if (!fecha) return res.json([]);
   const [almsSnap, allItemsSnap] = await Promise.all([
-    cached('almacenes', 60000, () => col('almacenes').orderBy('orden').get()),
-    cached('inventario', 60000, () => col('inventario').get()),
+    col('almacenes').orderBy('orden').get(),
+    col('inventario').get(),
   ]);
   const itemsByAl = {};
   allItemsSnap.docs.forEach(d => {
@@ -142,23 +196,27 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
   let allDiasSnap = { docs: [] };
   let prevDiasByAl = {};
   if (fecha) {
-    allDiasSnap = await cached('inv_diario_' + fecha, 30000, () => col('inventario_diario').where('fecha', '==', fecha).get());
-    // Always walk back to find the last day with real stock_cierre data
-    let prev = new Date(fecha + 'T12:00:00');
-    for (let tries = 0; tries < 10; tries++) {
-      prev.setDate(prev.getDate() - 1);
-      const prevStr = prev.toISOString().split('T')[0];
-      const prevSnap = await col('inventario_diario').where('fecha', '==', prevStr).get();
-      if (!prevSnap.empty && prevSnap.docs.some(d => (d.data().stock_cierre || 0) > 0)) {
-        // Build a lookup map for previous day data
-        prevSnap.docs.forEach(d => {
-          const dd = d.data();
-          const alId = dd.almacen_id;
-          if (!prevDiasByAl[alId]) prevDiasByAl[alId] = {};
-          prevDiasByAl[alId][dd.item_id] = dd;
-        });
-        break;
+    allDiasSnap = await col('inventario_diario').where('fecha', '==', fecha).get();
+    // Deterministic: try the previous working day first (e.g. Wed → Mon, skipping Tue)
+    const firstPrevStr = prevWorkingDay(fecha);
+    let prevSnap = await col('inventario_diario').where('fecha', '==', firstPrevStr).get();
+    if (prevSnap.empty) {
+      // Walk further back if the immediate prev working day has no data
+      let prev = new Date(firstPrevStr + 'T12:00:00');
+      for (let tries = 0; tries < 10; tries++) {
+        prev.setDate(prev.getDate() - 1);
+        const prevStr = prev.toISOString().split('T')[0];
+        prevSnap = await col('inventario_diario').where('fecha', '==', prevStr).get();
+        if (!prevSnap.empty) break;
       }
+    }
+    if (!prevSnap.empty) {
+      prevSnap.docs.forEach(d => {
+        const dd = d.data();
+        const alId = dd.almacen_id;
+        if (!prevDiasByAl[alId]) prevDiasByAl[alId] = {};
+        prevDiasByAl[alId][dd.item_id] = dd;
+      });
     }
   }
   const diasByAl = {};
@@ -176,15 +234,15 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
     const items = invItems.map(inv => {
       const dia = diaMap[inv.item_id] || {};
       const prevDia = prevMap[inv.item_id] || {};
-      // If the current day's doc was saved by a user (has saved_by), trust its values
-      // Otherwise, use the last working day's stock_cierre as apertura (movements = 0)
-      const userSaved = dia.saved_by != null;
-      const apertura = userSaved ? (dia.stock_apertura ?? inv.stock_apertura ?? 0) : (prevDia.stock_cierre ?? inv.stock_apertura ?? 0);
-      const ingreso = userSaved ? (dia.stock_ingreso ?? 0) : 0;
-      const salida = userSaved ? (dia.salida_almacen ?? 0) : 0;
-      const ventas = userSaved ? (dia.total_ventas ?? 0) : 0;
-      const falta = userSaved ? (dia.falta_almacen ?? inv.falta_almacen ?? 0) : 0;
-      const cierre = apertura + ingreso - salida - ventas - falta;
+      // If today's doc exists (from propagation or user-saved), use its apertura.
+      // If not (new item or no data), fall back to prev day's cierre, then inventario base.
+      const apertura = (dia.stock_apertura ?? prevDia.stock_cierre ?? inv.stock_apertura ?? 0);
+      const ingreso = (dia.stock_ingreso ?? 0);
+      const salida = (dia.salida_almacen ?? 0);
+      const ventas = (dia.total_ventas ?? 0);
+      const falta = (dia.falta_almacen ?? 0);
+      const baja = (dia.stock_baja ?? 0);
+      const cierre = apertura + ingreso - salida - ventas - falta - baja;
       return {
         id: inv.item_id,
         nombre: inv.nombre,
@@ -194,7 +252,9 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
         salida_almacen: salida,
         total_ventas: ventas,
         falta_almacen: falta,
-        stock_cierre: Math.round(cierre * 100) / 100,
+      stock_baja: baja,
+      nota_baja: dia.nota_baja || '',
+      stock_cierre: Math.round(cierre * 100) / 100,
         cantidad_minima: inv.cantidad_minima || 0,
         fecha_apertura: inv.fecha_apertura || '',
         saved_by: dia.saved_by || null,
@@ -219,7 +279,9 @@ app.post('/api/almacenes/guardar-dia', async (req, res) => {
     const salida = parseFloat(r.salida_almacen) || 0;
     const ventas = parseFloat(r.total_ventas) || 0;
     const falta = parseFloat(r.falta_almacen) || 0;
-    const cierre = apertura + ingreso - salida - ventas - falta;
+    const baja = parseFloat(r.stock_baja) || 0;
+    const notaBaja = r.nota_baja || '';
+    const cierre = apertura + ingreso - salida - ventas - falta - baja;
     const ref = col('inventario_diario').doc(id);
     batch.set(ref, {
       fecha,
@@ -230,6 +292,8 @@ app.post('/api/almacenes/guardar-dia', async (req, res) => {
       salida_almacen: salida,
       total_ventas: ventas,
       falta_almacen: falta,
+      stock_baja: baja,
+      nota_baja: notaBaja,
       stock_cierre: Math.round(cierre * 100) / 100,
       updated_at: new Date().toISOString(),
       saved_by: savedBy,
@@ -251,22 +315,44 @@ app.post('/api/almacenes/guardar-dia', async (req, res) => {
     const nextDocs = await Promise.all(oldSnap.docs.map(doc => {
       const d = doc.data();
       const nextId = docId('invdiario', nextDay, d.almacen_id, d.item_id);
-      return col('inventario_diario').doc(nextId).get().then(snap => ({ d, exists: snap.exists }));
+      return col('inventario_diario').doc(nextId).get().then(snap => ({ d, exists: snap.exists, snap }));
     }));
     const nextBatch = db.batch();
     let hasChanges = false;
-    for (const { d, exists } of nextDocs) {
-      if (!exists) {
-        nextBatch.set(col('inventario_diario').doc(docId('invdiario', nextDay, d.almacen_id, d.item_id)), {
+    for (const { d, exists, snap } of nextDocs) {
+      const nextRef = col('inventario_diario').doc(docId('invdiario', nextDay, d.almacen_id, d.item_id));
+      const apertura = d.stock_cierre ?? 0;
+      if (exists) {
+        const existing = snap.data();
+        const ingreso = existing.stock_ingreso ?? 0;
+        const salida = existing.salida_almacen ?? 0;
+        const ventas = existing.total_ventas ?? 0;
+        const falta = existing.falta_almacen ?? 0;
+        const baja = existing.stock_baja ?? 0;
+        const cierre = apertura + ingreso - salida - ventas - falta - baja;
+        const updateData = {
+          stock_apertura: apertura,
+          stock_cierre: Math.round(cierre * 100) / 100,
+          updated_at: new Date().toISOString(),
+        };
+        // preserve nota_baja if it exists
+        if (existing.nota_baja) {
+          updateData.nota_baja = existing.nota_baja;
+        }
+        nextBatch.update(nextRef, updateData);
+        hasChanges = true;
+      } else {
+        nextBatch.set(nextRef, {
           fecha: nextDay,
           item_id: d.item_id,
           almacen_id: d.almacen_id,
-          stock_apertura: d.stock_cierre ?? 0,
+          stock_apertura: apertura,
           stock_ingreso: 0,
           salida_almacen: 0,
           total_ventas: 0,
           falta_almacen: 0,
-          stock_cierre: d.stock_cierre ?? 0,
+          stock_baja: 0,
+          stock_cierre: apertura,
           updated_at: new Date().toISOString(),
         });
         hasChanges = true;
@@ -284,6 +370,12 @@ function getNextWorkingDay(fecha) {
   const d = new Date(fecha + 'T12:00:00');
   d.setDate(d.getDate() + 1);
   while (d.getDay() === 2) d.setDate(d.getDate() + 1);
+  return d.toISOString().split('T')[0];
+}
+function prevWorkingDay(fecha) {
+  const d = new Date(fecha + 'T12:00:00');
+  d.setDate(d.getDate() - 1);
+  while (d.getDay() === 2) d.setDate(d.getDate() - 1);
   return d.toISOString().split('T')[0];
 }
 
@@ -330,6 +422,43 @@ app.post('/api/repair/propagar', async (req, res) => {
   }
 });
 
+// --- REPAIR: fix apertura of existing data to match prev working day's cierre ---
+app.post('/api/repair/fix-apertura', async (req, res) => {
+  try {
+    const { fecha } = req.body;
+    if (!fecha) return res.status(400).json({ error: 'fecha requerida' });
+    const prevStr = prevWorkingDay(fecha);
+    const [prevSnap, curSnap] = await Promise.all([
+      col('inventario_diario').where('fecha', '==', prevStr).get(),
+      col('inventario_diario').where('fecha', '==', fecha).get(),
+    ]);
+    if (prevSnap.empty) return res.json({ ok: false, msg: 'No hay data anterior en ' + prevStr });
+    const prevByKey = {};
+    prevSnap.docs.forEach(d => {
+      const dd = d.data();
+      prevByKey[dd.almacen_id + '_' + dd.item_id] = dd;
+    });
+    const batch = db.batch();
+    let changed = 0;
+    curSnap.docs.forEach(d => {
+      const dd = d.data();
+      const prev = prevByKey[dd.almacen_id + '_' + dd.item_id];
+      if (prev && dd.stock_apertura !== prev.stock_cierre) {
+        const newCierre = (prev.stock_cierre ?? 0) + (dd.stock_ingreso ?? 0) - (dd.salida_almacen ?? 0) - (dd.total_ventas ?? 0) - (dd.falta_almacen ?? 0);
+        batch.update(d.ref, {
+          stock_apertura: prev.stock_cierre ?? 0,
+          stock_cierre: Math.round(newCierre * 100) / 100,
+        });
+        changed++;
+      }
+    });
+    if (changed > 0) await batch.commit();
+    res.json({ ok: true, msg: `Corregidas ${changed} aperturas en ${fecha} (prev: ${prevStr})` });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- MINIMOS ---
 app.put('/api/inventario/minimos', async (req, res) => {
   const { minimos, botellas } = req.body;
@@ -356,9 +485,9 @@ app.put('/api/inventario/minimos', async (req, res) => {
 app.get('/api/precios', async (req, res) => {
   const fecha = req.query.fecha;
   const [almsSnap, allInvSnap, allDiasSnap] = await Promise.all([
-    cached('almacenes', 60000, () => col('almacenes').orderBy('orden').get()),
-    cached('inventario', 60000, () => col('inventario').get()),
-    fecha ? cached('inv_diario_' + fecha, 30000, () => col('inventario_diario').where('fecha', '==', fecha).get()) : Promise.resolve({ docs: [] }),
+    col('almacenes').orderBy('orden').get(),
+    col('inventario').get(),
+    fecha ? col('inventario_diario').where('fecha', '==', fecha).get() : Promise.resolve({ docs: [] }),
   ]);
   const invByAl = {};
   allInvSnap.docs.forEach(d => {
@@ -378,7 +507,7 @@ app.get('/api/precios', async (req, res) => {
     const stockMap = diasByAl[alId] || {};
     const items = invItems.map(inv => {
       const dia = stockMap[inv.item_id] || {};
-      const cierre = (dia.stock_apertura ?? inv.stock_apertura ?? 0) + (dia.stock_ingreso ?? 0) - (dia.salida_almacen ?? 0) - (dia.total_ventas ?? 0) - (dia.falta_almacen ?? 0);
+      const cierre = (dia.stock_apertura ?? inv.stock_apertura ?? 0) + (dia.stock_ingreso ?? 0) - (dia.salida_almacen ?? 0) - (dia.total_ventas ?? 0) - (dia.falta_almacen ?? 0) - (dia.stock_baja ?? 0);
       return {
         id: inv.item_id,
         nombre: inv.nombre,
@@ -407,9 +536,9 @@ app.put('/api/precios', async (req, res) => {
 // --- RECETAS ---
 app.get('/api/recetas', async (req, res) => {
   const [recSnap, precSnap, ingSnap] = await Promise.all([
-    cached('recetas', 60000, () => col('recetas').orderBy('categoria').orderBy('nombre').get()),
-    cached('barra_precios', 60000, () => col('barra_precios').orderBy('ingrediente').get()),
-    cached('receta_ingredientes', 60000, () => col('receta_ingredientes').orderBy('id').get()),
+    col('recetas').orderBy('nombre').get(),
+    col('barra_precios').orderBy('ingrediente').get(),
+    col('receta_ingredientes').orderBy('id').get(),
   ]);
   const precios = precSnap.docs.map(d => d.data());
   const ingByRec = {};
@@ -517,7 +646,7 @@ app.put('/api/recetas/:id/with-ingredientes', async (req, res) => {
 
 // --- BARRA STOCK ---
 app.get('/api/barra/stock', async (req, res) => {
-  const snap = await cached('barra_stock', 60000, () => col('barra_stock').orderBy('ingrediente').get());
+  const snap = await col('barra_stock').orderBy('ingrediente').get();
   res.json(snap.docs.map(d => ({ id: Number(d.id), ...d.data() })));
 });
 
@@ -550,7 +679,7 @@ app.delete('/api/barra/stock/:id', async (req, res) => {
 
 // --- BARRA PRECIOS ---
 app.get('/api/barra/precios', async (req, res) => {
-  const snap = await cached('barra_precios', 60000, () => col('barra_precios').orderBy('ingrediente').get());
+  const snap = await col('barra_precios').orderBy('ingrediente').get();
   res.json(snap.docs.map(d => ({ id: Number(d.id), ...d.data() })));
 });
 
@@ -584,9 +713,9 @@ app.get('/api/reportes/diferencias', async (req, res) => {
   const fecha = req.query.fecha;
   if (!fecha) return res.json([]);
   const [almsSnap, allInvSnap, allDiasSnap] = await Promise.all([
-    cached('almacenes', 60000, () => col('almacenes').orderBy('orden').get()),
-    cached('inventario', 60000, () => col('inventario').get()),
-    cached('inv_diario_' + fecha, 30000, () => col('inventario_diario').where('fecha', '==', fecha).get()),
+    col('almacenes').orderBy('orden').get(),
+    col('inventario').get(),
+    col('inventario_diario').where('fecha', '==', fecha).get(),
   ]);
   const invByAl = {};
   allInvSnap.docs.forEach(d => {
@@ -611,7 +740,8 @@ app.get('/api/reportes/diferencias', async (req, res) => {
       const salida = dia.salida_almacen ?? 0;
       const ventas = dia.total_ventas ?? 0;
       const falta = dia.falta_almacen ?? 0;
-      const cierre = apertura + ingreso - salida - ventas - falta;
+      const baja = dia.stock_baja ?? 0;
+      const cierre = apertura + ingreso - salida - ventas - falta - baja;
       const minima = inv.cantidad_minima || 0;
       const diferencia = cierre - minima;
       result.push({
@@ -644,6 +774,21 @@ app.post('/api/setup/display-name', authMiddleware, async (req, res) => {
     if (!displayName) return res.status(400).json({ error: 'displayName requerido' });
     await admin.auth().updateUser(req.user.uid, { displayName });
     res.json({ ok: true, displayName });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- List registered users ---
+app.get('/api/auth/users', authMiddleware, async (req, res) => {
+  try {
+    const list = await admin.auth().listUsers(1000);
+    const users = list.users.map(u => ({
+      uid: u.uid,
+      email: u.email,
+      displayName: u.displayName || null,
+    }));
+    res.json(users);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
