@@ -69,6 +69,17 @@ firebase.auth().onAuthStateChanged(user => {
       body: JSON.stringify({ fecha: todayStr() })
     }).catch(() => {});
   });
+  // Register service worker for PWA (auto-update on new deploy)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+      // Check for updates every 5 minutes while app is open
+      setInterval(() => reg.update(), 300000);
+      // Auto-reload when a new version activates
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        window.location.reload();
+      });
+    }).catch(() => {});
+  }
 });
 document.addEventListener('click', e => {
   if (e.target.id === 'btn-salir') {
@@ -165,6 +176,7 @@ function itemRow(i, a) {
     <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01" oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-ventas" value="${i.total_ventas || 0}" step="0.01" oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-falta" value="${i.falta_almacen || 0}" step="0.01" oninput="calcCierre(this)"></td>
+    <td><input type="hidden" class="input-baja" value="${i.stock_baja || 0}">
     <td><input type="number" class="input-num input-cierre" value="${i.stock_cierre || 0}" step="0.01" readonly></td>
     <td></td>
   </tr>`;
@@ -177,7 +189,8 @@ function calcCierre(el) {
   const s = parseFloat(tr.querySelector('.input-salida').value) || 0;
   const v = parseFloat(tr.querySelector('.input-ventas').value) || 0;
   const f = parseFloat(tr.querySelector('.input-falta')?.value) || 0;
-  tr.querySelector('.input-cierre').value = (a + i - s - v - f).toFixed(2);
+  const b = parseFloat(tr.querySelector('.input-baja')?.value) || 0;
+  tr.querySelector('.input-cierre').value = (a + i - s - v - f - b).toFixed(2);
   compararCierre(tr.querySelector('.input-cierre'));
 }
 
@@ -200,6 +213,7 @@ function recargarTodo(fecha) {
   cargarIngresos(fecha);
   cargarSalidas(fecha);
   cargarVentas(fecha);
+  cargarBajas(fecha);
   cargarStocks();
 }
 
@@ -219,6 +233,7 @@ function guardarDia() {
         salida_almacen: parseFloat(tr.querySelector('.input-salida').value) || 0,
         total_ventas: parseFloat(tr.querySelector('.input-ventas').value) || 0,
         falta_almacen: parseFloat(tr.querySelector('.input-falta').value) || 0,
+        stock_baja: parseFloat(tr.querySelector('.input-baja').value) || 0,
         stock_cierre: parseFloat(tr.querySelector('.input-cierre').value) || 0,
       });
     });
@@ -315,6 +330,8 @@ function cargarAlmacenes(fecha) {
         </div>
       </div>
     `).join('');
+    const ba = document.getElementById('buscar-item');
+    if (ba && ba.value) buscarEnTabla(ba.value, 'accordion-almacenes');
     container.querySelectorAll('tr[data-item-id]').forEach(tr => {
       calcCierre(tr.querySelector('.input-apertura'));
     });
@@ -408,6 +425,7 @@ function cargarSalidas(fecha) {
                     <input type="hidden" class="hidden-ventas" value="${i.total_ventas || 0}">
                     <input type="hidden" class="hidden-ingreso" value="${i.stock_ingreso || 0}">
                     <input type="hidden" class="hidden-falta" value="${i.falta_almacen || 0}">
+                    <input type="hidden" class="hidden-baja" value="${i.stock_baja || 0}">
                   </tr>`).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
@@ -420,6 +438,7 @@ function cargarSalidas(fecha) {
                     <input type="hidden" class="hidden-ventas" value="${i.total_ventas || 0}">
                     <input type="hidden" class="hidden-ingreso" value="${i.stock_ingreso || 0}">
                     <input type="hidden" class="hidden-falta" value="${i.falta_almacen || 0}">
+                    <input type="hidden" class="hidden-baja" value="${i.stock_baja || 0}">
                   </tr>`).join('')}
                 ` : ''}
               </tbody>
@@ -429,6 +448,8 @@ function cargarSalidas(fecha) {
         </div>
       </div>
     `).join('');
+    const bs = document.getElementById('buscar-salida');
+    if (bs && bs.value) buscarEnTabla(bs.value, 'accordion-salidas');
   });
 }
 
@@ -446,7 +467,8 @@ function guardarSalidas() {
       const ventas = parseFloat(tr.querySelector('.hidden-ventas')?.value) || 0;
       const ingreso = parseFloat(tr.querySelector('.hidden-ingreso')?.value) || 0;
       const falta = parseFloat(tr.querySelector('.hidden-falta')?.value) || 0;
-      const cierre = apertura + ingreso - salida - ventas;
+      const baja = parseFloat(tr.querySelector('.hidden-baja')?.value) || 0;
+      const cierre = apertura + ingreso - salida - ventas - falta - baja;
       registros.push({
         item_id: itemId,
         almacen_id: almacenId,
@@ -455,6 +477,7 @@ function guardarSalidas() {
         salida_almacen: salida,
         total_ventas: ventas,
         falta_almacen: falta,
+        stock_baja: baja,
         stock_cierre: cierre,
       });
     });
@@ -531,6 +554,35 @@ function verDetallesVentas() {
   });
 }
 
+function verDetallesBajas() {
+  const fecha = document.getElementById('fecha-bajas').value;
+  if (!fecha) { alert('Selecciona una fecha'); return; }
+  getInventario(fecha).then(data => {
+    let html = '<h3>Detalle de Bajas — ' + fecha + '</h3>';
+    let totalItems = 0;
+    data.forEach(a => {
+      const itemsConBaja = a.items.filter(i => (i.stock_baja || 0) > 0);
+      if (!itemsConBaja.length) return;
+      totalItems += itemsConBaja.length;
+      html += '<div class="accordion-item">';
+      html += '<div class="accordion-header" onclick="toggleAcordeon(this)"><span class="accordion-title">' + a.nombre + '</span><span class="accordion-arrow">▶</span></div>';
+      html += '<div class="accordion-body open">';
+      html += '<table><thead><tr><th>Item</th><th>Baja</th><th>Motivo</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
+      itemsConBaja.forEach(i => {
+        const t = i.updated_at ? new Date(i.updated_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
+        const u = DISPLAY_NAMES[i.saved_by] || i.saved_by || '-';
+        html += '<tr><td>' + i.nombre + '</td><td>' + (i.stock_baja || 0) + '</td><td style="max-width:250px;white-space:normal;word-break:break-word;">' + (i.nota_baja || '-') + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
+      });
+      html += '</tbody></table></div></div>';
+    });
+    if (!totalItems) {
+      html += '<p>No hay bajas registradas en esta fecha.</p>';
+    }
+    document.getElementById('modal-body').innerHTML = html;
+    document.getElementById('modal').style.display = 'block';
+  });
+}
+
 function cargarVentas(fecha) {
   if (!fecha) fecha = document.getElementById('fecha-ventas').value;
   getInventario(fecha).then(data => {
@@ -590,6 +642,7 @@ function cargarVentas(fecha) {
                     <input type="hidden" class="hidden-salida" value="${i.salida_almacen || 0}">
                     <input type="hidden" class="hidden-ingreso" value="${i.stock_ingreso || 0}">
                     <input type="hidden" class="hidden-falta" value="${i.falta_almacen || 0}">
+                    <input type="hidden" class="hidden-baja" value="${i.stock_baja || 0}">
                   </tr>`).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
@@ -602,6 +655,7 @@ function cargarVentas(fecha) {
                     <input type="hidden" class="hidden-salida" value="${i.salida_almacen || 0}">
                     <input type="hidden" class="hidden-ingreso" value="${i.stock_ingreso || 0}">
                     <input type="hidden" class="hidden-falta" value="${i.falta_almacen || 0}">
+                    <input type="hidden" class="hidden-baja" value="${i.stock_baja || 0}">
                   </tr>`).join('')}
                 ` : ''}
               </tbody>
@@ -611,6 +665,8 @@ function cargarVentas(fecha) {
         </div>
       </div>
     `).join('');
+    const bv = document.getElementById('buscar-venta');
+    if (bv && bv.value) buscarEnTabla(bv.value, 'accordion-ventas');
   });
 }
 
@@ -628,7 +684,8 @@ function guardarVentas() {
       const ventas = parseFloat(tr.querySelector('.input-ventas').value) || 0;
       const ingreso = parseFloat(tr.querySelector('.hidden-ingreso')?.value) || 0;
       const falta = parseFloat(tr.querySelector('.hidden-falta')?.value) || 0;
-      const cierre = apertura + ingreso - salida - ventas;
+      const baja = parseFloat(tr.querySelector('.hidden-baja')?.value) || 0;
+      const cierre = apertura + ingreso - salida - ventas - falta - baja;
       registros.push({
         item_id: itemId,
         almacen_id: almacenId,
@@ -637,6 +694,7 @@ function guardarVentas() {
         salida_almacen: salida,
         total_ventas: ventas,
         falta_almacen: falta,
+        stock_baja: baja,
         stock_cierre: cierre,
       });
     });
@@ -651,6 +709,176 @@ function guardarVentas() {
     btn.disabled = false; btn.textContent = '💾 GUARDAR VENTAS';
     alert('Error al guardar');
   });
+}
+
+function cargarBajas(fecha) {
+  if (!fecha) fecha = document.getElementById('fecha-bajas').value;
+  getInventario(fecha).then(data => {
+    const categoriasPorAlmacen = {};
+    const defaultCategorias = [
+      { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
+      { label: 'GASEOSAS', test: i => /COCA|INKA/i.test(i.nombre) },
+      { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
+      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONAY|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MANTGRAS/i.test(i.nombre) },
+    ];
+    data = data.map(a => {
+      const categorias = defaultCategorias;
+      const usado = new Set();
+      const secciones = categorias.map(cat => {
+        const items = a.items.filter(i => cat.test(i) && !usado.has(i.id)).sort((x, y) => {
+          const xg = (x.stock_apertura || 0) > 0 ? 0 : 1;
+          const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
+          if (xg !== yg) return xg - yg;
+          if (cat.label === 'VINOS' && a.id === 2) {
+            const xi = vinosOrder.indexOf(x.nombre);
+            const yi = vinosOrder.indexOf(y.nombre);
+            return (xi === -1 ? 999 : xi) - (yi === -1 ? 999 : yi);
+          }
+          return x.nombre.localeCompare(y.nombre);
+        });
+        items.forEach(i => usado.add(i.id));
+        return { ...cat, items };
+      });
+      const otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
+        const xg = (x.stock_apertura || 0) > 0 ? 0 : 1;
+        const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
+        return xg - yg || x.nombre.localeCompare(y.nombre);
+      });
+      return { ...a, secciones, otros };
+    });
+    const container = document.getElementById('accordion-bajas');
+    container.innerHTML = data.map(a => `
+      <div class="accordion-item" data-almacen-id="${a.id}">
+        <div class="accordion-header" onclick="toggleAcordeon(this)">
+          <span class="accordion-title">${a.nombre}</span>
+          <span class="accordion-arrow">▶</span>
+        </div>
+        <div class="accordion-body">
+          ${a.items.length ? `
+            <div class="table-wrap">
+            <table>
+              <thead><tr><th>Item</th><th>Stock Actual</th><th>Baja</th><th></th></tr></thead>
+              <tbody>
+                ${a.secciones.map(s => s.items.length ? `
+                  <tr class="section-header"><td colspan="4">— ${s.label} —</td></tr>
+                  ${s.items.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
+                    <td>${i.nombre}</td>
+                    <td>${i.stock_apertura || 0}</td>
+                    <td><input type="number" class="input-num input-baja" value="${i.stock_baja || 0}" step="0.01" onchange="abrirModalBaja(this)" oninput="mostrarBotonNota(this)"></td>
+                    <td><button class="btn-nota-baja" onclick="abrirModalBaja(this.closest('tr').querySelector('.input-baja'))" style="background:none;border:none;cursor:pointer;font-size:1.1rem;${(i.stock_baja||0)>0?'':'display:none'}">📝</button></td>
+                    <input type="hidden" class="hidden-nota-baja" value="${(i.nota_baja||'')}">
+                    <input type="hidden" class="hidden-cierre" value="${i.stock_cierre || 0}">
+                    <input type="hidden" class="hidden-ingreso" value="${i.stock_ingreso || 0}">
+                    <input type="hidden" class="hidden-salida" value="${i.salida_almacen || 0}">
+                    <input type="hidden" class="hidden-ventas" value="${i.total_ventas || 0}">
+                    <input type="hidden" class="hidden-falta" value="${i.falta_almacen || 0}">
+                  </tr>`).join('')}
+                ` : '').join('')}
+                ${a.otros.length ? `
+                  <tr class="section-header"><td colspan="4">— OTROS —</td></tr>
+                  ${a.otros.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
+                    <td>${i.nombre}</td>
+                    <td>${i.stock_apertura || 0}</td>
+                    <td><input type="number" class="input-num input-baja" value="${i.stock_baja || 0}" step="0.01" onchange="abrirModalBaja(this)" oninput="mostrarBotonNota(this)"></td>
+                    <td><button class="btn-nota-baja" onclick="abrirModalBaja(this.closest('tr').querySelector('.input-baja'))" style="background:none;border:none;cursor:pointer;font-size:1.1rem;${(i.stock_baja||0)>0?'':'display:none'}">📝</button></td>
+                    <input type="hidden" class="hidden-nota-baja" value="${(i.nota_baja||'')}">
+                    <input type="hidden" class="hidden-cierre" value="${i.stock_cierre || 0}">
+                    <input type="hidden" class="hidden-ingreso" value="${i.stock_ingreso || 0}">
+                    <input type="hidden" class="hidden-salida" value="${i.salida_almacen || 0}">
+                    <input type="hidden" class="hidden-ventas" value="${i.total_ventas || 0}">
+                    <input type="hidden" class="hidden-falta" value="${i.falta_almacen || 0}">
+                  </tr>`).join('')}
+                ` : ''}
+              </tbody>
+            </table>
+            </div>
+          ` : '<p class="sin-items">Este almacén no tiene items.</p>'}
+        </div>
+      </div>
+    `).join('');
+    const bb = document.getElementById('buscar-baja');
+    if (bb && bb.value) buscarEnTabla(bb.value, 'accordion-bajas');
+  });
+}
+
+function guardarBajas() {
+  const fecha = document.getElementById('fecha-bajas').value;
+  if (!fecha) { alert('Selecciona una fecha'); return; }
+  const registros = [];
+  document.querySelectorAll('#accordion-bajas .accordion-item').forEach(item => {
+    const almacenId = parseInt(item.dataset.almacenId);
+    item.querySelectorAll('tr[data-item-id]').forEach(tr => {
+      const itemId = parseInt(tr.dataset.itemId);
+      const celdas = tr.querySelectorAll('td');
+      const apertura = parseFloat(celdas[1]?.textContent) || 0;
+      const baja = parseFloat(tr.querySelector('.input-baja').value) || 0;
+      const ingreso = parseFloat(tr.querySelector('.hidden-ingreso')?.value) || 0;
+      const salida = parseFloat(tr.querySelector('.hidden-salida')?.value) || 0;
+      const ventas = parseFloat(tr.querySelector('.hidden-ventas')?.value) || 0;
+      const falta = parseFloat(tr.querySelector('.hidden-falta')?.value) || 0;
+      const nota_baja = tr.querySelector('.hidden-nota-baja')?.value || '';
+      const cierre = apertura + ingreso - salida - ventas - falta - baja;
+      registros.push({
+        item_id: itemId,
+        almacen_id: almacenId,
+        stock_apertura: apertura,
+        stock_ingreso: ingreso,
+        salida_almacen: salida,
+        total_ventas: ventas,
+        falta_almacen: falta,
+        stock_baja: baja,
+        nota_baja: nota_baja,
+        stock_cierre: cierre,
+      });
+    });
+  });
+  const btn = document.querySelector('#tab-bajas .btn-guardar-dia');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  api('POST', '/api/almacenes/guardar-dia', { fecha, registros, saved_by: currentUserName }).then(() => {
+    btn.disabled = false; btn.textContent = '💾 GUARDAR BAJAS';
+    showToast('Baja Guardada');
+    recargarTodo(fecha);
+  }).catch(() => {
+    btn.disabled = false; btn.textContent = '💾 GUARDAR BAJAS';
+    alert('Error al guardar');
+  });
+}
+
+function abrirModalBaja(inputEl) {
+  const tr = inputEl.closest('tr');
+  const notaInput = tr.querySelector('.hidden-nota-baja');
+  const itemName = tr.querySelector('td')?.textContent || '';
+  const almacenId = tr.dataset.almacenId;
+  const itemId = tr.dataset.itemId;
+  const body = document.getElementById('modal-body');
+  body.innerHTML = `
+    <h3>Motivo de la Baja</h3>
+    <p><strong>Item:</strong> ${itemName}</p>
+    <label style="display:block;margin-top:1rem;">
+      Describe el motivo:
+      <textarea id="nota-baja-texto" style="width:100%;min-height:100px;margin-top:0.5rem;padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-family:inherit;font-size:0.9rem;">${notaInput.value}</textarea>
+    </label>
+    <button onclick="guardarNotaBaja('${itemId}', '${almacenId}')" style="margin-top:1rem;padding:0.5rem 1.5rem;background:#1a237e;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+  `;
+  document.getElementById('modal').style.display = 'block';
+}
+
+function guardarNotaBaja(itemId, almacenId) {
+  const texto = document.getElementById('nota-baja-texto').value;
+  const tr = document.querySelector(`tr[data-item-id="${itemId}"][data-almacen-id="${almacenId}"]`);
+  if (tr) {
+    tr.querySelector('.hidden-nota-baja').value = texto;
+  }
+  document.getElementById('modal').style.display = 'none';
+}
+
+function mostrarBotonNota(inputEl) {
+  const tr = inputEl.closest('tr');
+  const btn = tr.querySelector('.btn-nota-baja');
+  const val = parseFloat(inputEl.value) || 0;
+  if (btn) {
+    btn.style.display = val > 0 ? '' : 'none';
+  }
 }
 
 function cargarIngresos(fecha) {
@@ -711,6 +939,7 @@ function cargarIngresos(fecha) {
                     <input type="hidden" class="hidden-salida" value="${i.salida_almacen || 0}">
                     <input type="hidden" class="hidden-ventas" value="${i.total_ventas || 0}">
                     <input type="hidden" class="hidden-falta" value="${i.falta_almacen || 0}">
+                    <input type="hidden" class="hidden-baja" value="${i.stock_baja || 0}">
                   </tr>`).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
@@ -723,6 +952,7 @@ function cargarIngresos(fecha) {
                     <input type="hidden" class="hidden-salida" value="${i.salida_almacen || 0}">
                     <input type="hidden" class="hidden-ventas" value="${i.total_ventas || 0}">
                     <input type="hidden" class="hidden-falta" value="${i.falta_almacen || 0}">
+                    <input type="hidden" class="hidden-baja" value="${i.stock_baja || 0}">
                   </tr>`).join('')}
                 ` : ''}
               </tbody>
@@ -732,6 +962,8 @@ function cargarIngresos(fecha) {
         </div>
       </div>
     `).join('');
+    const bi = document.getElementById('buscar-ingreso');
+    if (bi && bi.value) buscarEnTabla(bi.value, 'accordion-ingresos');
   });
 }
 
@@ -749,7 +981,8 @@ function guardarIngresos() {
       const salida = parseFloat(tr.querySelector('.hidden-salida')?.value) || 0;
       const ventas = parseFloat(tr.querySelector('.hidden-ventas')?.value) || 0;
       const falta = parseFloat(tr.querySelector('.hidden-falta')?.value) || 0;
-      const cierre = apertura + ingreso - salida - ventas;
+      const baja = parseFloat(tr.querySelector('.hidden-baja')?.value) || 0;
+      const cierre = apertura + ingreso - salida - ventas - falta - baja;
       registros.push({
         item_id: itemId,
         almacen_id: almacenId,
@@ -758,6 +991,7 @@ function guardarIngresos() {
         salida_almacen: salida,
         total_ventas: ventas,
         falta_almacen: falta,
+        stock_baja: baja,
         stock_cierre: cierre,
       });
     });
@@ -1007,6 +1241,8 @@ function cargarStocks() {
       </div>`;
     }).join('');
     container.innerHTML = html || '<p>Sin datos para esta fecha.</p>';
+    const bs = document.getElementById('buscar-stock');
+    if (bs && bs.value) buscarEnTabla(bs.value, 'accordion-stocks');
 
     // Botellas Abiertas: items with decimal stock_cierre
     getInventario(fecha).then(fullData => {
@@ -1237,6 +1473,7 @@ function initPicker(id, fn) {
 initPicker('fecha-almacenes', cargarAlmacenes);
 initPicker('fecha-salidas', cargarSalidas);
 initPicker('fecha-ventas', cargarVentas);
+initPicker('fecha-bajas', cargarBajas);
 initPicker('fecha-ingresos', cargarIngresos);
 initPicker('fecha-stocks', function() { cargarStocks(); });
 // reportes, precios, barra loaded lazily on first tab click
@@ -1601,6 +1838,8 @@ function cargarPreciosAlmacen() {
       </div>
     `).join('');
     container.innerHTML = html;
+    const bp = document.getElementById('buscar-precio-item');
+    if (bp && bp.value) buscarEnTabla(bp.value, 'accordion-precios');
   });
 }
 
