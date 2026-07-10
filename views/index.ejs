@@ -195,7 +195,17 @@
             <input type="text" id="buscar-stock-barra" placeholder="Buscar en stock..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:250px;" oninput="buscarTablaBarra(this.value, 'barra-stock-container', 'tr[data-stock-id]')">
             <input type="text" id="nuevo-stock-input" placeholder="Ingrediente" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:180px;">
             <input type="number" id="nuevo-stock-cant" placeholder="Cant." step="0.01" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:90px;">
-            <input type="text" id="nuevo-stock-uni" placeholder="Unidad" value="ml" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:80px;">
+            <select id="nuevo-stock-uni" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:90px;">
+              <option value="ml">ml</option>
+              <option value="unidad">unidad</option>
+              <option value="onzas">onzas</option>
+              <option value="gramos">gramos</option>
+              <option value="kg">kg</option>
+              <option value="lt">lt</option>
+              <option value="hojas">hojas</option>
+              <option value="gotas">gotas</option>
+              <option value="rodajas">rodajas</option>
+            </select>
             <button onclick="agregarStockBarra()">AGREGAR ITEM</button>
           </div>
         </div>
@@ -238,11 +248,11 @@
             <input type="number" id="nuevo-cocina-stock-cant" placeholder="Cantidad" step="0.01" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:100px;">
             <select id="nuevo-cocina-stock-uni" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
               <option value="unidad">unidad</option>
+              <option value="onzas">onzas</option>
+              <option value="gramos">gramos</option>
               <option value="kg">kg</option>
               <option value="lt">lt</option>
-              <option value="gr">gr</option>
               <option value="ml">ml</option>
-              <option value="und">und</option>
             </select>
             <button class="btn-guardar-dia" onclick="alert('Próximamente')">➕ AGREGAR</button>
           </div>
@@ -257,10 +267,11 @@
             <input type="text" id="nuevo-cocina-precio-input" placeholder="Nuevo ingrediente..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:200px;">
             <select id="nuevo-cocina-precio-uni" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
               <option value="unidad">unidad</option>
+              <option value="onzas">onzas</option>
+              <option value="gramos">gramos</option>
               <option value="kg">kg</option>
               <option value="lt">lt</option>
-              <option value="gr">gr</option>
-              <option value="und">und</option>
+              <option value="ml">ml</option>
             </select>
             <input type="number" id="nuevo-cocina-precio-precio" placeholder="Precio" step="0.01" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:100px;">
             <button class="btn-guardar-dia" onclick="alert('Próximamente')">➕ AGREGAR</button>

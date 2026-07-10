@@ -604,7 +604,7 @@ app.post('/api/recetas/:id/ingredientes', async (req, res) => {
   const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
   await col('receta_ingredientes').doc(String(nextId)).set({
     id: nextId, receta_id: Number(req.params.id),
-    ingrediente, cantidad: cantidad || 0, unidad: unidad || 'unidad'
+    ingrediente, cantidad: cantidad || 0, unidad: normalizeUnit(unidad)
   });
   res.json({ ok: true });
 });
@@ -612,7 +612,7 @@ app.post('/api/recetas/:id/ingredientes', async (req, res) => {
 app.put('/api/receta-ingredientes/:id', async (req, res) => {
   const { ingrediente, cantidad, unidad } = req.body;
   await col('receta_ingredientes').doc(req.params.id).update({
-    ingrediente, cantidad: cantidad || 0, unidad: unidad || 'unidad'
+    ingrediente, cantidad: cantidad || 0, unidad: normalizeUnit(unidad)
   });
   res.json({ ok: true });
 });
@@ -637,7 +637,7 @@ app.put('/api/recetas/:id/with-ingredientes', async (req, res) => {
     for (const ing of ingredientes) {
       maxId++;
       const ref = col('receta_ingredientes').doc(String(maxId));
-      batch.set(ref, { id: maxId, receta_id: Number(id), ingrediente: ing.ingrediente, cantidad: ing.cantidad || 0, unidad: ing.unidad || 'unidad' });
+      batch.set(ref, { id: maxId, receta_id: Number(id), ingrediente: ing.ingrediente, cantidad: ing.cantidad || 0, unidad: normalizeUnit(ing.unidad) });
     }
   }
   await batch.commit();
@@ -656,7 +656,7 @@ app.post('/api/barra/stock', async (req, res) => {
   const all = await col('barra_stock').get();
   const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
   await col('barra_stock').doc(String(nextId)).set({
-    id: nextId, ingrediente, cantidad: cantidad || 0, unidad: unidad || 'unidad',
+    id: nextId, ingrediente, cantidad: cantidad || 0, unidad: normalizeUnit(unidad),
     created_at: new Date().toISOString(), updated_at: new Date().toISOString()
   });
   res.json({ ok: true });
@@ -667,7 +667,7 @@ app.put('/api/barra/stock/:id', async (req, res) => {
   const upd = { updated_at: new Date().toISOString() };
   if (cantidad !== undefined) upd.cantidad = cantidad;
   if (ingrediente) upd.ingrediente = ingrediente;
-  if (unidad) upd.unidad = unidad;
+  if (unidad) upd.unidad = normalizeUnit(unidad);
   await col('barra_stock').doc(req.params.id).update(upd);
   res.json({ ok: true });
 });
@@ -689,7 +689,7 @@ app.post('/api/barra/precios', async (req, res) => {
   const all = await col('barra_precios').get();
   const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
   await col('barra_precios').doc(String(nextId)).set({
-    id: nextId, ingrediente, precio: precio || 0, unidad: unidad || 'unidad',
+    id: nextId, ingrediente, precio: precio || 0, unidad: normalizeUnit(unidad),
     created_at: new Date().toISOString(), updated_at: new Date().toISOString()
   });
   res.json({ ok: true });
@@ -789,6 +789,40 @@ app.get('/api/auth/users', authMiddleware, async (req, res) => {
       displayName: u.displayName || null,
     }));
     res.json(users);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+function normalizeUnit(u) {
+  if (!u) return 'unidad';
+  const lower = u.trim().toLowerCase();
+  const map = { 'oz': 'onzas', 'und': 'unidad', 'unidades': 'unidad', 'gr': 'gramos', 'gramo': 'gramos' };
+  return map[lower] || lower;
+}
+
+// --- Normalize units across all collections ---
+app.post('/api/migrate/normalize-units', authMiddleware, async (req, res) => {
+  try {
+    const collections = ['receta_ingredientes', 'barra_stock', 'barra_precios'];
+    let total = 0;
+    for (const collName of collections) {
+      const snap = await col(collName).get();
+      const batch = db.batch();
+      let count = 0;
+      snap.docs.forEach(d => {
+        const data = d.data();
+        const original = data.unidad || 'unidad';
+        const normalized = normalizeUnit(original);
+        if (original !== normalized) {
+          batch.update(d.ref, { unidad: normalized });
+          count++;
+        }
+      });
+      if (count > 0) await batch.commit();
+      total += count;
+    }
+    res.json({ ok: true, updated: total });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -207,6 +207,10 @@ function compararCierre(el) {
   }
 }
 
+function normalizeUnit(u) {
+  const map = { 'oz': 'onzas', 'und': 'unidad', 'unidades': 'unidad', 'gr': 'gramos', 'gramo': 'gramos' };
+  return map[u ? u.toLowerCase().trim() : ''] || (u ? u.trim().toLowerCase() : 'unidad');
+}
 function recargarTodo(fecha) {
   _invCache = { fecha: null, data: null, pending: null };
   cargarAlmacenes(fecha);
@@ -1618,7 +1622,17 @@ function editarReceta(id) {
             <tr data-edit-ing-idx="${idx}">
               <td><input class="edit-ing-nombre" value="${ing.ingrediente}" style="width:100%"></td>
               <td><input class="edit-ing-cant" type="number" step="0.01" value="${ing.cantidad}" style="width:80px"></td>
-              <td><input class="edit-ing-uni" value="${ing.unidad}" style="width:80px"></td>
+              <td><select class="edit-ing-uni" style="width:90px">
+                <option value="unidad" ${ing.unidad === 'unidad' ? 'selected' : ''}>unidad</option>
+                <option value="onzas" ${ing.unidad === 'onzas' ? 'selected' : ''}>onzas</option>
+                <option value="gramos" ${ing.unidad === 'gramos' ? 'selected' : ''}>gramos</option>
+                <option value="ml" ${ing.unidad === 'ml' ? 'selected' : ''}>ml</option>
+                <option value="kg" ${ing.unidad === 'kg' ? 'selected' : ''}>kg</option>
+                <option value="lt" ${ing.unidad === 'lt' ? 'selected' : ''}>lt</option>
+                <option value="hojas" ${ing.unidad === 'hojas' ? 'selected' : ''}>hojas</option>
+                <option value="gotas" ${ing.unidad === 'gotas' ? 'selected' : ''}>gotas</option>
+                <option value="rodajas" ${ing.unidad === 'rodajas' ? 'selected' : ''}>rodajas</option>
+              </select></td>
               <td><button class="danger" onclick="this.closest('tr').remove()">✕</button></td>
             </tr>
           `).join('')}
@@ -1641,7 +1655,17 @@ function agregarFilaIngrediente() {
   tr.innerHTML = `
     <td><input class="edit-ing-nombre" value="" style="width:100%" placeholder="Ingrediente"></td>
     <td><input class="edit-ing-cant" type="number" step="0.01" value="0" style="width:80px"></td>
-    <td><input class="edit-ing-uni" value="ml" style="width:80px"></td>
+    <td><select class="edit-ing-uni" style="width:90px">
+      <option value="ml" selected>ml</option>
+      <option value="unidad">unidad</option>
+      <option value="onzas">onzas</option>
+      <option value="gramos">gramos</option>
+      <option value="kg">kg</option>
+      <option value="lt">lt</option>
+      <option value="hojas">hojas</option>
+      <option value="gotas">gotas</option>
+      <option value="rodajas">rodajas</option>
+    </select></td>
     <td><button class="danger" onclick="this.closest('tr').remove()">✕</button></td>
   `;
   tbody.appendChild(tr);
@@ -1660,7 +1684,7 @@ function guardarEdicionReceta(id) {
       ingredientes.push({
         ingrediente: nomIn.value.trim(),
         cantidad: parseFloat(cantIn.value) || 0,
-        unidad: uniIn.value.trim() || 'unidad'
+        unidad: normalizeUnit(uniIn.value)
       });
     }
   });
@@ -1676,7 +1700,7 @@ function agregarIngrediente(recetaId, btn) {
   const cantidad = parseFloat(tr.querySelector('.input-nuevo-cant').value) || 0;
   const unidad = tr.querySelector('.input-nuevo-uni').value;
   if (!ingrediente) { alert('Ingresa el nombre del ingrediente'); return; }
-  api('POST', '/api/recetas/' + recetaId + '/ingredientes', { ingrediente, cantidad, unidad }).then(() => {
+  api('POST', '/api/recetas/' + recetaId + '/ingredientes', { ingrediente, cantidad, unidad: normalizeUnit(unidad) }).then(() => {
     cargarRecetas();
   });
 }
@@ -1729,7 +1753,7 @@ function agregarStockBarra() {
   const cantidad = parseFloat(document.getElementById('nuevo-stock-cant').value) || 0;
   const unidad = document.getElementById('nuevo-stock-uni').value;
   if (!ingrediente) { alert('Ingresa el nombre del ingrediente'); return; }
-  api('POST', '/api/barra/stock', { ingrediente, cantidad, unidad }).then(() => {
+  api('POST', '/api/barra/stock', { ingrediente, cantidad, unidad: normalizeUnit(unidad) }).then(() => {
     document.getElementById('nuevo-stock-input').value = '';
     document.getElementById('nuevo-stock-cant').value = '';
     cargarStockBarra();
