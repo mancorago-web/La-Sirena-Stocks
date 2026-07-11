@@ -69,6 +69,12 @@ firebase.auth().onAuthStateChanged(user => {
       body: JSON.stringify({ fecha: todayStr() })
     }).catch(() => {});
   });
+  // Auto-migrate normalizar unidades e importar RECETAS BASE (idempotent)
+  user.getIdToken().then(token => {
+    const opts = { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token } };
+    fetch('/api/migrate/normalize-units', opts).catch(() => {});
+    fetch('/api/migrate/import-recetas-base', opts).catch(() => {});
+  });
   // Register service worker for PWA (auto-update on new deploy)
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').then(reg => {
