@@ -1612,6 +1612,12 @@ function editarReceta(id) {
   api('GET', '/api/recetas').then(recetas => {
     const r = recetas.find(rec => rec.id === id);
     if (!r) { alert('Receta no encontrada'); return; }
+    const dl = document.getElementById('recetas-base-datalist');
+    if (dl) {
+      dl.innerHTML = recetas.filter(rec => rec.categoria === 'RECETAS BASE').map(rec =>
+        `<option value="${rec.nombre}">`
+      ).join('');
+    }
     let html = `
       <h3 style="margin-top:0">EDITAR RECETA</h3>
       <label style="font-weight:600;display:block;margin-bottom:0.2rem">Nombre</label>
@@ -1627,7 +1633,7 @@ function editarReceta(id) {
         <tbody id="edit-ingredientes-tbody">
           ${r.ingredientes.map((ing, idx) => `
             <tr data-edit-ing-idx="${idx}">
-              <td><input class="edit-ing-nombre" value="${ing.ingrediente}" style="width:100%"></td>
+              <td><input class="edit-ing-nombre" value="${ing.ingrediente}" list="recetas-base-datalist" style="width:100%"></td>
               <td><input class="edit-ing-cant" type="number" step="0.01" value="${ing.cantidad}" style="width:80px"></td>
               <td><select class="edit-ing-uni" style="width:90px">
                 <option value="unidad" ${normalizeUnit(ing.unidad) === 'unidad' ? 'selected' : ''}>unidad</option>
@@ -1660,7 +1666,7 @@ function agregarFilaIngrediente() {
   if (!tbody) return;
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td><input class="edit-ing-nombre" value="" style="width:100%" placeholder="Ingrediente"></td>
+    <td><input class="edit-ing-nombre" value="" list="recetas-base-datalist" style="width:100%" placeholder="Ingrediente"></td>
     <td><input class="edit-ing-cant" type="number" step="0.01" value="0" style="width:80px"></td>
     <td><select class="edit-ing-uni" style="width:90px">
       <option value="ml" selected>ml</option>
