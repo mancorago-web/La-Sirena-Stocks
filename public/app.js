@@ -1826,12 +1826,6 @@ function actualizarPrecio(id, el) {
   api('PUT', '/api/barra/precios/' + id, { precio }).catch(() => alert('Error al actualizar'));
 }
 
-// --- BOTELLAS ABIERTAS ---
-function cargarBotellas(fecha) {
-  document.getElementById('botellas-container').innerHTML = '<p>Próximamente...</p>';
-}
-function buscarBotellas(q) {}
-
 // --- PRECIOS POR ALMACEN ---
 function cargarPreciosAlmacen() {
   const fecha = document.getElementById('fecha-almacenes')?.value || new Date().toISOString().split('T')[0];
