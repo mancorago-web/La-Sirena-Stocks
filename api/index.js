@@ -1068,6 +1068,8 @@ app.post('/api/migrate/unify-ingredientes', authMiddleware, async (req, res) => 
     // Phase 2: Bulk lowercase ALL barra_precios names and merge exact lowercase duplicates
     const allPrec = await col('barra_precios').get();
     const byLower = {};
+    const renameMap = {}; // oldName → lowerName for receta updates
+
     allPrec.docs.forEach(d => {
       const data = d.data();
       const key = data.ingrediente.toLowerCase().trim();
@@ -1075,48 +1077,49 @@ app.post('/api/migrate/unify-ingredientes', authMiddleware, async (req, res) => 
       byLower[key].push({ id: d.id, ref: d.ref, ...data });
     });
 
-    const lowerBatch = db.batch();
-    let lowerCount = 0;
+    // Step 2a: Build batch for barra_precios only (lowercase + deletes)
+    const precBatch = db.batch();
+    let precOps = 0;
 
     for (const [lowerName, items] of Object.entries(byLower)) {
       if (items.length === 1) {
-        // Single item: just lowercase the name if needed
-        if (items[0].ingrediente !== lowerName) {
-          lowerBatch.update(items[0].ref, { ingrediente: lowerName });
-          lowerCount++;
+        const item = items[0];
+        if (item.ingrediente !== lowerName) {
+          precBatch.update(item.ref, { ingrediente: lowerName });
+          precOps++;
         }
+        if (item.ingrediente !== lowerName) renameMap[item.ingrediente] = lowerName;
       } else {
-        // Multiple items with same lowercase name: merge
-        // Keep the one with highest precio, or the most recent
-        const sorted = [...items].sort((a, b) => (b.precio || 0) - (a.precio || 0));
-        const keeper = sorted[0];
-        const toDelete = sorted.slice(1);
-
-        // Update keeper to lowercase name + best unit
+        // Multiple items with same lowercase name: keep one with precio > 0, or the first
+        const withPrice = items.filter(i => (i.precio || 0) > 0);
+        const keeper = withPrice.length > 0 ? withPrice[0] : items[0];
+        const toDelete = items.filter(i => i.id !== keeper.id);
         const bestUnit = items.reduce((best, item) => {
           if (item.unidad && item.unidad !== 'unidad' && item.unidad !== lowerName) return item.unidad;
           return best;
         }, keeper.unidad || 'unidad');
-        lowerBatch.update(keeper.ref, { ingrediente: lowerName, unidad: normalizeUnit(bestUnit), updated_at: new Date().toISOString() });
-        lowerCount++;
-
-        // Delete duplicates
-        toDelete.forEach(item => lowerBatch.delete(item.ref));
-        deletedPrecios += toDelete.length;
-
-        // Update receta_ingredientes that reference the deleted names
-        for (const item of toDelete) {
-          const riSnap = await col('receta_ingredientes').where('ingrediente', '==', item.ingrediente).get();
-          if (riSnap.docs.length > 0) {
-            const batch = db.batch();
-            riSnap.docs.forEach(d => batch.update(d.ref, { ingrediente: lowerName }));
-            await batch.commit();
-            updatedRecetas += riSnap.docs.length;
-          }
-        }
+        precBatch.update(keeper.ref, { ingrediente: lowerName, unidad: normalizeUnit(bestUnit), updated_at: new Date().toISOString() });
+        precOps++;
+        toDelete.forEach(item => { precBatch.delete(item.ref); deletedPrecios++; });
+        if (keeper.ingrediente !== lowerName) renameMap[keeper.ingrediente] = lowerName;
+        toDelete.forEach(item => { if (item.ingrediente !== lowerName) renameMap[item.ingrediente] = lowerName; });
       }
     }
-    if (lowerCount > 0) await lowerBatch.commit();
+
+    // Commit precBatch FIRST (before any receta queries)
+    if (precOps > 0) await precBatch.commit();
+    const lowerCount = precOps;
+
+    // Step 2b: Now update receta_ingredientes for all renamed items
+    for (const [oldName, newName] of Object.entries(renameMap)) {
+      const riSnap = await col('receta_ingredientes').where('ingrediente', '==', oldName).get();
+      if (riSnap.docs.length > 0) {
+        const batch = db.batch();
+        riSnap.docs.forEach(d => batch.update(d.ref, { ingrediente: newName }));
+        await batch.commit();
+        updatedRecetas += riSnap.docs.length;
+      }
+    }
 
     // Phase 3: Lowercase all receta_ingredientes names (any remaining uppercase variants)
     const allRI = await col('receta_ingredientes').get();
