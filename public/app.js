@@ -114,29 +114,30 @@ function irACategoria(cat) {
   document.getElementById('main-menu').style.display = 'none';
   document.getElementById('container').style.display = 'block';
   document.getElementById('btn-back').style.display = '';
-  // Show/hide tabs bar based on category
-  const tabsBar = document.getElementById('tabs-bar');
+  // Hide all tabs-bars
+  document.querySelectorAll('.tabs-bar').forEach(tb => tb.style.display = 'none');
+  document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
   if (cat === 'stocks') {
-    tabsBar.style.display = '';
-    // Reset to first tab (almacenes)
+    document.getElementById('tabs-bar').style.display = '';
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
     document.querySelector('.tab[data-tab="almacenes"]').classList.add('active');
     document.getElementById('tab-almacenes').classList.add('active');
   } else {
-    tabsBar.style.display = 'none';
-    document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+    document.getElementById('tabs-' + cat).style.display = '';
     document.getElementById('tab-' + cat).classList.add('active');
     if (!_loaded[cat]) {
       _loaded[cat] = true;
       if (cat === 'barra') { cargarRecetas(); cargarStockBarra(); cargarPrecios(); }
     }
+    // Activate first sub-tab for the category
+    const firstSub = document.querySelector('#tabs-' + cat + ' .sub-tab');
+    if (firstSub) cambiarSubTab(firstSub.dataset.subtab, cat);
   }
 }
 function volverMenu() {
   document.getElementById('main-menu').style.display = '';
   document.getElementById('container').style.display = 'none';
-  document.getElementById('tabs-bar').style.display = 'none';
+  document.querySelectorAll('.tabs-bar').forEach(tb => tb.style.display = 'none');
   document.getElementById('btn-back').style.display = 'none';
 }
 
@@ -1729,10 +1730,11 @@ function eliminarIngrediente(id) {
 // --- BARRA: Sub-tabs ---
 function cambiarSubTab(nombre, prefix) {
   if (!prefix) prefix = 'barra';
-  const tab = document.getElementById('tab-' + prefix);
-  tab.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
-  tab.querySelectorAll('.sub-tab-content').forEach(tc => tc.classList.remove('active'));
-  tab.querySelector(`.sub-tab[data-subtab="${nombre}"]`).classList.add('active');
+  const tabsBar = document.getElementById('tabs-' + prefix);
+  tabsBar.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+  tabsBar.querySelector(`.sub-tab[data-subtab="${nombre}"]`).classList.add('active');
+  // Switch content
+  document.querySelectorAll('#tab-' + prefix + ' .sub-tab-content').forEach(tc => tc.classList.remove('active'));
   document.getElementById('sub-' + prefix + '-' + nombre).classList.add('active');
   // Lazy load barra movement tabs
   if (prefix === 'barra' && ['ingresos','ventas','bajas'].includes(nombre)) {
@@ -1972,4 +1974,25 @@ function guardarBarraMovimientos(tipo) {
     showToast(tipo === 'ingresos' ? 'Ingreso Guardado' : tipo === 'ventas' ? 'Venta Guardada' : 'Baja Guardada');
     cargarBarraMovimientos(tipo);
   }).catch(e => { console.error(e); alert('Error al guardar'); });
+}
+
+function verDetallesBarra(tipo) {
+  const fecha = document.getElementById('fecha-barra-' + tipo)?.value;
+  if (!fecha) { alert('Selecciona una fecha'); return; }
+  api('GET', '/api/barra/movimientos?fecha=' + fecha + '&tipo=' + tipo).then(movs => {
+    const label = tipo === 'ingresos' ? 'Ingresos' : tipo === 'ventas' ? 'Ventas' : 'Bajas';
+    let html = '<h3>Detalle de ' + label + ' Barra — ' + fecha + '</h3>';
+    if (!movs.length) { html += '<p>No hay movimientos registrados en esta fecha.</p>'; }
+    else {
+      html += '<table><thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
+      movs.forEach(m => {
+        const t = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
+        const u = DISPLAY_NAMES[m.saved_by] || m.saved_by || '-';
+        html += '<tr><td>' + m.ingrediente + '</td><td>' + (m.cantidad || 0) + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
+      });
+      html += '</tbody></table>';
+    }
+    document.getElementById('modal-body').innerHTML = html;
+    document.getElementById('modal').style.display = 'block';
+  });
 }

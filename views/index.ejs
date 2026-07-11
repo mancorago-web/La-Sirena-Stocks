@@ -45,7 +45,7 @@
     </div>
   </div>
 
-  <!-- Tabs bar (solo visible en STOCKS) -->
+  <!-- Tabs bar (STOCKS) -->
   <div id="tabs-bar" class="tabs-bar" style="display:none">
     <div class="tabs">
       <button class="tab" data-tab="ingresos">Ingresos</button>
@@ -56,6 +56,27 @@
       <button class="tab" data-tab="stocks">Stocks</button>
       <button class="tab" data-tab="reportes">Reportes</button>
       <button class="tab" data-tab="precios">Precios</button>
+    </div>
+  </div>
+
+  <!-- Tabs bar (BARRA) -->
+  <div id="tabs-barra" class="tabs-bar" style="display:none">
+    <div class="tabs">
+      <button class="sub-tab" data-subtab="ingresos" onclick="cambiarSubTab('ingresos')">Ingresos</button>
+      <button class="sub-tab" data-subtab="ventas" onclick="cambiarSubTab('ventas')">Ventas</button>
+      <button class="sub-tab" data-subtab="bajas" onclick="cambiarSubTab('bajas')">Bajas</button>
+      <button class="sub-tab" data-subtab="stock" onclick="cambiarSubTab('stock')">Stock</button>
+      <button class="sub-tab active" data-subtab="recetas" onclick="cambiarSubTab('recetas')">Recetas</button>
+      <button class="sub-tab" data-subtab="basedatos" onclick="cambiarSubTab('basedatos')">Base de Datos</button>
+    </div>
+  </div>
+
+  <!-- Tabs bar (COCINA) -->
+  <div id="tabs-cocina" class="tabs-bar" style="display:none">
+    <div class="tabs">
+      <button class="sub-tab active" data-subtab="recetas" onclick="cambiarSubTab('recetas','cocina')">Recetas</button>
+      <button class="sub-tab" data-subtab="stock" onclick="cambiarSubTab('stock','cocina')">Stock</button>
+      <button class="sub-tab" data-subtab="basedatos" onclick="cambiarSubTab('basedatos','cocina')">Base de Datos</button>
     </div>
   </div>
 
@@ -162,22 +183,14 @@
     </div>
 
     <div id="tab-barra" class="tab-content">
-      <div class="sub-tabs">
-        <button class="sub-tab" data-subtab="ingresos" onclick="cambiarSubTab('ingresos')">📥 INGRESOS</button>
-        <button class="sub-tab" data-subtab="ventas" onclick="cambiarSubTab('ventas')">📤 VENTAS</button>
-        <button class="sub-tab" data-subtab="bajas" onclick="cambiarSubTab('bajas')">🗑️ BAJAS</button>
-        <button class="sub-tab" data-subtab="stock" onclick="cambiarSubTab('stock')">🍷 STOCK</button>
-        <button class="sub-tab active" data-subtab="recetas" onclick="cambiarSubTab('recetas')">📋 RECETAS</button>
-        <button class="sub-tab" data-subtab="basedatos" onclick="cambiarSubTab('basedatos')">📦 BASE DE DATOS</button>
-      </div>
-
       <div id="sub-barra-ingresos" class="sub-tab-content">
         <div class="header-actions">
           <h2>Ingresos Barra</h2>
           <div class="controles-dia">
             <label>Fecha: <input type="date" id="fecha-barra-ingresos" onchange="cargarBarraMovimientos('ingresos')"></label>
-            <input type="text" id="buscar-barra-ingresos" placeholder="Buscar..." oninput="buscarEnTabla(this.value,'accordion-barra-ingresos')">
+            <input type="text" id="buscar-barra-ingresos" placeholder="Buscar item..." oninput="buscarEnTabla(this.value,'accordion-barra-ingresos')">
             <button class="btn-guardar-dia" onclick="guardarBarraMovimientos('ingresos')">💾 GUARDAR INGRESOS</button>
+            <button class="btn-detalles" onclick="verDetallesBarra('ingresos')">📋 DETALLES</button>
           </div>
         </div>
         <div id="accordion-barra-ingresos"></div>
@@ -188,8 +201,9 @@
           <h2>Ventas Barra</h2>
           <div class="controles-dia">
             <label>Fecha: <input type="date" id="fecha-barra-ventas" onchange="cargarBarraMovimientos('ventas')"></label>
-            <input type="text" id="buscar-barra-ventas" placeholder="Buscar..." oninput="buscarEnTabla(this.value,'accordion-barra-ventas')">
+            <input type="text" id="buscar-barra-ventas" placeholder="Buscar item..." oninput="buscarEnTabla(this.value,'accordion-barra-ventas')">
             <button class="btn-guardar-dia" onclick="guardarBarraMovimientos('ventas')">💾 GUARDAR VENTAS</button>
+            <button class="btn-detalles" onclick="verDetallesBarra('ventas')">📋 DETALLES</button>
           </div>
         </div>
         <div id="accordion-barra-ventas"></div>
@@ -200,8 +214,9 @@
           <h2>Bajas Barra</h2>
           <div class="controles-dia">
             <label>Fecha: <input type="date" id="fecha-barra-bajas" onchange="cargarBarraMovimientos('bajas')"></label>
-            <input type="text" id="buscar-barra-bajas" placeholder="Buscar..." oninput="buscarEnTabla(this.value,'accordion-barra-bajas')">
+            <input type="text" id="buscar-barra-bajas" placeholder="Buscar item..." oninput="buscarEnTabla(this.value,'accordion-barra-bajas')">
             <button class="btn-guardar-dia" onclick="guardarBarraMovimientos('bajas')">💾 GUARDAR BAJAS</button>
+            <button class="btn-detalles" onclick="verDetallesBarra('bajas')">📋 DETALLES</button>
           </div>
         </div>
         <div id="accordion-barra-bajas"></div>
@@ -266,12 +281,6 @@
     </div>
 
     <div id="tab-cocina" class="tab-content">
-      <div class="sub-tabs">
-        <button class="sub-tab active" data-subtab="recetas" onclick="cambiarSubTab('recetas','cocina')">📋 RECETAS</button>
-        <button class="sub-tab" data-subtab="stock" onclick="cambiarSubTab('stock','cocina')">🍷 STOCK</button>
-        <button class="sub-tab" data-subtab="basedatos" onclick="cambiarSubTab('basedatos','cocina')">📦 BASE DE DATOS</button>
-      </div>
-
       <div id="sub-cocina-recetas" class="sub-tab-content active">
         <div class="header-actions">
           <h2>Recetas</h2>
