@@ -94,6 +94,36 @@ app.get('/api/diag', async (req, res) => {
   }
 });
 
+// --- DEBUG: inspect barra_precios and receta_ingredientes (no auth) ---
+app.get('/api/debug/ingredientes', async (req, res) => {
+  try {
+    const precSnap = await col('barra_precios').orderBy('ingrediente').get();
+    const precios = precSnap.docs.map(d => ({ id: Number(d.id), ...d.data() }));
+    const ingSnap = await col('receta_ingredientes').get();
+    const recIngs = {};
+    ingSnap.docs.forEach(d => {
+      const ing = d.data();
+      const key = ing.ingrediente.toLowerCase().trim().replace(/[^a-z0-9áéíóúüñ ]/g, '').replace(/\s+/g, ' ');
+      if (!recIngs[key]) recIngs[key] = { variantes: {}, count: 0 };
+      const variant = ing.ingrediente.trim();
+      if (!recIngs[key].variantes[variant]) recIngs[key].variantes[variant] = { unidades: new Set(), veces: 0 };
+      recIngs[key].variantes[variant].unidades.add(ing.unidad);
+      recIngs[key].variantes[variant].veces++;
+      recIngs[key].count++;
+    });
+    const uniques = Object.entries(recIngs).map(([key, v]) => ({
+      key,
+      variantes: Object.entries(v.variantes).map(([name, info]) => ({
+        nombre: name, unidades: [...info.unidades], veces: info.veces
+      })),
+      total_usos: v.count
+    }));
+    res.json({ barra_precios: precios, receta_ingredientes_agrupados: uniques });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- DEBUG: check fallback data (no auth) ---
 app.get('/api/debug/fallback', async (req, res) => {
   const fecha = req.query.fecha;
