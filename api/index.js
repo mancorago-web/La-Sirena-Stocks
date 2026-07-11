@@ -1195,6 +1195,78 @@ app.post('/api/migrate/unify-ingredientes', authMiddleware, async (req, res) => 
   }
 });
 
+// --- Fix: recipe ingredients that don't match barra_precios (case variants + deleted items) ---
+app.post('/api/migrate/fix-receta-ingredientes', authMiddleware, async (req, res) => {
+  try {
+    // Build lookup of canonical names in barra_precios
+    const precSnap = await col('barra_precios').get();
+    const canonical = {};
+    precSnap.docs.forEach(d => { canonical[d.data().ingrediente] = true; });
+
+    // Define replacements: oldName → newName
+    const replacements = {
+      // Items the user deleted from barra_precios
+      'bidon de agua x 20lt': 'agua',
+      'bidon de agua x 20 lt': 'agua',
+      // Case variants (recipes have mixed case, barra_precios has lowercase)
+      'Pisco Quebranta Pedro manuel x 4lt': 'pisco quebranta pedro manuel x 4lt',
+      'Mora': 'mora',
+      'Cherry brandi': 'cherry brandi',
+      'Dry': 'dry',
+      'Limon': 'limon',
+      'Menta': 'menta',
+      'Zumo de limon': 'zumo de limon',
+      'Leche evaporada': 'leche evaporada',
+      'Jarabe hoja de coca': 'jarabe hoja de coca',
+      'HIERBA LUISA': 'hierba luisa',
+      'Campari': 'campari',
+      'Falernum': 'falernum',
+      'PLATANOS BANANITOS': 'platanos bananitos',
+      'Jarabe de Sandia': 'jarabe de sandia',
+      'CANELA': 'canela',
+      'AGUA TONICA': 'agua tonica',
+      'ANIS ESTRELLA': 'anis estrella',
+    };
+
+    let updatedRecetas = 0;
+    let deletedPrecios = 0;
+
+    for (const [oldName, newName] of Object.entries(replacements)) {
+      // Update receta_ingredientes
+      const riSnap = await col('receta_ingredientes').where('ingrediente', '==', oldName).get();
+      if (riSnap.docs.length > 0) {
+        const batch = db.batch();
+        riSnap.docs.forEach(d => batch.update(d.ref, { ingrediente: newName }));
+        await batch.commit();
+        updatedRecetas += riSnap.docs.length;
+      }
+      // Delete the old entry from barra_precios if it exists
+      const oldPrec = await col('barra_precios').where('ingrediente', '==', oldName).get();
+      if (oldPrec.docs.length > 0) {
+        const batch = db.batch();
+        oldPrec.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+        deletedPrecios += oldPrec.docs.length;
+      }
+    }
+
+    // Also delete the lowercase bidon items from barra_precios if they still exist
+    for (const name of ['bidon de agua x 20lt', 'bidon de agua x 20 lt']) {
+      const snap = await col('barra_precios').where('ingrediente', '==', name).get();
+      if (snap.docs.length > 0) {
+        const batch = db.batch();
+        snap.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+        deletedPrecios += snap.docs.length;
+      }
+    }
+
+    res.json({ ok: true, recetas_actualizadas: updatedRecetas, precios_eliminados: deletedPrecios });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Sync all recipe ingredients to barra_precios ---
 app.post('/api/migrate/sync-ingredientes-to-precios', authMiddleware, async (req, res) => {
   try {

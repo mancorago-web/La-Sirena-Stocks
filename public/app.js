@@ -74,6 +74,7 @@ firebase.auth().onAuthStateChanged(user => {
     const opts = { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token } };
     await fetch('/api/migrate/normalize-units', opts).catch(() => {});
     await fetch('/api/migrate/import-recetas-base', opts).catch(() => {});
+    await fetch('/api/migrate/fix-receta-ingredientes', opts).catch(() => {});
   });
   // Register service worker for PWA (auto-update on new deploy)
   if ('serviceWorker' in navigator) {
