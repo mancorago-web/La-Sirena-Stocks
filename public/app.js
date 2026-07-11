@@ -1734,6 +1734,11 @@ function cambiarSubTab(nombre, prefix) {
   tab.querySelectorAll('.sub-tab-content').forEach(tc => tc.classList.remove('active'));
   tab.querySelector(`.sub-tab[data-subtab="${nombre}"]`).classList.add('active');
   document.getElementById('sub-' + prefix + '-' + nombre).classList.add('active');
+  // Lazy load barra movement tabs
+  if (prefix === 'barra' && ['ingresos','ventas','bajas'].includes(nombre)) {
+    const key = 'barra_' + nombre;
+    if (!_loaded[key]) { _loaded[key] = true; cargarBarraMovimientos(nombre); }
+  }
 }
 
 // --- BARRA: Stock ---
@@ -1921,4 +1926,50 @@ function exportarPrecios() {
   const hoja = XLSX.utils.aoa_to_sheet(wsData);
   XLSX.utils.book_append_sheet(libro, hoja, 'Precios');
   XLSX.writeFile(libro, `Precios_${fecha}.xlsx`);
+}
+
+// --- BARRA: INGRESOS / VENTAS / BAJAS ---
+function cargarBarraMovimientos(tipo) {
+  const fecha = document.getElementById('fecha-barra-' + tipo)?.value || todayStr();
+  const accId = 'accordion-barra-' + tipo;
+  Promise.all([
+    api('GET', '/api/barra/precios'),
+    api('GET', '/api/barra/movimientos?fecha=' + fecha + '&tipo=' + tipo)
+  ]).then(([precios, movs]) => {
+    const movByIng = {};
+    movs.forEach(m => { movByIng[m.ingrediente] = m; });
+    const container = document.getElementById(accId);
+    if (!precios.length) { container.innerHTML = '<p>No hay items en BASE DE DATOS.</p>'; return; }
+    container.innerHTML = `
+      <div class="table-wrap"><table>
+        <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th></tr></thead>
+        <tbody>
+          ${precios.map(p => {
+            const mov = movByIng[p.ingrediente] || {};
+            return `<tr data-ing="${p.ingrediente}">
+              <td>${p.ingrediente}</td>
+              <td><input type="number" class="input-barra-mov" value="${mov.cantidad || ''}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
+              <td>${p.unidad || 'unidad'}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table></div>`;
+    const bp = document.getElementById('buscar-barra-' + tipo);
+    if (bp && bp.value) buscarEnTabla(bp.value, accId);
+  });
+}
+
+function guardarBarraMovimientos(tipo) {
+  const fecha = document.getElementById('fecha-barra-' + tipo)?.value || todayStr();
+  const items = [];
+  document.querySelectorAll('#accordion-barra-' + tipo + ' tr[data-ing]').forEach(tr => {
+    const cant = parseFloat(tr.querySelector('.input-barra-mov').value) || 0;
+    if (cant > 0) {
+      items.push({ ingrediente: tr.dataset.ing, cantidad: cant, unidad: 'unidad' });
+    }
+  });
+  api('POST', '/api/barra/movimientos', { fecha, tipo, items }).then(() => {
+    showToast(tipo === 'ingresos' ? 'Ingreso Guardado' : tipo === 'ventas' ? 'Venta Guardada' : 'Baja Guardada');
+    cargarBarraMovimientos(tipo);
+  }).catch(e => { console.error(e); alert('Error al guardar'); });
 }

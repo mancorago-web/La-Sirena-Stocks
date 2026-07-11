@@ -163,9 +163,48 @@
 
     <div id="tab-barra" class="tab-content">
       <div class="sub-tabs">
+        <button class="sub-tab" data-subtab="ingresos" onclick="cambiarSubTab('ingresos')">📥 INGRESOS</button>
+        <button class="sub-tab" data-subtab="ventas" onclick="cambiarSubTab('ventas')">📤 VENTAS</button>
+        <button class="sub-tab" data-subtab="bajas" onclick="cambiarSubTab('bajas')">🗑️ BAJAS</button>
         <button class="sub-tab active" data-subtab="recetas" onclick="cambiarSubTab('recetas')">📋 RECETAS</button>
         <button class="sub-tab" data-subtab="stock" onclick="cambiarSubTab('stock')">🍷 STOCK</button>
         <button class="sub-tab" data-subtab="basedatos" onclick="cambiarSubTab('basedatos')">📦 BASE DE DATOS</button>
+      </div>
+
+      <div id="sub-barra-ingresos" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>Ingresos Barra</h2>
+          <div class="controles-dia">
+            <label>Fecha: <input type="date" id="fecha-barra-ingresos" onchange="cargarBarraMovimientos('ingresos')"></label>
+            <input type="text" id="buscar-barra-ingresos" placeholder="Buscar..." oninput="buscarEnTabla(this.value,'accordion-barra-ingresos')">
+            <button class="btn-guardar-dia" onclick="guardarBarraMovimientos('ingresos')">💾 GUARDAR INGRESOS</button>
+          </div>
+        </div>
+        <div id="accordion-barra-ingresos"></div>
+      </div>
+
+      <div id="sub-barra-ventas" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>Ventas Barra</h2>
+          <div class="controles-dia">
+            <label>Fecha: <input type="date" id="fecha-barra-ventas" onchange="cargarBarraMovimientos('ventas')"></label>
+            <input type="text" id="buscar-barra-ventas" placeholder="Buscar..." oninput="buscarEnTabla(this.value,'accordion-barra-ventas')">
+            <button class="btn-guardar-dia" onclick="guardarBarraMovimientos('ventas')">💾 GUARDAR VENTAS</button>
+          </div>
+        </div>
+        <div id="accordion-barra-ventas"></div>
+      </div>
+
+      <div id="sub-barra-bajas" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>Bajas Barra</h2>
+          <div class="controles-dia">
+            <label>Fecha: <input type="date" id="fecha-barra-bajas" onchange="cargarBarraMovimientos('bajas')"></label>
+            <input type="text" id="buscar-barra-bajas" placeholder="Buscar..." oninput="buscarEnTabla(this.value,'accordion-barra-bajas')">
+            <button class="btn-guardar-dia" onclick="guardarBarraMovimientos('bajas')">💾 GUARDAR BAJAS</button>
+          </div>
+        </div>
+        <div id="accordion-barra-bajas"></div>
       </div>
 
       <div id="sub-barra-recetas" class="sub-tab-content active">

@@ -801,6 +801,40 @@ app.delete('/api/barra/precios/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// --- BARRA MOVIMIENTOS (INGRESOS / VENTAS / BAJAS) ---
+app.get('/api/barra/movimientos', authMiddleware, async (req, res) => {
+  try {
+    const { fecha, tipo } = req.query;
+    if (!fecha || !tipo) return res.json([]);
+    const snap = await col('barra_movimientos').where('fecha', '==', fecha).where('tipo', '==', tipo).get();
+    res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/barra/movimientos', authMiddleware, async (req, res) => {
+  try {
+    const { fecha, tipo, items } = req.body;
+    if (!fecha || !tipo || !items) return res.status(400).json({ error: 'fecha, tipo e items requeridos' });
+    const batch = db.batch();
+    // Delete existing movements for this fecha+tipo
+    const existing = await col('barra_movimientos').where('fecha', '==', fecha).where('tipo', '==', tipo).get();
+    existing.docs.forEach(d => batch.delete(d.ref));
+    // Insert new movements
+    for (const item of items) {
+      if (!item.cantidad || item.cantidad <= 0) continue;
+      const ref = col('barra_movimientos').doc();
+      batch.set(ref, {
+        fecha, tipo, ingrediente: item.ingrediente,
+        cantidad: item.cantidad, unidad: item.unidad || 'unidad',
+        saved_by: req.user?.name || req.user?.email || 'unknown',
+        created_at: new Date().toISOString()
+      });
+    }
+    await batch.commit();
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- REPORTES ---
 app.get('/api/reportes/diferencias', async (req, res) => {
   const fecha = req.query.fecha;
