@@ -1008,6 +1008,91 @@ app.post('/api/migrate/import-recetas-base', authMiddleware, async (req, res) =>
   }
 });
 
+// --- Unify duplicate ingredient names in barra_precios and receta_ingredientes ---
+app.post('/api/migrate/unify-ingredientes', authMiddleware, async (req, res) => {
+  try {
+    const changes = [
+      // Typo fixes
+      { oldName: 'ALBAHAHA X KG', newName: 'ALBAHACA X KG', newUnit: 'kg', deleteIds: [101] },
+      // Case normalization (same name, different casing → pick lowercase)
+      { oldName: 'Jarabe de goma', newName: 'jarabe de goma', deleteIds: [92] },
+      { oldName: 'Zumo de maracuya', newName: 'zumo de maracuya', deleteIds: [94] },
+      { oldName: 'Zumo de naranja', newName: 'zumo de naranja', deleteIds: [109] },
+      { oldName: 'Clara', newName: 'clara', deleteIds: [106] },
+      { oldName: 'Ron blanco', newName: 'ron blanco', deleteIds: [90] },
+      { oldName: 'Pisco', newName: 'pisco', deleteIds: [111] },
+      { oldName: 'Piña', newName: 'piña', deleteIds: [95] },
+      { oldName: 'Angostura', newName: 'amargo de angostura', newUnit: 'unidad', deleteIds: [112] },
+      // Same ingredient, different name
+      { oldName: 'amargo de angostura', newName: 'AMARGO DE ANGOSTURA X 75ML', newUnit: 'unidad', deleteIds: [63] },
+      { oldName: 'sal, pimienta', newName: 'sal y pimienta', newUnit: 'gramos', deleteIds: [53] },
+      { oldName: 'tabasco', newName: 'TABASCO X 60 ML', newUnit: 'unidad', deleteIds: [54] },
+    ];
+
+    let updatedRecetas = 0, updatedPrecios = 0, deletedPrecios = 0;
+    for (const ch of changes) {
+      // Update receta_ingredientes
+      const ingSnap = await col('receta_ingredientes').where('ingrediente', '==', ch.oldName).get();
+      const b1 = db.batch();
+      ingSnap.docs.forEach(d => {
+        b1.update(d.ref, { ingrediente: ch.newName, updated_at: new Date().toISOString() });
+      });
+      if (ingSnap.docs.length > 0) await b1.commit();
+      updatedRecetas += ingSnap.docs.length;
+
+      // Update barra_precios entries with oldName
+      const precSnap = await col('barra_precios').where('ingrediente', '==', ch.oldName).get();
+      const b2 = db.batch();
+      precSnap.docs.forEach(d => {
+        const updates = { ingrediente: ch.newName, updated_at: new Date().toISOString() };
+        if (ch.newUnit) updates.unidad = ch.newUnit;
+        b2.update(d.ref, updates);
+      });
+      if (precSnap.docs.length > 0) await b2.commit();
+      updatedPrecios += precSnap.docs.length;
+
+      // Update barra_stock entries with oldName
+      const stockSnap = await col('barra_stock').where('ingrediente', '==', ch.oldName).get();
+      const b3 = db.batch();
+      stockSnap.docs.forEach(d => {
+        const updates = { ingrediente: ch.newName };
+        if (ch.newUnit) updates.unidad = ch.newUnit;
+        b3.update(d.ref, updates);
+      });
+      if (stockSnap.docs.length > 0) await b3.commit();
+
+      // Delete duplicate barra_precios entries
+      if (ch.deleteIds && ch.deleteIds.length) {
+        const b4 = db.batch();
+        for (const id of ch.deleteIds) {
+          const ref = col('barra_precios').doc(String(id));
+          // Only delete if exists and is not the canonical entry
+          const snap = await ref.get();
+          if (snap.exists && snap.data().ingrediente === ch.oldName) {
+            b4.delete(ref);
+            deletedPrecios++;
+          }
+        }
+        if (deletedPrecios > 0) await b4.commit();
+      }
+    }
+
+    // After all merges, fix the typo "ALBAHACA X KG" unit to kg if it was set to unidad
+    const albSnap = await col('barra_precios').where('ingrediente', '==', 'ALBAHACA X KG').get();
+    if (!albSnap.empty) {
+      const b5 = db.batch();
+      albSnap.docs.forEach(d => {
+        b5.update(d.ref, { unidad: 'kg' });
+      });
+      await b5.commit();
+    }
+
+    res.json({ ok: true, updatedRecetas, updatedPrecios, deletedPrecios });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Sync all recipe ingredients to barra_precios ---
 app.post('/api/migrate/sync-ingredientes-to-precios', authMiddleware, async (req, res) => {
   try {

@@ -69,12 +69,13 @@ firebase.auth().onAuthStateChanged(user => {
       body: JSON.stringify({ fecha: todayStr() })
     }).catch(() => {});
   });
-  // Auto-migrate normalizar unidades, importar RECETAS BASE y sync ingredientes (idempotent)
+  // Auto-migrate normalizar unidades, importar RECETAS BASE, sync y unificar ingredientes (idempotent)
   user.getIdToken().then(token => {
     const opts = { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token } };
     fetch('/api/migrate/normalize-units', opts).catch(() => {});
     fetch('/api/migrate/import-recetas-base', opts).catch(() => {});
     fetch('/api/migrate/sync-ingredientes-to-precios', opts).catch(() => {});
+    fetch('/api/migrate/unify-ingredientes', opts).catch(() => {});
   });
   // Register service worker for PWA (auto-update on new deploy)
   if ('serviceWorker' in navigator) {
