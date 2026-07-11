@@ -1532,6 +1532,7 @@ function renderReceta(r) {
 
 function cargarRecetas() {
   api('GET', '/api/recetas').then(data => {
+    console.log('Recetas cargadas:', data.length);
     const container = document.getElementById('recetas-container');
     if (!data.length) {
       container.innerHTML = '<p>No hay recetas. Agrega una nueva.</p>';
@@ -1558,7 +1559,7 @@ function cargarRecetas() {
       </div>`;
     });
     container.innerHTML = html;
-  });
+  }).catch(e => console.error('Error cargando recetas:', e));
 }
 
 function exportarRecetas() {
@@ -1617,7 +1618,7 @@ function editarReceta(id) {
       <input id="edit-receta-nombre" value="${r.nombre}" style="width:100%;margin-bottom:0.5rem;">
       <label style="font-weight:600;display:block;margin-bottom:0.2rem">Categoría</label>
       <select id="edit-receta-categoria" style="width:100%;margin-bottom:1rem;">
-        ${['Clásicos','Mojitos','Limonadas','DEL BARMAN','Chilcanos y Sours'].map(c =>
+        ${['RECETAS BASE','Clásicos','Mojitos','Limonadas','DEL BARMAN','Chilcanos y Sours'].map(c =>
           `<option value="${c}" ${r.categoria === c ? 'selected' : ''}>${c}</option>`
         ).join('')}
       </select>
@@ -1697,7 +1698,7 @@ function guardarEdicionReceta(id) {
   api('PUT', '/api/recetas/' + id + '/with-ingredientes', { nombre, categoria, ingredientes }).then(() => {
     cerrarModal();
     cargarRecetas();
-  }).catch(() => alert('Error al guardar'));
+  }).catch(e => { console.error('Error guardando receta:', e); alert('Error al guardar'); });
 }
 
 function agregarIngrediente(recetaId, btn) {
