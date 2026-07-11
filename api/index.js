@@ -682,13 +682,17 @@ app.put('/api/recetas/:id/with-ingredientes', async (req, res) => {
 // --- Helper: ensure an ingredient exists in barra_precios ---
 async function ensureIngredienteInPrecios(ingrediente, unidad) {
   if (!ingrediente) return null;
-  const existing = await col('barra_precios').where('ingrediente', '==', ingrediente).get();
-  if (!existing.empty) return existing.docs[0];
+  // Case-insensitive check: try exact match first, then scan all
+  const exact = await col('barra_precios').where('ingrediente', '==', ingrediente).get();
+  if (!exact.empty) return exact.docs[0];
   const all = await col('barra_precios').get();
+  const lower = ingrediente.toLowerCase().trim();
+  const existing = all.docs.find(d => d.data().ingrediente.toLowerCase().trim() === lower);
+  if (existing) return existing;
   const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
   const ref = col('barra_precios').doc(String(nextId));
   await ref.set({
-    id: nextId, ingrediente, precio: 0, unidad: normalizeUnit(unidad || 'unidad'),
+    id: nextId, ingrediente: lower, precio: 0, unidad: normalizeUnit(unidad || 'unidad'),
     created_at: new Date().toISOString(), updated_at: new Date().toISOString()
   });
   return { id: nextId };

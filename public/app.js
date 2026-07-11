@@ -69,13 +69,13 @@ firebase.auth().onAuthStateChanged(user => {
       body: JSON.stringify({ fecha: todayStr() })
     }).catch(() => {});
   });
-  // Auto-migrate normalizar unidades, importar RECETAS BASE, sync y unificar ingredientes (idempotent)
-  user.getIdToken().then(token => {
+  // Auto-migrate: sequential to avoid race conditions
+  user.getIdToken().then(async token => {
     const opts = { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token } };
-    fetch('/api/migrate/normalize-units', opts).catch(() => {});
-    fetch('/api/migrate/import-recetas-base', opts).catch(() => {});
-    fetch('/api/migrate/sync-ingredientes-to-precios', opts).catch(() => {});
-    fetch('/api/migrate/unify-ingredientes', opts).catch(() => {});
+    await fetch('/api/migrate/normalize-units', opts).catch(() => {});
+    await fetch('/api/migrate/import-recetas-base', opts).catch(() => {});
+    await fetch('/api/migrate/sync-ingredientes-to-precios', opts).catch(() => {});
+    await fetch('/api/migrate/unify-ingredientes', opts).catch(() => {});
   });
   // Register service worker for PWA (auto-update on new deploy)
   if ('serviceWorker' in navigator) {
