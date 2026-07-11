@@ -606,6 +606,7 @@ app.post('/api/recetas/:id/ingredientes', async (req, res) => {
     id: nextId, receta_id: Number(req.params.id),
     ingrediente, cantidad: cantidad || 0, unidad: normalizeUnit(unidad)
   });
+  await ensureIngredienteInPrecios(ingrediente, unidad);
   res.json({ ok: true });
 });
 
@@ -641,8 +642,27 @@ app.put('/api/recetas/:id/with-ingredientes', async (req, res) => {
     }
   }
   await batch.commit();
+  // Auto-add all ingredients to barra_precios if not already there
+  if (ingredientes && ingredientes.length) {
+    await Promise.all(ingredientes.map(ing => ensureIngredienteInPrecios(ing.ingrediente, ing.unidad)));
+  }
   res.json({ ok: true });
 });
+
+// --- Helper: ensure an ingredient exists in barra_precios ---
+async function ensureIngredienteInPrecios(ingrediente, unidad) {
+  if (!ingrediente) return null;
+  const existing = await col('barra_precios').where('ingrediente', '==', ingrediente).get();
+  if (!existing.empty) return existing.docs[0];
+  const all = await col('barra_precios').get();
+  const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
+  const ref = col('barra_precios').doc(String(nextId));
+  await ref.set({
+    id: nextId, ingrediente, precio: 0, unidad: normalizeUnit(unidad || 'unidad'),
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+  });
+  return { id: nextId };
+}
 
 // --- BARRA STOCK ---
 app.get('/api/barra/stock', async (req, res) => {
@@ -958,7 +978,24 @@ app.post('/api/migrate/import-recetas-base', authMiddleware, async (req, res) =>
   }
 });
 
-// --- Cron-like propagation on startup ---
-// On Vercel, we can't run cron jobs the same way. Will handle via guardar-dia.
+// --- Sync all recipe ingredients to barra_precios ---
+app.post('/api/migrate/sync-ingredientes-to-precios', authMiddleware, async (req, res) => {
+  try {
+    const ingSnap = await col('receta_ingredientes').get();
+    const seen = {};
+    let added = 0;
+    for (const d of ingSnap.docs) {
+      const ing = d.data();
+      const key = ing.ingrediente.toLowerCase().trim();
+      if (seen[key]) continue;
+      seen[key] = true;
+      const result = await ensureIngredienteInPrecios(ing.ingrediente, ing.unidad);
+      if (result) added++;
+    }
+    res.json({ ok: true, added });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 module.exports = app;
