@@ -124,6 +124,45 @@ app.get('/api/debug/ingredientes', async (req, res) => {
   }
 });
 
+// --- DEBUG: compare recipe ingredients vs barra_precios (no auth) ---
+app.get('/api/debug/verificar-recetas', async (req, res) => {
+  try {
+    const precSnap = await col('barra_precios').get();
+    const canonical = {};
+    precSnap.docs.forEach(d => {
+      const data = d.data();
+      canonical[data.ingrediente.toLowerCase().trim()] = data.ingrediente;
+    });
+    const ingSnap = await col('receta_ingredientes').get();
+    const recetasSnap = await col('recetas').get();
+    const recetaMap = {};
+    recetasSnap.docs.forEach(d => {
+      const r = d.data();
+      recetaMap[r.id] = r.nombre || '(sin nombre)';
+    });
+    const mismatches = [];
+    ingSnap.docs.forEach(d => {
+      const ing = d.data();
+      const lower = ing.ingrediente.toLowerCase().trim();
+      if (!canonical[lower]) {
+        // Find closest match
+        const keys = Object.keys(canonical);
+        const close = keys.find(k => k.includes(lower) || lower.includes(k));
+        mismatches.push({
+          receta: recetaMap[ing.receta_id] || `id:${ing.receta_id}`,
+          receta_id: ing.receta_id,
+          ingrediente_actual: ing.ingrediente,
+          sugerencia: close ? canonical[close] : null,
+          unidad: ing.unidad
+        });
+      }
+    });
+    res.json({ total_recetas: recetasSnap.size, total_ingredientes: ingSnap.docs.length, mismatches });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- DEBUG: check fallback data (no auth) ---
 app.get('/api/debug/fallback', async (req, res) => {
   const fecha = req.query.fecha;
