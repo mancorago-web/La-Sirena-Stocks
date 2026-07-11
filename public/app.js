@@ -69,13 +69,11 @@ firebase.auth().onAuthStateChanged(user => {
       body: JSON.stringify({ fecha: todayStr() })
     }).catch(() => {});
   });
-  // Auto-migrate: sequential to avoid race conditions
+  // Auto-migrate (one-time setup, no re-sync on every load)
   user.getIdToken().then(async token => {
     const opts = { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token } };
     await fetch('/api/migrate/normalize-units', opts).catch(() => {});
     await fetch('/api/migrate/import-recetas-base', opts).catch(() => {});
-    await fetch('/api/migrate/sync-ingredientes-to-precios', opts).catch(() => {});
-    await fetch('/api/migrate/unify-ingredientes', opts).catch(() => {});
   });
   // Register service worker for PWA (auto-update on new deploy)
   if ('serviceWorker' in navigator) {
@@ -1619,12 +1617,8 @@ function editarReceta(id) {
     if (!r) { alert('Receta no encontrada'); return; }
     const dl = document.getElementById('recetas-base-datalist');
     if (dl) {
-      const nombres = new Set();
-      // Add RECETAS BASE recipe names
-      recetas.filter(rec => rec.categoria === 'RECETAS BASE').forEach(rec => nombres.add(rec.nombre));
-      // Add ALL barra_precios ingredient names
-      precios.forEach(p => nombres.add(p.ingrediente));
-      dl.innerHTML = [...nombres].map(n => `<option value="${n}">`).join('');
+      // Only show items currently in barra_precios (BASE DE DATOS)
+      dl.innerHTML = precios.map(p => `<option value="${p.ingrediente}">`).join('');
     }
     let html = `
       <h3 style="margin-top:0">EDITAR RECETA</h3>
