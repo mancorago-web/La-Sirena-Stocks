@@ -1011,83 +1011,139 @@ app.post('/api/migrate/import-recetas-base', authMiddleware, async (req, res) =>
 // --- Unify duplicate ingredient names in barra_precios and receta_ingredientes ---
 app.post('/api/migrate/unify-ingredientes', authMiddleware, async (req, res) => {
   try {
-    const changes = [
-      // Typo fixes
-      { oldName: 'ALBAHAHA X KG', newName: 'ALBAHACA X KG', newUnit: 'kg', deleteIds: [101] },
-      // Case normalization (same name, different casing → pick lowercase)
-      { oldName: 'Jarabe de goma', newName: 'jarabe de goma', deleteIds: [92] },
-      { oldName: 'Zumo de maracuya', newName: 'zumo de maracuya', deleteIds: [94] },
-      { oldName: 'Zumo de naranja', newName: 'zumo de naranja', deleteIds: [109] },
-      { oldName: 'Clara', newName: 'clara', deleteIds: [106] },
-      { oldName: 'Ron blanco', newName: 'ron blanco', deleteIds: [90] },
-      { oldName: 'Pisco', newName: 'pisco', deleteIds: [111] },
-      { oldName: 'Piña', newName: 'piña', deleteIds: [95] },
-      { oldName: 'Angostura', newName: 'amargo de angostura', newUnit: 'unidad', deleteIds: [112] },
-      // Same ingredient, different name
-      { oldName: 'amargo de angostura', newName: 'AMARGO DE ANGOSTURA X 75ML', newUnit: 'unidad', deleteIds: [63] },
-      { oldName: 'sal, pimienta', newName: 'sal y pimienta', newUnit: 'gramos', deleteIds: [53] },
-      { oldName: 'tabasco', newName: 'TABASCO X 60 ML', newUnit: 'unidad', deleteIds: [54] },
+    let updatedRecetas = 0, deletedPrecios = 0, mergedCount = 0;
+
+    // Phase 1: Special merges (different names that mean the same thing)
+    const specialMerges = [
+      { oldName: 'ALBAHAHA X KG', newName: 'albahaca x kg', newUnit: 'kg' },
+      { oldName: 'Angostura', newName: 'amargo de angostura x 75ml' },
+      { oldName: 'amargo de angostura', newName: 'amargo de angostura x 75ml' },
+      { oldName: 'sal, pimienta', newName: 'sal y pimienta' },
+      { oldName: 'tabasco', newName: 'tabasco x 60 ml' },
+      // Case-only normalizations (oldName will be deleted after merging)
+      { oldName: 'Jarabe de goma', newName: 'jarabe de goma' },
+      { oldName: 'Zumo de maracuya', newName: 'zumo de maracuya' },
+      { oldName: 'Zumo de naranja', newName: 'zumo de naranja' },
+      { oldName: 'Clara', newName: 'clara' },
+      { oldName: 'Ron blanco', newName: 'ron blanco' },
+      { oldName: 'Pisco', newName: 'pisco' },
+      { oldName: 'Piña', newName: 'piña' },
     ];
 
-    let updatedRecetas = 0, updatedPrecios = 0, deletedPrecios = 0;
-    for (const ch of changes) {
-      // Update receta_ingredientes
+    // First pass: update receta_ingredientes and barra_stock to use newName
+    for (const ch of specialMerges) {
       const ingSnap = await col('receta_ingredientes').where('ingrediente', '==', ch.oldName).get();
-      const b1 = db.batch();
-      ingSnap.docs.forEach(d => {
-        b1.update(d.ref, { ingrediente: ch.newName, updated_at: new Date().toISOString() });
-      });
-      if (ingSnap.docs.length > 0) await b1.commit();
-      updatedRecetas += ingSnap.docs.length;
-
-      // Update barra_precios entries with oldName
-      const precSnap = await col('barra_precios').where('ingrediente', '==', ch.oldName).get();
-      const b2 = db.batch();
-      precSnap.docs.forEach(d => {
-        const updates = { ingrediente: ch.newName, updated_at: new Date().toISOString() };
-        if (ch.newUnit) updates.unidad = ch.newUnit;
-        b2.update(d.ref, updates);
-      });
-      if (precSnap.docs.length > 0) await b2.commit();
-      updatedPrecios += precSnap.docs.length;
-
-      // Update barra_stock entries with oldName
+      if (ingSnap.docs.length > 0) {
+        const batch = db.batch();
+        ingSnap.docs.forEach(d => batch.update(d.ref, { ingrediente: ch.newName }));
+        await batch.commit();
+        updatedRecetas += ingSnap.docs.length;
+      }
+      // Also update barra_stock if needed
       const stockSnap = await col('barra_stock').where('ingrediente', '==', ch.oldName).get();
-      const b3 = db.batch();
-      stockSnap.docs.forEach(d => {
-        const updates = { ingrediente: ch.newName };
-        if (ch.newUnit) updates.unidad = ch.newUnit;
-        b3.update(d.ref, updates);
-      });
-      if (stockSnap.docs.length > 0) await b3.commit();
-
-      // Delete duplicate barra_precios entries
-      if (ch.deleteIds && ch.deleteIds.length) {
-        const b4 = db.batch();
-        for (const id of ch.deleteIds) {
-          const ref = col('barra_precios').doc(String(id));
-          // Only delete if exists and is not the canonical entry
-          const snap = await ref.get();
-          if (snap.exists && snap.data().ingrediente === ch.oldName) {
-            b4.delete(ref);
-            deletedPrecios++;
-          }
+      if (stockSnap.docs.length > 0) {
+        const batch = db.batch();
+        stockSnap.docs.forEach(d => batch.update(d.ref, { ingrediente: ch.newName }));
+        await batch.commit();
+      }
+      // Delete the old barra_precios entry (oldName)
+      const precSnap = await col('barra_precios').where('ingrediente', '==', ch.oldName).get();
+      if (precSnap.docs.length > 0) {
+        const batch = db.batch();
+        // Transfer precio if newName doesn't have a price
+        const newSnap = await col('barra_precios').where('ingrediente', '==', ch.newName).get();
+        if (!newSnap.empty && precSnap.docs[0].data().precio > 0 && !newSnap.docs[0].data().precio) {
+          batch.update(newSnap.docs[0].ref, { precio: precSnap.docs[0].data().precio });
         }
-        if (deletedPrecios > 0) await b4.commit();
+        precSnap.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+        deletedPrecios += precSnap.docs.length;
       }
     }
 
-    // After all merges, fix the typo "ALBAHACA X KG" unit to kg if it was set to unidad
-    const albSnap = await col('barra_precios').where('ingrediente', '==', 'ALBAHACA X KG').get();
-    if (!albSnap.empty) {
-      const b5 = db.batch();
-      albSnap.docs.forEach(d => {
-        b5.update(d.ref, { unidad: 'kg' });
-      });
-      await b5.commit();
-    }
+    // Phase 2: Bulk lowercase ALL barra_precios names and merge exact lowercase duplicates
+    const allPrec = await col('barra_precios').get();
+    const byLower = {};
+    allPrec.docs.forEach(d => {
+      const data = d.data();
+      const key = data.ingrediente.toLowerCase().trim();
+      if (!byLower[key]) byLower[key] = [];
+      byLower[key].push({ id: d.id, ref: d.ref, ...data });
+    });
 
-    res.json({ ok: true, updatedRecetas, updatedPrecios, deletedPrecios });
+    const lowerBatch = db.batch();
+    let lowerCount = 0;
+
+    for (const [lowerName, items] of Object.entries(byLower)) {
+      if (items.length === 1) {
+        // Single item: just lowercase the name if needed
+        if (items[0].ingrediente !== lowerName) {
+          lowerBatch.update(items[0].ref, { ingrediente: lowerName });
+          lowerCount++;
+        }
+      } else {
+        // Multiple items with same lowercase name: merge
+        // Keep the one with highest precio, or the most recent
+        const sorted = [...items].sort((a, b) => (b.precio || 0) - (a.precio || 0));
+        const keeper = sorted[0];
+        const toDelete = sorted.slice(1);
+
+        // Update keeper to lowercase name + best unit
+        const bestUnit = items.reduce((best, item) => {
+          if (item.unidad && item.unidad !== 'unidad' && item.unidad !== lowerName) return item.unidad;
+          return best;
+        }, keeper.unidad || 'unidad');
+        lowerBatch.update(keeper.ref, { ingrediente: lowerName, unidad: normalizeUnit(bestUnit), updated_at: new Date().toISOString() });
+        lowerCount++;
+
+        // Delete duplicates
+        toDelete.forEach(item => lowerBatch.delete(item.ref));
+        deletedPrecios += toDelete.length;
+
+        // Update receta_ingredientes that reference the deleted names
+        for (const item of toDelete) {
+          const riSnap = await col('receta_ingredientes').where('ingrediente', '==', item.ingrediente).get();
+          if (riSnap.docs.length > 0) {
+            const batch = db.batch();
+            riSnap.docs.forEach(d => batch.update(d.ref, { ingrediente: lowerName }));
+            await batch.commit();
+            updatedRecetas += riSnap.docs.length;
+          }
+        }
+      }
+    }
+    if (lowerCount > 0) await lowerBatch.commit();
+
+    // Phase 3: Lowercase all receta_ingredientes names (any remaining uppercase variants)
+    const allRI = await col('receta_ingredientes').get();
+    const riBatch = db.batch();
+    let riCount = 0;
+    allRI.docs.forEach(d => {
+      const data = d.data();
+      const lower = data.ingrediente.trim();
+      if (lower !== data.ingrediente) {
+        riBatch.update(d.ref, { ingrediente: lower });
+        riCount++;
+      }
+    });
+    // Also lowercase barra_stock
+    const allStock = await col('barra_stock').get();
+    const stockBatch = db.batch();
+    let stockCount = 0;
+    allStock.docs.forEach(d => {
+      const data = d.data();
+      const lower = data.ingrediente.trim().toLowerCase();
+      if (lower !== data.ingrediente) {
+        stockBatch.update(d.ref, { ingrediente: lower, updated_at: new Date().toISOString() });
+        stockCount++;
+      }
+    });
+    if (riCount > 0) await riBatch.commit();
+    if (stockCount > 0) await stockBatch.commit();
+
+    mergedCount = deletedPrecios;
+
+    res.json({ ok: true, updatedRecetas, deletedPrecios, mergedCount, lowercasedPrecios: lowerCount, lowercasedRecetas: riCount, lowercasedStock: stockCount });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
