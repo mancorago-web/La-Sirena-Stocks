@@ -68,10 +68,11 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .container { max-width: 1200px; margin: 0 auto; padding: 1.5rem 2rem; display: none; }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
-.sub-tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
-.sub-tab { background: #e0e0e0; color: #333; border: none; padding: 0.5rem 1rem; cursor: pointer; font-size: 0.9rem; border-radius: 4px; font-weight: 600; }
-.sub-tab:hover { background: #d0d0d0; }
-.sub-tab.active { background: #1a237e; color: #fff; }
+.sub-tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; flex-wrap: nowrap; background: #283593; padding: 0.5rem 1rem; border-radius: 4px; }
+.sub-tabs::-webkit-scrollbar { display: none; }
+.sub-tab { background: transparent; color: #ccc; border: none; padding: 0.5rem 0.75rem; cursor: pointer; font-size: 0.9rem; border-radius: 4px; white-space: nowrap; }
+.sub-tab:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.sub-tab.active { background: rgba(255,255,255,0.2); color: #fff; font-weight: 600; }
 .sub-tab-content { display: none; }
 .sub-tab-content.active { display: block; }
 
