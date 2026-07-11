@@ -176,6 +176,18 @@
             <button onclick="exportarRecetas()">EXPORTAR</button>
           </div>
         </div>
+        <div style="margin-bottom:1rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;padding:1rem;background:#f9f9f9;border-radius:8px;">
+          <input type="text" id="nueva-receta-input" placeholder="Nueva receta..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:150px;">
+          <select id="nueva-receta-cat" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;">
+            <option value="RECETAS BASE">RECETAS BASE</option>
+            <option value="Clásicos">Clásicos</option>
+            <option value="Mojitos">Mojitos</option>
+            <option value="Limonadas">Limonadas</option>
+            <option value="DEL BARMAN">DEL BARMAN</option>
+            <option value="Chilcanos y Sours">Chilcanos y Sours</option>
+          </select>
+          <button onclick="guardarReceta()">AGREGAR RECETA</button>
+        </div>
         <div id="recetas-container"></div>
       </div>
 
