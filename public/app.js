@@ -1611,14 +1611,20 @@ function eliminarReceta(id) {
 }
 
 function editarReceta(id) {
-  api('GET', '/api/recetas').then(recetas => {
+  Promise.all([
+    api('GET', '/api/recetas'),
+    api('GET', '/api/barra/precios')
+  ]).then(([recetas, precios]) => {
     const r = recetas.find(rec => rec.id === id);
     if (!r) { alert('Receta no encontrada'); return; }
     const dl = document.getElementById('recetas-base-datalist');
     if (dl) {
-      dl.innerHTML = recetas.filter(rec => rec.categoria === 'RECETAS BASE').map(rec =>
-        `<option value="${rec.nombre}">`
-      ).join('');
+      const nombres = new Set();
+      // Add RECETAS BASE recipe names
+      recetas.filter(rec => rec.categoria === 'RECETAS BASE').forEach(rec => nombres.add(rec.nombre));
+      // Add ALL barra_precios ingredient names
+      precios.forEach(p => nombres.add(p.ingrediente));
+      dl.innerHTML = [...nombres].map(n => `<option value="${n}">`).join('');
     }
     let html = `
       <h3 style="margin-top:0">EDITAR RECETA</h3>
