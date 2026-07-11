@@ -797,7 +797,7 @@ app.get('/api/auth/users', authMiddleware, async (req, res) => {
 function normalizeUnit(u) {
   if (!u) return 'unidad';
   const lower = u.trim().toLowerCase();
-  const map = { 'oz': 'onzas', 'und': 'unidad', 'unidades': 'unidad', 'gr': 'gramos', 'gramo': 'gramos' };
+  const map = { 'oz': 'onzas', 'onz': 'onzas', 'und': 'unidad', 'unidades': 'unidad', 'gr': 'gramos', 'gramo': 'gramos' };
   return map[lower] || lower;
 }
 
@@ -823,6 +823,136 @@ app.post('/api/migrate/normalize-units', authMiddleware, async (req, res) => {
       total += count;
     }
     res.json({ ok: true, updated: total });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Import RECETAS BASE from spreadsheet data ---
+const recetasBase = [
+  { nombre: 'JARABE DE GOMA X 2 LT - 66 ONZ', ingredientes: [
+    { ingrediente: 'Azucar blanca', cantidad: 1250, unidad: 'gr' },
+    { ingrediente: 'bidon de agua x 20lt', cantidad: 1, unidad: 'lt' },
+  ]},
+  { nombre: 'JARABE DE SANDIA X 750 ML', ingredientes: [
+    { ingrediente: 'Sandia', cantidad: 500, unidad: 'gr' },
+    { ingrediente: 'azucar blanca', cantidad: 500, unidad: 'gr' },
+  ]},
+  { nombre: 'MIEL CURCUMA - 20 COCTELES', ingredientes: [
+    { ingrediente: 'Curcuma (15und)', cantidad: 200, unidad: 'gr' },
+    { ingrediente: 'miel de abeja x ml', cantidad: 750, unidad: 'ml' },
+  ]},
+  { nombre: 'ESPUMA DE GENGIBRE - 4 COCTELES', ingredientes: [
+    { ingrediente: 'Piña', cantidad: 250, unidad: 'gr' },
+    { ingrediente: 'gengibre', cantidad: 20, unidad: 'gr' },
+    { ingrediente: 'huevo', cantidad: 1, unidad: 'und' },
+    { ingrediente: 'limon', cantidad: 1, unidad: 'und' },
+  ]},
+  { nombre: 'PURE DE MORA 1KG - 4 BOLOS(1 BOLO - 5 ONZ)', ingredientes: [
+    { ingrediente: 'Mora', cantidad: 1000, unidad: 'gr' },
+  ]},
+  { nombre: 'FALERNUM 66 ONZ', ingredientes: [
+    { ingrediente: 'Jarabe de goma', cantidad: 1, unidad: 'und' },
+    { ingrediente: 'canela,limon,anis estrella, clavo de olor', cantidad: 1, unidad: 'und' },
+  ]},
+  { nombre: 'ESFERA DE HIELO(6 UND)', ingredientes: [
+    { ingrediente: 'Agua', cantidad: 700, unidad: 'ml' },
+    { ingrediente: 'Flor de jamaica', cantidad: 100, unidad: 'gr' },
+    { ingrediente: 'Campari', cantidad: 300, unidad: 'ml' },
+    { ingrediente: 'Falernum', cantidad: 1, unidad: 'onz' },
+  ]},
+  { nombre: 'SIROP PIÑA Y CRANBERY 13 COCTELES', ingredientes: [
+    { ingrediente: 'jarabe de goma', cantidad: 200, unidad: 'ml' },
+    { ingrediente: 'líquido marrasquino', cantidad: 200, unidad: 'ml' },
+  ]},
+  { nombre: 'INFUSCION DE PISCO FRESA Y ANIS 1.5 lt', ingredientes: [
+    { ingrediente: 'pisco', cantidad: 1.5, unidad: 'lt' },
+    { ingrediente: 'fresa', cantidad: 1000, unidad: 'gr' },
+    { ingrediente: 'anis estrella', cantidad: 3, unidad: 'gr' },
+  ]},
+  { nombre: 'MACERADO DE MAIZ MORADO x 2lt', ingredientes: [
+    { ingrediente: 'PISCO QUEBRANTA PEDRO MANUEL X 4LT', cantidad: 2000, unidad: 'lt' },
+    { ingrediente: 'maíz morado', cantidad: 1500, unidad: 'gr' },
+    { ingrediente: 'cáscara de piña', cantidad: 250, unidad: 'gr' },
+    { ingrediente: 'especias', cantidad: 5, unidad: 'gr' },
+    { ingrediente: 'manzana verde', cantidad: 1, unidad: 'und' },
+    { ingrediente: 'maracuya', cantidad: 1, unidad: 'und' },
+  ]},
+  { nombre: 'ESPUMA DE PIÑA Y CANELA 4 COCTELES', ingredientes: [
+    { ingrediente: 'piña', cantidad: 250, unidad: 'gr' },
+    { ingrediente: 'canela entera', cantidad: 2, unidad: 'gr' },
+    { ingrediente: 'PISCO QUEBRANTA PEDRO MANUEL X 4LT', cantidad: 1, unidad: 'onz' },
+    { ingrediente: 'zumo de limon', cantidad: 0.5, unidad: 'onz' },
+    { ingrediente: 'huevo', cantidad: 1, unidad: 'und' },
+  ]},
+  { nombre: 'SIROP DE MAIZ MORADO 700 ml', ingredientes: [
+    { ingrediente: 'maíz morado', cantidad: 500, unidad: 'gr' },
+    { ingrediente: 'cáscara de piña', cantidad: 250, unidad: 'gr' },
+    { ingrediente: 'especias', cantidad: 5, unidad: 'gr' },
+    { ingrediente: 'manzana verde', cantidad: 1, unidad: 'und' },
+    { ingrediente: 'maracuya', cantidad: 1, unidad: 'und' },
+    { ingrediente: 'azucar blanca', cantidad: 500, unidad: 'gr' },
+  ]},
+  { nombre: 'ESPUMA DE MENTA Y HIERBA LUISA - 4 COCTELES', ingredientes: [
+    { ingrediente: 'piña', cantidad: 250, unidad: 'gr' },
+    { ingrediente: 'menta', cantidad: 2, unidad: 'gr' },
+    { ingrediente: 'hierba luisa', cantidad: 2, unidad: 'gr' },
+    { ingrediente: 'Pisco Quebranta Pedro manuel x 4lt', cantidad: 1, unidad: 'onz' },
+    { ingrediente: 'zumo de limon', cantidad: 0.5, unidad: 'onz' },
+    { ingrediente: 'huevo', cantidad: 1, unidad: 'und' },
+  ]},
+  { nombre: 'JARABE DEMERARA X 750 ML', ingredientes: [
+    { ingrediente: 'agua', cantidad: 500, unidad: 'lt' },
+    { ingrediente: 'azucar rubia', cantidad: 500, unidad: 'gr' },
+  ]},
+  { nombre: 'ZUMO DE MARACUYA X UND - 90 ML', ingredientes: [
+    { ingrediente: 'maracuya', cantidad: 3, unidad: 'onz' },
+  ]},
+  { nombre: 'ZUMO DE NARANJA X UND', ingredientes: [
+    { ingrediente: 'naranja', cantidad: 1, unidad: 'und' },
+  ]},
+  { nombre: 'ZUMO DE LIMON X UND', ingredientes: [
+    { ingrediente: 'limon', cantidad: 2, unidad: 'und' },
+  ]},
+  { nombre: 'MANGO CIRUELO 5 BOLOS - 5 onzas x bolo', ingredientes: [
+    { ingrediente: 'mango ciruelo', cantidad: 1000, unidad: 'gr' },
+  ]},
+];
+
+app.post('/api/migrate/import-recetas-base', authMiddleware, async (req, res) => {
+  try {
+    const existing = await col('recetas').where('categoria', '==', 'RECETAS BASE').get();
+    if (!existing.empty) {
+      return res.json({ ok: true, message: 'Ya importado', count: existing.size });
+    }
+    const allRec = await col('recetas').get();
+    const allIng = await col('receta_ingredientes').get();
+    let nextRecId = allRec.docs.length > 0 ? Math.max(...allRec.docs.map(d => Number(d.id) || 0)) + 1 : 1;
+    let nextIngId = allIng.docs.length > 0 ? Math.max(...allIng.docs.map(d => Number(d.id) || 0)) + 1 : 1;
+    const batch = db.batch();
+    let recCount = 0;
+    let ingCount = 0;
+    for (const rec of recetasBase) {
+      const recId = nextRecId++;
+      const ref = col('recetas').doc(String(recId));
+      batch.set(ref, {
+        id: recId, nombre: rec.nombre, categoria: 'RECETAS BASE',
+        created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+      });
+      recCount++;
+      for (const ing of rec.ingredientes) {
+        const ingId = nextIngId++;
+        batch.set(col('receta_ingredientes').doc(String(ingId)), {
+          id: ingId, receta_id: recId,
+          ingrediente: ing.ingrediente,
+          cantidad: ing.cantidad,
+          unidad: normalizeUnit(ing.unidad),
+        });
+        ingCount++;
+      }
+    }
+    await batch.commit();
+    res.json({ ok: true, recetas: recCount, ingredientes: ingCount });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

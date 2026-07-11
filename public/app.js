@@ -208,7 +208,7 @@ function compararCierre(el) {
 }
 
 function normalizeUnit(u) {
-  const map = { 'oz': 'onzas', 'und': 'unidad', 'unidades': 'unidad', 'gr': 'gramos', 'gramo': 'gramos' };
+  const map = { 'oz': 'onzas', 'onz': 'onzas', 'und': 'unidad', 'unidades': 'unidad', 'gr': 'gramos', 'gramo': 'gramos' };
   return map[u ? u.toLowerCase().trim() : ''] || (u ? u.trim().toLowerCase() : 'unidad');
 }
 function recargarTodo(fecha) {
@@ -1537,7 +1537,7 @@ function cargarRecetas() {
       if (!grupos[cat]) grupos[cat] = [];
       grupos[cat].push(r);
     });
-    const ordenCat = ['Clásicos', 'Mojitos', 'Limonadas', 'DEL BARMAN', 'Chilcanos y Sours'];
+    const ordenCat = ['RECETAS BASE', 'Clásicos', 'Mojitos', 'Limonadas', 'DEL BARMAN', 'Chilcanos y Sours'];
     let html = '';
     const catsToRender = [...ordenCat.filter(c => grupos[c]), ...Object.keys(grupos).filter(c => !ordenCat.includes(c))];
     catsToRender.forEach(cat => {
@@ -1623,15 +1623,15 @@ function editarReceta(id) {
               <td><input class="edit-ing-nombre" value="${ing.ingrediente}" style="width:100%"></td>
               <td><input class="edit-ing-cant" type="number" step="0.01" value="${ing.cantidad}" style="width:80px"></td>
               <td><select class="edit-ing-uni" style="width:90px">
-                <option value="unidad" ${ing.unidad === 'unidad' ? 'selected' : ''}>unidad</option>
-                <option value="onzas" ${ing.unidad === 'onzas' ? 'selected' : ''}>onzas</option>
-                <option value="gramos" ${ing.unidad === 'gramos' ? 'selected' : ''}>gramos</option>
-                <option value="ml" ${ing.unidad === 'ml' ? 'selected' : ''}>ml</option>
-                <option value="kg" ${ing.unidad === 'kg' ? 'selected' : ''}>kg</option>
-                <option value="lt" ${ing.unidad === 'lt' ? 'selected' : ''}>lt</option>
-                <option value="hojas" ${ing.unidad === 'hojas' ? 'selected' : ''}>hojas</option>
-                <option value="gotas" ${ing.unidad === 'gotas' ? 'selected' : ''}>gotas</option>
-                <option value="rodajas" ${ing.unidad === 'rodajas' ? 'selected' : ''}>rodajas</option>
+                <option value="unidad" ${normalizeUnit(ing.unidad) === 'unidad' ? 'selected' : ''}>unidad</option>
+                <option value="onzas" ${normalizeUnit(ing.unidad) === 'onzas' ? 'selected' : ''}>onzas</option>
+                <option value="gramos" ${normalizeUnit(ing.unidad) === 'gramos' ? 'selected' : ''}>gramos</option>
+                <option value="ml" ${normalizeUnit(ing.unidad) === 'ml' ? 'selected' : ''}>ml</option>
+                <option value="kg" ${normalizeUnit(ing.unidad) === 'kg' ? 'selected' : ''}>kg</option>
+                <option value="lt" ${normalizeUnit(ing.unidad) === 'lt' ? 'selected' : ''}>lt</option>
+                <option value="hojas" ${normalizeUnit(ing.unidad) === 'hojas' ? 'selected' : ''}>hojas</option>
+                <option value="gotas" ${normalizeUnit(ing.unidad) === 'gotas' ? 'selected' : ''}>gotas</option>
+                <option value="rodajas" ${normalizeUnit(ing.unidad) === 'rodajas' ? 'selected' : ''}>rodajas</option>
               </select></td>
               <td><button class="danger" onclick="this.closest('tr').remove()">✕</button></td>
             </tr>
