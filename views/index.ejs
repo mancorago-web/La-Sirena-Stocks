@@ -274,6 +274,7 @@
           <h2>Base de Datos</h2>
           <div class="controles-dia">
             <input type="text" id="buscar-precios" placeholder="Buscar en base de datos..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:250px;" oninput="buscarTablaBarra(this.value, 'barra-precios-container', 'tr[data-precio-id]')">
+            <button class="btn-detalles" onclick="exportarBaseDatos()">EXPORTAR</button>
           </div>
         </div>
         <div id="barra-precios-container"></div>

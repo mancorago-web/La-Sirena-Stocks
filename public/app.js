@@ -1909,6 +1909,17 @@ function guardarPreciosAlmacen() {
   });
 }
 
+function exportarBaseDatos() {
+  api('GET', '/api/barra/precios').then(data => {
+    const wsData = [['NOMBRE', 'UNIDAD DE MEDIDA', 'PRECIO']];
+    data.forEach(p => wsData.push([p.ingrediente, p.unidad || '', p.precio || 0]));
+    const libro = XLSX.utils.book_new();
+    const hoja = XLSX.utils.aoa_to_sheet(wsData);
+    XLSX.utils.book_append_sheet(libro, hoja, 'Base de Datos');
+    XLSX.writeFile(libro, 'Base_de_Datos.xlsx');
+  }).catch(() => alert('Error al exportar'));
+}
+
 function exportarPrecios() {
   const fecha = document.getElementById('fecha-almacenes')?.value || new Date().toISOString().split('T')[0];
   const wsData = [['Almacén', 'Item', 'Stock Actual', 'Precio Unidad', 'Total']];
