@@ -1940,30 +1940,62 @@ function cargarBarraMovimientos(tipo) {
   const fecha = document.getElementById('fecha-barra-' + tipo)?.value || todayStr();
   const accId = 'accordion-barra-' + tipo;
   if (tipo === 'ventas') {
-    // VENTAS shows recipes, not individual items
     Promise.all([
       api('GET', '/api/recetas'),
       api('GET', '/api/barra/movimientos?fecha=' + fecha + '&tipo=ventas')
     ]).then(([recetas, movs]) => {
-      const movByRec = {};
-      movs.forEach(m => { movByRec[m.ingrediente] = m; });
+      const ordenCat = ['RECETAS BASE', 'Clásicos', 'Mojitos', 'Limonadas', 'DEL BARMAN', 'Chilcanos y Sours'];
+      const recetasGuardadas = movs.filter(m => m.es_receta !== false);
+      const recQty = {};
+      recetasGuardadas.forEach(m => { recQty[m.ingrediente] = m.cantidad; });
+      const grupos = {};
+      recetas.forEach(r => {
+        const cat = r.categoria || 'Clásicos';
+        if (!grupos[cat]) grupos[cat] = [];
+        grupos[cat].push(r);
+      });
+      const catsToRender = [...ordenCat.filter(c => grupos[c]), ...Object.keys(grupos).filter(c => !ordenCat.includes(c))];
       const container = document.getElementById(accId);
       if (!recetas.length) { container.innerHTML = '<p>No hay recetas registradas.</p>'; return; }
-      container.innerHTML = `
-        <div class="table-wrap"><table>
-          <thead><tr><th>Receta</th><th>Cantidad Vendida</th><th>Ingredientes</th></tr></thead>
-          <tbody>
-            ${recetas.map(r => {
-              const mov = movByRec[r.nombre] || {};
-              const ingList = r.ingredientes.map(i => i.ingrediente).join(', ');
-              return `<tr data-receta="${r.nombre}" data-ingredientes='${JSON.stringify(r.ingredientes.map(i => ({ ingrediente: i.ingrediente, cantidad: i.cantidad, unidad: i.unidad })))}'>
-                <td>${r.nombre}</td>
-                <td><input type="number" class="input-barra-mov" value="${mov.cantidad || ''}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
-                <td style="font-size:0.8rem;color:#666;">${ingList}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table></div>`;
+      let html = '<h3 style="margin:0 0 0.5rem 0;">RECETAS VENDIDAS</h3>';
+      catsToRender.forEach(cat => {
+        html += `<div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAcordeon(this)">
+            <span class="accordion-title">${cat}</span>
+            <span class="accordion-arrow">▶</span>
+          </div>
+          <div class="accordion-body">
+            <div class="table-wrap"><table>
+              <thead><tr><th>Receta</th><th>Cant. Vendida</th><th>Ingredientes</th></tr></thead>
+              <tbody>
+                ${grupos[cat].map(r => {
+                  const qty = recQty[r.nombre] || '';
+                  const ings = r.ingredientes.map(i => i.ingrediente).join(', ');
+                  return `<tr data-receta="${r.nombre}" data-ingredientes='${JSON.stringify(r.ingredientes.map(i => ({ ingrediente: i.ingrediente, cantidad: i.cantidad, unidad: i.unidad })))}'>
+                    <td>${r.nombre}</td>
+                    <td><input type="number" class="input-barra-mov input-receta-qty" value="${qty}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="calcularItemsSalientes()"></td>
+                    <td style="font-size:0.8rem;color:#666;">${ings}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table></div>
+          </div>
+        </div>`;
+      });
+      // ITEMS SALIENTES section
+      html += '<div id="items-salientes-section"><h3 style="margin:1rem 0 0.5rem 0;">ITEMS SALIENTES</h3>';
+      const ingSaved = movs.filter(m => m.es_receta === false);
+      if (ingSaved.length) {
+        html += '<div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th>Cantidad Consumida</th><th>Unidad</th></tr></thead><tbody>';
+        ingSaved.forEach(m => {
+          html += `<tr><td>${m.ingrediente}</td><td>${m.cantidad || 0}</td><td>${m.unidad || 'unidad'}</td></tr>`;
+        });
+        html += '</tbody></table></div>';
+      } else {
+        html += '<p style="color:#888;">Calculado automáticamente al ingresar cantidades de recetas.</p>';
+      }
+      html += '</div>';
+      container.innerHTML = html;
       const bp = document.getElementById('buscar-barra-ventas');
       if (bp && bp.value) buscarTablaBarra(bp.value, accId, 'tr[data-receta]');
     });
@@ -2000,27 +2032,35 @@ function cargarBarraMovimientos(tipo) {
 function guardarBarraMovimientos(tipo) {
   const fecha = document.getElementById('fecha-barra-' + tipo)?.value || todayStr();
   if (tipo === 'ventas') {
-    // Expand recipes into individual ingredient entries
-    const expanded = [];
+    const items = [];
+    // Recipe-level entries
     document.querySelectorAll('#accordion-barra-ventas tr[data-receta]').forEach(tr => {
-      const qty = parseFloat(tr.querySelector('.input-barra-mov').value) || 0;
+      const qty = parseFloat(tr.querySelector('.input-receta-qty').value) || 0;
       if (qty > 0) {
+        items.push({
+          ingrediente: tr.dataset.receta,
+          cantidad: qty,
+          unidad: 'unidad',
+          es_receta: true
+        });
+        // Expanded ingredient entries
         const ingredientes = JSON.parse(tr.dataset.ingredientes || '[]');
         ingredientes.forEach(ing => {
-          expanded.push({
+          items.push({
             ingrediente: ing.ingrediente,
             cantidad: (ing.cantidad || 0) * qty,
-            unidad: ing.unidad || 'unidad'
+            unidad: ing.unidad || 'unidad',
+            es_receta: false,
+            receta: tr.dataset.receta
           });
         });
       }
     });
-    api('POST', '/api/barra/movimientos', { fecha, tipo, items: expanded }).then(() => {
+    api('POST', '/api/barra/movimientos', { fecha, tipo, items }).then(() => {
       showToast('Venta Guardada');
       cargarBarraMovimientos(tipo);
     }).catch(e => { console.error(e); alert('Error al guardar'); });
   } else {
-    // INGRESOS / BAJAS: save as-is
     const items = [];
     document.querySelectorAll('#accordion-barra-' + tipo + ' tr[data-ing]').forEach(tr => {
       const cant = parseFloat(tr.querySelector('.input-barra-mov').value) || 0;
@@ -2041,17 +2081,59 @@ function verDetallesBarra(tipo) {
   const label = tipo === 'ingresos' ? 'Ingresos' : tipo === 'ventas' ? 'Ventas' : 'Bajas';
   api('GET', '/api/barra/movimientos?fecha=' + fecha + '&tipo=' + tipo).then(movs => {
     let html = '<h3>Detalle de ' + label + ' Barra — ' + fecha + '</h3>';
-    if (!movs.length) { html += '<p>No hay movimientos registrados en esta fecha.</p>'; }
-    else {
-      html += '<table><thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
-      movs.forEach(m => {
-        const t = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
-        const u = DISPLAY_NAMES[m.saved_by] || m.saved_by || '-';
-        html += '<tr><td>' + m.ingrediente + '</td><td>' + (m.cantidad || 0) + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
-      });
-      html += '</tbody></table>';
+    if (tipo === 'ventas') {
+      // Show only recipe-level entries
+      const recetas = movs.filter(m => m.es_receta !== false);
+      if (!recetas.length) { html += '<p>No hay ventas registradas en esta fecha.</p>'; }
+      else {
+        html += '<table><thead><tr><th>Receta</th><th>Cantidad</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
+        recetas.forEach(m => {
+          const t = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
+          const u = DISPLAY_NAMES[m.saved_by] || m.saved_by || '-';
+          html += '<tr><td>' + m.ingrediente + '</td><td>' + (m.cantidad || 0) + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
+        });
+        html += '</tbody></table>';
+      }
+    } else {
+      if (!movs.length) { html += '<p>No hay movimientos registrados en esta fecha.</p>'; }
+      else {
+        html += '<table><thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
+        movs.forEach(m => {
+          const t = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
+          const u = DISPLAY_NAMES[m.saved_by] || m.saved_by || '-';
+          html += '<tr><td>' + m.ingrediente + '</td><td>' + (m.cantidad || 0) + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
+        });
+        html += '</tbody></table>';
+      }
     }
     document.getElementById('modal-body').innerHTML = html;
     document.getElementById('modal').style.display = 'block';
   });
+}
+
+function calcularItemsSalientes() {
+  const seccion = document.getElementById('items-salientes-section');
+  if (!seccion) return;
+  const totals = {};
+  const units = {};
+  document.querySelectorAll('#accordion-barra-ventas tr[data-receta]').forEach(tr => {
+    const qty = parseFloat(tr.querySelector('.input-receta-qty').value) || 0;
+    if (qty > 0) {
+      const ingredientes = JSON.parse(tr.dataset.ingredientes || '[]');
+      ingredientes.forEach(ing => {
+        const name = ing.ingrediente;
+        const cant = (ing.cantidad || 0) * qty;
+        totals[name] = (totals[name] || 0) + cant;
+        units[name] = ing.unidad || 'unidad';
+      });
+    }
+  });
+  const names = Object.keys(totals);
+  if (!names.length) {
+    seccion.innerHTML = '<h3 style="margin:1rem 0 0.5rem 0;">ITEMS SALIENTES</h3><p style="color:#888;">Calculado automáticamente al ingresar cantidades de recetas.</p>';
+    return;
+  }
+  seccion.innerHTML = '<h3 style="margin:1rem 0 0.5rem 0;">ITEMS SALIENTES</h3><div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th>Cantidad Consumida</th><th>Unidad</th></tr></thead><tbody>' +
+    names.map(n => '<tr><td>' + n + '</td><td>' + (totals[n] || 0).toFixed(2) + '</td><td>' + (units[n] || 'unidad') + '</td></tr>').join('') +
+    '</tbody></table></div>';
 }

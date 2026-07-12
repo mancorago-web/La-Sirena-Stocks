@@ -823,12 +823,15 @@ app.post('/api/barra/movimientos', authMiddleware, async (req, res) => {
     for (const item of items) {
       if (!item.cantidad || item.cantidad <= 0) continue;
       const ref = col('barra_movimientos').doc();
-      batch.set(ref, {
+      const doc = {
         fecha, tipo, ingrediente: item.ingrediente,
         cantidad: item.cantidad, unidad: item.unidad || 'unidad',
         saved_by: req.user?.name || req.user?.email || 'unknown',
         created_at: new Date().toISOString()
-      });
+      };
+      if (item.es_receta !== undefined) doc.es_receta = item.es_receta;
+      if (item.receta) doc.receta = item.receta;
+      batch.set(ref, doc);
     }
     await batch.commit();
     res.json({ ok: true });
