@@ -1487,6 +1487,11 @@ initPicker('fecha-salidas', cargarSalidas);
 initPicker('fecha-ventas', cargarVentas);
 initPicker('fecha-bajas', cargarBajas);
 initPicker('fecha-ingresos', cargarIngresos);
+// Barra: just set today's date, actual load happens via lazy-load in cambiarSubTab
+['fecha-barra-ingresos','fecha-barra-ventas','fecha-barra-bajas'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.value = todayStr();
+});
 initPicker('fecha-stocks', function() { cargarStocks(); });
 // reportes, precios, barra loaded lazily on first tab click
 initPicker('reporte-fecha-dif');
