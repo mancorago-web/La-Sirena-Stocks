@@ -1119,6 +1119,7 @@ function guardarMinimosStocks() {
   document.querySelectorAll('#accordion-stocks tr[data-item-id]').forEach(tr => {
     const itemId = parseInt(tr.dataset.itemId);
     const almacenId = parseInt(tr.dataset.almacenId);
+    if (isNaN(itemId) || isNaN(almacenId)) return;
     const val = parseFloat(tr.querySelector('.input-minimo').value) || 0;
     minimos.push({ item_id: itemId, almacen_id: almacenId, cantidad_minima: val });
   });
@@ -1899,7 +1900,7 @@ function guardarPreciosAlmacen() {
     const precio = parseFloat(tr.querySelector('.input-precio-almacen').value) || 0;
     items.push({ item_id, almacen_id, precio });
   });
-  api('PUT', '/api/precios', { items }).then(() => {
+  api('PUT', '/api/precios', { precios: items }).then(() => {
     btn.textContent = '✓ Guardado';
     setTimeout(() => { btn.disabled = false; btn.textContent = '💾 GUARDAR PRECIOS'; }, 2000);
   }).catch(() => {

@@ -530,24 +530,29 @@ app.post('/api/repair/fix-apertura', async (req, res) => {
 
 // --- MINIMOS ---
 app.put('/api/inventario/minimos', async (req, res) => {
-  const { minimos, botellas } = req.body;
-  const batch = db.batch();
-  if (minimos) {
-    for (const m of minimos) {
-      const id = docId('inventario', m.item_id, m.almacen_id);
-      const ref = col('inventario').doc(id);
-      batch.update(ref, { cantidad_minima: parseFloat(m.cantidad_minima) || 0 });
+  try {
+    const { minimos, botellas } = req.body;
+    const batch = db.batch();
+    if (minimos) {
+      for (const m of minimos) {
+        const id = docId('inventario', m.item_id, m.almacen_id);
+        const ref = col('inventario').doc(id);
+        batch.set(ref, { cantidad_minima: parseFloat(m.cantidad_minima) || 0 }, { merge: true });
+      }
     }
-  }
-  if (botellas) {
-    for (const b of botellas) {
-      const id = docId('inventario', b.item_id, b.almacen_id);
-      const ref = col('inventario').doc(id);
-      batch.set(ref, { fecha_apertura: b.fecha_apertura || '' }, { merge: true });
+    if (botellas) {
+      for (const b of botellas) {
+        const id = docId('inventario', b.item_id, b.almacen_id);
+        const ref = col('inventario').doc(id);
+        batch.set(ref, { fecha_apertura: b.fecha_apertura || '' }, { merge: true });
+      }
     }
+    await batch.commit();
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Error en minimos:', e.message);
+    res.status(500).json({ error: e.message });
   }
-  await batch.commit();
-  res.json({ ok: true });
 });
 
 // --- PRECIOS ---
@@ -596,7 +601,7 @@ app.put('/api/precios', async (req, res) => {
   for (const p of precios) {
     const id = docId('inventario', p.item_id, p.almacen_id);
     const ref = col('inventario').doc(id);
-    batch.update(ref, { precio: parseFloat(p.precio) || 0 });
+    batch.set(ref, { precio: parseFloat(p.precio) || 0 }, { merge: true });
   }
   await batch.commit();
   res.json({ ok: true });
