@@ -201,7 +201,7 @@
           <h2>Ventas Barra</h2>
           <div class="controles-dia">
             <label>Fecha: <input type="date" id="fecha-barra-ventas" onchange="cargarBarraMovimientos('ventas')"></label>
-            <input type="text" id="buscar-barra-ventas" placeholder="Buscar item..." oninput="buscarEnTabla(this.value,'accordion-barra-ventas')">
+            <input type="text" id="buscar-barra-ventas" placeholder="Buscar receta..." oninput="buscarTablaBarra(this.value,'accordion-barra-ventas','tr[data-receta]')">
             <button class="btn-guardar-dia" onclick="guardarBarraMovimientos('ventas')">💾 GUARDAR VENTAS</button>
             <button class="btn-detalles" onclick="verDetallesBarra('ventas')">📋 DETALLES</button>
           </div>

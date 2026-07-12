@@ -1939,53 +1939,107 @@ function exportarPrecios() {
 function cargarBarraMovimientos(tipo) {
   const fecha = document.getElementById('fecha-barra-' + tipo)?.value || todayStr();
   const accId = 'accordion-barra-' + tipo;
-  Promise.all([
-    api('GET', '/api/barra/precios'),
-    api('GET', '/api/barra/movimientos?fecha=' + fecha + '&tipo=' + tipo)
-  ]).then(([precios, movs]) => {
-    const movByIng = {};
-    movs.forEach(m => { movByIng[m.ingrediente] = m; });
-    const container = document.getElementById(accId);
-    if (!precios.length) { container.innerHTML = '<p>No hay items en BASE DE DATOS.</p>'; return; }
-    container.innerHTML = `
-      <div class="table-wrap"><table>
-        <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th></tr></thead>
-        <tbody>
-          ${precios.map(p => {
-            const mov = movByIng[p.ingrediente] || {};
-            return `<tr data-ing="${p.ingrediente}">
-              <td>${p.ingrediente}</td>
-              <td><input type="number" class="input-barra-mov" value="${mov.cantidad || ''}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
-              <td>${p.unidad || 'unidad'}</td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table></div>`;
-    const bp = document.getElementById('buscar-barra-' + tipo);
-    if (bp && bp.value) buscarEnTabla(bp.value, accId);
-  });
+  if (tipo === 'ventas') {
+    // VENTAS shows recipes, not individual items
+    Promise.all([
+      api('GET', '/api/recetas'),
+      api('GET', '/api/barra/movimientos?fecha=' + fecha + '&tipo=ventas')
+    ]).then(([recetas, movs]) => {
+      const movByRec = {};
+      movs.forEach(m => { movByRec[m.ingrediente] = m; });
+      const container = document.getElementById(accId);
+      if (!recetas.length) { container.innerHTML = '<p>No hay recetas registradas.</p>'; return; }
+      container.innerHTML = `
+        <div class="table-wrap"><table>
+          <thead><tr><th>Receta</th><th>Cantidad Vendida</th><th>Ingredientes</th></tr></thead>
+          <tbody>
+            ${recetas.map(r => {
+              const mov = movByRec[r.nombre] || {};
+              const ingList = r.ingredientes.map(i => i.ingrediente).join(', ');
+              return `<tr data-receta="${r.nombre}" data-ingredientes='${JSON.stringify(r.ingredientes.map(i => ({ ingrediente: i.ingrediente, cantidad: i.cantidad, unidad: i.unidad })))}'>
+                <td>${r.nombre}</td>
+                <td><input type="number" class="input-barra-mov" value="${mov.cantidad || ''}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
+                <td style="font-size:0.8rem;color:#666;">${ingList}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table></div>`;
+      const bp = document.getElementById('buscar-barra-ventas');
+      if (bp && bp.value) buscarTablaBarra(bp.value, accId, 'tr[data-receta]');
+    });
+  } else {
+    // INGRESOS / BAJAS: show barra_precios items
+    Promise.all([
+      api('GET', '/api/barra/precios'),
+      api('GET', '/api/barra/movimientos?fecha=' + fecha + '&tipo=' + tipo)
+    ]).then(([precios, movs]) => {
+      const movByIng = {};
+      movs.forEach(m => { movByIng[m.ingrediente] = m; });
+      const container = document.getElementById(accId);
+      if (!precios.length) { container.innerHTML = '<p>No hay items en BASE DE DATOS.</p>'; return; }
+      container.innerHTML = `
+        <div class="table-wrap"><table>
+          <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th></tr></thead>
+          <tbody>
+            ${precios.map(p => {
+              const mov = movByIng[p.ingrediente] || {};
+              return `<tr data-ing="${p.ingrediente}">
+                <td>${p.ingrediente}</td>
+                <td><input type="number" class="input-barra-mov" value="${mov.cantidad || ''}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
+                <td>${p.unidad || 'unidad'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table></div>`;
+      const bp = document.getElementById('buscar-barra-' + tipo);
+      if (bp && bp.value) buscarEnTabla(bp.value, accId);
+    });
+  }
 }
 
 function guardarBarraMovimientos(tipo) {
   const fecha = document.getElementById('fecha-barra-' + tipo)?.value || todayStr();
-  const items = [];
-  document.querySelectorAll('#accordion-barra-' + tipo + ' tr[data-ing]').forEach(tr => {
-    const cant = parseFloat(tr.querySelector('.input-barra-mov').value) || 0;
-    if (cant > 0) {
-      items.push({ ingrediente: tr.dataset.ing, cantidad: cant, unidad: 'unidad' });
-    }
-  });
-  api('POST', '/api/barra/movimientos', { fecha, tipo, items }).then(() => {
-    showToast(tipo === 'ingresos' ? 'Ingreso Guardado' : tipo === 'ventas' ? 'Venta Guardada' : 'Baja Guardada');
-    cargarBarraMovimientos(tipo);
-  }).catch(e => { console.error(e); alert('Error al guardar'); });
+  if (tipo === 'ventas') {
+    // Expand recipes into individual ingredient entries
+    const expanded = [];
+    document.querySelectorAll('#accordion-barra-ventas tr[data-receta]').forEach(tr => {
+      const qty = parseFloat(tr.querySelector('.input-barra-mov').value) || 0;
+      if (qty > 0) {
+        const ingredientes = JSON.parse(tr.dataset.ingredientes || '[]');
+        ingredientes.forEach(ing => {
+          expanded.push({
+            ingrediente: ing.ingrediente,
+            cantidad: (ing.cantidad || 0) * qty,
+            unidad: ing.unidad || 'unidad'
+          });
+        });
+      }
+    });
+    api('POST', '/api/barra/movimientos', { fecha, tipo, items: expanded }).then(() => {
+      showToast('Venta Guardada');
+      cargarBarraMovimientos(tipo);
+    }).catch(e => { console.error(e); alert('Error al guardar'); });
+  } else {
+    // INGRESOS / BAJAS: save as-is
+    const items = [];
+    document.querySelectorAll('#accordion-barra-' + tipo + ' tr[data-ing]').forEach(tr => {
+      const cant = parseFloat(tr.querySelector('.input-barra-mov').value) || 0;
+      if (cant > 0) {
+        items.push({ ingrediente: tr.dataset.ing, cantidad: cant, unidad: 'unidad' });
+      }
+    });
+    api('POST', '/api/barra/movimientos', { fecha, tipo, items }).then(() => {
+      showToast(tipo === 'ingresos' ? 'Ingreso Guardado' : 'Baja Guardada');
+      cargarBarraMovimientos(tipo);
+    }).catch(e => { console.error(e); alert('Error al guardar'); });
+  }
 }
 
 function verDetallesBarra(tipo) {
   const fecha = document.getElementById('fecha-barra-' + tipo)?.value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
+  const label = tipo === 'ingresos' ? 'Ingresos' : tipo === 'ventas' ? 'Ventas' : 'Bajas';
   api('GET', '/api/barra/movimientos?fecha=' + fecha + '&tipo=' + tipo).then(movs => {
-    const label = tipo === 'ingresos' ? 'Ingresos' : tipo === 'ventas' ? 'Ventas' : 'Bajas';
     let html = '<h3>Detalle de ' + label + ' Barra — ' + fecha + '</h3>';
     if (!movs.length) { html += '<p>No hay movimientos registrados en esta fecha.</p>'; }
     else {
