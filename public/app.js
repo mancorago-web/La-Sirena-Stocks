@@ -1115,21 +1115,14 @@ function editarAlmacen(id, nombre, descripcion) {
 function guardarMinimosStocks() {
   const btn = document.querySelector('#tab-stocks .btn-guardar-dia');
   btn.disabled = true; btn.textContent = 'Guardando...';
-  const items = [];
+  const minimos = [];
   document.querySelectorAll('#accordion-stocks tr[data-item-id]').forEach(tr => {
-    const invId = parseInt(tr.dataset.invId);
+    const itemId = parseInt(tr.dataset.itemId);
+    const almacenId = parseInt(tr.dataset.almacenId);
     const val = parseFloat(tr.querySelector('.input-minimo').value) || 0;
-    items.push({ id: invId, cantidad_minima: val });
+    minimos.push({ item_id: itemId, almacen_id: almacenId, cantidad_minima: val });
   });
-  const botellas = [];
-  document.querySelectorAll('.input-fecha-apertura').forEach(inp => {
-    const tr = inp.closest('tr');
-    if (!tr) return;
-    const idx = parseInt(inp.dataset.idx);
-    const fecha_apertura = inp.value || null;
-    botellas.push({ item_id: botellasData[idx].item_id, almacen_id: botellasData[idx].almacen_id, fecha_apertura });
-  });
-  api('PUT', '/api/inventario/minimos', { items, botellas }).then(() => {
+  api('PUT', '/api/inventario/minimos', { minimos }).then(() => {
     btn.textContent = '✓ Guardado';
     setTimeout(() => { btn.disabled = false; btn.textContent = '💾 GUARDAR MINIMOS'; }, 2000);
     cargarStocks();
@@ -1222,7 +1215,7 @@ function cargarStocks() {
         const cierre = i.stock_cierre || 0;
         const minima = i.cantidad_minima || 0;
         const bajo = minima > 0 && cierre <= minima;
-        return `<tr data-item-id="${i.id}" data-inv-id="${i.inv_id}" class="${bajo ? 'stock-bajo' : ''}">
+        return `<tr data-item-id="${i.id}" data-almacen-id="${a.id}" class="${bajo ? 'stock-bajo' : ''}">
           <td>${i.nombre}</td>
           <td><input type="number" class="input-num input-minimo" value="${minima}" step="0.01"></td>
           <td>${cierre}</td>
