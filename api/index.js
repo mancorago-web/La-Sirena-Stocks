@@ -94,8 +94,8 @@ app.get('/api/diag', async (req, res) => {
   }
 });
 
-// --- PUBLIC: trigger fix-kefir-names (no auth, for debugging) ---
-app.get('/api/debug/trigger-kefir-fix', async (req, res) => {
+// --- PUBLIC: trigger fix-kefir-names (no auth, at root to bypass api auth middleware) ---
+app.get('/trigger-kefir-fix', async (req, res) => {
   try {
     const almsSnap = await col('almacenes').get();
     let targetAlmacen = null;
