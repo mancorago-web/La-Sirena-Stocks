@@ -1329,45 +1329,61 @@ app.post('/api/migrate/sync-ingredientes-to-precios', authMiddleware, async (req
   }
 });
 
-// --- Fix: rename Kombucha → Kefir, add KEFIR CITRICO ---
+// --- Fix: rename Kombucha → Kefir in REFRIGERADOR COCINA 1, add KEFIR CITRICO ---
 app.post('/api/migrate/fix-kefir-names', authMiddleware, async (req, res) => {
   try {
-    // Find warehouse "REFRIGERADOR COCINA 1 (ABAJO)"
+    // Log all almacenes for debugging
     const almsSnap = await col('almacenes').get();
+    const almacenes = almsSnap.docs.map(d => ({ id: Number(d.id), nombre: d.data().nombre }));
+    const debug = { almacenes };
+
+    // Find warehouse matching "REFRIGERADOR COCINA 1"
     let targetAlmacen = null;
     almsSnap.docs.forEach(d => {
-      if (d.data().nombre && d.data().nombre.includes('REFRIGERADOR COCINA 1')) targetAlmacen = Number(d.id);
-    });
-    if (!targetAlmacen) return res.status(404).json({ error: 'REFRIGERADOR COCINA 1 no encontrado' });
-
-    const batch = db.batch();
-    const invSnap = await col('inventario').where('almacen_id', '==', targetAlmacen).get();
-    const renames = { 'Kombucha Granadilla': 'Kefir GRANADILLA', 'Kombucha Jamaica': 'Kefir JAMAICA' };
-    let renamed = 0, added = 0;
-    invSnap.docs.forEach(d => {
-      const inv = d.data();
-      const newName = renames[inv.nombre];
-      if (newName) {
-        batch.update(d.ref, { nombre: newName });
-        renamed++;
+      if (d.data().nombre && /REFRIGERADOR COCINA 1/i.test(d.data().nombre)) {
+        targetAlmacen = Number(d.id);
       }
     });
-    // Add KEFIR CITRICO if not already present
-    const existingLower = new Set(Array.from(invSnap.docs).map(d => d.data().nombre.toLowerCase()));
-    if (!existingLower.has('KEFIR CITRICO'.toLowerCase())) {
-      const allInv = await col('inventario').get();
-      let maxId = 0;
-      allInv.docs.forEach(d => { const id = d.data().item_id || 0; if (id > maxId) maxId = id; });
-      const newItemId = maxId + 1;
-      const docIdStr = docId('inventario', newItemId, targetAlmacen);
-      batch.set(col('inventario').doc(docIdStr), {
-        item_id: newItemId, almacen_id: targetAlmacen, nombre: 'KEFIR CITRICO',
-        categoria: 'KOMBUCHAS', stock_apertura: 0, cantidad_minima: 0
+
+    const batch = db.batch();
+    let renamed = 0, added = 0;
+
+    if (targetAlmacen) {
+      const invSnap = await col('inventario').where('almacen_id', '==', targetAlmacen).get();
+      const allNames = invSnap.docs.map(d => d.data().nombre);
+      debug.warehouseNames = allNames;
+
+      // Case-insensitive renames
+      const replacements = [];
+      invSnap.docs.forEach(d => {
+        const inv = d.data();
+        if (/^kombucha\s+granadilla$/i.test(inv.nombre)) {
+          replacements.push({ ref: d.ref, old: inv.nombre, new: 'Kefir GRANADILLA' });
+        } else if (/^kombucha\s+jamaica$/i.test(inv.nombre)) {
+          replacements.push({ ref: d.ref, old: inv.nombre, new: 'Kefir JAMAICA' });
+        }
       });
-      added = 1;
+      replacements.forEach(r => { batch.update(r.ref, { nombre: r.new }); renamed++; });
+      debug.replacements = replacements;
+
+      // Add KEFIR CITRICO if not already present
+      const existingLower = invSnap.docs.map(d => d.data().nombre.toLowerCase());
+      if (!existingLower.some(n => n === 'kefir citrico')) {
+        const allInv = await col('inventario').get();
+        let maxId = 0;
+        allInv.docs.forEach(d => { const id = d.data().item_id || 0; if (id > maxId) maxId = id; });
+        const newItemId = maxId + 1;
+        const docIdStr = docId('inventario', newItemId, targetAlmacen);
+        batch.set(col('inventario').doc(docIdStr), {
+          item_id: newItemId, almacen_id: targetAlmacen, nombre: 'KEFIR CITRICO',
+          categoria: 'KOMBUCHAS', stock_apertura: 0, cantidad_minima: 0
+        });
+        added = 1;
+      }
     }
+
     await batch.commit();
-    res.json({ ok: true, renamed, added, almacen_id: targetAlmacen });
+    res.json({ ok: true, renamed, added, debug });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
