@@ -108,9 +108,11 @@ app.get('/trigger-kefir-fix', async (req, res) => {
     const invSnap = await col('inventario').where('almacen_id', '==', targetAlmacen).get();
     let renamed = 0;
     const results = [];
+    const allItems = [];
 
     invSnap.docs.forEach(d => {
       const inv = d.data();
+      allItems.push({ id: d.id, nombre: inv.nombre, item_id: inv.item_id });
       let newName = null;
       if (/^kombucha\s+granadilla$/i.test(inv.nombre)) newName = 'Kefir GRANADILLA';
       else if (/^kombucha\s+jamaica$/i.test(inv.nombre)) newName = 'Kefir JAMAICA';
@@ -123,7 +125,7 @@ app.get('/trigger-kefir-fix', async (req, res) => {
     });
 
     await batch.commit();
-    res.json({ ok: true, renamed, results });
+    res.json({ ok: true, renamed, results, allItems, targetAlmacen });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
