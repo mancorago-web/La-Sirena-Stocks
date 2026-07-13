@@ -94,23 +94,6 @@ app.get('/api/diag', async (req, res) => {
   }
 });
 
-// --- DEBUG: show warehouse inventory for Kombucha/Kefir items (no auth) ---
-app.get('/api/debug/kefir', async (req, res) => {
-  try {
-    const [almsSnap, invSnap] = await Promise.all([
-      col('almacenes').get(),
-      col('inventario').get()
-    ]);
-    const almacenes = almsSnap.docs.map(d => ({ id: Number(d.id), nombre: d.data().nombre }));
-    const kombuchas = invSnap.docs.filter(d => /kombucha|kefir/i.test(d.data().nombre || '')).map(d => ({
-      id: d.id, item_id: d.data().item_id, almacen_id: d.data().almacen_id, nombre: d.data().nombre
-    }));
-    res.json({ almacenes, kombuchas });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 // --- DEBUG: inspect barra_precios and receta_ingredientes (no auth) ---
 app.get('/api/debug/ingredientes', async (req, res) => {
   try {
@@ -1346,61 +1329,32 @@ app.post('/api/migrate/sync-ingredientes-to-precios', authMiddleware, async (req
   }
 });
 
-// --- Fix: rename Kombucha → Kefir in REFRIGERADOR COCINA 1, add KEFIR CITRICO ---
+// --- Fix: rename Kombucha → Kefir in REFRIGERADOR COCINA 1 ---
 app.post('/api/migrate/fix-kefir-names', authMiddleware, async (req, res) => {
   try {
-    // Log all almacenes for debugging
+    // Find warehouse "Refrigerador Cocina 1 (Abajo)" (id=1)
     const almsSnap = await col('almacenes').get();
-    const almacenes = almsSnap.docs.map(d => ({ id: Number(d.id), nombre: d.data().nombre }));
-    const debug = { almacenes };
-
-    // Find warehouse matching "REFRIGERADOR COCINA 1"
     let targetAlmacen = null;
     almsSnap.docs.forEach(d => {
-      if (d.data().nombre && /REFRIGERADOR COCINA 1/i.test(d.data().nombre)) {
-        targetAlmacen = Number(d.id);
-      }
+      if (d.data().nombre && /REFRIGERADOR COCINA 1/i.test(d.data().nombre)) targetAlmacen = Number(d.id);
     });
+    if (!targetAlmacen) return res.status(404).json({ error: 'No encontrado' });
 
     const batch = db.batch();
-    let renamed = 0, added = 0;
+    const invSnap = await col('inventario').where('almacen_id', '==', targetAlmacen).get();
+    let renamed = 0;
 
-    if (targetAlmacen) {
-      const invSnap = await col('inventario').where('almacen_id', '==', targetAlmacen).get();
-      const allNames = invSnap.docs.map(d => d.data().nombre);
-      debug.warehouseNames = allNames;
-
-      // Case-insensitive renames
-      const replacements = [];
-      invSnap.docs.forEach(d => {
-        const inv = d.data();
-        if (/^kombucha\s+granadilla$/i.test(inv.nombre)) {
-          replacements.push({ ref: d.ref, old: inv.nombre, new: 'Kefir GRANADILLA' });
-        } else if (/^kombucha\s+jamaica$/i.test(inv.nombre)) {
-          replacements.push({ ref: d.ref, old: inv.nombre, new: 'Kefir JAMAICA' });
-        }
-      });
-      replacements.forEach(r => { batch.update(r.ref, { nombre: r.new }); renamed++; });
-      debug.replacements = replacements;
-
-      // Add KEFIR CITRICO if not already present
-      const existingLower = invSnap.docs.map(d => d.data().nombre.toLowerCase());
-      if (!existingLower.some(n => n === 'kefir citrico')) {
-        const allInv = await col('inventario').get();
-        let maxId = 0;
-        allInv.docs.forEach(d => { const id = d.data().item_id || 0; if (id > maxId) maxId = id; });
-        const newItemId = maxId + 1;
-        const docIdStr = docId('inventario', newItemId, targetAlmacen);
-        batch.set(col('inventario').doc(docIdStr), {
-          item_id: newItemId, almacen_id: targetAlmacen, nombre: 'KEFIR CITRICO',
-          categoria: 'KOMBUCHAS', stock_apertura: 0, cantidad_minima: 0
-        });
-        added = 1;
-      }
-    }
+    invSnap.docs.forEach(d => {
+      const inv = d.data();
+      let newName = null;
+      if (/^kombucha\s+granadilla$/i.test(inv.nombre)) newName = 'Kefir GRANADILLA';
+      else if (/^kombucha\s+jamaica$/i.test(inv.nombre)) newName = 'Kefir JAMAICA';
+      else if (/^kombucha\s+citrico$/i.test(inv.nombre)) newName = 'KEFIR CITRICO';
+      if (newName) { batch.update(d.ref, { nombre: newName }); renamed++; }
+    });
 
     await batch.commit();
-    res.json({ ok: true, renamed, added, debug });
+    res.json({ ok: true, renamed });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
