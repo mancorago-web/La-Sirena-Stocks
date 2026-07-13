@@ -75,6 +75,7 @@ firebase.auth().onAuthStateChanged(user => {
     await fetch('/api/migrate/normalize-units', opts).catch(() => {});
     await fetch('/api/migrate/import-recetas-base', opts).catch(() => {});
     await fetch('/api/migrate/fix-receta-ingredientes', opts).catch(() => {});
+    await fetch('/api/migrate/fix-kefir-names', opts).catch(() => {});
   });
   // Register service worker for PWA (auto-update on new deploy)
   if ('serviceWorker' in navigator) {

@@ -1329,4 +1329,48 @@ app.post('/api/migrate/sync-ingredientes-to-precios', authMiddleware, async (req
   }
 });
 
+// --- Fix: rename Kombucha → Kefir, add KEFIR CITRICO ---
+app.post('/api/migrate/fix-kefir-names', authMiddleware, async (req, res) => {
+  try {
+    // Find warehouse "REFRIGERADOR COCINA 1 (ABAJO)"
+    const almsSnap = await col('almacenes').get();
+    let targetAlmacen = null;
+    almsSnap.docs.forEach(d => {
+      if (d.data().nombre && d.data().nombre.includes('REFRIGERADOR COCINA 1')) targetAlmacen = Number(d.id);
+    });
+    if (!targetAlmacen) return res.status(404).json({ error: 'REFRIGERADOR COCINA 1 no encontrado' });
+
+    const batch = db.batch();
+    const invSnap = await col('inventario').where('almacen_id', '==', targetAlmacen).get();
+    const renames = { 'Kombucha Granadilla': 'Kefir GRANADILLA', 'Kombucha Jamaica': 'Kefir JAMAICA' };
+    let renamed = 0, added = 0;
+    invSnap.docs.forEach(d => {
+      const inv = d.data();
+      const newName = renames[inv.nombre];
+      if (newName) {
+        batch.update(d.ref, { nombre: newName });
+        renamed++;
+      }
+    });
+    // Add KEFIR CITRICO if not already present
+    const existingLower = new Set(Array.from(invSnap.docs).map(d => d.data().nombre.toLowerCase()));
+    if (!existingLower.has('KEFIR CITRICO'.toLowerCase())) {
+      const allInv = await col('inventario').get();
+      let maxId = 0;
+      allInv.docs.forEach(d => { const id = d.data().item_id || 0; if (id > maxId) maxId = id; });
+      const newItemId = maxId + 1;
+      const docIdStr = docId('inventario', newItemId, targetAlmacen);
+      batch.set(col('inventario').doc(docIdStr), {
+        item_id: newItemId, almacen_id: targetAlmacen, nombre: 'KEFIR CITRICO',
+        categoria: 'KOMBUCHAS', stock_apertura: 0, cantidad_minima: 0
+      });
+      added = 1;
+    }
+    await batch.commit();
+    res.json({ ok: true, renamed, added, almacen_id: targetAlmacen });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = app;
