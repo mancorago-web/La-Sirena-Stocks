@@ -94,8 +94,8 @@ app.get('/api/diag', async (req, res) => {
   }
 });
 
-// --- PUBLIC: trigger fix-kefir-names (no auth, at root to bypass api auth middleware) ---
-app.get('/trigger-kefir-fix', async (req, res) => {
+// --- PUBLIC: add KOMBUCHA CITRICO to Refrigerador Cocina 1 (no auth) ---
+app.get('/trigger-add-kombucha', async (req, res) => {
   try {
     const almsSnap = await col('almacenes').get();
     let targetAlmacen = null;
@@ -104,28 +104,24 @@ app.get('/trigger-kefir-fix', async (req, res) => {
     });
     if (!targetAlmacen) return res.json({ error: 'no encontrado' });
 
-    const batch = db.batch();
+    // Check if KOMBUCHA CITRICO already exists in this warehouse
     const invSnap = await col('inventario').where('almacen_id', '==', targetAlmacen).get();
-    let renamed = 0;
-    const results = [];
-    const allItems = [];
+    const existing = invSnap.docs.filter(d => /^kombucha\s+citrico$/i.test(d.data().nombre));
+    if (existing.length > 0) return res.json({ ok: true, msg: 'ya existe', items: existing.map(d => ({ id: d.id, nombre: d.data().nombre })) });
 
-    invSnap.docs.forEach(d => {
-      const inv = d.data();
-      allItems.push({ id: d.id, nombre: inv.nombre, item_id: inv.item_id });
-      let newName = null;
-      if (/^kombucha\s+granadilla$/i.test(inv.nombre)) newName = 'Kefir GRANADILLA';
-      else if (/^kombucha\s+jamaica$/i.test(inv.nombre)) newName = 'Kefir JAMAICA';
-      else if (/^kombucha\s+citrico$/i.test(inv.nombre)) newName = 'KEFIR CITRICO';
-      if (newName) {
-        batch.update(d.ref, { nombre: newName });
-        renamed++;
-        results.push({ old: inv.nombre, new: newName, id: d.id });
-      }
+    // Find max item_id
+    const allInv = await col('inventario').get();
+    let maxId = 0;
+    allInv.docs.forEach(d => { const id = d.data().item_id || 0; if (id > maxId) maxId = id; });
+    const newItemId = maxId + 1;
+    const docIdStr = docId('inventario', newItemId, targetAlmacen);
+    const batch = db.batch();
+    batch.set(col('inventario').doc(docIdStr), {
+      item_id: newItemId, almacen_id: targetAlmacen, nombre: 'KOMBUCHA CITRICO',
+      categoria: 'KOMBUCHAS', stock_apertura: 0, cantidad_minima: 0
     });
-
     await batch.commit();
-    res.json({ ok: true, renamed, results, allItems, targetAlmacen });
+    res.json({ ok: true, added: true, newItemId, docId: docIdStr });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
