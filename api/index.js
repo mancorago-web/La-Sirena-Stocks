@@ -94,39 +94,6 @@ app.get('/api/diag', async (req, res) => {
   }
 });
 
-// --- PUBLIC: add KOMBUCHA CITRICO to Refrigerador Cocina 1 (no auth) ---
-app.get('/trigger-add-kombucha', async (req, res) => {
-  try {
-    const almsSnap = await col('almacenes').get();
-    let targetAlmacen = null;
-    almsSnap.docs.forEach(d => {
-      if (d.data().nombre && /REFRIGERADOR COCINA 1/i.test(d.data().nombre)) targetAlmacen = Number(d.id);
-    });
-    if (!targetAlmacen) return res.json({ error: 'no encontrado' });
-
-    // Check if KOMBUCHA CITRICO already exists in this warehouse
-    const invSnap = await col('inventario').where('almacen_id', '==', targetAlmacen).get();
-    const existing = invSnap.docs.filter(d => /^kombucha\s+citrico$/i.test(d.data().nombre));
-    if (existing.length > 0) return res.json({ ok: true, msg: 'ya existe', items: existing.map(d => ({ id: d.id, nombre: d.data().nombre })) });
-
-    // Find max item_id
-    const allInv = await col('inventario').get();
-    let maxId = 0;
-    allInv.docs.forEach(d => { const id = d.data().item_id || 0; if (id > maxId) maxId = id; });
-    const newItemId = maxId + 1;
-    const docIdStr = docId('inventario', newItemId, targetAlmacen);
-    const batch = db.batch();
-    batch.set(col('inventario').doc(docIdStr), {
-      item_id: newItemId, almacen_id: targetAlmacen, nombre: 'KOMBUCHA CITRICO',
-      categoria: 'KOMBUCHAS', stock_apertura: 0, cantidad_minima: 0
-    });
-    await batch.commit();
-    res.json({ ok: true, added: true, newItemId, docId: docIdStr });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 // --- DEBUG: inspect barra_precios and receta_ingredientes (no auth) ---
 app.get('/api/debug/ingredientes', async (req, res) => {
   try {
@@ -1357,37 +1324,6 @@ app.post('/api/migrate/sync-ingredientes-to-precios', authMiddleware, async (req
       if (result) added++;
     }
     res.json({ ok: true, added });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// --- Fix: rename Kombucha → Kefir in REFRIGERADOR COCINA 1 ---
-app.post('/api/migrate/fix-kefir-names', authMiddleware, async (req, res) => {
-  try {
-    // Find warehouse "Refrigerador Cocina 1 (Abajo)" (id=1)
-    const almsSnap = await col('almacenes').get();
-    let targetAlmacen = null;
-    almsSnap.docs.forEach(d => {
-      if (d.data().nombre && /REFRIGERADOR COCINA 1/i.test(d.data().nombre)) targetAlmacen = Number(d.id);
-    });
-    if (!targetAlmacen) return res.status(404).json({ error: 'No encontrado' });
-
-    const batch = db.batch();
-    const invSnap = await col('inventario').where('almacen_id', '==', targetAlmacen).get();
-    let renamed = 0;
-
-    invSnap.docs.forEach(d => {
-      const inv = d.data();
-      let newName = null;
-      if (/^kombucha\s+granadilla$/i.test(inv.nombre)) newName = 'Kefir GRANADILLA';
-      else if (/^kombucha\s+jamaica$/i.test(inv.nombre)) newName = 'Kefir JAMAICA';
-      else if (/^kombucha\s+citrico$/i.test(inv.nombre)) newName = 'KEFIR CITRICO';
-      if (newName) { batch.update(d.ref, { nombre: newName }); renamed++; }
-    });
-
-    await batch.commit();
-    res.json({ ok: true, renamed });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
