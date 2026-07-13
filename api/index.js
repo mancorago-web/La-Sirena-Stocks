@@ -90,7 +90,42 @@ app.get('/api/diag', async (req, res) => {
       recetas: rec.size,
     });
   } catch (e) {
-    res.status(500).json({ error: e.message, stack: e.stack?.split('\n').slice(0,3).join('; ') });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- PUBLIC: trigger fix-kefir-names (no auth, for debugging) ---
+app.get('/api/debug/trigger-kefir-fix', async (req, res) => {
+  try {
+    const almsSnap = await col('almacenes').get();
+    let targetAlmacen = null;
+    almsSnap.docs.forEach(d => {
+      if (d.data().nombre && /REFRIGERADOR COCINA 1/i.test(d.data().nombre)) targetAlmacen = Number(d.id);
+    });
+    if (!targetAlmacen) return res.json({ error: 'no encontrado' });
+
+    const batch = db.batch();
+    const invSnap = await col('inventario').where('almacen_id', '==', targetAlmacen).get();
+    let renamed = 0;
+    const results = [];
+
+    invSnap.docs.forEach(d => {
+      const inv = d.data();
+      let newName = null;
+      if (/^kombucha\s+granadilla$/i.test(inv.nombre)) newName = 'Kefir GRANADILLA';
+      else if (/^kombucha\s+jamaica$/i.test(inv.nombre)) newName = 'Kefir JAMAICA';
+      else if (/^kombucha\s+citrico$/i.test(inv.nombre)) newName = 'KEFIR CITRICO';
+      if (newName) {
+        batch.update(d.ref, { nombre: newName });
+        renamed++;
+        results.push({ old: inv.nombre, new: newName, id: d.id });
+      }
+    });
+
+    await batch.commit();
+    res.json({ ok: true, renamed, results });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
