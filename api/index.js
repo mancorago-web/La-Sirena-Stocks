@@ -94,6 +94,23 @@ app.get('/api/diag', async (req, res) => {
   }
 });
 
+// --- DEBUG: show warehouse inventory for Kombucha/Kefir items (no auth) ---
+app.get('/api/debug/kefir', async (req, res) => {
+  try {
+    const [almsSnap, invSnap] = await Promise.all([
+      col('almacenes').get(),
+      col('inventario').get()
+    ]);
+    const almacenes = almsSnap.docs.map(d => ({ id: Number(d.id), nombre: d.data().nombre }));
+    const kombuchas = invSnap.docs.filter(d => /kombucha|kefir/i.test(d.data().nombre || '')).map(d => ({
+      id: d.id, item_id: d.data().item_id, almacen_id: d.data().almacen_id, nombre: d.data().nombre
+    }));
+    res.json({ almacenes, kombuchas });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- DEBUG: inspect barra_precios and receta_ingredientes (no auth) ---
 app.get('/api/debug/ingredientes', async (req, res) => {
   try {
