@@ -1329,4 +1329,49 @@ app.post('/api/migrate/sync-ingredientes-to-precios', authMiddleware, async (req
   }
 });
 
+// --- Reporte de Vinos (no auth — public) ---
+app.get('/api/reportes/vinos', async (req, res) => {
+  try {
+    const fecha = req.query.fecha || new Date().toISOString().split('T')[0];
+    const [invSnap, diaSnap, almSnap] = await Promise.all([
+      col('inventario').get(),
+      col('inventario_diario').where('fecha', '==', fecha).get(),
+      col('almacenes').get(),
+    ]);
+
+    // Build warehouse name map
+    const almacenes = {};
+    almSnap.docs.forEach(d => { almacenes[Number(d.id)] = d.data().nombre; });
+
+    // Combined VINOS regex (same as frontend defaultCategorias + warehouse 1 specifics)
+    const vinosRegex = /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONAY|ALBARIÑO|PROTOS|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MANTGRAS/i;
+
+    // Build dia map: key = "item_id_almacen_id"
+    const diaMap = {};
+    diaSnap.docs.forEach(d => {
+      const dd = d.data();
+      diaMap[dd.item_id + '_' + dd.almacen_id] = dd;
+    });
+
+    const vinos = {};
+    invSnap.docs.forEach(d => {
+      const inv = d.data();
+      const match = vinosRegex.test(inv.nombre) || (inv.categoria && /vinos/i.test(inv.categoria));
+      if (!match) return;
+      const key = inv.nombre.trim();
+      if (!vinos[key]) vinos[key] = { nombre: inv.nombre, total: 0, almacenes: {} };
+      const dia = diaMap[inv.item_id + '_' + inv.almacen_id] || {};
+      const cantidad = dia.stock_apertura ?? inv.stock_apertura ?? 0;
+      vinos[key].total += cantidad;
+      const alName = almacenes[inv.almacen_id] || ('Almacén ' + inv.almacen_id);
+      vinos[key].almacenes[alName] = (vinos[key].almacenes[alName] || 0) + cantidad;
+    });
+
+    const items = Object.values(vinos).sort((a, b) => a.nombre.localeCompare(b.nombre));
+    res.json({ ok: true, fecha, totalItems: items.length, totalStock: items.reduce((s, i) => s + i.total, 0), items });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = app;
