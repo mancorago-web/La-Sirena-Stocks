@@ -1857,7 +1857,7 @@ function cargarPrecios() {
             <tr data-precio-id="${s.id}">
               <td>${s.ingrediente}</td>
               <td>${s.unidad}</td>
-              <td><input type="number" class="input-precio-val" value="${s.precio}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" onchange="actualizarPrecio(${s.id}, this)"></td>
+              <td><input type="number" class="input-precio-val" value="${s.precio}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
               <td><button onclick="editarPrecio(${s.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;">EDITAR</button></td>
             </tr>
           `).join('')}
@@ -1878,6 +1878,25 @@ function agregarPrecio() {
     document.getElementById('nuevo-precio-precio').value = '';
     cargarPrecios();
   }).catch(() => alert('Error al agregar'));
+}
+
+function guardarPreciosBase() {
+  const btn = document.querySelector('#sub-barra-basedatos .btn-guardar-dia');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  const promises = [];
+  document.querySelectorAll('#barra-precios-container tr[data-precio-id]').forEach(tr => {
+    const id = parseInt(tr.dataset.precioId);
+    const precio = parseFloat(tr.querySelector('.input-precio-val').value) || 0;
+    promises.push(api('PUT', '/api/barra/precios/' + id, { precio }));
+  });
+  Promise.all(promises).then(() => {
+    btn.disabled = false; btn.textContent = '💾 GUARDAR';
+    showToast('Precios Guardados');
+    cargarPrecios();
+  }).catch(() => {
+    btn.disabled = false; btn.textContent = '💾 GUARDAR';
+    alert('Error al guardar precios');
+  });
 }
 
 function eliminarPrecio(id) {

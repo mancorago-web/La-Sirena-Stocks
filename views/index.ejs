@@ -288,6 +288,7 @@
             <input type="number" id="nuevo-precio-precio" placeholder="Precio S/." step="0.01" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:100px;">
             <button onclick="agregarPrecio()">AGREGAR ITEM</button>
             <input type="text" id="buscar-precios" placeholder="Buscar..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:200px;" oninput="buscarTablaBarra(this.value, 'barra-precios-container', 'tr[data-precio-id]')">
+            <button class="btn-guardar-dia" onclick="guardarPreciosBase()">💾 GUARDAR</button>
             <button class="btn-detalles" onclick="exportarBaseDatos()">EXPORTAR</button>
           </div>
         </div>
