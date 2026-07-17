@@ -308,6 +308,10 @@ function cargarAlmacenes(fecha) {
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
       });
+      if (a.id == 6 && otros.length) {
+        const vinosCat = secciones.find(s => s.label === 'VINOS');
+        if (vinosCat) { otros.forEach(i => vinosCat.items.push(i)); otros = []; }
+      }
       return { ...a, secciones, otros };
     });
     const container = document.getElementById('accordion-almacenes');
@@ -409,6 +413,10 @@ function cargarSalidas(fecha) {
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
       });
+      if (a.id == 6 && otros.length) {
+        const vinosCat = secciones.find(s => s.label === 'VINOS');
+        if (vinosCat) { otros.forEach(i => vinosCat.items.push(i)); otros = []; }
+      }
       return { ...a, secciones, otros };
     });
     const container = document.getElementById('accordion-salidas');
@@ -629,6 +637,10 @@ function cargarVentas(fecha) {
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
       });
+      if (a.id == 6 && otros.length) {
+        const vinosCat = secciones.find(s => s.label === 'VINOS');
+        if (vinosCat) { otros.forEach(i => vinosCat.items.push(i)); otros = []; }
+      }
       return { ...a, secciones, otros };
     });
     const container = document.getElementById('accordion-ventas');
@@ -756,6 +768,10 @@ function cargarBajas(fecha) {
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
       });
+      if (a.id == 6 && otros.length) {
+        const vinosCat = secciones.find(s => s.label === 'VINOS');
+        if (vinosCat) { otros.forEach(i => vinosCat.items.push(i)); otros = []; }
+      }
       return { ...a, secciones, otros };
     });
     const container = document.getElementById('accordion-bajas');
@@ -926,6 +942,10 @@ function cargarIngresos(fecha) {
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
       });
+      if (a.id == 6 && otros.length) {
+        const vinosCat = secciones.find(s => s.label === 'VINOS');
+        if (vinosCat) { otros.forEach(i => vinosCat.items.push(i)); otros = []; }
+      }
       return { ...a, secciones, otros };
     });
     const container = document.getElementById('accordion-ingresos');
