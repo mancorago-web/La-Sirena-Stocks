@@ -794,10 +794,12 @@ app.post('/api/barra/precios', async (req, res) => {
 });
 
 app.put('/api/barra/precios/:id', async (req, res) => {
-  const { precio } = req.body;
-  await col('barra_precios').doc(req.params.id).update({
-    precio: precio || 0, updated_at: new Date().toISOString()
-  });
+  const { precio, ingrediente, unidad } = req.body;
+  const updateData = { updated_at: new Date().toISOString() };
+  if (precio !== undefined) updateData.precio = precio;
+  if (ingrediente !== undefined) updateData.ingrediente = ingrediente;
+  if (unidad !== undefined) updateData.unidad = normalizeUnit(unidad);
+  await col('barra_precios').doc(req.params.id).update(updateData);
   res.json({ ok: true });
 });
 

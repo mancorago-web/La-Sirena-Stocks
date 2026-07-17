@@ -1858,7 +1858,7 @@ function cargarPrecios() {
               <td>${s.ingrediente}</td>
               <td>${s.unidad}</td>
               <td><input type="number" class="input-precio-val" value="${s.precio}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" onchange="actualizarPrecio(${s.id}, this)"></td>
-              <td><button class="danger" onclick="eliminarPrecio(${s.id})">✕</button></td>
+              <td><button onclick="editarPrecio(${s.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;">EDITAR</button></td>
             </tr>
           `).join('')}
         </tbody>
@@ -1888,6 +1888,49 @@ function eliminarPrecio(id) {
 function actualizarPrecio(id, el) {
   const precio = parseFloat(el.value) || 0;
   api('PUT', '/api/barra/precios/' + id, { precio }).catch(() => alert('Error al actualizar'));
+}
+
+function editarPrecio(id) {
+  api('GET', '/api/barra/precios').then(data => {
+    const item = data.find(d => d.id === id);
+    if (!item) { alert('Item no encontrado'); return; }
+    const body = document.getElementById('modal-body');
+    body.innerHTML = `
+      <h3>Editar Item</h3>
+      <label style="display:block;margin-top:1rem;">
+        Nombre:
+        <input type="text" id="edit-precio-nombre" value="${item.ingrediente}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Unidad:
+        <select id="edit-precio-unidad" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+          ${['unidad','onzas','gramos','kg','lt','ml','hojas','gotas'].map(u =>
+            `<option value="${u}" ${item.unidad === u ? 'selected' : ''}>${u}</option>`
+          ).join('')}
+        </select>
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Precio:
+        <input type="number" id="edit-precio-valor" value="${item.precio}" step="0.01" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+        <button onclick="guardarEdicionPrecio(${id})" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+        <button onclick="eliminarPrecio(${id})" style="flex:1;padding:0.5rem;background:#c62828;color:#fff;border:none;border-radius:4px;cursor:pointer;">Eliminar</button>
+      </div>
+    `;
+    document.getElementById('modal').style.display = 'block';
+  });
+}
+
+function guardarEdicionPrecio(id) {
+  const ingrediente = document.getElementById('edit-precio-nombre').value.trim();
+  const unidad = document.getElementById('edit-precio-unidad').value;
+  const precio = parseFloat(document.getElementById('edit-precio-valor').value) || 0;
+  if (!ingrediente) { alert('El nombre es requerido'); return; }
+  api('PUT', '/api/barra/precios/' + id, { ingrediente, unidad, precio }).then(() => {
+    document.getElementById('modal').style.display = 'none';
+    cargarPrecios();
+  }).catch(() => alert('Error al guardar'));
 }
 
 // --- PRECIOS POR ALMACEN ---
