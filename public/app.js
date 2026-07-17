@@ -1468,22 +1468,21 @@ function exportarDiferencias() {
 function exportarVinos() {
   const fecha = document.getElementById('reporte-fecha-dif')?.value || todayStr();
   api('GET', '/api/reportes/vinos?fecha=' + fecha).then(data => {
+    const items = data.items.filter(i => i.total > 0);
     const wsData = [['Vino', 'Cantidad Total']];
-    // Collect all unique warehouse names across all items
     const allAlms = new Set();
-    data.items.forEach(i => Object.keys(i.almacenes).forEach(a => allAlms.add(a)));
+    items.forEach(i => Object.keys(i.almacenes).forEach(a => allAlms.add(a)));
     const almsHeaders = Array.from(allAlms).sort();
     wsData[0] = ['Vino', 'Cantidad Total', ...almsHeaders];
 
-    data.items.forEach(i => {
+    items.forEach(i => {
       const row = [i.nombre, i.total];
       almsHeaders.forEach(a => row.push(i.almacenes[a] || 0));
       wsData.push(row);
     });
-    // Totals row
     const totalRow = ['TOTAL', data.totalStock];
     almsHeaders.forEach(a => {
-      totalRow.push(data.items.reduce((s, i) => s + (i.almacenes[a] || 0), 0));
+      totalRow.push(items.reduce((s, i) => s + (i.almacenes[a] || 0), 0));
     });
     wsData.push(totalRow);
 
