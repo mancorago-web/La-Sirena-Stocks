@@ -275,7 +275,7 @@ function cargarAlmacenes(fecha) {
         { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
         { label: 'GASEOSAS', test: i => /COCA|INKA/i.test(i.nombre) },
         { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
-        { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONAY|ALBARIÑO/i.test(i.nombre) },
+        { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONAY|ALBARIÑO|PROTOS/i.test(i.nombre) },
       ],
     };
     const defaultCategorias = [
