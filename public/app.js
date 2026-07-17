@@ -303,7 +303,7 @@ function cargarAlmacenes(fecha) {
         items.forEach(i => usado.add(i.id));
         return { ...cat, items };
       });
-      const otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
+      let otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
         const xg = (x.stock_apertura || 0) > 0 ? 0 : 1;
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
@@ -408,7 +408,7 @@ function cargarSalidas(fecha) {
         items.forEach(i => usado.add(i.id));
         return { ...cat, items };
       });
-      const otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
+      let otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
         const xg = (x.stock_apertura || 0) > 0 ? 0 : 1;
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
@@ -632,7 +632,7 @@ function cargarVentas(fecha) {
         items.forEach(i => usado.add(i.id));
         return { ...cat, items };
       });
-      const otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
+      let otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
         const xg = (x.stock_apertura || 0) > 0 ? 0 : 1;
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
@@ -763,7 +763,7 @@ function cargarBajas(fecha) {
         items.forEach(i => usado.add(i.id));
         return { ...cat, items };
       });
-      const otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
+      let otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
         const xg = (x.stock_apertura || 0) > 0 ? 0 : 1;
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
@@ -937,7 +937,7 @@ function cargarIngresos(fecha) {
         items.forEach(i => usado.add(i.id));
         return { ...cat, items };
       });
-      const otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
+      let otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
         const xg = (x.stock_apertura || 0) > 0 ? 0 : 1;
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
@@ -1223,7 +1223,7 @@ function cargarStocks() {
         items.forEach(i => usado.add(i.id));
         return { ...cat, items };
       });
-      const otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
+      let otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
         const xg = (x.stock_cierre || 0) > 0 ? 0 : 1;
         const yg = (y.stock_cierre || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
