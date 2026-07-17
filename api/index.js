@@ -1329,44 +1329,4 @@ app.post('/api/migrate/sync-ingredientes-to-precios', authMiddleware, async (req
   }
 });
 
-// --- PUBLIC: add items to warehouse 6 ---
-app.get('/trigger-add-vinos', async (req, res) => {
-  try {
-    const almsSnap = await col('almacenes').get();
-    let targetAlmacen = null;
-    almsSnap.docs.forEach(d => {
-      if (d.data().nombre && /refrigerador chica.*vinos.*arriba/i.test(d.data().nombre)) targetAlmacen = Number(d.id);
-    });
-    if (!targetAlmacen) return res.json({ error: 'no encontrado' });
-
-    const invSnap = await col('inventario').where('almacen_id', '==', targetAlmacen).get();
-    const existing = invSnap.docs.map(d => ({ id: d.id, item_id: d.data().item_id, nombre: d.data().nombre }));
-    const existingNames = existing.map(e => e.nombre.toLowerCase().trim());
-
-    const newItems = ['PRADO REY ORIGEN 2023', 'MALAJUNTA RESERVA 2024'].filter(n => !existingNames.includes(n.toLowerCase().trim()));
-
-    if (newItems.length === 0) return res.json({ ok: true, msg: 'ya existen', existing });
-
-    const allInv = await col('inventario').get();
-    let maxId = 0;
-    allInv.docs.forEach(d => { const id = d.data().item_id || 0; if (id > maxId) maxId = id; });
-
-    const batch = db.batch();
-    const added = [];
-    newItems.forEach((nombre, i) => {
-      const newItemId = maxId + 1 + i;
-      const docIdStr = docId('inventario', newItemId, targetAlmacen);
-      batch.set(col('inventario').doc(docIdStr), {
-        item_id: newItemId, almacen_id: targetAlmacen, nombre,
-        categoria: 'VINOS', stock_apertura: 0, cantidad_minima: 0
-      });
-      added.push({ item_id: newItemId, nombre, docId: docIdStr });
-    });
-    await batch.commit();
-    res.json({ ok: true, added, existing });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 module.exports = app;
