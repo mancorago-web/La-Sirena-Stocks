@@ -1893,17 +1893,24 @@ function actualizarStockCant(id, el) {
 
 // --- BARRA: Base de Datos (precios) ---
 function cargarPrecios() {
-  api('GET', '/api/barra/precios').then(data => {
+  Promise.all([
+    api('GET', '/api/barra/precios'),
+    api('GET', '/api/recetas')
+  ]).then(([data, recetas]) => {
     const container = document.getElementById('barra-precios-container');
     if (!data.length) {
       container.innerHTML = '<p>No hay ingredientes en la base de datos. Agrega uno nuevo.</p>';
       return;
     }
+    const recetasBase = new Set();
+    recetas.filter(r => r.categoria === 'RECETAS BASE').forEach(r => recetasBase.add(r.nombre.toLowerCase()));
     const conPrecio = data.filter(s => parseFloat(s.precio) > 0);
     const sinPrecio = data.filter(s => !parseFloat(s.precio));
     function tablaItems(items) {
-      return items.map(s => `
-        <tr data-precio-id="${s.id}">
+      return items.map(s => {
+        const esRecetaBase = recetasBase.has(s.ingrediente.toLowerCase());
+        return `
+        <tr data-precio-id="${s.id}"${esRecetaBase ? ' style="background:#e3f2fd;"' : ''}>
           <td>${s.ingrediente}</td>
           <td>${s.unidad}</td>
           <td><input type="number" class="input-precio-val" value="${s.precio}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
@@ -1912,8 +1919,8 @@ function cargarPrecios() {
             <button onclick="editarPrecio(${s.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">EDITAR</button>
             <button onclick="eliminarPrecio(${s.id})" title="Eliminar" style="background:#c62828;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">✕</button>
           </td>
-        </tr>
-      `).join('');
+        </tr>`;
+      }).join('');
     }
     let html = '';
     if (conPrecio.length) {
