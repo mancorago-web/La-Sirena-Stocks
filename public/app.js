@@ -1592,7 +1592,8 @@ window.addEventListener('click', e => { if (e.target === document.getElementById
 // --- BARRA: Recetas ---
 function renderReceta(r) {
   const costoTotal = r.costoTotal || 0;
-  return `<div class="accordion-item" data-receta-id="${r.id}">
+  const esBase = r.categoria === 'RECETAS BASE';
+  return `<div class="accordion-item" data-receta-id="${r.id}"${esBase ? ' style="background:#e3f2fd;"' : ''}>
     <div class="accordion-header" onclick="toggleAcordeon(this)">
       <span class="accordion-title">${r.nombre}${costoTotal > 0 ? ` <span style="font-weight:400;font-size:0.85rem;color:#555">— COSTO: S/${costoTotal.toFixed(2)}</span>` : ''}</span>
       <span class="accordion-actions" onclick="event.stopPropagation()">
@@ -1892,26 +1893,17 @@ function actualizarStockCant(id, el) {
 
 // --- BARRA: Base de Datos (precios) ---
 function cargarPrecios() {
-  Promise.all([
-    api('GET', '/api/barra/precios'),
-    api('GET', '/api/recetas')
-  ]).then(([data, recetas]) => {
+  api('GET', '/api/barra/precios').then(data => {
     const container = document.getElementById('barra-precios-container');
     if (!data.length) {
       container.innerHTML = '<p>No hay ingredientes en la base de datos. Agrega uno nuevo.</p>';
       return;
     }
-    const baseIngs = new Set();
-    recetas.filter(r => r.categoria === 'RECETAS BASE').forEach(r => {
-      r.ingredientes.forEach(ing => baseIngs.add(ing.ingrediente.toLowerCase()));
-    });
     const conPrecio = data.filter(s => parseFloat(s.precio) > 0);
     const sinPrecio = data.filter(s => !parseFloat(s.precio));
     function tablaItems(items) {
-      return items.map(s => {
-        const esBase = baseIngs.has(s.ingrediente.toLowerCase());
-        return `
-        <tr data-precio-id="${s.id}"${esBase ? ' style="background:#e3f2fd;"' : ''}>
+      return items.map(s => `
+        <tr data-precio-id="${s.id}">
           <td>${s.ingrediente}</td>
           <td>${s.unidad}</td>
           <td><input type="number" class="input-precio-val" value="${s.precio}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
@@ -1920,8 +1912,8 @@ function cargarPrecios() {
             <button onclick="editarPrecio(${s.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">EDITAR</button>
             <button onclick="eliminarPrecio(${s.id})" title="Eliminar" style="background:#c62828;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">✕</button>
           </td>
-        </tr>`;
-      }).join('');
+        </tr>
+      `).join('');
     }
     let html = '';
     if (conPrecio.length) {
