@@ -308,7 +308,7 @@ function cargarAlmacenes(fecha) {
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
       });
-      if (a.id == 6 && otros.length) {
+      if ((a.id == 6 || a.id == 3) && otros.length) {
         const vinosCat = secciones.find(s => s.label === 'VINOS');
         if (vinosCat) { otros.forEach(i => vinosCat.items.push(i)); otros = []; }
       }
@@ -413,7 +413,7 @@ function cargarSalidas(fecha) {
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
       });
-      if (a.id == 6 && otros.length) {
+      if ((a.id == 6 || a.id == 3) && otros.length) {
         const vinosCat = secciones.find(s => s.label === 'VINOS');
         if (vinosCat) { otros.forEach(i => vinosCat.items.push(i)); otros = []; }
       }
@@ -637,7 +637,7 @@ function cargarVentas(fecha) {
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
       });
-      if (a.id == 6 && otros.length) {
+      if ((a.id == 6 || a.id == 3) && otros.length) {
         const vinosCat = secciones.find(s => s.label === 'VINOS');
         if (vinosCat) { otros.forEach(i => vinosCat.items.push(i)); otros = []; }
       }
@@ -768,7 +768,7 @@ function cargarBajas(fecha) {
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
       });
-      if (a.id == 6 && otros.length) {
+      if ((a.id == 6 || a.id == 3) && otros.length) {
         const vinosCat = secciones.find(s => s.label === 'VINOS');
         if (vinosCat) { otros.forEach(i => vinosCat.items.push(i)); otros = []; }
       }
@@ -942,7 +942,7 @@ function cargarIngresos(fecha) {
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
       });
-      if (a.id == 6 && otros.length) {
+      if ((a.id == 6 || a.id == 3) && otros.length) {
         const vinosCat = secciones.find(s => s.label === 'VINOS');
         if (vinosCat) { otros.forEach(i => vinosCat.items.push(i)); otros = []; }
       }
