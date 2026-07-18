@@ -375,10 +375,11 @@ function agregarItemAlmacen(almacenId, almacenNombre) {
 async function guardarItemAlmacen() {
   const nombre = document.getElementById('f-nombre-item').value.trim();
   const almacen_id = parseInt(document.getElementById('f-almacen_id').value);
+  const categoria = document.getElementById('f-categoria-item').value;
   const cantidad = parseFloat(document.getElementById('f-cantidad').value) || 0;
   const nota = document.getElementById('f-nota').value || 'Agregado desde almacén';
   if (!nombre) { alert('Ingresa el nombre del item'); return; }
-  await api('POST', '/api/inventario/agregar-item', { nombre, almacen_id, cantidad, nota });
+  await api('POST', '/api/inventario/agregar-item', { nombre, almacen_id, categoria, cantidad, nota });
   cerrarModal();
   _invCache = { fecha: null, data: null, pending: null };
   cargarAlmacenes();
@@ -1094,13 +1095,28 @@ function showModal(tipo, data) {
   } else if (tipo === 'item-almacen') {
     body.innerHTML = `
       <h3>Agregar Item a: ${data.almacenNombre}</h3>
-      <label>Nombre del Item
+      <label style="display:block;margin-top:1rem;">
+        Nombre del Item
         <input type="text" id="f-nombre-item" placeholder="Ej: COCA COLA 500ml" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
       </label>
-      <label style="margin-top:1rem;display:block;">Cantidad Inicial
+      <label style="display:block;margin-top:1rem;">
+        Título / Categoría
+        <select id="f-categoria-item" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+          <option value="">Sin categoría</option>
+          <option value="VINOS">VINOS</option>
+          <option value="AGUAS">AGUAS</option>
+          <option value="GASEOSAS">GASEOSAS</option>
+          <option value="CERVEZAS">CERVEZAS</option>
+          <option value="KOMBUCHAS">KOMBUCHAS</option>
+          <option value="LECHES">LECHES</option>
+        </select>
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Cantidad Inicial
         <input type="number" id="f-cantidad" value="0" min="0" step="0.01" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
       </label>
-      <label style="margin-top:1rem;display:block;">Nota
+      <label style="display:block;margin-top:1rem;">
+        Nota
         <textarea id="f-nota" placeholder="Opcional" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;"></textarea>
       </label>
       <input type="hidden" id="f-almacen_id" value="${data.almacenId}">

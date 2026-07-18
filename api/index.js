@@ -1395,7 +1395,7 @@ app.post('/api/inventario/agregar-item', authMiddleware, async (req, res) => {
       item_id = maxId + 1;
       const docIdStr = docId('inventario', item_id, almacen_id);
       await col('inventario').doc(docIdStr).set({
-        item_id, almacen_id, nombre, categoria: '',
+        item_id, almacen_id, nombre, categoria: req.body.categoria || '',
         stock_apertura: 0, cantidad_minima: 0
       });
     }
