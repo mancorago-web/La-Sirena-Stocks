@@ -1906,7 +1906,10 @@ function cargarPrecios() {
           <td>${s.ingrediente}</td>
           <td>${s.unidad}</td>
           <td><input type="number" class="input-precio-val" value="${s.precio}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
-          <td><button onclick="editarPrecio(${s.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;">EDITAR</button></td>
+          <td style="white-space:nowrap">
+            <button onclick="actualizarPrecio(${s.id},this.closest('tr').querySelector('.input-precio-val'))" style="background:#2e7d32;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">GUARDAR</button>
+            <button onclick="editarPrecio(${s.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">EDITAR</button>
+          </td>
         </tr>
       `).join('');
     }
@@ -1970,7 +1973,7 @@ function eliminarPrecio(id) {
 
 function actualizarPrecio(id, el) {
   const precio = parseFloat(el.value) || 0;
-  api('PUT', '/api/barra/precios/' + id, { precio }).catch(() => alert('Error al actualizar'));
+  api('PUT', '/api/barra/precios/' + id, { precio }).then(() => showToast('✓ Guardado')).catch(() => alert('Error al actualizar'));
 }
 
 function editarPrecio(id) {
