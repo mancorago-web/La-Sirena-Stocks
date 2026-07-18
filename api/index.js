@@ -1401,7 +1401,7 @@ app.post('/api/inventario/agregar-item', authMiddleware, async (req, res) => {
     }
 
     const fecha = new Date().toISOString().split('T')[0];
-    const diaDocId = docId('inventario_diario', item_id, almacen_id, fecha);
+    const diaDocId = docId('invdiario', fecha, almacen_id, item_id);
     const diaSnap = await col('inventario_diario').doc(diaDocId).get();
     if (diaSnap.exists) {
       const data = diaSnap.data();
