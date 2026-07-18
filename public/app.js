@@ -380,6 +380,7 @@ async function guardarItemAlmacen() {
   if (!nombre) { alert('Ingresa el nombre del item'); return; }
   await api('POST', '/api/inventario/agregar-item', { nombre, almacen_id, cantidad, nota });
   cerrarModal();
+  _invCache = { fecha: null, data: null, pending: null };
   cargarAlmacenes();
   cargarReportes();
 }
