@@ -1902,13 +1902,12 @@ function cargarPrecios() {
       container.innerHTML = '<p>No hay ingredientes en la base de datos. Agrega uno nuevo.</p>';
       return;
     }
-    const recetasBase = new Set();
-    recetas.filter(r => r.categoria === 'RECETAS BASE').forEach(r => recetasBase.add(r.nombre.toLowerCase()));
+    const recetasBase = recetas.filter(r => r.categoria === 'RECETAS BASE').map(r => r.nombre.toLowerCase());
     const conPrecio = data.filter(s => parseFloat(s.precio) > 0);
     const sinPrecio = data.filter(s => !parseFloat(s.precio));
     function tablaItems(items) {
       return items.map(s => {
-        const esRecetaBase = recetasBase.has(s.ingrediente.toLowerCase());
+        const esRecetaBase = recetasBase.some(rn => rn.startsWith(s.ingrediente.toLowerCase()));
         return `
         <tr data-precio-id="${s.id}"${esRecetaBase ? ' style="background:#e3f2fd;"' : ''}>
           <td>${s.ingrediente}</td>
