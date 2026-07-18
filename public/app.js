@@ -373,12 +373,12 @@ function agregarItemAlmacen(almacenId, almacenNombre) {
 }
 
 async function guardarItemAlmacen() {
-  const item_id = parseInt(document.getElementById('f-item_id').value);
+  const nombre = document.getElementById('f-nombre-item').value.trim();
   const almacen_id = parseInt(document.getElementById('f-almacen_id').value);
   const cantidad = parseFloat(document.getElementById('f-cantidad').value) || 0;
   const nota = document.getElementById('f-nota').value || 'Agregado desde almacén';
-  if (!item_id) { alert('Selecciona un item'); return; }
-  await api('POST', '/api/inventario/ajustar', { item_id, almacen_id, cantidad, nota });
+  if (!nombre) { alert('Ingresa el nombre del item'); return; }
+  await api('POST', '/api/inventario/agregar-item', { nombre, almacen_id, cantidad, nota });
   cerrarModal();
   cargarAlmacenes();
   cargarReportes();
@@ -1093,19 +1093,18 @@ function showModal(tipo, data) {
   } else if (tipo === 'item-almacen') {
     body.innerHTML = `
       <h3>Agregar Item a: ${data.almacenNombre}</h3>
-      <label>Item
-        <select id="f-item_id"><option value="">Cargando...</option></select>
+      <label>Nombre del Item
+        <input type="text" id="f-nombre-item" placeholder="Ej: COCA COLA 500ml" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
       </label>
-      <label>Cantidad <input type="number" id="f-cantidad" value="0" min="0" step="0.01"></label>
-      <label>Nota <textarea id="f-nota" placeholder="Opcional"></textarea></label>
+      <label style="margin-top:1rem;display:block;">Cantidad Inicial
+        <input type="number" id="f-cantidad" value="0" min="0" step="0.01" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <label style="margin-top:1rem;display:block;">Nota
+        <textarea id="f-nota" placeholder="Opcional" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;"></textarea>
+      </label>
       <input type="hidden" id="f-almacen_id" value="${data.almacenId}">
-      <button onclick="guardarItemAlmacen()">Guardar</button>
+      <button onclick="guardarItemAlmacen()" style="margin-top:1rem;padding:0.5rem 1.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
     `;
-    api('GET', '/api/items').then(items => {
-      const sel = document.getElementById('f-item_id');
-      sel.innerHTML = '<option value="">Seleccionar item...</option>' +
-        items.map(i => `<option value="${i.id}">${i.nombre}</option>`).join('');
-    });
   }
 }
 

@@ -1376,4 +1376,54 @@ app.get('/api/reportes/vinos', async (req, res) => {
   }
 });
 
+// --- Agregar item a un almacén (crea el item si no existe) ---
+app.post('/api/inventario/agregar-item', authMiddleware, async (req, res) => {
+  try {
+    const { nombre, almacen_id, cantidad, nota } = req.body;
+    if (!nombre || !almacen_id) return res.status(400).json({ error: 'Nombre y almacén requeridos' });
+
+    const invSnap = await col('inventario').where('almacen_id', '==', almacen_id).get();
+    const existing = invSnap.docs.find(d => d.data().nombre.toLowerCase().trim() === nombre.toLowerCase().trim());
+
+    let item_id;
+    if (existing) {
+      item_id = existing.data().item_id;
+    } else {
+      const allInv = await col('inventario').get();
+      let maxId = 0;
+      allInv.docs.forEach(d => { const id = d.data().item_id || 0; if (id > maxId) maxId = id; });
+      item_id = maxId + 1;
+      const docIdStr = docId('inventario', item_id, almacen_id);
+      await col('inventario').doc(docIdStr).set({
+        item_id, almacen_id, nombre, categoria: '',
+        stock_apertura: 0, cantidad_minima: 0
+      });
+    }
+
+    const fecha = new Date().toISOString().split('T')[0];
+    const diaDocId = docId('inventario_diario', item_id, almacen_id, fecha);
+    const diaSnap = await col('inventario_diario').doc(diaDocId).get();
+    if (diaSnap.exists) {
+      const data = diaSnap.data();
+      await col('inventario_diario').doc(diaDocId).update({
+        stock_ingreso: (data.stock_ingreso || 0) + cantidad,
+        stock_cierre: (data.stock_cierre || 0) + cantidad,
+        updated_at: new Date().toISOString(), saved_by: req.user.displayName || req.user.email
+      });
+    } else {
+      await col('inventario_diario').doc(diaDocId).set({
+        fecha, item_id, almacen_id,
+        stock_apertura: 0, stock_ingreso: cantidad, salida_almacen: 0,
+        total_ventas: 0, falta_almacen: 0, stock_baja: 0,
+        stock_cierre: cantidad, created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(), saved_by: req.user.displayName || req.user.email
+      });
+    }
+
+    res.json({ ok: true, item_id, nombre, almacen_id });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = app;
