@@ -308,9 +308,14 @@ function cargarAlmacenes(fecha) {
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
       });
-      if ((a.id == 6 || a.id == 3) && otros.length) {
-        const vinosCat = secciones.find(s => s.label === 'VINOS');
-        if (vinosCat) { otros.forEach(i => vinosCat.items.push(i)); otros = []; }
+      if (otros.length) {
+        otros = otros.filter(i => {
+          if (i.categoria) {
+            const cat = secciones.find(s => s.label.toUpperCase() === i.categoria.toUpperCase());
+            if (cat) { cat.items.push(i); return false; }
+          }
+          return true;
+        });
       }
       return { ...a, secciones, otros };
     });
@@ -415,9 +420,14 @@ function cargarSalidas(fecha) {
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
       });
-      if ((a.id == 6 || a.id == 3) && otros.length) {
-        const vinosCat = secciones.find(s => s.label === 'VINOS');
-        if (vinosCat) { otros.forEach(i => vinosCat.items.push(i)); otros = []; }
+      if (otros.length) {
+        otros = otros.filter(i => {
+          if (i.categoria) {
+            const cat = secciones.find(s => s.label.toUpperCase() === i.categoria.toUpperCase());
+            if (cat) { cat.items.push(i); return false; }
+          }
+          return true;
+        });
       }
       return { ...a, secciones, otros };
     });
@@ -639,9 +649,14 @@ function cargarVentas(fecha) {
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
       });
-      if ((a.id == 6 || a.id == 3) && otros.length) {
-        const vinosCat = secciones.find(s => s.label === 'VINOS');
-        if (vinosCat) { otros.forEach(i => vinosCat.items.push(i)); otros = []; }
+      if (otros.length) {
+        otros = otros.filter(i => {
+          if (i.categoria) {
+            const cat = secciones.find(s => s.label.toUpperCase() === i.categoria.toUpperCase());
+            if (cat) { cat.items.push(i); return false; }
+          }
+          return true;
+        });
       }
       return { ...a, secciones, otros };
     });
@@ -770,9 +785,14 @@ function cargarBajas(fecha) {
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
       });
-      if ((a.id == 6 || a.id == 3) && otros.length) {
-        const vinosCat = secciones.find(s => s.label === 'VINOS');
-        if (vinosCat) { otros.forEach(i => vinosCat.items.push(i)); otros = []; }
+      if (otros.length) {
+        otros = otros.filter(i => {
+          if (i.categoria) {
+            const cat = secciones.find(s => s.label.toUpperCase() === i.categoria.toUpperCase());
+            if (cat) { cat.items.push(i); return false; }
+          }
+          return true;
+        });
       }
       return { ...a, secciones, otros };
     });
@@ -944,9 +964,14 @@ function cargarIngresos(fecha) {
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
       });
-      if ((a.id == 6 || a.id == 3) && otros.length) {
-        const vinosCat = secciones.find(s => s.label === 'VINOS');
-        if (vinosCat) { otros.forEach(i => vinosCat.items.push(i)); otros = []; }
+      if (otros.length) {
+        otros = otros.filter(i => {
+          if (i.categoria) {
+            const cat = secciones.find(s => s.label.toUpperCase() === i.categoria.toUpperCase());
+            if (cat) { cat.items.push(i); return false; }
+          }
+          return true;
+        });
       }
       return { ...a, secciones, otros };
     });
@@ -1244,6 +1269,15 @@ function cargarStocks() {
         const yg = (y.stock_cierre || 0) > 0 ? 0 : 1;
         return xg - yg || x.nombre.localeCompare(y.nombre);
       });
+      if (otros.length) {
+        otros = otros.filter(i => {
+          if (i.categoria) {
+            const cat = secciones.find(s => s.label.toUpperCase() === i.categoria.toUpperCase());
+            if (cat) { cat.items.push(i); return false; }
+          }
+          return true;
+        });
+      }
       return { ...a, secciones, otros };
     });
     const container = document.getElementById('accordion-stocks');
