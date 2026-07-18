@@ -1898,23 +1898,37 @@ function cargarPrecios() {
       container.innerHTML = '<p>No hay ingredientes en la base de datos. Agrega uno nuevo.</p>';
       return;
     }
-    container.innerHTML = `
-      <div class="table-wrap">
+    const conPrecio = data.filter(s => parseFloat(s.precio) > 0);
+    const sinPrecio = data.filter(s => !parseFloat(s.precio));
+    function tablaItems(items) {
+      return items.map(s => `
+        <tr data-precio-id="${s.id}">
+          <td>${s.ingrediente}</td>
+          <td>${s.unidad}</td>
+          <td><input type="number" class="input-precio-val" value="${s.precio}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
+          <td><button onclick="editarPrecio(${s.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;">EDITAR</button></td>
+        </tr>
+      `).join('');
+    }
+    let html = '';
+    if (conPrecio.length) {
+      html += `<div class="table-wrap" style="margin-bottom:1.5rem;">
       <table>
         <thead><tr><th>Ingrediente</th><th>Unidad</th><th>Precio</th><th></th></tr></thead>
-        <tbody>
-          ${data.map(s => `
-            <tr data-precio-id="${s.id}">
-              <td>${s.ingrediente}</td>
-              <td>${s.unidad}</td>
-              <td><input type="number" class="input-precio-val" value="${s.precio}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
-              <td><button onclick="editarPrecio(${s.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;">EDITAR</button></td>
-            </tr>
-          `).join('')}
-        </tbody>
+        <tbody>${tablaItems(conPrecio)}</tbody>
       </table>
-      </div>
-    `;
+      </div>`;
+    }
+    if (sinPrecio.length) {
+      html += `<div class="table-wrap">
+      <table>
+        <thead><tr><th style="color:#999;">Ingrediente</th><th style="color:#999;">Unidad</th><th style="color:#999;">Precio</th><th></th></tr></thead>
+        <tbody>${tablaItems(sinPrecio)}</tbody>
+      </table>
+      ${conPrecio.length ? '<p style="margin-top:0.5rem;color:#999;font-size:0.85rem;">— Items sin precio —</p>' : ''}
+      </div>`;
+    }
+    container.innerHTML = html;
   });
 }
 
