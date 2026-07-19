@@ -1911,7 +1911,7 @@ function cargarPrecios() {
         return `
         <tr data-precio-id="${s.id}"${esRecetaBase ? ' style="background:#e3f2fd;"' : ''}>
           <td>${s.ingrediente}</td>
-          <td><input type="text" class="input-uni-compra" value="${s.unidad_compra || ''}" style="width:90px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
+          <td><select class="input-uni-compra" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${['','KILOS','GRAMOS','LITRO','ML','ONZAS','UNIDAD','HOJAS'].map(u => `<option value="${u}" ${(s.unidad_compra||'')===u?'selected':''}>${u || '—'}</option>`).join('')}</select></td>
           <td><input type="number" class="input-precio-compra" value="${s.precio_compra || 0}" step="0.01" style="width:90px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
           <td style="font-size:0.85rem;color:#666;">${s.unidad}</td>
           <td><input type="number" class="input-precio-val" value="${s.precio}" step="0.01" style="width:90px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
@@ -2016,7 +2016,11 @@ function editarPrecio(id) {
       </label>
       <label style="display:block;margin-top:1rem;">
         Unidad Compra:
-        <input type="text" id="edit-uni-compra" value="${item.unidad_compra || ''}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;" placeholder="ej: botella 750ml, kg, etc.">
+        <select id="edit-uni-compra" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+          ${['','KILOS','GRAMOS','LITRO','ML','ONZAS','UNIDAD','HOJAS'].map(u =>
+            `<option value="${u}" ${(item.unidad_compra||'')===u?'selected':''}>${u || '—'}</option>`
+          ).join('')}
+        </select>
       </label>
       <label style="display:block;margin-top:1rem;">
         Precio Compra:
