@@ -2238,10 +2238,11 @@ function cargarBarraMovimientos(tipo) {
           <tbody>
             ${precios.map(p => {
               const mov = movByIng[p.ingrediente] || {};
-              return `<tr data-ing="${p.ingrediente}">
+              const uc = p.unidad_compra || p.unidad || 'unidad';
+              return `<tr data-ing="${p.ingrediente}" data-uni-compra="${uc}">
                 <td>${p.ingrediente}</td>
                 <td><input type="number" class="input-barra-mov" value="${mov.cantidad || ''}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
-                <td>${p.unidad || 'unidad'}</td>
+                <td>${uc}</td>
               </tr>`;
             }).join('')}
           </tbody>
@@ -2288,7 +2289,7 @@ function guardarBarraMovimientos(tipo) {
     document.querySelectorAll('#accordion-barra-' + tipo + ' tr[data-ing]').forEach(tr => {
       const cant = parseFloat(tr.querySelector('.input-barra-mov').value) || 0;
       if (cant > 0) {
-        items.push({ ingrediente: tr.dataset.ing, cantidad: cant, unidad: 'unidad' });
+        items.push({ ingrediente: tr.dataset.ing, cantidad: cant, unidad: tr.dataset.uniCompra || 'unidad' });
       }
     });
     api('POST', '/api/barra/movimientos', { fecha, tipo, items }).then(() => {
