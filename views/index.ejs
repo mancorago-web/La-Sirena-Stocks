@@ -274,32 +274,7 @@
         <div class="header-actions">
           <h2>Base de Datos</h2>
           <div class="controles-dia" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-            <input type="text" id="nuevo-precio-input" placeholder="Ingrediente" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:180px;">
-            <select id="nuevo-uni-compra" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:110px;">
-              <option value="">Unid.Compra</option>
-              <option value="KILOS">KILOS</option>
-              <option value="GRAMOS">GRAMOS</option>
-              <option value="LITRO">LITRO</option>
-              <option value="ML">ML</option>
-              <option value="ONZAS">ONZAS</option>
-              <option value="UNIDAD">UNIDAD</option>
-              <option value="HOJAS">HOJAS</option>
-              <option value="BOTELLA">BOTELLA</option>
-              <option value="GALON">GALON</option>
-            </select>
-            <input type="number" id="nuevo-precio-compra" placeholder="Precio Compra" step="0.01" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:110px;">
-            <select id="nuevo-precio-uni" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:90px;">
-              <option value="unidad">unidad</option>
-              <option value="onzas">onzas</option>
-              <option value="gramos">gramos</option>
-              <option value="kg">kg</option>
-              <option value="lt">lt</option>
-              <option value="ml">ml</option>
-              <option value="hojas">hojas</option>
-              <option value="gotas">gotas</option>
-            </select>
-            <input type="number" id="nuevo-precio-precio" placeholder="Precio S/." step="0.01" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:100px;">
-            <button onclick="agregarPrecio()">AGREGAR ITEM</button>
+            <button onclick="mostrarModalAgregarItem()">AGREGAR ITEM</button>
             <input type="text" id="buscar-precios" placeholder="Buscar..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:200px;" oninput="buscarTablaBarra(this.value, 'barra-precios-container', 'tr[data-precio-id]')">
             <button class="btn-guardar-dia" onclick="guardarPreciosBase()">💾 GUARDAR</button>
             <button class="btn-detalles" onclick="exportarBaseDatos()">EXPORTAR</button>

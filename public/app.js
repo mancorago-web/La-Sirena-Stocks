@@ -1945,18 +1945,66 @@ function cargarPrecios() {
   });
 }
 
+function mostrarModalAgregarItem() {
+  const body = document.getElementById('modal-body');
+  body.innerHTML = `
+    <h3>Agregar Item</h3>
+    <label style="display:block;margin-top:1rem;">
+      Ingrediente:
+      <input type="text" id="nuevo-precio-input" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+    </label>
+    <label style="display:block;margin-top:1rem;">
+      Unidad Compra:
+      <select id="nuevo-uni-compra" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+        <option value="">—</option>
+        <option value="KILOS">KILOS</option>
+        <option value="GRAMOS">GRAMOS</option>
+        <option value="LITRO">LITRO</option>
+        <option value="ML">ML</option>
+        <option value="ONZAS">ONZAS</option>
+        <option value="UNIDAD">UNIDAD</option>
+        <option value="HOJAS">HOJAS</option>
+        <option value="BOTELLA">BOTELLA</option>
+        <option value="GALON">GALON</option>
+      </select>
+    </label>
+    <label style="display:block;margin-top:1rem;">
+      Precio Compra:
+      <input type="number" id="nuevo-precio-compra" step="0.01" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+    </label>
+    <label style="display:block;margin-top:1rem;">
+      Unidad (receta):
+      <select id="nuevo-precio-uni" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+        <option value="unidad">unidad</option>
+        <option value="onzas">onzas</option>
+        <option value="gramos">gramos</option>
+        <option value="kg">kg</option>
+        <option value="lt">lt</option>
+        <option value="ml">ml</option>
+        <option value="hojas">hojas</option>
+        <option value="gotas">gotas</option>
+      </select>
+    </label>
+    <label style="display:block;margin-top:1rem;">
+      Precio (por unidad receta):
+      <input type="number" id="nuevo-precio-precio" step="0.01" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+    </label>
+    <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+      <button onclick="agregarPrecio()" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+      <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
+    </div>`;
+  document.getElementById('modal').style.display = 'block';
+}
+
 function agregarPrecio() {
   const ingrediente = document.getElementById('nuevo-precio-input').value.trim();
   const unidad = document.getElementById('nuevo-precio-uni').value;
   const precio = parseFloat(document.getElementById('nuevo-precio-precio').value) || 0;
   const precio_compra = parseFloat(document.getElementById('nuevo-precio-compra').value) || 0;
-  const unidad_compra = document.getElementById('nuevo-uni-compra').value.trim();
+  const unidad_compra = document.getElementById('nuevo-uni-compra').value;
   if (!ingrediente) { alert('Ingresa el nombre del ingrediente'); return; }
   api('POST', '/api/barra/precios', { ingrediente, unidad, precio, precio_compra, unidad_compra }).then(() => {
-    document.getElementById('nuevo-precio-input').value = '';
-    document.getElementById('nuevo-precio-precio').value = '';
-    document.getElementById('nuevo-precio-compra').value = '';
-    document.getElementById('nuevo-uni-compra').value = '';
+    cerrarModal();
     cargarPrecios();
   }).catch(() => alert('Error al agregar'));
 }
