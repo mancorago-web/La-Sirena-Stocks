@@ -150,10 +150,14 @@ async function start() {
       ingrediente TEXT NOT NULL,
       unidad TEXT DEFAULT 'unidad',
       precio REAL DEFAULT 0,
+      precio_compra REAL DEFAULT 0,
+      unidad_compra TEXT DEFAULT '',
       created_at TEXT DEFAULT (datetime('now','localtime')),
       updated_at TEXT DEFAULT (datetime('now','localtime'))
     );
   `);
+  try { exec('ALTER TABLE barra_precios ADD COLUMN precio_compra REAL DEFAULT 0;'); } catch(e) {}
+  try { exec('ALTER TABLE barra_precios ADD COLUMN unidad_compra TEXT DEFAULT \'\';'); } catch(e) {}
   // Migrate existing barra_stock items to barra_precios if empty
   try {
     const preciosExistentes = query('SELECT COUNT(*) as c FROM barra_precios');
@@ -624,17 +628,25 @@ async function start() {
   });
 
   app.post('/api/barra/precios', (req, res) => {
-    const { ingrediente, unidad, precio } = req.body;
+    const { ingrediente, unidad, precio, precio_compra, unidad_compra } = req.body;
     if (!ingrediente) return res.status(400).json({ error: 'Nombre requerido' });
-    run('INSERT INTO barra_precios (ingrediente, unidad, precio) VALUES (?, ?, ?)',
-      [ingrediente, unidad || 'unidad', precio ?? 0]);
+    run('INSERT INTO barra_precios (ingrediente, unidad, precio, precio_compra, unidad_compra) VALUES (?, ?, ?, ?, ?)',
+      [ingrediente, unidad || 'unidad', precio ?? 0, precio_compra ?? 0, unidad_compra || '']);
     res.json({ ok: true });
   });
 
   app.put('/api/barra/precios/:id', (req, res) => {
-    const { precio } = req.body;
-    run('UPDATE barra_precios SET precio = ?, updated_at = datetime(\'now\',\'localtime\') WHERE id = ?',
-      [precio ?? 0, req.params.id]);
+    const { precio, precio_compra, unidad_compra, ingrediente, unidad } = req.body;
+    const sets = [];
+    const params = [];
+    if (precio !== undefined) { sets.push('precio = ?'); params.push(precio); }
+    if (precio_compra !== undefined) { sets.push('precio_compra = ?'); params.push(precio_compra); }
+    if (unidad_compra !== undefined) { sets.push('unidad_compra = ?'); params.push(unidad_compra); }
+    if (ingrediente !== undefined) { sets.push('ingrediente = ?'); params.push(ingrediente); }
+    if (unidad !== undefined) { sets.push('unidad = ?'); params.push(unidad); }
+    if (!sets.length) return res.json({ ok: true });
+    params.push(req.params.id);
+    run('UPDATE barra_precios SET ' + sets.join(', ') + ', updated_at = datetime(\'now\',\'localtime\') WHERE id = ?', params);
     res.json({ ok: true });
   });
 

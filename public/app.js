@@ -1911,10 +1911,12 @@ function cargarPrecios() {
         return `
         <tr data-precio-id="${s.id}"${esRecetaBase ? ' style="background:#e3f2fd;"' : ''}>
           <td>${s.ingrediente}</td>
-          <td>${s.unidad}</td>
-          <td><input type="number" class="input-precio-val" value="${s.precio}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
+          <td><input type="text" class="input-uni-compra" value="${s.unidad_compra || ''}" style="width:90px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
+          <td><input type="number" class="input-precio-compra" value="${s.precio_compra || 0}" step="0.01" style="width:90px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
+          <td style="font-size:0.85rem;color:#666;">${s.unidad}</td>
+          <td><input type="number" class="input-precio-val" value="${s.precio}" step="0.01" style="width:90px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
           <td style="white-space:nowrap">
-            <button onclick="actualizarPrecio(${s.id},this.closest('tr').querySelector('.input-precio-val'))" style="background:#2e7d32;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">GUARDAR</button>
+            <button onclick="guardarFilaPrecio(this)" style="background:#2e7d32;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">GUARDAR</button>
             <button onclick="editarPrecio(${s.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">EDITAR</button>
             <button onclick="eliminarPrecio(${s.id})" title="Eliminar" style="background:#c62828;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">✕</button>
           </td>
@@ -1925,7 +1927,7 @@ function cargarPrecios() {
     if (conPrecio.length) {
       html += `<div class="table-wrap" style="margin-bottom:1.5rem;">
       <table>
-        <thead><tr><th>Ingrediente</th><th>Unidad</th><th>Precio</th><th></th></tr></thead>
+        <thead><tr><th>Ingrediente</th><th>Unidad Compra</th><th>Precio Compra</th><th>Unidad</th><th>Precio</th><th></th></tr></thead>
         <tbody>${tablaItems(conPrecio)}</tbody>
       </table>
       </div>`;
@@ -1933,7 +1935,7 @@ function cargarPrecios() {
     if (sinPrecio.length) {
       html += `<div class="table-wrap">
       <table>
-        <thead><tr><th style="color:#999;">Ingrediente</th><th style="color:#999;">Unidad</th><th style="color:#999;">Precio</th><th></th></tr></thead>
+        <thead><tr><th style="color:#999;">Ingrediente</th><th style="color:#999;">Unidad Compra</th><th style="color:#999;">Precio Compra</th><th style="color:#999;">Unidad</th><th style="color:#999;">Precio</th><th></th></tr></thead>
         <tbody>${tablaItems(sinPrecio)}</tbody>
       </table>
       ${conPrecio.length ? '<p style="margin-top:0.5rem;color:#999;font-size:0.85rem;">— Items sin precio —</p>' : ''}
@@ -1947,12 +1949,27 @@ function agregarPrecio() {
   const ingrediente = document.getElementById('nuevo-precio-input').value.trim();
   const unidad = document.getElementById('nuevo-precio-uni').value;
   const precio = parseFloat(document.getElementById('nuevo-precio-precio').value) || 0;
+  const precio_compra = parseFloat(document.getElementById('nuevo-precio-compra').value) || 0;
+  const unidad_compra = document.getElementById('nuevo-uni-compra').value.trim();
   if (!ingrediente) { alert('Ingresa el nombre del ingrediente'); return; }
-  api('POST', '/api/barra/precios', { ingrediente, unidad, precio }).then(() => {
+  api('POST', '/api/barra/precios', { ingrediente, unidad, precio, precio_compra, unidad_compra }).then(() => {
     document.getElementById('nuevo-precio-input').value = '';
     document.getElementById('nuevo-precio-precio').value = '';
+    document.getElementById('nuevo-precio-compra').value = '';
+    document.getElementById('nuevo-uni-compra').value = '';
     cargarPrecios();
   }).catch(() => alert('Error al agregar'));
+}
+
+function guardarFilaPrecio(btn) {
+  const tr = btn.closest('tr');
+  const id = parseInt(tr.dataset.precioId);
+  const precio = parseFloat(tr.querySelector('.input-precio-val').value) || 0;
+  const precio_compra = parseFloat(tr.querySelector('.input-precio-compra').value) || 0;
+  const unidad_compra = tr.querySelector('.input-uni-compra').value.trim();
+  api('PUT', '/api/barra/precios/' + id, { precio, precio_compra, unidad_compra }).then(() => {
+    showToast('✓ Guardado');
+  }).catch(() => alert('Error al guardar'));
 }
 
 function guardarPreciosBase() {
@@ -1962,7 +1979,9 @@ function guardarPreciosBase() {
   document.querySelectorAll('#barra-precios-container tr[data-precio-id]').forEach(tr => {
     const id = parseInt(tr.dataset.precioId);
     const precio = parseFloat(tr.querySelector('.input-precio-val').value) || 0;
-    promises.push(api('PUT', '/api/barra/precios/' + id, { precio }));
+    const precio_compra = parseFloat(tr.querySelector('.input-precio-compra').value) || 0;
+    const unidad_compra = tr.querySelector('.input-uni-compra').value.trim();
+    promises.push(api('PUT', '/api/barra/precios/' + id, { precio, precio_compra, unidad_compra }));
   });
   Promise.all(promises).then(() => {
     btn.disabled = false; btn.textContent = '💾 GUARDAR';
@@ -1996,7 +2015,15 @@ function editarPrecio(id) {
         <input type="text" id="edit-precio-nombre" value="${item.ingrediente}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
       </label>
       <label style="display:block;margin-top:1rem;">
-        Unidad:
+        Unidad Compra:
+        <input type="text" id="edit-uni-compra" value="${item.unidad_compra || ''}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;" placeholder="ej: botella 750ml, kg, etc.">
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Precio Compra:
+        <input type="number" id="edit-precio-compra" value="${item.precio_compra || 0}" step="0.01" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Unidad (receta):
         <select id="edit-precio-unidad" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
           ${['unidad','onzas','gramos','kg','lt','ml','hojas','gotas'].map(u =>
             `<option value="${u}" ${item.unidad === u ? 'selected' : ''}>${u}</option>`
@@ -2004,7 +2031,7 @@ function editarPrecio(id) {
         </select>
       </label>
       <label style="display:block;margin-top:1rem;">
-        Precio:
+        Precio (por unidad receta):
         <input type="number" id="edit-precio-valor" value="${item.precio}" step="0.01" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
       </label>
       <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
@@ -2020,8 +2047,10 @@ function guardarEdicionPrecio(id) {
   const ingrediente = document.getElementById('edit-precio-nombre').value.trim();
   const unidad = document.getElementById('edit-precio-unidad').value;
   const precio = parseFloat(document.getElementById('edit-precio-valor').value) || 0;
+  const precio_compra = parseFloat(document.getElementById('edit-precio-compra').value) || 0;
+  const unidad_compra = document.getElementById('edit-uni-compra').value.trim();
   if (!ingrediente) { alert('El nombre es requerido'); return; }
-  api('PUT', '/api/barra/precios/' + id, { ingrediente, unidad, precio }).then(() => {
+  api('PUT', '/api/barra/precios/' + id, { ingrediente, unidad, precio, precio_compra, unidad_compra }).then(() => {
     document.getElementById('modal').style.display = 'none';
     cargarPrecios();
   }).catch(() => alert('Error al guardar'));
@@ -2096,8 +2125,8 @@ function guardarPreciosAlmacen() {
 
 function exportarBaseDatos() {
   api('GET', '/api/barra/precios').then(data => {
-    const wsData = [['NOMBRE', 'UNIDAD DE MEDIDA', 'PRECIO']];
-    data.forEach(p => wsData.push([p.ingrediente, p.unidad || '', p.precio || 0]));
+    const wsData = [['NOMBRE', 'UNIDAD COMPRA', 'PRECIO COMPRA', 'UNIDAD', 'PRECIO']];
+    data.forEach(p => wsData.push([p.ingrediente, p.unidad_compra || '', p.precio_compra || 0, p.unidad || '', p.precio || 0]));
     const libro = XLSX.utils.book_new();
     const hoja = XLSX.utils.aoa_to_sheet(wsData);
     XLSX.utils.book_append_sheet(libro, hoja, 'Base de Datos');

@@ -782,21 +782,24 @@ app.get('/api/barra/precios', async (req, res) => {
 });
 
 app.post('/api/barra/precios', async (req, res) => {
-  const { ingrediente, precio, unidad } = req.body;
+  const { ingrediente, precio, unidad, precio_compra, unidad_compra } = req.body;
   if (!ingrediente) return res.status(400).json({ error: 'Nombre requerido' });
   const all = await col('barra_precios').get();
   const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
   await col('barra_precios').doc(String(nextId)).set({
     id: nextId, ingrediente, precio: precio || 0, unidad: normalizeUnit(unidad),
+    precio_compra: precio_compra || 0, unidad_compra: unidad_compra || '',
     created_at: new Date().toISOString(), updated_at: new Date().toISOString()
   });
   res.json({ ok: true });
 });
 
 app.put('/api/barra/precios/:id', async (req, res) => {
-  const { precio, ingrediente, unidad } = req.body;
+  const { precio, precio_compra, unidad_compra, ingrediente, unidad } = req.body;
   const updateData = { updated_at: new Date().toISOString() };
   if (precio !== undefined) updateData.precio = precio;
+  if (precio_compra !== undefined) updateData.precio_compra = precio_compra;
+  if (unidad_compra !== undefined) updateData.unidad_compra = unidad_compra;
   if (ingrediente !== undefined) updateData.ingrediente = ingrediente;
   if (unidad !== undefined) updateData.unidad = normalizeUnit(unidad);
   await col('barra_precios').doc(req.params.id).update(updateData);
