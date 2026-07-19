@@ -1613,7 +1613,7 @@ function renderReceta(r) {
               <td>${ing.ingrediente}</td>
               <td>${ing.cantidad}</td>
               <td>${ing.unidad}</td>
-              <td>${ing.precioMatch ? 'S/' + pu.toFixed(2) : '—'}</td>
+              <td>${ing.precioMatch ? 'S/' + pu.toFixed(5) : '—'}</td>
               <td>${ing.precioMatch ? 'S/' + pt.toFixed(2) : '—'}</td>
               <td><button class="danger" onclick="eliminarIngrediente(${ing.id})">✕</button></td>
             </tr>`;
