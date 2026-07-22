@@ -1904,12 +1904,13 @@ function cargarPrecios() {
     }
     const recetasBase = recetas.filter(r => r.categoria === 'RECETAS BASE').map(r => r.nombre.toLowerCase());
     const destacados = ['jarabe de cherry y piña','jarabe de kion','jarabe de maiz morado','jarabe hoja de coca','pisco con canela','pisco con kion','pisco con maiz morado','pisco macerado con maiz morado','zumo de piña'];
+    const excluir = ['mango ciruelo'];
     const conPrecio = data.filter(s => parseFloat(s.precio) > 0);
     const sinPrecio = data.filter(s => !parseFloat(s.precio));
     function tablaItems(items) {
       return items.map(s => {
         const name = s.ingrediente.toLowerCase();
-        const esRecetaBase = recetasBase.some(rn => rn.startsWith(name)) || destacados.includes(name);
+        const esRecetaBase = !excluir.includes(name) && (recetasBase.some(rn => rn.startsWith(name)) || destacados.includes(name));
         return `
         <tr data-precio-id="${s.id}"${esRecetaBase ? ' style="background:#e3f2fd;"' : ''}>
           <td>${s.ingrediente}</td>
