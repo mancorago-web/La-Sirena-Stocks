@@ -2189,6 +2189,18 @@ function exportarBaseDatos() {
   }).catch(() => alert('Error al exportar'));
 }
 
+function exportarBaseDatosSinPrecio() {
+  api('GET', '/api/barra/precios').then(data => {
+    const sinPrecio = data.filter(p => !parseFloat(p.precio));
+    const wsData = [['NOMBRE', 'UNIDAD COMPRA', 'PRECIO COMPRA', 'UNIDAD', 'PRECIO']];
+    sinPrecio.forEach(p => wsData.push([p.ingrediente, p.unidad_compra || '', p.precio_compra || 0, p.unidad || '', p.precio || 0]));
+    const libro = XLSX.utils.book_new();
+    const hoja = XLSX.utils.aoa_to_sheet(wsData);
+    XLSX.utils.book_append_sheet(libro, hoja, 'Sin Precio');
+    XLSX.writeFile(libro, 'Items_Sin_Precio.xlsx');
+  }).catch(() => alert('Error al exportar'));
+}
+
 function exportarPrecios() {
   const fecha = document.getElementById('fecha-almacenes')?.value || new Date().toISOString().split('T')[0];
   const wsData = [['Almacén', 'Item', 'Stock Actual', 'Precio Unidad', 'Total']];
