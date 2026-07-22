@@ -1903,7 +1903,7 @@ function cargarPrecios() {
       return;
     }
     const recetasBase = recetas.filter(r => r.categoria === 'RECETAS BASE').map(r => r.nombre.toLowerCase());
-    const destacados = ['jarabe de cherry y piña','jarabe de kion','jarabe de maiz morado','jarabe hoja de coca','pisco con canela','pisco con kion','pisco con maiz morado','pisco macerado con maiz morado','zumo de piña'];
+    const destacados = ['jarabe de cherry y piña','jarabe de kion','jarabe de maiz morado','jarabe hoja de coca','pisco con canela','pisco con kion','pisco con maiz morado','pisco macerado con maiz morado','zumo de piña','concentrado flor de jamaica y canela'];
     const excluir = ['mango ciruelo'];
     const conPrecio = data.filter(s => parseFloat(s.precio) > 0);
     const sinPrecio = data.filter(s => !parseFloat(s.precio));
