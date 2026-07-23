@@ -1204,7 +1204,7 @@ function verReporteStocksBajos() {
     data.forEach(a => {
       const itemsBajos = a.items.filter(i => {
         const min = i.cantidad_minima || 0;
-        return min > 0 && (i.stock_cierre || 0) <= min;
+        return min > 0 && (i.stock_cierre || 0) < min;
       });
       if (!itemsBajos.length) return;
       totalItems += itemsBajos.length;
