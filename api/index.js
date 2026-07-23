@@ -984,7 +984,7 @@ function calcularCosto(cantidad, unidadReceta, precioItem, unidadItem, equivMl, 
   if (unidadReceta === unidadItem) return { costo: (cantidad || 0) * (precioItem || 0), converted: false };
   if (unidadReceta === 'unidad') return { costo: (cantidad || 0) * (precioItem || 0), converted: false };
 
-  if (!equivMl && !equivGr && nombreItem) {
+  if (unidadItem === 'unidad' && !equivMl && !equivGr && nombreItem) {
     const parsed = parseEquivFromName(nombreItem);
     if (!equivMl) equivMl = parsed.equiv_ml;
     if (!equivGr) equivGr = parsed.equiv_gr;
