@@ -630,7 +630,7 @@ app.get('/api/recetas', async (req, res) => {
       const match = precios.find(p => p.ingrediente && p.ingrediente.toLowerCase() === ing.ingrediente.toLowerCase());
       const precioUnidad = match ? (match.precio || 0) : 0;
       const conv = match
-        ? calcularCosto(ing.cantidad, ing.unidad, precioUnidad, match.unidad, match.equiv_ml, match.equiv_gr)
+        ? calcularCosto(ing.cantidad, ing.unidad, precioUnidad, match.unidad, match.equiv_ml, match.equiv_gr, match.ingrediente)
         : { costo: (ing.cantidad || 0) * precioUnidad, converted: false };
       const costo = typeof conv === 'object' ? conv.costo : conv;
       const converted = typeof conv === 'object' ? conv.converted : false;
@@ -791,25 +791,29 @@ app.post('/api/barra/precios', async (req, res) => {
   if (!ingrediente) return res.status(400).json({ error: 'Nombre requerido' });
   const all = await col('barra_precios').get();
   const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
+  const parsed = parseEquivFromName(ingrediente);
   await col('barra_precios').doc(String(nextId)).set({
     id: nextId, ingrediente, precio: precio || 0, unidad: normalizeUnit(unidad),
     precio_compra: precio_compra || 0, unidad_compra: unidad_compra || '',
-    equiv_ml: equiv_ml || 0, equiv_gr: equiv_gr || 0,
+    equiv_ml: parsed.equiv_ml || 0, equiv_gr: parsed.equiv_gr || 0,
     created_at: new Date().toISOString(), updated_at: new Date().toISOString()
   });
   res.json({ ok: true });
 });
 
 app.put('/api/barra/precios/:id', async (req, res) => {
-  const { precio, precio_compra, unidad_compra, ingrediente, unidad, equiv_ml, equiv_gr } = req.body;
+  const { precio, precio_compra, unidad_compra, ingrediente, unidad } = req.body;
   const updateData = { updated_at: new Date().toISOString() };
   if (precio !== undefined) updateData.precio = precio;
   if (precio_compra !== undefined) updateData.precio_compra = precio_compra;
   if (unidad_compra !== undefined) updateData.unidad_compra = unidad_compra;
-  if (ingrediente !== undefined) updateData.ingrediente = ingrediente;
   if (unidad !== undefined) updateData.unidad = normalizeUnit(unidad);
-  if (equiv_ml !== undefined) updateData.equiv_ml = equiv_ml;
-  if (equiv_gr !== undefined) updateData.equiv_gr = equiv_gr;
+  if (ingrediente !== undefined) {
+    updateData.ingrediente = ingrediente;
+    const parsed = parseEquivFromName(ingrediente);
+    if (parsed.equiv_ml) updateData.equiv_ml = parsed.equiv_ml;
+    if (parsed.equiv_gr) updateData.equiv_gr = parsed.equiv_gr;
+  }
   await col('barra_precios').doc(req.params.id).update(updateData);
   res.json({ ok: true });
 });
@@ -973,12 +977,18 @@ function parseEquivFromName(name) {
   return {};
 }
 
-function calcularCosto(cantidad, unidadReceta, precioItem, unidadItem, equivMl, equivGr) {
+function calcularCosto(cantidad, unidadReceta, precioItem, unidadItem, equivMl, equivGr, nombreItem) {
   unidadReceta = normalizeUnit(unidadReceta);
   unidadItem = normalizeUnit(unidadItem);
   if (!unidadReceta || !unidadItem) return { costo: (cantidad || 0) * (precioItem || 0), converted: false };
   if (unidadReceta === unidadItem) return { costo: (cantidad || 0) * (precioItem || 0), converted: false };
   if (unidadReceta === 'unidad') return { costo: (cantidad || 0) * (precioItem || 0), converted: false };
+
+  if (!equivMl && !equivGr && nombreItem) {
+    const parsed = parseEquivFromName(nombreItem);
+    if (!equivMl) equivMl = parsed.equiv_ml;
+    if (!equivGr) equivGr = parsed.equiv_gr;
+  }
 
   if (equivMl || getUnitToMl(unidadItem)) {
     const mlReceta = (cantidad || 0) * getUnitToMl(unidadReceta);

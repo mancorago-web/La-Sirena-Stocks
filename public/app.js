@@ -1919,8 +1919,6 @@ function cargarPrecios() {
           <td><input type="number" class="input-precio-compra" value="${s.precio_compra || 0}" step="0.01" style="width:90px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
           <td style="font-size:0.85rem;color:#666;">${s.unidad}</td>
           <td><input type="number" class="input-precio-val" value="${s.precio}" step="0.01" style="width:90px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
-          <td><input type="number" class="input-eq-ml" value="${s.equiv_ml || ''}" step="1" min="0" style="width:70px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" placeholder="ml"></td>
-          <td><input type="number" class="input-eq-gr" value="${s.equiv_gr || ''}" step="1" min="0" style="width:70px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" placeholder="gr"></td>
           <td style="white-space:nowrap">
             <button onclick="guardarFilaPrecio(this)" style="background:#2e7d32;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">GUARDAR</button>
             <button onclick="editarPrecio(${s.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">EDITAR</button>
@@ -1933,7 +1931,7 @@ function cargarPrecios() {
     if (conPrecio.length) {
       html += `<div class="table-wrap" style="margin-bottom:1.5rem;">
       <table>
-        <thead><tr><th>Ingrediente</th><th>Unidad Compra</th><th>Precio Compra</th><th>Unidad</th><th>Precio</th><th>Eq.ML</th><th>Eq.GR</th><th></th></tr></thead>
+        <thead><tr><th>Ingrediente</th><th>Unidad Compra</th><th>Precio Compra</th><th>Unidad</th><th>Precio</th><th></th></tr></thead>
         <tbody>${tablaItems(conPrecio)}</tbody>
       </table>
       </div>`;
@@ -1941,7 +1939,7 @@ function cargarPrecios() {
     if (sinPrecio.length) {
       html += `<div class="table-wrap">
       <table>
-        <thead><tr><th style="color:#999;">Ingrediente</th><th style="color:#999;">Unidad Compra</th><th style="color:#999;">Precio Compra</th><th style="color:#999;">Unidad</th><th style="color:#999;">Precio</th><th style="color:#999;">Eq.ML</th><th style="color:#999;">Eq.GR</th><th></th></tr></thead>
+        <thead><tr><th style="color:#999;">Ingrediente</th><th style="color:#999;">Unidad Compra</th><th style="color:#999;">Precio Compra</th><th style="color:#999;">Unidad</th><th style="color:#999;">Precio</th><th></th></tr></thead>
         <tbody>${tablaItems(sinPrecio)}</tbody>
       </table>
       ${conPrecio.length ? '<p style="margin-top:0.5rem;color:#999;font-size:0.85rem;">— Items sin precio —</p>' : ''}
@@ -1995,14 +1993,6 @@ function mostrarModalAgregarItem() {
       Precio (por unidad receta):
       <input type="number" id="nuevo-precio-precio" step="0.01" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
     </label>
-    <div style="display:flex;gap:0.5rem;margin-top:1rem;">
-      <label style="flex:1;">Eq. ML:
-        <input type="number" id="nuevo-eq-ml" step="1" min="0" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;" placeholder="ej: 20000">
-      </label>
-      <label style="flex:1;">Eq. GR:
-        <input type="number" id="nuevo-eq-gr" step="1" min="0" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;" placeholder="ej: 1000">
-      </label>
-    </div>
     <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
       <button onclick="agregarPrecio()" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
       <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
@@ -2016,10 +2006,8 @@ function agregarPrecio() {
   const precio = parseFloat(document.getElementById('nuevo-precio-precio').value) || 0;
   const precio_compra = parseFloat(document.getElementById('nuevo-precio-compra').value) || 0;
   const unidad_compra = document.getElementById('nuevo-uni-compra').value;
-  const equiv_ml = parseFloat(document.getElementById('nuevo-eq-ml').value) || 0;
-  const equiv_gr = parseFloat(document.getElementById('nuevo-eq-gr').value) || 0;
   if (!ingrediente) { alert('Ingresa el nombre del ingrediente'); return; }
-  api('POST', '/api/barra/precios', { ingrediente, unidad, precio, precio_compra, unidad_compra, equiv_ml, equiv_gr }).then(() => {
+  api('POST', '/api/barra/precios', { ingrediente, unidad, precio, precio_compra, unidad_compra }).then(() => {
     cerrarModal();
     cargarPrecios();
   }).catch(() => alert('Error al agregar'));
@@ -2031,9 +2019,7 @@ function guardarFilaPrecio(btn) {
   const precio = parseFloat(tr.querySelector('.input-precio-val').value) || 0;
   const precio_compra = parseFloat(tr.querySelector('.input-precio-compra').value) || 0;
   const unidad_compra = tr.querySelector('.input-uni-compra').value.trim();
-  const equiv_ml = parseFloat(tr.querySelector('.input-eq-ml').value) || 0;
-  const equiv_gr = parseFloat(tr.querySelector('.input-eq-gr').value) || 0;
-  api('PUT', '/api/barra/precios/' + id, { precio, precio_compra, unidad_compra, equiv_ml, equiv_gr }).then(() => {
+  api('PUT', '/api/barra/precios/' + id, { precio, precio_compra, unidad_compra }).then(() => {
     showToast('✓ Guardado');
   }).catch(() => alert('Error al guardar'));
 }
@@ -2047,9 +2033,7 @@ function guardarPreciosBase() {
     const precio = parseFloat(tr.querySelector('.input-precio-val').value) || 0;
     const precio_compra = parseFloat(tr.querySelector('.input-precio-compra').value) || 0;
     const unidad_compra = tr.querySelector('.input-uni-compra').value.trim();
-    const equiv_ml = parseFloat(tr.querySelector('.input-eq-ml').value) || 0;
-    const equiv_gr = parseFloat(tr.querySelector('.input-eq-gr').value) || 0;
-    promises.push(api('PUT', '/api/barra/precios/' + id, { precio, precio_compra, unidad_compra, equiv_ml, equiv_gr }));
+    promises.push(api('PUT', '/api/barra/precios/' + id, { precio, precio_compra, unidad_compra }));
   });
   Promise.all(promises).then(() => {
     btn.disabled = false; btn.textContent = '💾 GUARDAR';
