@@ -2050,13 +2050,6 @@ function eliminarPrecio(id) {
   api('DELETE', '/api/barra/precios/' + id).then(() => cargarPrecios());
 }
 
-function parsearEquiv() {
-  api('POST', '/api/migrate/parse-equiv', {}).then(data => {
-    showToast('Actualizados: ' + (data.actualizados || 0) + ' items');
-    cargarPrecios();
-  }).catch(() => alert('Error al parsear equivalencias'));
-}
-
 function actualizarPrecio(id, el) {
   const precio = parseFloat(el.value) || 0;
   api('PUT', '/api/barra/precios/' + id, { precio }).then(() => showToast('✓ Guardado')).catch(() => alert('Error al actualizar'));
