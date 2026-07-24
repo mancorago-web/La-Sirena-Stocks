@@ -954,7 +954,7 @@ function normalizeUnit(u) {
 }
 
 function getUnitToMl(unit) {
-  const map = { 'ml': 1, 'lt': 1000, 'onzas': 29.5735 };
+  const map = { 'ml': 1, 'lt': 1000, 'onzas': 29.5735, 'gotas': 0.05 };
   return map[normalizeUnit(unit)] || 0;
 }
 
