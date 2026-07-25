@@ -959,7 +959,7 @@ function getUnitToMl(unit) {
 }
 
 function getUnitToGr(unit) {
-  const map = { 'gramos': 1, 'kg': 1000 };
+  const map = { 'gramos': 1, 'kg': 1000, 'onzas': 28.3495 };
   return map[normalizeUnit(unit)] || 0;
 }
 
