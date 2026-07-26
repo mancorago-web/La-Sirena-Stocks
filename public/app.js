@@ -75,6 +75,7 @@ firebase.auth().onAuthStateChanged(user => {
     await fetch('/api/migrate/normalize-units', opts).catch(() => {});
     await fetch('/api/migrate/import-recetas-base', opts).catch(() => {});
     await fetch('/api/migrate/fix-receta-ingredientes', opts).catch(e => console.error('fix-receta-ingredientes error:', e));
+    await fetch('/api/migrate/rename-mantgras', opts).catch(e => console.error('rename-mantgras error:', e));
   });
   // Register service worker for PWA (auto-update on new deploy)
   if ('serviceWorker' in navigator) {
@@ -148,12 +149,12 @@ const vinosOrder = [
   'ESCORIHUELA GASCON MALBEC 2023',
   'PRADOREY ORIGEN 2023',
   'MALJUNTA RESERVA CABERNET FRANC 2024',
-  'MANTGRAS DE VINE RESERVE CARBERNET SAUVIGNON 2023',
+  'MONTGRASS DE VINE RESERVE CARBERNET SAUVIGNON 2023',
   'CRODERO DI MONTEZEMOLO 2023',
   'MALAJUNTA RESERVA MALBEC 2024',
   'MALAJUNTA RESERVA MALBEC 2023',
   'MALAJUNTA RESERVA CABERNET FRANC 2022',
-  'MANTGRAS QUATRO TINTO 2021',
+  'MONTGRASS QUATRO TINTO 2021',
   'CHAMPAGNE VOLLEREAUX RESERVA BRUT',
 ];
 
@@ -283,7 +284,7 @@ function cargarAlmacenes(fecha) {
       { label: 'GASEOSAS', test: i => /COCA|INKA/i.test(i.nombre) },
       { label: 'KOMBUCHAS', test: i => /^KOMBUCHA/i.test(i.nombre) },
       { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
-      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MANTGRAS/i.test(i.nombre) },
+      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS/i.test(i.nombre) },
     ];
     data = data.map(a => {
       const categorias = categoriasPorAlmacen[a.id] || defaultCategorias;
@@ -401,7 +402,7 @@ function cargarSalidas(fecha) {
       { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
       { label: 'GASEOSAS', test: i => /COCA|INKA/i.test(i.nombre) },
       { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
-      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MANTGRAS/i.test(i.nombre) },
+      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS/i.test(i.nombre) },
     ];
     data = data.map(a => {
       const categorias = defaultCategorias;
@@ -624,7 +625,7 @@ function cargarVentas(fecha) {
       { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
       { label: 'GASEOSAS', test: i => /COCA|INKA/i.test(i.nombre) },
       { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
-      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MANTGRAS/i.test(i.nombre) },
+      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS/i.test(i.nombre) },
     ];
     data = data.map(a => {
       const categorias = defaultCategorias;
@@ -760,7 +761,7 @@ function cargarBajas(fecha) {
       { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
       { label: 'GASEOSAS', test: i => /COCA|INKA/i.test(i.nombre) },
       { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
-      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MANTGRAS/i.test(i.nombre) },
+      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS/i.test(i.nombre) },
     ];
     data = data.map(a => {
       const categorias = defaultCategorias;
@@ -939,7 +940,7 @@ function cargarIngresos(fecha) {
       { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
       { label: 'GASEOSAS', test: i => /COCA|INKA/i.test(i.nombre) },
       { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
-      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MANTGRAS/i.test(i.nombre) },
+      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS/i.test(i.nombre) },
     ];
     data = data.map(a => {
       const categorias = defaultCategorias;
@@ -1244,7 +1245,7 @@ function cargarStocks() {
       { label: 'GASEOSAS', test: i => /COCA|INKA/i.test(i.nombre) },
       { label: 'KOMBUCHAS', test: i => /^KOMBUCHA/i.test(i.nombre) },
       { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
-      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MANTGRAS/i.test(i.nombre) },
+      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS/i.test(i.nombre) },
     ];
     data = data.map(a => {
       const categorias = categoriasPorAlmacen[a.id] || defaultCategorias;

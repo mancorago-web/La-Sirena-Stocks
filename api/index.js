@@ -1434,6 +1434,37 @@ app.post('/api/migrate/parse-equiv', authMiddleware, async (req, res) => {
   }
 });
 
+// --- Rename MANTGRAS → MONTGRASS in inventario and inventario_diario ---
+app.post('/api/migrate/rename-mantgras', authMiddleware, async (req, res) => {
+  try {
+    const invSnap = await col('inventario').get();
+    const batch = db.batch();
+    let count = 0;
+    invSnap.docs.forEach(d => {
+      const name = d.data().nombre || '';
+      if (name.startsWith('MANTGRAS')) {
+        batch.update(d.ref, { nombre: name.replace(/^MANTGRAS/, 'MONTGRASS'), updated_at: new Date().toISOString() });
+        count++;
+      }
+    });
+    const diaSnap = await col('inventario_diario').get();
+    const diaBatch = db.batch();
+    let diaCount = 0;
+    diaSnap.docs.forEach(d => {
+      const name = d.data().nombre || '';
+      if (name.startsWith('MANTGRAS')) {
+        diaBatch.update(d.ref, { nombre: name.replace(/^MANTGRAS/, 'MONTGRASS'), updated_at: new Date().toISOString() });
+        diaCount++;
+      }
+    });
+    if (count > 0) await batch.commit();
+    if (diaCount > 0) await diaBatch.commit();
+    res.json({ ok: true, inventario: count, diario: diaCount });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Reporte de Vinos (no auth — public) ---
 app.get('/api/reportes/vinos', async (req, res) => {
   try {
@@ -1448,7 +1479,7 @@ app.get('/api/reportes/vinos', async (req, res) => {
     const almacenes = {};
     almSnap.docs.forEach(d => { almacenes[Number(d.id)] = d.data().nombre; });
 
-    const vinosRegex = /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONAY|ALBARIÑO|PROTOS|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MANTGRAS|GOUTTE.*ARGENT|PINOT.*NOIR|PINOT/i;
+    const vinosRegex = /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONAY|ALBARIÑO|PROTOS|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS|GOUTTE.*ARGENT|PINOT.*NOIR|PINOT/i;
 
     // Build dia map: key = "item_id_almacen_id"
     const diaMap = {};
