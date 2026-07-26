@@ -1465,6 +1465,37 @@ app.post('/api/migrate/rename-mantgras', authMiddleware, async (req, res) => {
   }
 });
 
+// --- Fix specific item name in STOCK DECORATIVO ENTRADA ---
+app.post('/api/migrate/fix-montgrass-name', authMiddleware, async (req, res) => {
+  try {
+    const invSnap = await col('inventario').get();
+    const batch = db.batch();
+    let count = 0;
+    invSnap.docs.forEach(d => {
+      const name = d.data().nombre || '';
+      if (name === 'MONTGRASS DE VINE RESERVA CABERNET' || name === 'MANTGRAS DE VINE RESERVA CABERNET') {
+        batch.update(d.ref, { nombre: 'MONTGRASS DE VINE RESERVE CARBERNET SAUVIGNON 2023', updated_at: new Date().toISOString() });
+        count++;
+      }
+    });
+    const diaSnap = await col('inventario_diario').get();
+    const diaBatch = db.batch();
+    let diaCount = 0;
+    diaSnap.docs.forEach(d => {
+      const name = d.data().nombre || '';
+      if (name === 'MONTGRASS DE VINE RESERVA CABERNET' || name === 'MANTGRAS DE VINE RESERVA CABERNET') {
+        diaBatch.update(d.ref, { nombre: 'MONTGRASS DE VINE RESERVE CARBERNET SAUVIGNON 2023', updated_at: new Date().toISOString() });
+        diaCount++;
+      }
+    });
+    if (count > 0) await batch.commit();
+    if (diaCount > 0) await diaBatch.commit();
+    res.json({ ok: true, inventario: count, diario: diaCount });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Reporte de Vinos (no auth — public) ---
 app.get('/api/reportes/vinos', async (req, res) => {
   try {
