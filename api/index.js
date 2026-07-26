@@ -1448,8 +1448,7 @@ app.get('/api/reportes/vinos', async (req, res) => {
     const almacenes = {};
     almSnap.docs.forEach(d => { almacenes[Number(d.id)] = d.data().nombre; });
 
-    // Combined VINOS regex (same as frontend defaultCategorias + warehouse 1 specifics)
-    const vinosRegex = /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONAY|ALBARIÑO|PROTOS|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MANTGRAS/i;
+    const vinosRegex = /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONAY|ALBARIÑO|PROTOS|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MANTGRAS|GOUTTE.*ARGENT|PINOT.*NOIR|PINOT/i;
 
     // Build dia map: key = "item_id_almacen_id"
     const diaMap = {};
@@ -1466,7 +1465,7 @@ app.get('/api/reportes/vinos', async (req, res) => {
       const key = inv.nombre.trim();
       if (!vinos[key]) vinos[key] = { nombre: inv.nombre, total: 0, almacenes: {} };
       const dia = diaMap[inv.item_id + '_' + inv.almacen_id] || {};
-      const cantidad = dia.stock_apertura ?? inv.stock_apertura ?? 0;
+      const cantidad = dia.stock_cierre ?? dia.stock_apertura ?? inv.stock_apertura ?? 0;
       vinos[key].total += cantidad;
       const alName = almacenes[inv.almacen_id] || ('Almacén ' + inv.almacen_id);
       vinos[key].almacenes[alName] = (vinos[key].almacenes[alName] || 0) + cantidad;
