@@ -188,7 +188,10 @@ function itemRow(i, a) {
     <td><input type="number" class="input-num input-falta" value="${i.falta_almacen || 0}" step="0.01" oninput="calcCierre(this)"></td>
     <td><input type="hidden" class="input-baja" value="${i.stock_baja || 0}">
     <td><input type="number" class="input-num input-cierre" value="${i.stock_cierre || 0}" step="0.01" readonly></td>
-    <td></td>
+    <td style="white-space:nowrap">
+      <button onclick="editarItemAlmacen(${i.id}, ${a.id})" style="background:#0f3460;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">EDITAR</button>
+      <button onclick="eliminarItemAlmacen(${i.id}, ${a.id})" style="background:#c62828;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">✕</button>
+    </td>
   </tr>`;
 }
 
@@ -379,6 +382,33 @@ function agregarItemAlmacen(almacenId, almacenNombre) {
   showModal('item-almacen', { almacenId, almacenNombre });
 }
 
+function editarItemAlmacen(itemId, almacenId) {
+  const tr = document.querySelector(`tr[data-item-id="${itemId}"][data-almacen-id="${almacenId}"]`);
+  if (!tr) return;
+  const nombre = tr.querySelector('td:first-child').textContent;
+  // Try to find categoria from section header
+  let categoria = '';
+  const section = tr.closest('.accordion-item');
+  if (section) {
+    const header = section.querySelector('.accordion-title');
+    const almacenNombre = header ? header.textContent.trim() : '';
+    // Look up the section header row before this item
+    let prev = tr.previousElementSibling;
+    while (prev) {
+      if (prev.classList.contains('section-header')) {
+        const label = prev.querySelector('td')?.textContent?.replace(/[—\s]/g, '') || '';
+        const cats = ['VINOS','AGUAS','GASEOSAS','CERVEZAS','KOMBUCHAS','LECHES'];
+        const found = cats.find(c => label.toUpperCase().includes(c));
+        if (found) { categoria = found; break; }
+      }
+      prev = prev.previousElementSibling;
+    }
+  }
+  const sectionItem = tr.closest('.accordion-item');
+  const almacenNombre = sectionItem ? sectionItem.querySelector('.accordion-title')?.textContent?.trim() || '' : '';
+  showModal('editar-item-almacen', { itemId, almacenId, nombre, categoria, almacenNombre });
+}
+
 async function guardarItemAlmacen() {
   const nombre = document.getElementById('f-nombre-item').value.trim();
   const almacen_id = parseInt(document.getElementById('f-almacen_id').value);
@@ -391,6 +421,27 @@ async function guardarItemAlmacen() {
   _invCache = { fecha: null, data: null, pending: null };
   cargarAlmacenes();
   cargarReportes();
+}
+
+function guardarEdicionItem(itemId, almacenId) {
+  const nombre = document.getElementById('f-editar-nombre').value.trim();
+  const categoria = document.getElementById('f-editar-categoria').value;
+  if (!nombre) { alert('Ingresa el nombre del item'); return; }
+  api('PUT', '/api/inventario/' + itemId + '/' + almacenId, { nombre, categoria }).then(() => {
+    cerrarModal();
+    _invCache = { fecha: null, data: null, pending: null };
+    cargarAlmacenes();
+    cargarReportes();
+  }).catch(() => alert('Error al guardar'));
+}
+
+function eliminarItemAlmacen(itemId, almacenId) {
+  if (!confirm('¿Eliminar este item permanentemente?')) return;
+  api('DELETE', '/api/inventario/' + itemId + '/' + almacenId).then(() => {
+    _invCache = { fecha: null, data: null, pending: null };
+    cargarAlmacenes();
+    cargarReportes();
+  }).catch(() => alert('Error al eliminar'));
 }
 
 function cargarSalidas(fecha) {
@@ -1148,6 +1199,28 @@ function showModal(tipo, data) {
       </label>
       <input type="hidden" id="f-almacen_id" value="${data.almacenId}">
       <button onclick="guardarItemAlmacen()" style="margin-top:1rem;padding:0.5rem 1.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+    `;
+  } else if (tipo === 'editar-item-almacen') {
+    body.innerHTML = `
+      <h3>Editar Item</h3>
+      <p style="color:#666;font-size:0.9rem;">Almacén: ${data.almacenNombre}</p>
+      <label style="display:block;margin-top:1rem;">
+        Nombre del Item
+        <input type="text" id="f-editar-nombre" value="${data.nombre}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Título / Categoría
+        <select id="f-editar-categoria" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+          <option value="">Sin categoría</option>
+          ${['VINOS','AGUAS','GASEOSAS','CERVEZAS','KOMBUCHAS','LECHES'].map(c =>
+            `<option value="${c}" ${data.categoria === c ? 'selected' : ''}>${c}</option>`
+          ).join('')}
+        </select>
+      </label>
+      <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+        <button onclick="guardarEdicionItem(${data.itemId}, ${data.almacenId})" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+        <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
+      </div>
     `;
   }
 }

@@ -1590,4 +1590,46 @@ app.post('/api/inventario/agregar-item', authMiddleware, async (req, res) => {
   }
 });
 
+// --- Edit item in almacén ---
+app.put('/api/inventario/:item_id/:almacen_id', authMiddleware, async (req, res) => {
+  try {
+    const { item_id, almacen_id } = req.params;
+    const { nombre, categoria } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+    const docIdStr = docId('inventario', Number(item_id), Number(almacen_id));
+    await col('inventario').doc(docIdStr).update({
+      nombre, categoria: categoria || '', updated_at: new Date().toISOString()
+    });
+    // Also update inventario_diario for all dates
+    const diaSnap = await col('inventario_diario')
+      .where('item_id', '==', Number(item_id))
+      .where('almacen_id', '==', Number(almacen_id)).get();
+    const batch = db.batch();
+    diaSnap.docs.forEach(d => batch.update(d.ref, { nombre, updated_at: new Date().toISOString() }));
+    if (diaSnap.docs.length > 0) await batch.commit();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Delete item from almacén ---
+app.delete('/api/inventario/:item_id/:almacen_id', authMiddleware, async (req, res) => {
+  try {
+    const { item_id, almacen_id } = req.params;
+    const docIdStr = docId('inventario', Number(item_id), Number(almacen_id));
+    await col('inventario').doc(docIdStr).delete();
+    // Delete all inventario_diario for this item
+    const diaSnap = await col('inventario_diario')
+      .where('item_id', '==', Number(item_id))
+      .where('almacen_id', '==', Number(almacen_id)).get();
+    const batch = db.batch();
+    diaSnap.docs.forEach(d => batch.delete(d.ref));
+    if (diaSnap.docs.length > 0) await batch.commit();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = app;
