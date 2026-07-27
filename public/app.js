@@ -546,25 +546,8 @@ function guardarSalidas() {
     const almacenId = parseInt(item.dataset.almacenId);
     item.querySelectorAll('tr[data-item-id]').forEach(tr => {
       const itemId = parseInt(tr.dataset.itemId);
-      const celdas = tr.querySelectorAll('td');
-      const apertura = parseFloat(celdas[1]?.textContent) || 0;
       const salida = parseFloat(tr.querySelector('.input-salida').value) || 0;
-      const ventas = parseFloat(tr.querySelector('.hidden-ventas')?.value) || 0;
-      const ingreso = parseFloat(tr.querySelector('.hidden-ingreso')?.value) || 0;
-      const falta = parseFloat(tr.querySelector('.hidden-falta')?.value) || 0;
-      const baja = parseFloat(tr.querySelector('.hidden-baja')?.value) || 0;
-      const cierre = apertura + ingreso - salida - ventas - falta - baja;
-      registros.push({
-        item_id: itemId,
-        almacen_id: almacenId,
-        stock_apertura: apertura,
-        stock_ingreso: ingreso,
-        salida_almacen: salida,
-        total_ventas: ventas,
-        falta_almacen: falta,
-        stock_baja: baja,
-        stock_cierre: cierre,
-      });
+      registros.push({ item_id: itemId, almacen_id: almacenId, salida_almacen: salida });
     });
   });
   const btn = document.querySelector('#tab-salidas .btn-guardar-dia');
@@ -772,25 +755,8 @@ function guardarVentas() {
     const almacenId = parseInt(item.dataset.almacenId);
     item.querySelectorAll('tr[data-item-id]').forEach(tr => {
       const itemId = parseInt(tr.dataset.itemId);
-      const celdas = tr.querySelectorAll('td');
-      const apertura = parseFloat(celdas[1]?.textContent) || 0;
-      const salida = parseFloat(tr.querySelector('.hidden-salida')?.value) || 0;
       const ventas = parseFloat(tr.querySelector('.input-ventas').value) || 0;
-      const ingreso = parseFloat(tr.querySelector('.hidden-ingreso')?.value) || 0;
-      const falta = parseFloat(tr.querySelector('.hidden-falta')?.value) || 0;
-      const baja = parseFloat(tr.querySelector('.hidden-baja')?.value) || 0;
-      const cierre = apertura + ingreso - salida - ventas - falta - baja;
-      registros.push({
-        item_id: itemId,
-        almacen_id: almacenId,
-        stock_apertura: apertura,
-        stock_ingreso: ingreso,
-        salida_almacen: salida,
-        total_ventas: ventas,
-        falta_almacen: falta,
-        stock_baja: baja,
-        stock_cierre: cierre,
-      });
+      registros.push({ item_id: itemId, almacen_id: almacenId, total_ventas: ventas });
     });
   });
   const btn = document.querySelector('#tab-ventas .btn-guardar-dia');
@@ -912,27 +878,9 @@ function guardarBajas() {
     const almacenId = parseInt(item.dataset.almacenId);
     item.querySelectorAll('tr[data-item-id]').forEach(tr => {
       const itemId = parseInt(tr.dataset.itemId);
-      const celdas = tr.querySelectorAll('td');
-      const apertura = parseFloat(celdas[1]?.textContent) || 0;
       const baja = parseFloat(tr.querySelector('.input-baja').value) || 0;
-      const ingreso = parseFloat(tr.querySelector('.hidden-ingreso')?.value) || 0;
-      const salida = parseFloat(tr.querySelector('.hidden-salida')?.value) || 0;
-      const ventas = parseFloat(tr.querySelector('.hidden-ventas')?.value) || 0;
-      const falta = parseFloat(tr.querySelector('.hidden-falta')?.value) || 0;
       const nota_baja = tr.querySelector('.hidden-nota-baja')?.value || '';
-      const cierre = apertura + ingreso - salida - ventas - falta - baja;
-      registros.push({
-        item_id: itemId,
-        almacen_id: almacenId,
-        stock_apertura: apertura,
-        stock_ingreso: ingreso,
-        salida_almacen: salida,
-        total_ventas: ventas,
-        falta_almacen: falta,
-        stock_baja: baja,
-        nota_baja: nota_baja,
-        stock_cierre: cierre,
-      });
+      registros.push({ item_id: itemId, almacen_id: almacenId, stock_baja: baja, nota_baja });
     });
   });
   const btn = document.querySelector('#tab-bajas .btn-guardar-dia');
@@ -1087,25 +1035,8 @@ function guardarIngresos() {
     const almacenId = parseInt(item.dataset.almacenId);
     item.querySelectorAll('tr[data-item-id]').forEach(tr => {
       const itemId = parseInt(tr.dataset.itemId);
-      const celdas = tr.querySelectorAll('td');
-      const apertura = parseFloat(celdas[1]?.textContent) || 0;
       const ingreso = parseFloat(tr.querySelector('.input-ingreso').value) || 0;
-      const salida = parseFloat(tr.querySelector('.hidden-salida')?.value) || 0;
-      const ventas = parseFloat(tr.querySelector('.hidden-ventas')?.value) || 0;
-      const falta = parseFloat(tr.querySelector('.hidden-falta')?.value) || 0;
-      const baja = parseFloat(tr.querySelector('.hidden-baja')?.value) || 0;
-      const cierre = apertura + ingreso - salida - ventas - falta - baja;
-      registros.push({
-        item_id: itemId,
-        almacen_id: almacenId,
-        stock_apertura: apertura,
-        stock_ingreso: ingreso,
-        salida_almacen: salida,
-        total_ventas: ventas,
-        falta_almacen: falta,
-        stock_baja: baja,
-        stock_cierre: cierre,
-      });
+      registros.push({ item_id: itemId, almacen_id: almacenId, stock_ingreso: ingreso });
     });
   });
   const btn = document.querySelector('#tab-ingresos .btn-guardar-dia');

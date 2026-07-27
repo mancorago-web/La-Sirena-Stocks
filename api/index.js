@@ -340,44 +340,54 @@ app.post('/api/almacenes/guardar-dia', async (req, res) => {
   const { fecha, registros } = req.body;
   if (!fecha || !registros) return res.status(400).json({ error: 'fecha y registros requeridos' });
   const savedBy = req.body.saved_by || (req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown');
+
+  // Read existing docs for all records to merge partial updates
+  const existentes = {};
+  await Promise.all(registros.map(async r => {
+    const id = docId('invdiario', fecha, r.almacen_id, r.item_id);
+    const snap = await col('inventario_diario').doc(id).get();
+    existentes[id] = snap.exists ? snap.data() : {};
+  }));
+
   const batch = db.batch();
   for (const r of registros) {
     const id = docId('invdiario', fecha, r.almacen_id, r.item_id);
-    const apertura = parseFloat(r.stock_apertura) || 0;
-    const ingreso = parseFloat(r.stock_ingreso) || 0;
-    const salida = parseFloat(r.salida_almacen) || 0;
-    const ventas = parseFloat(r.total_ventas) || 0;
-    const falta = parseFloat(r.falta_almacen) || 0;
-    const baja = parseFloat(r.stock_baja) || 0;
-    const notaBaja = r.nota_baja || '';
+    const prev = existentes[id] || {};
+
+    // Merge incoming with existing — only override fields that were actually sent
+    const apertura = r.stock_apertura !== undefined ? (parseFloat(r.stock_apertura) || 0) : (prev.stock_apertura || 0);
+    const ingreso = r.stock_ingreso !== undefined ? (parseFloat(r.stock_ingreso) || 0) : (prev.stock_ingreso || 0);
+    const salida = r.salida_almacen !== undefined ? (parseFloat(r.salida_almacen) || 0) : (prev.salida_almacen || 0);
+    const ventas = r.total_ventas !== undefined ? (parseFloat(r.total_ventas) || 0) : (prev.total_ventas || 0);
+    const falta = r.falta_almacen !== undefined ? (parseFloat(r.falta_almacen) || 0) : (prev.falta_almacen || 0);
+    const baja = r.stock_baja !== undefined ? (parseFloat(r.stock_baja) || 0) : (prev.stock_baja || 0);
+    const notaBaja = r.nota_baja !== undefined ? (r.nota_baja || '') : (prev.nota_baja || '');
     const cierre = apertura + ingreso - salida - ventas - falta - baja;
-    const ref = col('inventario_diario').doc(id);
-    batch.set(ref, {
-      fecha,
-      item_id: Number(r.item_id),
-      almacen_id: Number(r.almacen_id),
-      stock_apertura: apertura,
-      stock_ingreso: ingreso,
-      salida_almacen: salida,
-      total_ventas: ventas,
-      falta_almacen: falta,
-      stock_baja: baja,
-      nota_baja: notaBaja,
-      stock_cierre: Math.round(cierre * 100) / 100,
-      updated_at: new Date().toISOString(),
-      saved_by: savedBy,
-    }, { merge: true });
-    // Update permanent stock_apertura in inventario
-    const invId = docId('inventario', r.item_id, r.almacen_id);
-    const invRef = col('inventario').doc(invId);
-    batch.set(invRef, {
-      stock_apertura: apertura,
-    }, { merge: true });
+
+    const data = { fecha, item_id: Number(r.item_id), almacen_id: Number(r.almacen_id) };
+    if (r.stock_apertura !== undefined) data.stock_apertura = apertura;
+    if (r.stock_ingreso !== undefined) data.stock_ingreso = ingreso;
+    if (r.salida_almacen !== undefined) data.salida_almacen = salida;
+    if (r.total_ventas !== undefined) data.total_ventas = ventas;
+    if (r.falta_almacen !== undefined) data.falta_almacen = falta;
+    if (r.stock_baja !== undefined) data.stock_baja = baja;
+    if (r.nota_baja !== undefined) data.nota_baja = notaBaja;
+    data.stock_cierre = Math.round(cierre * 100) / 100;
+    data.updated_at = new Date().toISOString();
+    data.saved_by = savedBy;
+    batch.set(col('inventario_diario').doc(id), data, { merge: true });
+
+    // Update permanent stock_apertura in inventario (only if provided)
+    if (r.stock_apertura !== undefined) {
+      const invId = docId('inventario', r.item_id, r.almacen_id);
+      batch.set(col('inventario').doc(invId), { stock_apertura: apertura }, { merge: true });
+    }
   }
   await batch.commit();
   delete _cache['inv_diario_' + fecha];
 
   // Propagation: copy cierre to next working day's apertura (parallel reads)
+  const propErrors = [];
   try {
     const nextDay = getNextWorkingDay(fecha);
     const oldSnap = await col('inventario_diario').where('fecha', '==', fecha).get();
@@ -404,24 +414,14 @@ app.post('/api/almacenes/guardar-dia', async (req, res) => {
           stock_cierre: Math.round(cierre * 100) / 100,
           updated_at: new Date().toISOString(),
         };
-        // preserve nota_baja if it exists
-        if (existing.nota_baja) {
-          updateData.nota_baja = existing.nota_baja;
-        }
+        if (existing.nota_baja) updateData.nota_baja = existing.nota_baja;
         nextBatch.update(nextRef, updateData);
         hasChanges = true;
       } else {
         nextBatch.set(nextRef, {
-          fecha: nextDay,
-          item_id: d.item_id,
-          almacen_id: d.almacen_id,
-          stock_apertura: apertura,
-          stock_ingreso: 0,
-          salida_almacen: 0,
-          total_ventas: 0,
-          falta_almacen: 0,
-          stock_baja: 0,
-          stock_cierre: apertura,
+          fecha: nextDay, item_id: d.item_id, almacen_id: d.almacen_id,
+          stock_apertura: apertura, stock_ingreso: 0, salida_almacen: 0,
+          total_ventas: 0, falta_almacen: 0, stock_baja: 0, stock_cierre: apertura,
           updated_at: new Date().toISOString(),
         });
         hasChanges = true;
@@ -429,10 +429,11 @@ app.post('/api/almacenes/guardar-dia', async (req, res) => {
     }
     if (hasChanges) await nextBatch.commit();
   } catch (e) {
+    propErrors.push(e.message);
     console.error('Propagation error:', e.message);
   }
 
-  res.json({ ok: true });
+  res.json({ ok: true, propagated: propErrors.length === 0 });
 });
 
 function getNextWorkingDay(fecha) {
