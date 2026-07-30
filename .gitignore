@@ -6,3 +6,5 @@ sirena.db
 service-account.json
 _*.js
 check_*_temp.js
+
+.vercel

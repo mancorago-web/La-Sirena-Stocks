@@ -1082,9 +1082,11 @@ function verDetallesIngresos() {
 }
 
 function cargarReportes() {
-  const picker = document.getElementById('reporte-fecha-dif');
-  if (picker) {
-    if (!picker.value) picker.value = todayStr();
+  const ini = document.getElementById('reporte-fecha-ini');
+  const fin = document.getElementById('reporte-fecha-fin');
+  if (ini && fin) {
+    if (!ini.value) ini.value = todayStr();
+    if (!fin.value) fin.value = todayStr();
     cargarReporteDiferencias();
   }
 }
@@ -1396,18 +1398,21 @@ function renderReporteTabla(items, titulo) {
 }
 
 function cargarReporteDiferencias() {
-  const fecha = document.getElementById('reporte-fecha-dif')?.value;
-  if (!fecha) return;
-  api('GET', '/api/reportes/diferencias?fecha=' + fecha).then(data => {
+  const ini = document.getElementById('reporte-fecha-ini')?.value;
+  const fin = document.getElementById('reporte-fecha-fin')?.value;
+  if (!ini || !fin) return;
+  const url = '/api/reportes/diferencias?fecha_inicio=' + ini + '&fecha_fin=' + fin;
+  api('GET', url).then(data => {
     if (data.length === 0) {
-      document.getElementById('reporte-diferencias').innerHTML = '<p>Sin diferencias en esta fecha.</p>';
+      document.getElementById('reporte-diferencias').innerHTML = '<p>Sin diferencias en este rango.</p>';
       return;
     }
     const conFalta = data.filter(r => (r.falta_almacen || 0) > 0);
     const sinFalta = data.filter(r => !((r.falta_almacen || 0) > 0));
-    let html = renderReporteTabla(conFalta, 'PRODUCTOS CON FALTA');
+    let html = '<p style="margin-bottom:0.5rem;color:#666;">Rango: <strong>' + ini + '</strong> → <strong>' + fin + '</strong></p>';
+    html += renderReporteTabla(conFalta, 'PRODUCTOS CON FALTA');
     html += renderReporteTabla(sinFalta, 'PRODUCTOS SIN FALTA');
-    if (!html) html = '<p>Sin diferencias en esta fecha.</p>';
+    if (!html) html = '<p>Sin diferencias en este rango.</p>';
     document.getElementById('reporte-diferencias').innerHTML = html;
   });
 }
@@ -1505,24 +1510,26 @@ function exportarAlmacen(almacenId) {
 }
 
 function exportarDiferencias() {
-  const fecha = document.getElementById('reporte-fecha-dif')?.value;
-  if (!fecha) return;
-  api('GET', '/api/reportes/diferencias?fecha=' + fecha).then(data => {
-    const wsData = [['Almacén', 'Item', 'Apertura', 'Ingreso', 'Salidas', 'Ventas', 'Falta', 'Cierre', 'Diferencia', 'Estado']];
+  const ini = document.getElementById('reporte-fecha-ini')?.value;
+  const fin = document.getElementById('reporte-fecha-fin')?.value;
+  if (!ini || !fin) return;
+  const url = '/api/reportes/diferencias?fecha_inicio=' + ini + '&fecha_fin=' + fin;
+  api('GET', url).then(data => {
+    const wsData = [['Almacén', 'Item', 'Apertura', 'Ingreso', 'Salidas', 'Ventas', 'Falta', 'Baja', 'Cierre', 'Diferencia', 'Estado']];
     data.forEach(r => {
       const f = r.falta_almacen || 0;
       const estado = f > 0 ? 'FALTA' : 'OK';
-      wsData.push([r.almacen_nombre, r.nombre, r.stock_apertura, r.stock_ingreso || 0, r.salida_almacen || 0, r.total_ventas || 0, f, r.stock_cierre, r.diferencia, estado]);
+      wsData.push([r.almacen_nombre, r.nombre, r.stock_apertura, r.stock_ingreso || 0, r.salida_almacen || 0, r.total_ventas || 0, f, r.stock_baja || 0, r.stock_cierre, r.diferencia, estado]);
     });
     const libro = XLSX.utils.book_new();
     const hoja = XLSX.utils.aoa_to_sheet(wsData);
     XLSX.utils.book_append_sheet(libro, hoja, 'Diferencias');
-    XLSX.writeFile(libro, `Diferencias_${fecha}.xlsx`);
+    XLSX.writeFile(libro, `Diferencias_${ini}_${fin}.xlsx`);
   });
 }
 
 function exportarVinos() {
-  const fecha = document.getElementById('reporte-fecha-dif')?.value || todayStr();
+  const fecha = document.getElementById('reporte-fecha-fin')?.value || todayStr();
   api('GET', '/api/reportes/vinos?fecha=' + fecha).then(data => {
     const items = data.items.filter(i => i.total > 0);
     const wsData = [['Vino', 'Cantidad Total']];
@@ -1592,7 +1599,8 @@ initPicker('fecha-ingresos', cargarIngresos);
 });
 initPicker('fecha-stocks', function() { cargarStocks(); });
 // reportes, precios, barra loaded lazily on first tab click
-initPicker('reporte-fecha-dif');
+initPicker('reporte-fecha-ini');
+initPicker('reporte-fecha-fin');
 window.addEventListener('click', e => { if (e.target === document.getElementById('modal')) cerrarModal(); });
 
 // --- BARRA: Recetas ---

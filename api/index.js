@@ -386,48 +386,53 @@ app.post('/api/almacenes/guardar-dia', async (req, res) => {
   await batch.commit();
   delete _cache['inv_diario_' + fecha];
 
-  // Propagation: copy cierre to next working day's apertura (parallel reads)
+  // Propagation: chain forward through ALL subsequent days
   const propErrors = [];
   try {
-    const nextDay = getNextWorkingDay(fecha);
-    const oldSnap = await col('inventario_diario').where('fecha', '==', fecha).get();
-    const nextDocs = await Promise.all(oldSnap.docs.map(doc => {
-      const d = doc.data();
-      const nextId = docId('invdiario', nextDay, d.almacen_id, d.item_id);
-      return col('inventario_diario').doc(nextId).get().then(snap => ({ d, exists: snap.exists, snap }));
-    }));
-    const nextBatch = db.batch();
-    let hasChanges = false;
-    for (const { d, exists, snap } of nextDocs) {
-      const nextRef = col('inventario_diario').doc(docId('invdiario', nextDay, d.almacen_id, d.item_id));
-      const apertura = d.stock_cierre ?? 0;
-      if (exists) {
-        const existing = snap.data();
-        const ingreso = existing.stock_ingreso ?? 0;
-        const salida = existing.salida_almacen ?? 0;
-        const ventas = existing.total_ventas ?? 0;
-        const falta = existing.falta_almacen ?? 0;
-        const baja = existing.stock_baja ?? 0;
-        const cierre = apertura + ingreso - salida - ventas - falta - baja;
-        const updateData = {
-          stock_apertura: apertura,
-          stock_cierre: Math.round(cierre * 100) / 100,
-          updated_at: new Date().toISOString(),
-        };
-        if (existing.nota_baja) updateData.nota_baja = existing.nota_baja;
-        nextBatch.update(nextRef, updateData);
-        hasChanges = true;
-      } else {
-        nextBatch.set(nextRef, {
-          fecha: nextDay, item_id: d.item_id, almacen_id: d.almacen_id,
-          stock_apertura: apertura, stock_ingreso: 0, salida_almacen: 0,
-          total_ventas: 0, falta_almacen: 0, stock_baja: 0, stock_cierre: apertura,
-          updated_at: new Date().toISOString(),
-        });
-        hasChanges = true;
+    let srcFecha = fecha;
+    let maxChains = 30;
+    while (maxChains-- > 0) {
+      const targetDay = getNextWorkingDay(srcFecha);
+      // Read source docs and target docs
+      const [srcSnap, tgtSnap] = await Promise.all([
+        col('inventario_diario').where('fecha', '==', srcFecha).get(),
+        col('inventario_diario').where('fecha', '==', targetDay).get(),
+      ]);
+      if (srcSnap.empty) break;
+      const tgtHasData = tgtSnap.size > 0;
+      const tgtByKey = {};
+      tgtSnap.docs.forEach(d => { const dd = d.data(); tgtByKey[dd.almacen_id + '_' + dd.item_id] = dd; });
+      const batch = db.batch();
+      for (const doc of srcSnap.docs) {
+        const d = doc.data();
+        const key = d.almacen_id + '_' + d.item_id;
+        const existing = tgtByKey[key];
+        const apertura = d.stock_cierre ?? 0;
+        const nextId = docId('invdiario', targetDay, d.almacen_id, d.item_id);
+        if (existing) {
+          const ingreso = existing.stock_ingreso ?? 0;
+          const salida = existing.salida_almacen ?? 0;
+          const ventas = existing.total_ventas ?? 0;
+          const falta = existing.falta_almacen ?? 0;
+          const baja = existing.stock_baja ?? 0;
+          const cierre = apertura + ingreso - salida - ventas - falta - baja;
+          const upd = { stock_apertura: apertura, stock_cierre: Math.round(cierre * 100) / 100, updated_at: new Date().toISOString() };
+          if (existing.nota_baja) upd.nota_baja = existing.nota_baja;
+          batch.update(col('inventario_diario').doc(nextId), upd);
+        } else {
+          batch.set(col('inventario_diario').doc(nextId), {
+            fecha: targetDay, item_id: d.item_id, almacen_id: d.almacen_id,
+            stock_apertura: apertura, stock_ingreso: 0, salida_almacen: 0,
+            total_ventas: 0, falta_almacen: 0, stock_baja: 0, stock_cierre: apertura,
+            updated_at: new Date().toISOString(),
+          });
+        }
       }
+      await batch.commit();
+      // Keep chaining only if target already had data (user had worked on it)
+      if (!tgtHasData) break;
+      srcFecha = targetDay;
     }
-    if (hasChanges) await nextBatch.commit();
   } catch (e) {
     propErrors.push(e.message);
     console.error('Propagation error:', e.message);
@@ -871,12 +876,21 @@ app.post('/api/barra/movimientos', authMiddleware, async (req, res) => {
 
 // --- REPORTES ---
 app.get('/api/reportes/diferencias', async (req, res) => {
-  const fecha = req.query.fecha;
-  if (!fecha) return res.json([]);
+  let fechaInicio = req.query.fecha_inicio;
+  let fechaFin = req.query.fecha_fin;
+  if (!fechaInicio || !fechaFin) {
+    const fecha = req.query.fecha;
+    if (!fecha) return res.json([]);
+    fechaInicio = fechaFin = fecha;
+  }
+  if (fechaInicio > fechaFin) [fechaInicio, fechaFin] = [fechaFin, fechaInicio];
   const [almsSnap, allInvSnap, allDiasSnap] = await Promise.all([
     col('almacenes').orderBy('orden').get(),
     col('inventario').get(),
-    col('inventario_diario').where('fecha', '==', fecha).get(),
+    col('inventario_diario')
+      .where('fecha', '>=', fechaInicio)
+      .where('fecha', '<=', fechaFin)
+      .get(),
   ]);
   const invByAl = {};
   allInvSnap.docs.forEach(d => {
@@ -884,24 +898,39 @@ app.get('/api/reportes/diferencias', async (req, res) => {
     if (!invByAl[inv.almacen_id]) invByAl[inv.almacen_id] = [];
     invByAl[inv.almacen_id].push(inv);
   });
-  const diasByAl = {};
+  // Aggregate across date range per (almacen_id, item_id)
+  const agg = {};
   allDiasSnap.docs.forEach(d => {
     const dd = d.data();
-    if (!diasByAl[dd.almacen_id]) diasByAl[dd.almacen_id] = {};
-    diasByAl[dd.almacen_id][dd.item_id] = dd;
+    const key = dd.almacen_id + '_' + dd.item_id;
+    if (!agg[key]) {
+      agg[key] = {
+        almacen_id: dd.almacen_id,
+        item_id: dd.item_id,
+        stock_apertura: dd.stock_apertura ?? 0,
+        stock_ingreso: 0, salida_almacen: 0, total_ventas: 0, falta_almacen: 0, stock_baja: 0,
+        firstFecha: dd.fecha,
+      };
+    }
+    agg[key].stock_ingreso += dd.stock_ingreso ?? 0;
+    agg[key].salida_almacen += dd.salida_almacen ?? 0;
+    agg[key].total_ventas += dd.total_ventas ?? 0;
+    agg[key].falta_almacen += dd.falta_almacen ?? 0;
+    agg[key].stock_baja += dd.stock_baja ?? 0;
+    // keep first day's stock_apertura (opening stock at start of range)
   });
   const result = [];
   for (const alDoc of almsSnap.docs) {
     const alId = Number(alDoc.id);
-    const diaMap = diasByAl[alId] || {};
     for (const inv of (invByAl[alId] || [])) {
-      const dia = diaMap[inv.item_id] || {};
-      const apertura = dia.stock_apertura ?? 0;
-      const ingreso = dia.stock_ingreso ?? 0;
-      const salida = dia.salida_almacen ?? 0;
-      const ventas = dia.total_ventas ?? 0;
-      const falta = dia.falta_almacen ?? 0;
-      const baja = dia.stock_baja ?? 0;
+      const key = alId + '_' + inv.item_id;
+      const a = agg[key];
+      const apertura = a ? a.stock_apertura : 0;
+      const ingreso = a ? a.stock_ingreso : 0;
+      const salida = a ? a.salida_almacen : 0;
+      const ventas = a ? a.total_ventas : 0;
+      const falta = a ? a.falta_almacen : 0;
+      const baja = a ? a.stock_baja : 0;
       const cierre = apertura + ingreso - salida - ventas - falta - baja;
       const minima = inv.cantidad_minima || 0;
       const diferencia = cierre - minima;
@@ -914,7 +943,8 @@ app.get('/api/reportes/diferencias', async (req, res) => {
         salida_almacen: salida,
         total_ventas: ventas,
         falta_almacen: falta,
-        stock_cierre: cierre,
+        stock_baja: baja,
+        stock_cierre: Math.round(cierre * 100) / 100,
         cantidad_minima: minima,
         diferencia: Math.round(diferencia * 100) / 100,
       });
