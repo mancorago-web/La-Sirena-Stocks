@@ -1408,10 +1408,8 @@ function cargarReporteDiferencias() {
       return;
     }
     const conFalta = data.filter(r => (r.falta_almacen || 0) > 0);
-    const sinFalta = data.filter(r => !((r.falta_almacen || 0) > 0));
     let html = '<p style="margin-bottom:0.5rem;color:#666;">Rango: <strong>' + ini + '</strong> → <strong>' + fin + '</strong></p>';
     html += renderReporteTabla(conFalta, 'PRODUCTOS CON FALTA');
-    html += renderReporteTabla(sinFalta, 'PRODUCTOS SIN FALTA');
     if (!html) html = '<p>Sin diferencias en este rango.</p>';
     document.getElementById('reporte-diferencias').innerHTML = html;
   });
