@@ -1427,13 +1427,26 @@ function buscarTablaBarra(q, containerId, rowSelector) {
 
 function buscarReceta(q) {
   const term = q.trim().toLowerCase();
-  document.querySelectorAll('#recetas-container .accordion-item').forEach(item => {
-    const title = item.querySelector('.accordion-title')?.textContent?.toLowerCase() || '';
-    item.style.display = !term || title.includes(term) ? '' : 'none';
+  const container = document.getElementById('recetas-container');
+  if (!container) return;
+  // Recipes: match by name OR by ingredient
+  container.querySelectorAll('.accordion-item[data-receta-id]').forEach(recipe => {
+    const nombre = recipe.querySelector('.accordion-title')?.textContent?.toLowerCase() || '';
+    const ingredientes = Array.from(recipe.querySelectorAll('.accordion-body tbody td:first-child'))
+      .map(td => (td.textContent || '').toLowerCase().trim());
+    const match = !term || nombre.includes(term) || ingredientes.some(ing => ing.includes(term));
+    recipe.style.display = match ? '' : 'none';
   });
-  document.querySelectorAll('#recetas-container .categoria-recetas').forEach(cat => {
-    const visible = Array.from(cat.querySelectorAll('.accordion-item')).some(it => it.style.display !== 'none');
-    cat.style.display = visible || !term ? '' : 'none';
+  // Categories: show only those with matching recipes; expand them while searching
+  Array.from(container.children).forEach(cat => {
+    if (!cat.classList.contains('accordion-item')) return;
+    const recipes = cat.querySelectorAll('.accordion-item[data-receta-id]');
+    const anyVisible = Array.from(recipes).some(r => r.style.display !== 'none');
+    cat.style.display = !term || anyVisible ? '' : 'none';
+    if (term && anyVisible) {
+      const header = cat.querySelector('.accordion-header');
+      if (header && !header.classList.contains('active')) toggleAcordeon(header);
+    }
   });
 }
 
