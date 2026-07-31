@@ -1628,7 +1628,7 @@ function renderReceta(r) {
               <td>${ing.unidad}</td>
               <td>${ing.precioMatch ? 'S/' + pu.toFixed(5) : '—'}${convIcon}</td>
               <td>${ing.precioMatch ? 'S/' + pt.toFixed(2) : '—'}</td>
-              <td><button class="danger" onclick="eliminarIngrediente(${ing.id})">✕</button></td>
+              <td><button class="danger" onclick="eliminarIngrediente(${r.id}, ${ing.id})">✕</button></td>
             </tr>`;
           }).join('')}
           ${costoTotal > 0 ? `
@@ -1643,7 +1643,7 @@ function renderReceta(r) {
   </div>`;
 }
 
-function cargarRecetas() {
+function cargarRecetas(openId) {
   api('GET', '/api/recetas').then(data => {
     console.log('Recetas cargadas:', data.length);
     const container = document.getElementById('recetas-container');
@@ -1672,6 +1672,19 @@ function cargarRecetas() {
       </div>`;
     });
     container.innerHTML = html;
+    if (openId !== undefined) {
+      const el = container.querySelector(`[data-receta-id="${openId}"]`);
+      if (el) {
+        const parent = el.closest('.accordion-item');
+        if (parent && parent !== el) {
+          const catHeader = parent.querySelector('.accordion-header');
+          if (catHeader && !catHeader.classList.contains('active')) toggleAcordeon(catHeader);
+        }
+        const recHeader = el.querySelector('.accordion-header');
+        if (recHeader && !recHeader.classList.contains('active')) toggleAcordeon(recHeader);
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
   }).catch(e => console.error('Error cargando recetas:', e));
 }
 
@@ -1818,7 +1831,7 @@ function guardarEdicionReceta(id) {
   });
   api('PUT', '/api/recetas/' + id + '/with-ingredientes', { nombre, categoria, ingredientes }).then(() => {
     cerrarModal();
-    cargarRecetas();
+    cargarRecetas(id);
   }).catch(e => { console.error('Error guardando receta:', e); alert('Error al guardar'); });
 }
 
@@ -1833,9 +1846,9 @@ function agregarIngrediente(recetaId, btn) {
   });
 }
 
-function eliminarIngrediente(id) {
+function eliminarIngrediente(recetaId, id) {
   if (!confirm('¿Eliminar este ingrediente?')) return;
-  api('DELETE', '/api/receta-ingredientes/' + id).then(() => cargarRecetas());
+  api('DELETE', '/api/receta-ingredientes/' + id).then(() => cargarRecetas(recetaId));
 }
 
 // --- BARRA: Sub-tabs ---
