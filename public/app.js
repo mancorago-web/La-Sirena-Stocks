@@ -1734,7 +1734,7 @@ function eliminarReceta(id) {
   api('DELETE', '/api/recetas/' + id).then(() => cargarRecetas());
 }
 
-function editarReceta(id) {
+function editarReceta(id, saved) {
   Promise.all([
     api('GET', '/api/recetas'),
     api('GET', '/api/barra/precios')
@@ -1748,6 +1748,7 @@ function editarReceta(id) {
     }
     let html = `
       <h3 style="margin-top:0">EDITAR RECETA</h3>
+      ${saved ? '<p style="color:green;font-weight:600;margin:0 0 0.5rem">✓ Guardado</p>' : ''}
       <label style="font-weight:600;display:block;margin-bottom:0.2rem">Nombre</label>
       <input id="edit-receta-nombre" value="${r.nombre}" style="width:100%;margin-bottom:0.5rem;">
       <label style="font-weight:600;display:block;margin-bottom:0.2rem">Categoría</label>
@@ -1830,8 +1831,8 @@ function guardarEdicionReceta(id) {
     }
   });
   api('PUT', '/api/recetas/' + id + '/with-ingredientes', { nombre, categoria, ingredientes }).then(() => {
-    cerrarModal();
-    cargarRecetas(id);
+    // Mantener el modal abierto y refrescarlo con los datos guardados
+    editarReceta(id, true);
   }).catch(e => { console.error('Error guardando receta:', e); alert('Error al guardar'); });
 }
 
