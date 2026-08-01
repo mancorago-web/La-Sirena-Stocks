@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // La app accede a Firestore SOLO a través del Admin SDK (servidor api/index.js),
+    // que ignora estas reglas. Por eso bloqueamos todo acceso directo del cliente.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
