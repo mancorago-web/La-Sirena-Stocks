@@ -1660,6 +1660,11 @@ function renderReceta(r) {
             <td colspan="4">COSTO TOTAL</td>
             <td>S/${costoTotal.toFixed(2)}</td>
             <td></td>
+          </tr>
+          <tr style="font-weight:700;background:#fdecea;color:#c62828">
+            <td colspan="4">COSTO + 10% PÉRDIDA</td>
+            <td>S/${(costoTotal * 1.10).toFixed(2)}</td>
+            <td></td>
           </tr>` : ''}
         </tbody>
       </table>
