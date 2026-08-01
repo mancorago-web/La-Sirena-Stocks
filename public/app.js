@@ -378,8 +378,16 @@ function toggleAcordeon(header) {
   header.querySelector('.accordion-arrow').classList.toggle('open');
 }
 
-function agregarItemAlmacen(almacenId, almacenNombre) {
-  showModal('item-almacen', { almacenId, almacenNombre });
+async function agregarItemAlmacen(almacenId, almacenNombre) {
+  let sugerencias = [];
+  try {
+    const data = await getInventario(todayStr());
+    const seen = new Set();
+    data.forEach(al => (al.items || []).forEach(it => {
+      if (it.nombre && !seen.has(it.nombre)) { seen.add(it.nombre); sugerencias.push(it.nombre); }
+    }));
+  } catch (e) { console.error('Error cargando sugerencias:', e); }
+  showModal('item-almacen', { almacenId, almacenNombre, sugerencias });
 }
 
 function editarItemAlmacen(itemId, almacenId) {
@@ -1108,7 +1116,10 @@ function showModal(tipo, data) {
       <h3>Agregar Item a: ${data.almacenNombre}</h3>
       <label style="display:block;margin-top:1rem;">
         Nombre del Item
-        <input type="text" id="f-nombre-item" placeholder="Ej: COCA COLA 500ml" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+        <input type="text" id="f-nombre-item" placeholder="Ej: COCA COLA 500ml" list="sugerencias-items" autocomplete="off" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+        <datalist id="sugerencias-items">
+          ${(data.sugerencias || []).map(n => `<option value="${n.replace(/"/g, '&quot;')}">`).join('')}
+        </datalist>
       </label>
       <label style="display:block;margin-top:1rem;">
         Título / Categoría
