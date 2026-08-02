@@ -1667,9 +1667,10 @@ app.delete('/api/inventario/:item_id/:almacen_id', authMiddleware, async (req, r
 app.get('/api/costos', authMiddleware, async (req, res) => {
   try {
     const { fecha, tipo } = req.query;
-    if (!fecha) return res.json([]);
     // Single-field query avoids needing a composite index; filter/sort in memory
-    const snap = await col('costos').where('fecha', '==', fecha).get();
+    let query = col('costos');
+    if (fecha) query = query.where('fecha', '==', fecha);
+    const snap = await query.get();
     let docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (tipo) docs = docs.filter(c => c.tipo === String(tipo).toLowerCase());
     docs.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
@@ -1681,13 +1682,14 @@ app.get('/api/costos', authMiddleware, async (req, res) => {
 
 app.post('/api/costos', authMiddleware, async (req, res) => {
   try {
-    const { fecha, tipo, concepto, monto } = req.body;
+    const { fecha, tipo, concepto, monto, servicio } = req.body;
     if (!fecha || !tipo || monto === undefined) return res.status(400).json({ error: 'fecha, tipo y monto requeridos' });
     const ref = col('costos').doc();
     await ref.set({
       id: ref.id,
       fecha,
       tipo: String(tipo).toLowerCase(),
+      servicio: servicio ? String(servicio).toLowerCase() : '',
       concepto: (concepto || '').toString().trim(),
       monto: Math.round((parseFloat(monto) || 0) * 100) / 100,
       saved_by: req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown',
