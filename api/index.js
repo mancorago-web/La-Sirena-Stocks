@@ -1663,4 +1663,50 @@ app.delete('/api/inventario/:item_id/:almacen_id', authMiddleware, async (req, r
   }
 });
 
+// --- COSTOS: planillas, servicios y gastos operativos ---
+app.get('/api/costos', authMiddleware, async (req, res) => {
+  try {
+    const { fecha, tipo } = req.query;
+    if (!fecha) return res.json([]);
+    // Single-field query avoids needing a composite index; filter/sort in memory
+    const snap = await col('costos').where('fecha', '==', fecha).get();
+    let docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (tipo) docs = docs.filter(c => c.tipo === String(tipo).toLowerCase());
+    docs.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+    res.json(docs);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/costos', authMiddleware, async (req, res) => {
+  try {
+    const { fecha, tipo, concepto, monto } = req.body;
+    if (!fecha || !tipo || monto === undefined) return res.status(400).json({ error: 'fecha, tipo y monto requeridos' });
+    const ref = col('costos').doc();
+    await ref.set({
+      id: ref.id,
+      fecha,
+      tipo: String(tipo).toLowerCase(),
+      concepto: (concepto || '').toString().trim(),
+      monto: Math.round((parseFloat(monto) || 0) * 100) / 100,
+      saved_by: req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    res.json({ ok: true, id: ref.id });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/costos/:id', authMiddleware, async (req, res) => {
+  try {
+    await col('costos').doc(req.params.id).delete();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = app;

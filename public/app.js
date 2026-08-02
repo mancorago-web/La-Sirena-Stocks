@@ -1619,6 +1619,11 @@ initPicker('fecha-ingresos', cargarIngresos);
   const el = document.getElementById(id);
   if (el) el.value = todayStr();
 });
+// Costos: set today's date on pickers (load happens lazily in cambiarSubTab)
+['fecha-costos-planillas','fecha-costos-servicios','fecha-costos-gastos'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.value = todayStr();
+});
 initPicker('fecha-stocks', function() { cargarStocks(); });
 // reportes, precios, barra loaded lazily on first tab click
 initPicker('reporte-fecha-ini');
@@ -1895,6 +1900,11 @@ function cambiarSubTab(nombre, prefix) {
   if (prefix === 'barra' && ['ingresos','ventas','bajas'].includes(nombre)) {
     const key = 'barra_' + nombre;
     if (!_loaded[key]) { _loaded[key] = true; cargarBarraMovimientos(nombre); }
+  }
+  // Lazy load costos tabs
+  if (prefix === 'costos') {
+    const key = 'costos_' + nombre;
+    if (!_loaded[key]) { _loaded[key] = true; cargarCostos(nombre); }
   }
 }
 
@@ -2480,4 +2490,61 @@ function calcularItemsSalientes() {
   seccion.innerHTML = '<h3 style="margin:1rem 0 0.5rem 0;">ITEMS SALIENTES</h3><div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th>Cantidad Consumida</th><th>Unidad</th></tr></thead><tbody>' +
     names.map(n => '<tr><td>' + n + '</td><td>' + (totals[n] || 0).toFixed(2) + '</td><td>' + (units[n] || 'unidad') + '</td></tr>').join('') +
     '</tbody></table></div>';
+}
+
+// --- COSTOS: planillas, servicios y gastos operativos ---
+const LABEL_COSTOS = { planillas: 'Planillas', servicios: 'Servicios', gastos: 'Gastos Operativos' };
+
+function cargarCostos(tipo) {
+  const fecha = document.getElementById('fecha-costos-' + tipo)?.value || todayStr();
+  const accId = 'costos-' + tipo + '-container';
+  const container = document.getElementById(accId);
+  if (!container) return;
+  api('GET', '/api/costos?fecha=' + fecha + '&tipo=' + tipo).then(list => {
+    if (!list.length) {
+      container.innerHTML = '<p>Sin registros en esta fecha.</p>' + formAgregarCosto(tipo);
+      return;
+    }
+    let total = 0;
+    let html = '<div class="table-wrap"><table><thead><tr><th>Concepto</th><th>Monto</th><th>Usuario</th><th></th></tr></thead><tbody>';
+    list.forEach(c => {
+      total += c.monto || 0;
+      const u = DISPLAY_NAMES[c.saved_by] || c.saved_by || '-';
+      html += `<tr>
+        <td>${c.concepto || '-'}</td>
+        <td>S/ ${(c.monto || 0).toFixed(2)}</td>
+        <td>${u}</td>
+        <td><button class="danger" onclick="eliminarCosto('${c.id}', '${tipo}')">✕</button></td>
+      </tr>`;
+    });
+    html += `<tr style="font-weight:700;background:#f0f0ff"><td>TOTAL</td><td>S/ ${total.toFixed(2)}</td><td></td><td></td></tr>`;
+    html += '</tbody></table></div>';
+    html += formAgregarCosto(tipo);
+    container.innerHTML = html;
+  }).catch(e => { console.error(e); container.innerHTML = '<p>Error al cargar.</p>'; });
+}
+
+function formAgregarCosto(tipo) {
+  return `
+    <div style="margin-top:1rem;padding:1rem;background:#f9f9f9;border-radius:8px;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+      <input type="text" id="nuevo-costo-concepto-${tipo}" placeholder="Concepto / Descripción" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:200px;">
+      <input type="number" id="nuevo-costo-monto-${tipo}" placeholder="Monto (S/)" step="0.01" min="0" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;width:130px;">
+      <button class="btn-guardar-dia" onclick="guardarCosto('${tipo}')">AGREGAR</button>
+    </div>`;
+}
+
+function guardarCosto(tipo) {
+  const fecha = document.getElementById('fecha-costos-' + tipo)?.value || todayStr();
+  const concepto = document.getElementById('nuevo-costo-concepto-' + tipo)?.value.trim();
+  const monto = parseFloat(document.getElementById('nuevo-costo-monto-' + tipo)?.value);
+  if (!concepto || isNaN(monto)) { alert('Ingresa concepto y monto'); return; }
+  api('POST', '/api/costos', { fecha, tipo, concepto, monto }).then(() => {
+    showToast((LABEL_COSTOS[tipo] || 'Costo') + ' guardado');
+    cargarCostos(tipo);
+  }).catch(e => { console.error(e); alert('Error al guardar'); });
+}
+
+function eliminarCosto(id, tipo) {
+  if (!confirm('¿Eliminar este registro?')) return;
+  api('DELETE', '/api/costos/' + id).then(() => cargarCostos(tipo)).catch(e => { console.error(e); alert('Error al eliminar'); });
 }

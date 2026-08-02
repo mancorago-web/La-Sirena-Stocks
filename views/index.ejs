@@ -42,6 +42,11 @@
         <span class="category-label">COCINA</span>
         <span class="category-desc">Recetas, Stock y Base de Datos de la Cocina</span>
       </button>
+      <button class="category-btn" onclick="irACategoria('costos')">
+        <span class="category-icon">💰</span>
+        <span class="category-label">COSTOS</span>
+        <span class="category-desc">Planillas, Servicios y Gastos Operativos</span>
+      </button>
     </div>
   </div>
 
@@ -77,6 +82,15 @@
       <button class="sub-tab active" data-subtab="recetas" onclick="cambiarSubTab('recetas','cocina')">Recetas</button>
       <button class="sub-tab" data-subtab="stock" onclick="cambiarSubTab('stock','cocina')">Stock</button>
       <button class="sub-tab" data-subtab="basedatos" onclick="cambiarSubTab('basedatos','cocina')">Base de Datos</button>
+    </div>
+  </div>
+
+  <!-- Tabs bar (COSTOS) -->
+  <div id="tabs-costos" class="tabs-bar" style="display:none">
+    <div class="tabs">
+      <button class="sub-tab active" data-subtab="planillas" onclick="cambiarSubTab('planillas','costos')">Planillas</button>
+      <button class="sub-tab" data-subtab="servicios" onclick="cambiarSubTab('servicios','costos')">Servicios</button>
+      <button class="sub-tab" data-subtab="gastos" onclick="cambiarSubTab('gastos','costos')">Gastos Operativos</button>
     </div>
   </div>
 
@@ -336,6 +350,38 @@
           </div>
         </div>
         <div id="cocina-precios-container"><p>Sin datos aún.</p></div>
+      </div>
+    </div>
+
+    <div id="tab-costos" class="tab-content">
+      <div id="sub-costos-planillas" class="sub-tab-content active">
+        <div class="header-actions">
+          <h2>Planillas</h2>
+          <div class="controles-dia">
+            <label>Fecha: <input type="date" id="fecha-costos-planillas" onchange="cargarCostos('planillas')"></label>
+          </div>
+        </div>
+        <div id="costos-planillas-container"><p>Cargando...</p></div>
+      </div>
+
+      <div id="sub-costos-servicios" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>Servicios</h2>
+          <div class="controles-dia">
+            <label>Fecha: <input type="date" id="fecha-costos-servicios" onchange="cargarCostos('servicios')"></label>
+          </div>
+        </div>
+        <div id="costos-servicios-container"><p>Cargando...</p></div>
+      </div>
+
+      <div id="sub-costos-gastos" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>Gastos Operativos</h2>
+          <div class="controles-dia">
+            <label>Fecha: <input type="date" id="fecha-costos-gastos" onchange="cargarCostos('gastos')"></label>
+          </div>
+        </div>
+        <div id="costos-gastos-container"><p>Cargando...</p></div>
       </div>
     </div>
 
