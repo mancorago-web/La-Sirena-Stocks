@@ -1907,6 +1907,7 @@ function cambiarSubTab(nombre, prefix) {
     if (!_loaded[key]) {
       _loaded[key] = true;
       if (nombre === 'servicios') cargarServicios();
+      else if (nombre === 'planillas') cargarPlanillas();
       else cargarCostos(nombre);
     }
   }
@@ -2553,77 +2554,89 @@ function eliminarCosto(id, tipo) {
   api('DELETE', '/api/costos/' + id).then(() => cargarCostos(tipo)).catch(e => { console.error(e); alert('Error al eliminar'); });
 }
 
-// --- COSTOS: Servicios fijos (alquiler, agua, luz, internet, gas, limpieza) ---
+// --- COSTOS: categorías fijas (Servicios y Planillas) ---
 const SERVICIOS = ['ALQUILER', 'AGUA', 'LUZ', 'INTERNET', 'GAS', 'LIMPIEZA'];
+const PLANILLAS = ['MESEROS', 'COCINEROS', 'ADMINISTRACION', 'LIMPIEZA'];
+const CATEGORIAS_COSTOS = {
+  servicios: { tipo: 'servicio', titulos: SERVICIOS, campoSub: 'servicio', campoTexto: 'desc', colLabel: 'Descripción', phTexto: 'Descripción (ej. Recibo N° 123)' },
+  planillas: { tipo: 'planillas', titulos: PLANILLAS, campoSub: 'planilla', campoTexto: 'nombre', colLabel: 'Nombre', phTexto: 'Nombre del trabajador' }
+};
 
-function cargarServicios() {
-  const container = document.getElementById('costos-servicios-container');
+function cargarCostoCategoria(prefix) {
+  const cfg = CATEGORIAS_COSTOS[prefix];
+  const container = document.getElementById('costos-' + prefix + '-container');
   if (!container) return;
-  api('GET', '/api/costos?tipo=servicio').then(list => {
+  api('GET', '/api/costos?tipo=' + cfg.tipo).then(list => {
     const groups = {};
-    SERVICIOS.forEach(s => { groups[s] = []; });
+    cfg.titulos.forEach(t => { groups[t] = []; });
     groups['OTROS'] = [];
     list.forEach(c => {
-      let key = (c.servicio || '').toUpperCase();
+      let key = (c[cfg.campoSub] || '').toUpperCase();
       if (!groups[key]) {
         const up = (c.concepto || '').toUpperCase();
-        key = SERVICIOS.find(s => up.includes(s)) || 'OTROS';
+        key = cfg.titulos.find(t => up.includes(t)) || 'OTROS';
       }
       groups[key].push(c);
     });
     let html = '';
-    SERVICIOS.forEach((s, idx) => {
-      const records = groups[s].sort((a, b) => String(a.fecha || '').localeCompare(String(b.fecha || '')));
+    cfg.titulos.forEach((t, idx) => {
+      const records = groups[t].sort((a, b) => String(a.fecha || '').localeCompare(String(b.fecha || '')));
       const total = records.reduce((sum, r) => sum + (r.monto || 0), 0);
       const rows = records.map(r => {
         const u = DISPLAY_NAMES[r.saved_by] || r.saved_by || '-';
         return `<tr>
+          <td>${r[cfg.campoTexto] || r.concepto || '-'}</td>
           <td>${r.fecha || '-'}</td>
           <td>S/ ${(r.monto || 0).toFixed(2)}</td>
-          <td>${r.concepto || '-'}</td>
           <td>${u}</td>
-          <td><button class="danger" onclick="eliminarServicio('${r.id}')">✕</button></td>
+          <td><button class="danger" onclick="eliminarCostoCategoria('${prefix}', '${r.id}')">✕</button></td>
         </tr>`;
       }).join('');
       html += `<div class="accordion-item">
         <div class="accordion-header" onclick="toggleAcordeon(this)">
-          <span class="accordion-title">${s} <span style="font-weight:400;font-size:0.85rem;color:#777;">— TOTAL: S/ ${total.toFixed(2)}</span></span>
+          <span class="accordion-title">${t} <span style="font-weight:400;font-size:0.85rem;color:#777;">— TOTAL: S/ ${total.toFixed(2)}</span></span>
           <span class="accordion-arrow">▶</span>
         </div>
         <div class="accordion-body">
           <div class="table-wrap"><table>
-            <thead><tr><th>Fecha</th><th>Monto</th><th>Descripción</th><th>Usuario</th><th></th></tr></thead>
+            <thead><tr><th>${cfg.colLabel}</th><th>Fecha</th><th>Monto</th><th>Usuario</th><th></th></tr></thead>
             <tbody>${rows || '<tr><td colspan="5">Sin registros.</td></tr>'}</tbody>
           </table></div>
           <div style="margin-top:0.75rem;padding:0.75rem;background:#f9f9f9;border-radius:8px;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-            <label>Fecha: <input type="date" id="nuevo-serv-fecha-${idx}" value="${todayStr()}" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></label>
-            <input type="number" id="nuevo-serv-monto-${idx}" placeholder="Monto (S/)" step="0.01" min="0" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;width:120px;">
-            <input type="text" id="nuevo-serv-desc-${idx}" placeholder="Descripción (ej. Recibo N° 123)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:160px;">
-            <button class="btn-guardar-dia" onclick="guardarServicio(${idx})">AGREGAR</button>
+            <input type="text" id="nuevo-${prefix}-texto-${idx}" placeholder="${cfg.phTexto}" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:160px;">
+            <label>Fecha: <input type="date" id="nuevo-${prefix}-fecha-${idx}" value="${todayStr()}" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></label>
+            <input type="number" id="nuevo-${prefix}-monto-${idx}" placeholder="Monto (S/)" step="0.01" min="0" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;width:120px;">
+            <button class="btn-guardar-dia" onclick="guardarCostoCategoria('${prefix}', ${idx})">AGREGAR</button>
           </div>
         </div>
       </div>`;
     });
     if (groups['OTROS'].length) {
-      html += '<p style="color:#c62828;margin-top:0.5rem;">Nota: ' + groups['OTROS'].length + ' registro(s) de servicios sin clasificar quedaron sin mostrar.</p>';
+      html += '<p style="color:#c62828;margin-top:0.5rem;">Nota: ' + groups['OTROS'].length + ' registro(s) de ' + cfg.tipo + ' sin clasificar quedaron sin mostrar.</p>';
     }
     container.innerHTML = html;
   }).catch(e => { console.error(e); container.innerHTML = '<p>Error al cargar.</p>'; });
 }
 
-function guardarServicio(idx) {
-  const servicio = SERVICIOS[idx];
-  const fecha = document.getElementById('nuevo-serv-fecha-' + idx)?.value;
-  const monto = parseFloat(document.getElementById('nuevo-serv-monto-' + idx)?.value);
-  const desc = document.getElementById('nuevo-serv-desc-' + idx)?.value.trim() || servicio;
+function cargarServicios() { cargarCostoCategoria('servicios'); }
+function cargarPlanillas() { cargarCostoCategoria('planillas'); }
+
+function guardarCostoCategoria(prefix, idx) {
+  const cfg = CATEGORIAS_COSTOS[prefix];
+  const sub = cfg.titulos[idx];
+  const texto = document.getElementById('nuevo-' + prefix + '-texto-' + idx)?.value.trim() || sub;
+  const fecha = document.getElementById('nuevo-' + prefix + '-fecha-' + idx)?.value;
+  const monto = parseFloat(document.getElementById('nuevo-' + prefix + '-monto-' + idx)?.value);
   if (!fecha || isNaN(monto)) { alert('Ingresa fecha y monto'); return; }
-  api('POST', '/api/costos', { fecha, tipo: 'servicio', servicio: servicio.toLowerCase(), concepto: desc, monto }).then(() => {
-    showToast('Registro de ' + servicio + ' guardado');
-    cargarServicios();
+  const body = { fecha, tipo: cfg.tipo, concepto: texto, monto };
+  body[cfg.campoSub] = sub.toLowerCase();
+  api('POST', '/api/costos', body).then(() => {
+    showToast('Registro de ' + sub + ' guardado');
+    cargarCostoCategoria(prefix);
   }).catch(e => { console.error(e); alert('Error al guardar'); });
 }
 
-function eliminarServicio(id) {
+function eliminarCostoCategoria(prefix, id) {
   if (!confirm('¿Eliminar este registro?')) return;
-  api('DELETE', '/api/costos/' + id).then(() => cargarServicios()).catch(e => { console.error(e); alert('Error al eliminar'); });
+  api('DELETE', '/api/costos/' + id).then(() => cargarCostoCategoria(prefix)).catch(e => { console.error(e); alert('Error al eliminar'); });
 }

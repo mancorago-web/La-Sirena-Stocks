@@ -1682,7 +1682,7 @@ app.get('/api/costos', authMiddleware, async (req, res) => {
 
 app.post('/api/costos', authMiddleware, async (req, res) => {
   try {
-    const { fecha, tipo, concepto, monto, servicio } = req.body;
+    const { fecha, tipo, concepto, monto, servicio, planilla } = req.body;
     if (!fecha || !tipo || monto === undefined) return res.status(400).json({ error: 'fecha, tipo y monto requeridos' });
     const ref = col('costos').doc();
     await ref.set({
@@ -1690,6 +1690,7 @@ app.post('/api/costos', authMiddleware, async (req, res) => {
       fecha,
       tipo: String(tipo).toLowerCase(),
       servicio: servicio ? String(servicio).toLowerCase() : '',
+      planilla: planilla ? String(planilla).toLowerCase() : '',
       concepto: (concepto || '').toString().trim(),
       monto: Math.round((parseFloat(monto) || 0) * 100) / 100,
       saved_by: req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown',
