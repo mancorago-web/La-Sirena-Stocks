@@ -1453,25 +1453,99 @@ function cargarReporteDiferencias() {
   });
 }
 
-function buscarTablaBarra(q, containerId, rowSelector) {
-  const term = q.trim().toLowerCase();
-  const container = document.getElementById(containerId);
-  if (!container) return;
-  container.querySelectorAll(rowSelector).forEach(tr => {
-    const name = tr.children[0]?.textContent?.toLowerCase() || '';
-    tr.style.display = !term || name.includes(term) ? '' : 'none';
-  });
-}
-
 function normalizarBusquedaStock(el) {
   const v = el.value;
+  const id = 'fecha-stocks';
+  if (!el.id) el.id = id;
   if (v.includes(' — ')) el.value = v.split(' — ')[0].trim();
   buscarTablaBarra(el.value, 'barra-stock-container', 'tr[data-stock-id]');
 }
 
-function buscarReceta(q) {
-  const term = q.trim().toLowerCase();
-  const container = document.getElementById('recetas-container');
+function cargarStockBarraFecha(fecha) {
+  if (!fecha) { fecha = document.getElementById('fecha-stocks')?.value || todayStr(); }
+  api('GET', '/api/barra/stock?fecha=' + fecha).then(data => {
+    const container = document.getElementById('barra-stock-container');
+    if (!data.length) {
+      container.innerHTML = '<p>No hay ingredientes en stock para esta fecha.</p>';
+      return;
+    }
+    const groups = {};
+    GRUPOS_BARRA.forEach(g => { groups[g] = []; });
+    groups['SIN CLASIFICAR'] = [];
+    data.forEach(s => {
+      const key = (s.grupo || '').toUpperCase();
+      (groups[key] || groups['SIN CLASIFICAR']).push(s);
+    });
+    function fila(s) {
+      const opts = GRUPOS_BARRA.map(g => `<option value="${g}" ${((s.grupo || '').toUpperCase() === g) ? 'selected' : ''}>${g}</option>`).join('');
+      const uniList = UNIDADES_STOCK.includes(s.unidad) ? UNIDADES_STOCK : [...UNIDADES_STOCK, s.unidad];
+      const uniOpts = uniList.map(u => `<option value="${u}" ${s.unidad === u ? 'selected' : ''}>${u}</option>`).join('');
+      const onz = formatoOnzas(calcularOnzas(s));
+      return `<tr data-stock-id="${s.id}" data-orig-cantidad="${s.cantidad}" data-orig-unidad="${s.unidad}" data-orig-grupo="${(s.grupo || '').toUpperCase()}">
+        <td class="stock-nombre">${esc(s.ingrediente)}</td>
+        <td><input type="number" class="input-stock-cant" value="${s.cantidad}" step="0.01" min="0" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarOnzasFila(this); marcarStockDirty()"></td>
+        <td><select class="select-stock-uni" onchange="onUnidadStockChange(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${uniOpts}</select></td>
+        <td class="onzas-stock">${onz}</td>
+        <td><select class="select-stock-grupo" onchange="marcarStockDirty()" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${opts}</select></td>
+        <td>
+          <button class="editar" onclick="editarItemStock(${s.id})" style="padding:0.3rem 0.6rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">EDITAR</button>
+          <button class="danger" onclick="eliminarStockBarra(${s.id})">✕</button>
+        </td>
+      </tr>`;
+    }
+    container.innerHTML = GRUPOS_BARRA.map(g => {
+      const items = groups[g];
+      const total = items.reduce((sum, i) => sum + (parseFloat(i.cantidad) || 0), 0);
+      return `
+        <div class="accordion-item">
+          <div class="accordion-header active" onclick="toggleAcordeon(this)">
+            <span class="accordion-title">${g} <span style="font-weight:400;font-size:0.85rem;color:#777;">— ${items.length} item(s)</span></span>
+            <span class="accordion-arrow open">▶</span>
+          </div>
+          <div class="accordion-body open">
+            <div class="table-wrap"><table>
+              <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th><th>Mueble</th><th></th></tr></thead>
+              <tbody>${items.map(fila).join('') || '<tr><td colspan="6">Vacío.</td></tr>'}</tbody>
+            </table></div>
+          </div>
+        </div>`;
+    }).join('') + (groups['SIN CLASIFICAR'].length ? `
+        <div class="accordion-item">
+          <div class="accordion-header active" onclick="toggleAcordeon(this)">
+            <span class="accordion-title">SIN CLASIFICAR <span style="font-weight:400;font-size:0.85rem;color:#c62828;">— ${groups['SIN CLASIFICAR'].length} item(s) sin mueble asignado</span></span>
+            <span class="accordion-arrow open">▶</span>
+          </div>
+          <div class="accordion-body open">
+            <div class="table-wrap"><table>
+              <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th><th>Mueble</th><th></th></tr></thead>
+              <tbody>${groups['SIN CLASIFICAR'].map(fila).join('')}</tbody>
+            </table></div>
+          </div>
+        </div>` : '');
+    _stockDirty = false;
+    const b = document.getElementById('btn-guardar-stock');
+    if (b) { b.style.background = '#2e7d32'; b.textContent = '💾 GUARDAR STOCK'; }
+  }).catch(e => { console.error(e); });
+}
+
+function exportarStockBarra() {
+  const fecha = document.getElementById('fecha-stocks')?.value || todayStr();
+  const wsData = [['Mueble', 'Item', 'Cantidad', 'Unidad', 'Onzas']];
+  document.querySelectorAll('#barra-stock-container .accordion-item').forEach(acc => {
+    const mueble = acc.querySelector('.accordion-title')?.textContent?.split(' — ')[0] || '';
+    acc.querySelectorAll('tbody tr[data-stock-id]').forEach(tr => {
+      const ing = tr.querySelector('.stock-nombre')?.textContent || '';
+      const cant = tr.querySelector('.input-stock-cant')?.value || '';
+      const uni = tr.querySelector('.select-stock-uni')?.value || '';
+      const onz = tr.querySelector('.onzas-stock')?.textContent || '';
+      wsData.push([mueble, ing, cant, uni, onz]);
+    });
+  });
+  const libro = XLSX.utils.book_new();
+  const hoja = XLSX.utils.aoa_to_sheet(wsData);
+  XLSX.utils.book_append_sheet(libro, hoja, 'Stock Barra');
+  XLSX.writeFile(libro, `StockBarra_${fecha}.xlsx`);
+}
   if (!container) return;
   // Recipes: match by name OR by ingredient
   container.querySelectorAll('.accordion-item[data-receta-id]').forEach(recipe => {
