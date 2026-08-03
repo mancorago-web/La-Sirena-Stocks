@@ -1978,13 +1978,14 @@ function calcularOnzas(item) {
   const cant = parseFloat(item.cantidad) || 0;
   const u = (item.unidad || '').toLowerCase();
   if (u === 'onzas') return cant;
-  if (u === 'ml') return cant / 29.5735;
-  if (u === 'lt') return (cant * 1000) / 29.5735;
+  // Regla: 750 ml = 25 onzas (30 ml por onza) como margen de pérdidas
+  if (u === 'ml') return cant / 30;
+  if (u === 'lt') return (cant * 1000) / 30;
   if (u === 'gramos') return cant / 28.3495;
   if (u === 'kg') return (cant * 1000) / 28.3495;
   if (u === 'unidad' || u === 'botella') {
     const ml = botellaParaMl(item.ingrediente);
-    return ml ? (cant * ml) / 29.5735 : null;
+    return ml ? (cant * ml) / 30 : null;
   }
   return null;
 }
