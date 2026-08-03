@@ -129,7 +129,7 @@ function irACategoria(cat) {
     document.getElementById('tab-' + cat).classList.add('active');
     if (!_loaded[cat]) {
       _loaded[cat] = true;
-      if (cat === 'barra') { cargarRecetas(); cargarStockBarra(); cargarPrecios(); }
+      if (cat === 'barra') { cargarRecetas(); cargarStockBarra(); cargarPrecios(); cargarSugerenciasStock(); }
     }
     // Activate first sub-tab for the category
     const firstSub = document.querySelector('#tabs-' + cat + ' .sub-tab');
@@ -1915,6 +1915,20 @@ function cambiarSubTab(nombre, prefix) {
 
 // --- BARRA: Stock ---
 const GRUPOS_BARRA = ['MUEBLE DE ARRIBA', 'MUEBLE DE ABAJO', 'MUEBLE DE APOYO'];
+
+function cargarSugerenciasStock() {
+  api('GET', '/api/barra/precios').then(data => {
+    const dl = document.getElementById('sugerencia-stock-input');
+    if (!dl) return;
+    const seen = new Set();
+    dl.innerHTML = data.map(s => {
+      const n = (s.ingrediente || '').trim();
+      if (!n || seen.has(n.toLowerCase())) return '';
+      seen.add(n.toLowerCase());
+      return '<option value="' + n.replace(/"/g, '&quot;') + '"></option>';
+    }).join('');
+  }).catch(e => console.error('Error cargando sugerencias de stock:', e));
+}
 
 function cargarStockBarra() {
   api('GET', '/api/barra/stock').then(data => {
