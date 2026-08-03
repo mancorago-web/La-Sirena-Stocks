@@ -762,7 +762,7 @@ function normalizeGrupo(g) {
 }
 
 app.get('/api/barra/stock', async (req, res) => {
-  const snap = await col('barra_stock').orderBy('ingrediente').get();
+  const snap = await col('barra_stock').orderBy('id').get();
   res.json(snap.docs.map(d => ({ id: Number(d.id), ...d.data() })));
 });
 

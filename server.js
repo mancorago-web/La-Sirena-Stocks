@@ -599,7 +599,7 @@ async function start() {
 
   // --- BARRA: Stock ---
   app.get('/api/barra/stock', (req, res) => {
-    res.json(query('SELECT * FROM barra_stock ORDER BY ingrediente'));
+    res.json(query('SELECT * FROM barra_stock ORDER BY id'));
   });
 
   app.post('/api/barra/stock', (req, res) => {
