@@ -611,9 +611,16 @@ async function start() {
   });
 
   app.put('/api/barra/stock/:id', (req, res) => {
-    const { cantidad } = req.body;
-    run('UPDATE barra_stock SET cantidad = ?, updated_at = datetime(\'now\',\'localtime\') WHERE id = ?',
-      [cantidad ?? 0, req.params.id]);
+    const { cantidad, ingrediente, unidad, grupo } = req.body;
+    const sets = [];
+    const vals = [];
+    if (cantidad !== undefined) { sets.push('cantidad = ?'); vals.push(cantidad ?? 0); }
+    if (ingrediente) { sets.push('ingrediente = ?'); vals.push(ingrediente); }
+    if (unidad) { sets.push('unidad = ?'); vals.push(unidad); }
+    if (grupo !== undefined) { sets.push('grupo = ?'); vals.push(grupo || ''); }
+    if (!sets.length) return res.json({ ok: true });
+    sets.push("updated_at = datetime('now','localtime')");
+    run(`UPDATE barra_stock SET ${sets.join(', ')} WHERE id = ?`, [...vals, req.params.id]);
     res.json({ ok: true });
   });
 

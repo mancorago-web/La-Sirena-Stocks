@@ -1166,6 +1166,33 @@ function showModal(tipo, data) {
         <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
       </div>
     `;
+  } else if (tipo === 'editar-stock-item') {
+    const uniOpts = UNIDADES_STOCK.map(u => `<option value="${u}" ${data.unidad === u ? 'selected' : ''}>${u}</option>`).join('');
+    body.innerHTML = `
+      <h3>Editar Item de Stock</h3>
+      <label style="display:block;margin-top:1rem;">
+        Nombre del Item
+        <input id="f-stock-nombre" value="${esc(data.nombre)}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Cantidad
+        <input type="number" id="f-stock-cantidad" step="0.01" min="0" value="${data.cantidad}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Unidad
+        <select id="f-stock-unidad" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">${uniOpts}</select>
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Mueble
+        <select id="f-stock-grupo" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+          ${GRUPOS_BARRA.map(g => `<option value="${g}" ${data.grupo === g ? 'selected' : ''}>${g}</option>`).join('')}
+        </select>
+      </label>
+      <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+        <button onclick="guardarEdicionStock(${data.id})" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+        <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
+      </div>
+    `;
   }
 }
 
@@ -1915,6 +1942,66 @@ function cambiarSubTab(nombre, prefix) {
 
 // --- BARRA: Stock ---
 const GRUPOS_BARRA = ['MUEBLE DE ARRIBA', 'MUEBLE DE ABAJO', 'MUEBLE DE APOYO'];
+const UNIDADES_STOCK = ['ml', 'unidad', 'onzas', 'gramos', 'kg', 'lt', 'hojas', 'gotas', 'rodajas'];
+let _stockDirty = false;
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function marcarStockDirty() {
+  _stockDirty = true;
+  const b = document.getElementById('btn-guardar-stock');
+  if (b) { b.style.background = '#c62828'; b.textContent = '💾 GUARDAR (*)'; }
+}
+
+window.addEventListener('beforeunload', (e) => {
+  if (_stockDirty) { e.preventDefault(); e.returnValue = ''; }
+});
+
+// --- Conversión automática a onzas ---
+function botellaParaMl(nombre) {
+  const t = String(nombre || '').toLowerCase();
+  const m = t.match(/(\d+(?:[.,]\d+)?)\s*(ml|cc|l|lt)\b/);
+  if (!m) return null;
+  const v = parseFloat(m[1].replace(',', '.'));
+  return (m[2] === 'ml' || m[2] === 'cc') ? v : v * 1000;
+}
+
+function calcularOnzas(item) {
+  const cant = parseFloat(item.cantidad) || 0;
+  const u = (item.unidad || '').toLowerCase();
+  if (u === 'onzas') return cant;
+  if (u === 'ml') return cant / 29.5735;
+  if (u === 'lt') return (cant * 1000) / 29.5735;
+  if (u === 'gramos') return cant / 28.3495;
+  if (u === 'kg') return (cant * 1000) / 28.3495;
+  if (u === 'unidad' || u === 'botella') {
+    const ml = botellaParaMl(item.ingrediente);
+    return ml ? (cant * ml) / 29.5735 : null;
+  }
+  return null;
+}
+
+function formatoOnzas(n) {
+  if (n === null || n === undefined || isNaN(n)) return '-';
+  return n.toFixed(1) + ' onzas';
+}
+
+function actualizarOnzasFila(inputEl) {
+  const tr = inputEl.closest('tr');
+  if (!tr) return;
+  const nombre = tr.querySelector('.stock-nombre').textContent.trim();
+  const cantidad = parseFloat(inputEl.value) || 0;
+  const unidad = tr.querySelector('.select-stock-uni').value;
+  tr.querySelector('.onzas-stock').textContent = formatoOnzas(calcularOnzas({ ingrediente: nombre, cantidad, unidad }));
+}
+
+function onUnidadStockChange(sel) {
+  const cantEl = sel.closest('tr').querySelector('.input-stock-cant');
+  actualizarOnzasFila(cantEl);
+  marcarStockDirty();
+}
 
 function cargarSugerenciasStock() {
   api('GET', '/api/barra/precios').then(data => {
@@ -1946,12 +2033,19 @@ function cargarStockBarra() {
     });
     function fila(s) {
       const opts = GRUPOS_BARRA.map(g => `<option value="${g}" ${((s.grupo || '').toUpperCase() === g) ? 'selected' : ''}>${g}</option>`).join('');
-      return `<tr data-stock-id="${s.id}">
-        <td>${s.ingrediente}</td>
-        <td><input type="number" class="input-stock-cant" value="${s.cantidad}" step="0.01" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" onchange="actualizarStockCant(${s.id}, this)"></td>
-        <td>${s.unidad}</td>
-        <td><select onchange="cambiarGrupoStock(${s.id}, this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${opts}</select></td>
-        <td><button class="danger" onclick="eliminarStockBarra(${s.id})">✕</button></td>
+      const uniList = UNIDADES_STOCK.includes(s.unidad) ? UNIDADES_STOCK : [...UNIDADES_STOCK, s.unidad];
+      const uniOpts = uniList.map(u => `<option value="${u}" ${s.unidad === u ? 'selected' : ''}>${u}</option>`).join('');
+      const onz = formatoOnzas(calcularOnzas(s));
+      return `<tr data-stock-id="${s.id}" data-orig-cantidad="${s.cantidad}" data-orig-unidad="${s.unidad}" data-orig-grupo="${(s.grupo || '').toUpperCase()}">
+        <td class="stock-nombre">${esc(s.ingrediente)}</td>
+        <td><input type="number" class="input-stock-cant" value="${s.cantidad}" step="0.01" min="0" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarOnzasFila(this); marcarStockDirty()"></td>
+        <td><select class="select-stock-uni" onchange="onUnidadStockChange(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${uniOpts}</select></td>
+        <td class="onzas-stock">${onz}</td>
+        <td><select class="select-stock-grupo" onchange="marcarStockDirty()" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${opts}</select></td>
+        <td>
+          <button class="editar" onclick="editarItemStock(${s.id})" style="padding:0.3rem 0.6rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">EDITAR</button>
+          <button class="danger" onclick="eliminarStockBarra(${s.id})">✕</button>
+        </td>
       </tr>`;
     }
     container.innerHTML = GRUPOS_BARRA.map(g => {
@@ -1965,8 +2059,8 @@ function cargarStockBarra() {
           </div>
           <div class="accordion-body open">
             <div class="table-wrap"><table>
-              <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>Mueble</th><th></th></tr></thead>
-              <tbody>${items.map(fila).join('') || '<tr><td colspan="5">Vacío.</td></tr>'}</tbody>
+              <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th><th>Mueble</th><th></th></tr></thead>
+              <tbody>${items.map(fila).join('') || '<tr><td colspan="6">Vacío.</td></tr>'}</tbody>
             </table></div>
           </div>
         </div>`;
@@ -1978,7 +2072,7 @@ function cargarStockBarra() {
           </div>
           <div class="accordion-body open">
             <div class="table-wrap"><table>
-              <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>Mueble</th><th></th></tr></thead>
+              <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th><th>Mueble</th><th></th></tr></thead>
               <tbody>${groups['SIN CLASIFICAR'].map(fila).join('')}</tbody>
             </table></div>
           </div>
@@ -1999,18 +2093,61 @@ function agregarStockBarra() {
   }).catch(() => alert('Error al agregar'));
 }
 
+function guardarStockBarra() {
+  const rows = document.querySelectorAll('#barra-stock-container tr[data-stock-id]');
+  const updates = [];
+  rows.forEach(tr => {
+    const id = Number(tr.getAttribute('data-stock-id'));
+    const cantN = parseFloat(tr.querySelector('.input-stock-cant').value) || 0;
+    const uni = tr.querySelector('.select-stock-uni').value;
+    const grp = tr.querySelector('.select-stock-grupo').value;
+    const oCant = parseFloat(tr.getAttribute('data-orig-cantidad')) || 0;
+    const oUni = tr.getAttribute('data-orig-unidad');
+    const oGrp = tr.getAttribute('data-orig-grupo');
+    const body = {};
+    if (cantN !== oCant) body.cantidad = cantN;
+    if (uni !== oUni) body.unidad = uni;
+    if (grp !== oGrp) body.grupo = grp;
+    if (Object.keys(body).length) updates.push(api('PUT', '/api/barra/stock/' + id, body));
+  });
+  if (!updates.length) { showToast('Sin cambios por guardar'); return; }
+  Promise.all(updates).then(() => {
+    _stockDirty = false;
+    const b = document.getElementById('btn-guardar-stock');
+    if (b) { b.style.background = '#2e7d32'; b.textContent = '💾 GUARDAR STOCK'; }
+    showToast('Stock guardado');
+    cargarStockBarra();
+  }).catch(() => alert('Error al guardar'));
+}
+
+function editarItemStock(id) {
+  const tr = document.querySelector('#barra-stock-container tr[data-stock-id="' + id + '"]');
+  if (!tr) return;
+  showModal('editar-stock-item', {
+    id,
+    nombre: tr.querySelector('.stock-nombre').textContent.trim(),
+    cantidad: tr.querySelector('.input-stock-cant').value,
+    unidad: tr.querySelector('.select-stock-uni').value,
+    grupo: tr.querySelector('.select-stock-grupo').value
+  });
+}
+
+function guardarEdicionStock(id) {
+  const nombre = document.getElementById('f-stock-nombre').value.trim();
+  const cantidad = parseFloat(document.getElementById('f-stock-cantidad').value) || 0;
+  const unidad = document.getElementById('f-stock-unidad').value;
+  const grupo = document.getElementById('f-stock-grupo').value;
+  if (!nombre) { alert('Ingresa el nombre'); return; }
+  api('PUT', '/api/barra/stock/' + id, { ingrediente: nombre, cantidad, unidad, grupo }).then(() => {
+    cerrarModal();
+    showToast('Item actualizado');
+    cargarStockBarra();
+  }).catch(() => alert('Error al actualizar'));
+}
+
 function eliminarStockBarra(id) {
   if (!confirm('¿Eliminar este ingrediente del stock?')) return;
   api('DELETE', '/api/barra/stock/' + id).then(() => cargarStockBarra());
-}
-
-function cambiarGrupoStock(id, el) {
-  api('PUT', '/api/barra/stock/' + id, { grupo: el.value }).then(() => cargarStockBarra()).catch(() => alert('Error al mover'));
-}
-
-function actualizarStockCant(id, el) {
-  const cantidad = parseFloat(el.value) || 0;
-  api('PUT', '/api/barra/stock/' + id, { cantidad }).catch(() => alert('Error al actualizar'));
 }
 
 // --- BARRA: Base de Datos (precios) ---
