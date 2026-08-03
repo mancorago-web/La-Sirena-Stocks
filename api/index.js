@@ -755,29 +755,37 @@ async function ensureIngredienteInPrecios(ingrediente, unidad) {
 }
 
 // --- BARRA STOCK ---
+const GRUPOS_BARRA = ['MUEBLE DE ARRIBA', 'MUEBLE DE ABAJO', 'MUEBLE DE APOYO'];
+function normalizeGrupo(g) {
+  const up = String(g || '').toUpperCase().trim();
+  return GRUPOS_BARRA.find(x => x === up) || '';
+}
+
 app.get('/api/barra/stock', async (req, res) => {
   const snap = await col('barra_stock').orderBy('ingrediente').get();
   res.json(snap.docs.map(d => ({ id: Number(d.id), ...d.data() })));
 });
 
 app.post('/api/barra/stock', async (req, res) => {
-  const { ingrediente, cantidad, unidad } = req.body;
+  const { ingrediente, cantidad, unidad, grupo } = req.body;
   if (!ingrediente) return res.status(400).json({ error: 'Nombre requerido' });
   const all = await col('barra_stock').get();
   const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
   await col('barra_stock').doc(String(nextId)).set({
     id: nextId, ingrediente, cantidad: cantidad || 0, unidad: normalizeUnit(unidad),
+    grupo: normalizeGrupo(grupo),
     created_at: new Date().toISOString(), updated_at: new Date().toISOString()
   });
   res.json({ ok: true });
 });
 
 app.put('/api/barra/stock/:id', async (req, res) => {
-  const { cantidad, ingrediente, unidad } = req.body;
+  const { cantidad, ingrediente, unidad, grupo } = req.body;
   const upd = { updated_at: new Date().toISOString() };
   if (cantidad !== undefined) upd.cantidad = cantidad;
   if (ingrediente) upd.ingrediente = ingrediente;
   if (unidad) upd.unidad = normalizeUnit(unidad);
+  if (grupo !== undefined) upd.grupo = normalizeGrupo(grupo);
   await col('barra_stock').doc(req.params.id).update(upd);
   res.json({ ok: true });
 });

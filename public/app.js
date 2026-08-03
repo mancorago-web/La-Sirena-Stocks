@@ -1914,6 +1914,8 @@ function cambiarSubTab(nombre, prefix) {
 }
 
 // --- BARRA: Stock ---
+const GRUPOS_BARRA = ['MUEBLE DE ARRIBA', 'MUEBLE DE ABAJO', 'MUEBLE DE APOYO'];
+
 function cargarStockBarra() {
   api('GET', '/api/barra/stock').then(data => {
     const container = document.getElementById('barra-stock-container');
@@ -1921,23 +1923,52 @@ function cargarStockBarra() {
       container.innerHTML = '<p>No hay ingredientes en stock. Agrega uno nuevo.</p>';
       return;
     }
-    container.innerHTML = `
-      <div class="table-wrap">
-      <table>
-        <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th></th></tr></thead>
-        <tbody>
-          ${data.map(s => `
-            <tr data-stock-id="${s.id}">
-              <td>${s.ingrediente}</td>
-              <td><input type="number" class="input-stock-cant" value="${s.cantidad}" step="0.01" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" onchange="actualizarStockCant(${s.id}, this)"></td>
-              <td>${s.unidad}</td>
-              <td><button class="danger" onclick="eliminarStockBarra(${s.id})">✕</button></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-      </div>
-    `;
+    const groups = {};
+    GRUPOS_BARRA.forEach(g => { groups[g] = []; });
+    groups['SIN CLASIFICAR'] = [];
+    data.forEach(s => {
+      const key = (s.grupo || '').toUpperCase();
+      (groups[key] || groups['SIN CLASIFICAR']).push(s);
+    });
+    function fila(s) {
+      const opts = GRUPOS_BARRA.map(g => `<option value="${g}" ${((s.grupo || '').toUpperCase() === g) ? 'selected' : ''}>${g}</option>`).join('');
+      return `<tr data-stock-id="${s.id}">
+        <td>${s.ingrediente}</td>
+        <td><input type="number" class="input-stock-cant" value="${s.cantidad}" step="0.01" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" onchange="actualizarStockCant(${s.id}, this)"></td>
+        <td>${s.unidad}</td>
+        <td><select onchange="cambiarGrupoStock(${s.id}, this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${opts}</select></td>
+        <td><button class="danger" onclick="eliminarStockBarra(${s.id})">✕</button></td>
+      </tr>`;
+    }
+    container.innerHTML = GRUPOS_BARRA.map(g => {
+      const items = groups[g];
+      const total = items.reduce((sum, i) => sum + (parseFloat(i.cantidad) || 0), 0);
+      return `
+        <div class="accordion-item">
+          <div class="accordion-header active" onclick="toggleAcordeon(this)">
+            <span class="accordion-title">${g} <span style="font-weight:400;font-size:0.85rem;color:#777;">— ${items.length} item(s)</span></span>
+            <span class="accordion-arrow open">▶</span>
+          </div>
+          <div class="accordion-body open">
+            <div class="table-wrap"><table>
+              <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>Mueble</th><th></th></tr></thead>
+              <tbody>${items.map(fila).join('') || '<tr><td colspan="5">Vacío.</td></tr>'}</tbody>
+            </table></div>
+          </div>
+        </div>`;
+    }).join('') + (groups['SIN CLASIFICAR'].length ? `
+        <div class="accordion-item">
+          <div class="accordion-header active" onclick="toggleAcordeon(this)">
+            <span class="accordion-title">SIN CLASIFICAR <span style="font-weight:400;font-size:0.85rem;color:#c62828;">— ${groups['SIN CLASIFICAR'].length} item(s) sin mueble asignado</span></span>
+            <span class="accordion-arrow open">▶</span>
+          </div>
+          <div class="accordion-body open">
+            <div class="table-wrap"><table>
+              <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>Mueble</th><th></th></tr></thead>
+              <tbody>${groups['SIN CLASIFICAR'].map(fila).join('')}</tbody>
+            </table></div>
+          </div>
+        </div>` : '');
   });
 }
 
@@ -1945,8 +1976,9 @@ function agregarStockBarra() {
   const ingrediente = document.getElementById('nuevo-stock-input').value.trim();
   const cantidad = parseFloat(document.getElementById('nuevo-stock-cant').value) || 0;
   const unidad = document.getElementById('nuevo-stock-uni').value;
+  const grupo = document.getElementById('nuevo-stock-grupo')?.value || '';
   if (!ingrediente) { alert('Ingresa el nombre del ingrediente'); return; }
-  api('POST', '/api/barra/stock', { ingrediente, cantidad, unidad: normalizeUnit(unidad) }).then(() => {
+  api('POST', '/api/barra/stock', { ingrediente, cantidad, unidad: normalizeUnit(unidad), grupo }).then(() => {
     document.getElementById('nuevo-stock-input').value = '';
     document.getElementById('nuevo-stock-cant').value = '';
     cargarStockBarra();
@@ -1956,6 +1988,10 @@ function agregarStockBarra() {
 function eliminarStockBarra(id) {
   if (!confirm('¿Eliminar este ingrediente del stock?')) return;
   api('DELETE', '/api/barra/stock/' + id).then(() => cargarStockBarra());
+}
+
+function cambiarGrupoStock(id, el) {
+  api('PUT', '/api/barra/stock/' + id, { grupo: el.value }).then(() => cargarStockBarra()).catch(() => alert('Error al mover'));
 }
 
 function actualizarStockCant(id, el) {
