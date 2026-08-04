@@ -1960,6 +1960,7 @@ function cambiarSubTab(nombre, prefix) {
       _loaded[key] = true;
       if (nombre === 'servicios') cargarServicios();
       else if (nombre === 'planillas') cargarPlanillas();
+      else if (nombre === 'gastos') cargarGastos();
       else cargarCostos(nombre);
     }
   }
@@ -2824,11 +2825,13 @@ function eliminarCosto(id, tipo) {
   api('DELETE', '/api/costos/' + id).then(() => cargarCostos(tipo)).catch(e => { console.error(e); alert('Error al eliminar'); });
 }
 
-// --- COSTOS: categorías (Servicios fijos y Planillas dinámicas) ---
-const SERVICIOS = ['ALQUILER', 'AGUA', 'LUZ', 'INTERNET', 'GAS', 'LIMPIEZA'];
+// --- COSTOS: categorías (Servicios, Gastos y Planillas dinámicas) ---
+const SERVICIOS_DEFAULT = ['ALQUILER', 'AGUA', 'LUZ', 'INTERNET', 'GAS', 'LIMPIEZA'];
+const GASTOS_DEFAULT = ['SEGURIDAD', 'LIMPIEZA', 'MANTENIMIENTO', 'TRANSPORTE', 'OTROS'];
 const PLANILLAS_DEFAULT = ['MESEROS', 'COCINEROS', 'ADMINISTRACION', 'LIMPIEZA'];
 const CATEGORIAS_COSTOS = {
-  servicios: { tipo: 'servicio', titulos: SERVICIOS, campoSub: 'servicio', campoTexto: 'desc', colLabel: 'Descripción', phTexto: 'Descripción (ej. Recibo N° 123)' },
+  servicios: { tipo: 'servicio', titulos: SERVICIOS_DEFAULT, campoSub: 'servicio', campoTexto: 'concepto', colLabel: 'Concepto', phTexto: 'Descripción (ej. Recibo N° 123)', editableTitulos: true },
+  gastos: { tipo: 'gastos', titulos: GASTOS_DEFAULT, campoSub: 'gasto', campoTexto: 'concepto', colLabel: 'Concepto', phTexto: 'Descripción del gasto', editableTitulos: true },
   planillas: { tipo: 'planillas', titulos: PLANILLAS_DEFAULT, campoSub: 'planilla', campoTexto: 'nombre', colLabel: 'Nombre', phTexto: 'Nombre del trabajador', editableTitulos: true }
 };
 
@@ -2839,24 +2842,86 @@ function cargarPlanillas() {
   }).catch(() => cargarCostoCategoria('planillas'));
 }
 
-function cargarServicios() { cargarCostoCategoria('servicios'); }
+function cargarServicios() {
+  api('GET', '/api/servicios/titulos').then(r => {
+    if (r.titulos && r.titulos.length) CATEGORIAS_COSTOS.servicios.titulos = r.titulos;
+    cargarCostoCategoria('servicios');
+  }).catch(() => cargarCostoCategoria('servicios'));
+}
 
-function agregarCampoPlanilla() {
-  const nombre = prompt('Nombre del nuevo campo de planilla (ej. BARTENDERS):');
-  if (!nombre || !nombre.trim()) return;
-  api('POST', '/api/planillas/titulos', { nombre }).then(() => {
+function cargarGastos() {
+  api('GET', '/api/gastos/titulos').then(r => {
+    if (r.titulos && r.titulos.length) CATEGORIAS_COSTOS.gastos.titulos = r.titulos;
+    cargarCostoCategoria('gastos');
+  }).catch(() => cargarCostoCategoria('gastos'));
+}
+
+function agregarCampo(prefix) {
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modal-body');
+  modal.style.display = 'block';
+  body.innerHTML = `
+    <h3>Agregar Campo</h3>
+    <label style="display:block;margin-top:1rem;">
+      Nombre del Campo
+      <input type="text" id="f-nuevo-campo" placeholder="Ej: BARTENDERS" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+    </label>
+    <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+      <button onclick="guardarCampo('${prefix}')" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+      <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
+    </div>
+  `;
+}
+
+function guardarCampo(prefix) {
+  const nombre = document.getElementById('f-nuevo-campo').value.trim();
+  if (!nombre) { alert('Ingresa un nombre'); return; }
+  const endpoint = prefix === 'planillas' ? '/api/planillas/titulos' : 
+                   prefix === 'servicios' ? '/api/servicios/titulos' : 
+                   '/api/gastos/titulos';
+  api('POST', endpoint, { nombre }).then(() => {
+    cerrarModal();
     showToast('Campo agregado');
-    cargarPlanillas();
+    if (prefix === 'planillas') cargarPlanillas();
+    else if (prefix === 'servicios') cargarServicios();
+    else cargarGastos();
   }).catch(() => alert('Error al agregar'));
 }
 
-function editarTituloPlanilla(viejo) {
-  const nuevo = prompt('Nuevo nombre para "' + viejo + '":', viejo);
-  if (!nuevo || !nuevo.trim()) return;
-  if (nuevo.trim().toUpperCase() === viejo.toUpperCase()) return;
-  api('PUT', '/api/planillas/titulos', { viejo, nuevo }).then(() => {
+function editarTitulo(prefix, viejo) {
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modal-body');
+  modal.style.display = 'block';
+  body.innerHTML = `
+    <h3>Renombrar Campo</h3>
+    <label style="display:block;margin-top:1rem;">
+      Nombre Actual
+      <input type="text" value="${viejo}" disabled style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;background:#f5f5f5;">
+    </label>
+    <label style="display:block;margin-top:1rem;">
+      Nuevo Nombre
+      <input type="text" id="f-nuevo-nombre" value="${viejo}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+    </label>
+    <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+      <button onclick="guardarTitulo('${prefix}', '${viejo.replace(/'/g, "\\'")}')" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+      <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
+    </div>
+  `;
+}
+
+function guardarTitulo(prefix, viejo) {
+  const nuevo = document.getElementById('f-nuevo-nombre').value.trim();
+  if (!nuevo) { alert('Ingresa un nombre'); return; }
+  if (nuevo.toUpperCase() === viejo.toUpperCase()) { cerrarModal(); return; }
+  const endpoint = prefix === 'planillas' ? '/api/planillas/titulos' : 
+                   prefix === 'servicios' ? '/api/servicios/titulos' : 
+                   '/api/gastos/titulos';
+  api('PUT', endpoint, { viejo, nuevo }).then(() => {
+    cerrarModal();
     showToast('Campo renombrado');
-    cargarPlanillas();
+    if (prefix === 'planillas') cargarPlanillas();
+    else if (prefix === 'servicios') cargarServicios();
+    else cargarGastos();
   }).catch(e => { console.error(e); alert('Error al editar'); });
 }
 
@@ -2893,7 +2958,7 @@ function cargarCostoCategoria(prefix) {
       html += `<div class="accordion-item">
         <div class="accordion-header" onclick="toggleAcordeon(this)">
           <span class="accordion-title">${t} <span style="font-weight:400;font-size:0.85rem;color:#777;">— TOTAL: S/ ${total.toFixed(2)}</span></span>
-          ${cfg.editableTitulos ? `<button class="editar-titulo" title="Renombrar campo" onclick="event.stopPropagation(); editarTituloPlanilla('${esc(t).replace(/'/g, '&#39;')}')" style="margin-left:0.5rem;padding:0.2rem 0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.75rem;">✏️ Renombrar</button>` : ''}
+          ${cfg.editableTitulos ? `<button class="editar-titulo" title="Renombrar campo" onclick="event.stopPropagation(); editarTitulo('${prefix}', '${esc(t).replace(/'/g, '&#39;')}')" style="margin-left:0.5rem;padding:0.2rem 0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.75rem;">✏️ Renombrar</button>` : ''}
           <span class="accordion-arrow">▶</span>
         </div>
         <div class="accordion-body">

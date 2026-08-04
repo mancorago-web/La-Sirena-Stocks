@@ -1754,6 +1754,102 @@ app.delete('/api/costos/:id', authMiddleware, async (req, res) => {
   }
 });
 
+// --- SERVICIOS: títulos de categorías dinámicos ---
+app.get('/api/servicios/titulos', authMiddleware, async (req, res) => {
+  try {
+    const doc = await col('config').doc('servicios_titulos').get();
+    res.json({ titulos: doc.exists ? (doc.data().titulos || []) : [] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/servicios/titulos', authMiddleware, async (req, res) => {
+  try {
+    const nombre = String(req.body.nombre || '').trim().toUpperCase();
+    if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+    const doc = await col('config').doc('servicios_titulos').get();
+    let titulos = doc.exists ? (doc.data().titulos || []) : [];
+    if (!titulos.some(t => t.toUpperCase() === nombre)) titulos.push(nombre);
+    await col('config').doc('servicios_titulos').set({ titulos, updated_at: new Date().toISOString() });
+    res.json({ ok: true, titulos });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/servicios/titulos', authMiddleware, async (req, res) => {
+  try {
+    const viejo = String(req.body.viejo || '').trim();
+    const nuevo = String(req.body.nuevo || '').trim().toUpperCase();
+    if (!viejo || !nuevo) return res.status(400).json({ error: 'viejo y nuevo requeridos' });
+    const doc = await col('config').doc('servicios_titulos').get();
+    let titulos = doc.exists ? (doc.data().titulos || []) : [];
+    const idx = titulos.findIndex(t => t.toUpperCase() === viejo.toUpperCase());
+    if (idx === -1) return res.status(404).json({ error: 'Campo no encontrado' });
+    if (titulos.some(t => t.toUpperCase() === nuevo && t !== titulos[idx])) {
+      return res.status(400).json({ error: 'Ya existe un campo con ese nombre' });
+    }
+    titulos[idx] = nuevo;
+    await col('config').doc('servicios_titulos').set({ titulos, updated_at: new Date().toISOString() });
+    const snap = await col('costos').where('tipo', '==', 'servicio').where('servicio', '==', viejo.toLowerCase()).get();
+    const batch = db.batch();
+    snap.docs.forEach(d => batch.update(d.ref, { servicio: nuevo.toLowerCase(), updated_at: new Date().toISOString() }));
+    if (snap.size) await batch.commit();
+    res.json({ ok: true, titulos, actualizados: snap.size });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- GASTOS: títulos de categorías dinámicos ---
+app.get('/api/gastos/titulos', authMiddleware, async (req, res) => {
+  try {
+    const doc = await col('config').doc('gastos_titulos').get();
+    res.json({ titulos: doc.exists ? (doc.data().titulos || []) : [] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/gastos/titulos', authMiddleware, async (req, res) => {
+  try {
+    const nombre = String(req.body.nombre || '').trim().toUpperCase();
+    if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+    const doc = await col('config').doc('gastos_titulos').get();
+    let titulos = doc.exists ? (doc.data().titulos || []) : [];
+    if (!titulos.some(t => t.toUpperCase() === nombre)) titulos.push(nombre);
+    await col('config').doc('gastos_titulos').set({ titulos, updated_at: new Date().toISOString() });
+    res.json({ ok: true, titulos });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/gastos/titulos', authMiddleware, async (req, res) => {
+  try {
+    const viejo = String(req.body.viejo || '').trim();
+    const nuevo = String(req.body.nuevo || '').trim().toUpperCase();
+    if (!viejo || !nuevo) return res.status(400).json({ error: 'viejo y nuevo requeridos' });
+    const doc = await col('config').doc('gastos_titulos').get();
+    let titulos = doc.exists ? (doc.data().titulos || []) : [];
+    const idx = titulos.findIndex(t => t.toUpperCase() === viejo.toUpperCase());
+    if (idx === -1) return res.status(404).json({ error: 'Campo no encontrado' });
+    if (titulos.some(t => t.toUpperCase() === nuevo && t !== titulos[idx])) {
+      return res.status(400).json({ error: 'Ya existe un campo con ese nombre' });
+    }
+    titulos[idx] = nuevo;
+    await col('config').doc('gastos_titulos').set({ titulos, updated_at: new Date().toISOString() });
+    const snap = await col('costos').where('tipo', '==', 'gastos').where('gasto', '==', viejo.toLowerCase()).get();
+    const batch = db.batch();
+    snap.docs.forEach(d => batch.update(d.ref, { gasto: nuevo.toLowerCase(), updated_at: new Date().toISOString() }));
+    if (snap.size) await batch.commit();
+    res.json({ ok: true, titulos, actualizados: snap.size });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- PLANILLAS: títulos de categorías dinámicos ---
 app.get('/api/planillas/titulos', authMiddleware, async (req, res) => {
   try {
