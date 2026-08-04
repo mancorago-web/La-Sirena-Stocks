@@ -85,13 +85,9 @@
     </div>
   </div>
 
-  <!-- Tabs bar (COSTOS) -->
+  <!-- Tabs bar (COSTOS) - se carga dinámicamente -->
   <div id="tabs-costos" class="tabs-bar" style="display:none">
-    <div class="tabs">
-      <button class="sub-tab active" data-subtab="planillas" onclick="cambiarSubTab('planillas','costos')">Planillas</button>
-      <button class="sub-tab" data-subtab="servicios" onclick="cambiarSubTab('servicios','costos')">Servicios</button>
-      <button class="sub-tab" data-subtab="gastos" onclick="cambiarSubTab('gastos','costos')">Gastos Operativos</button>
-    </div>
+    <div class="tabs"></div>
   </div>
 
   <div class="container" id="container">
@@ -369,32 +365,7 @@
     </div>
 
     <div id="tab-costos" class="tab-content">
-      <div id="sub-costos-planillas" class="sub-tab-content active">
-        <div class="header-actions">
-          <h2>Planillas</h2>
-          <p class="subtitulo" style="color:#888;font-size:0.85rem;">Campos editables: Meseros, Cocineros, Administración, Limpieza...</p>
-          <button onclick="agregarCampo('planillas')" style="padding:0.5rem 1rem;background:#0f3460;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;">➕ AGREGAR CAMPO</button>
-        </div>
-        <div id="costos-planillas-container"><p>Cargando...</p></div>
-      </div>
-
-      <div id="sub-costos-servicios" class="sub-tab-content">
-        <div class="header-actions">
-          <h2>Servicios</h2>
-          <p class="subtitulo" style="color:#888;font-size:0.85rem;">Alquiler, Agua, Luz, Internet, Gas y Limpieza</p>
-          <button onclick="agregarCampo('servicios')" style="padding:0.5rem 1rem;background:#0f3460;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;">➕ AGREGAR CAMPO</button>
-        </div>
-        <div id="costos-servicios-container"><p>Cargando...</p></div>
-      </div>
-
-      <div id="sub-costos-gastos" class="sub-tab-content">
-        <div class="header-actions">
-          <h2>Gastos Operativos</h2>
-          <p class="subtitulo" style="color:#888;font-size:0.85rem;">Costos operativos del negocio</p>
-          <button onclick="agregarCampo('gastos')" style="padding:0.5rem 1rem;background:#0f3460;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;">➕ AGREGAR CAMPO</button>
-        </div>
-        <div id="costos-gastos-container"><p>Cargando...</p></div>
-      </div>
+      <div id="costos-content-area"></div>
     </div>
 
     <div id="modal" class="modal">

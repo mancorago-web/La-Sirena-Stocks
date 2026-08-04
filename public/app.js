@@ -130,6 +130,7 @@ function irACategoria(cat) {
     if (!_loaded[cat]) {
       _loaded[cat] = true;
       if (cat === 'barra') { cargarRecetas(); cargarStockBarra(); cargarPrecios(); cargarSugerenciasStock(); }
+      if (cat === 'costos') { cargarPestanas(); }
     }
     // Activate first sub-tab for the category
     const firstSub = document.querySelector('#tabs-' + cat + ' .sub-tab');
@@ -1958,10 +1959,9 @@ function cambiarSubTab(nombre, prefix) {
     const key = 'costos_' + nombre;
     if (!_loaded[key]) {
       _loaded[key] = true;
-      if (nombre === 'servicios') cargarServicios();
-      else if (nombre === 'planillas') cargarPlanillas();
-      else if (nombre === 'gastos') cargarGastos();
-      else cargarCostos(nombre);
+      if (CATEGORIAS_COSTOS[nombre]) {
+        cargarCostoCategoria(nombre);
+      }
     }
   }
 }
@@ -2825,110 +2825,129 @@ function eliminarCosto(id, tipo) {
   api('DELETE', '/api/costos/' + id).then(() => cargarCostos(tipo)).catch(e => { console.error(e); alert('Error al eliminar'); });
 }
 
-// --- COSTOS: categorías (Servicios, Gastos y Planillas dinámicas) ---
-const SERVICIOS_DEFAULT = ['ALQUILER', 'AGUA', 'LUZ', 'INTERNET', 'GAS', 'LIMPIEZA'];
-const GASTOS_DEFAULT = ['SEGURIDAD', 'LIMPIEZA', 'MANTENIMIENTO', 'TRANSPORTE', 'OTROS'];
-const PLANILLAS_DEFAULT = ['MESEROS', 'COCINEROS', 'ADMINISTRACION', 'LIMPIEZA'];
-const CATEGORIAS_COSTOS = {
-  servicios: { tipo: 'servicio', titulos: SERVICIOS_DEFAULT, campoSub: 'servicio', campoTexto: 'concepto', colLabel: 'Concepto', phTexto: 'Descripción (ej. Recibo N° 123)', editableTitulos: true },
-  gastos: { tipo: 'gastos', titulos: GASTOS_DEFAULT, campoSub: 'gasto', campoTexto: 'concepto', colLabel: 'Concepto', phTexto: 'Descripción del gasto', editableTitulos: true },
-  planillas: { tipo: 'planillas', titulos: PLANILLAS_DEFAULT, campoSub: 'planilla', campoTexto: 'nombre', colLabel: 'Nombre', phTexto: 'Nombre del trabajador', editableTitulos: true }
-};
+// --- COSTOS: pestañas dinámicas ---
+let CATEGORIAS_COSTOS = {};
 
-function cargarPlanillas() {
-  api('GET', '/api/planillas/titulos').then(r => {
-    if (r.titulos && r.titulos.length) CATEGORIAS_COSTOS.planillas.titulos = r.titulos;
-    cargarCostoCategoria('planillas');
-  }).catch(() => cargarCostoCategoria('planillas'));
+function cargarPestanas() {
+  return api('GET', '/api/costos/pestanas').then(r => {
+    const pestanas = r.pestanas || [];
+    CATEGORIAS_COSTOS = {};
+    pestanas.forEach(p => {
+      CATEGORIAS_COSTOS[p.id] = {
+        tipo: p.tipo, titulos: [], campoSub: p.campoSub, campoTexto: p.campoTexto,
+        colLabel: p.colLabel, phTexto: p.phTexto, editableTitulos: p.editableTitulos !== false,
+        label: p.label, titulosDoc: p.titulosDoc
+      };
+    });
+    renderizarPestanas(pestanas);
+    return pestanas;
+  });
 }
 
-function cargarServicios() {
-  api('GET', '/api/servicios/titulos').then(r => {
-    if (r.titulos && r.titulos.length) CATEGORIAS_COSTOS.servicios.titulos = r.titulos;
-    cargarCostoCategoria('servicios');
-  }).catch(() => cargarCostoCategoria('servicios'));
+function renderizarPestanas(pestanas) {
+  const tabsBar = document.getElementById('tabs-costos');
+  const contentArea = document.getElementById('costos-content-area');
+  if (!tabsBar || !contentArea) return;
+  const tabsContainer = tabsBar.querySelector('.tabs');
+  if (!tabsContainer) return;
+  let tabsHtml = '';
+  let contentHtml = '';
+  pestanas.forEach((p, i) => {
+    const activeClass = i === 0 ? 'active' : '';
+    tabsHtml += `<div class="sub-tab ${activeClass}" data-subtab="${p.id}" onclick="cambiarSubTab('${p.id}', 'costos')">
+      ${p.label}
+      <button class="editar-titulo" onclick="event.stopPropagation(); editarPestana('${p.id}')" title="Renombrar" style="margin-left:0.3rem;padding:0.1rem 0.3rem;background:#0f3460;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:0.65rem;">✏️</button>
+    </div>`;
+    const activeContent = i === 0 ? 'active' : '';
+    contentHtml += `<div id="sub-costos-${p.id}" class="sub-tab-content ${activeContent}">
+      <div class="header-actions">
+        <h2>${p.label}</h2>
+        <button onclick="agregarCampo('${p.id}')" style="padding:0.5rem 1rem;background:#0f3460;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;">➕ AGREGAR CAMPO</button>
+      </div>
+      <div id="costos-${p.id}-container"><p>Cargando...</p></div>
+    </div>`;
+  });
+  tabsHtml += `<div class="sub-tab" onclick="nuevaPestana()" style="cursor:pointer;color:#0f3460;font-weight:700;">➕</div>`;
+  tabsContainer.innerHTML = tabsHtml;
+  contentArea.innerHTML = contentHtml;
 }
 
-function cargarGastos() {
-  api('GET', '/api/gastos/titulos').then(r => {
-    if (r.titulos && r.titulos.length) CATEGORIAS_COSTOS.gastos.titulos = r.titulos;
-    cargarCostoCategoria('gastos');
-  }).catch(() => cargarCostoCategoria('gastos'));
-}
-
-function agregarCampo(prefix) {
+function nuevaPestana() {
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
   modal.style.display = 'block';
   body.innerHTML = `
-    <h3>Agregar Campo</h3>
+    <h3>Nueva Pestaña</h3>
     <label style="display:block;margin-top:1rem;">
-      Nombre del Campo
-      <input type="text" id="f-nuevo-campo" placeholder="Ej: BARTENDERS" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      Nombre de la Pestaña
+      <input type="text" id="f-nueva-pestana" placeholder="Ej: COMISIONES" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
     </label>
     <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
-      <button onclick="guardarCampo('${prefix}')" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+      <button onclick="guardarNuevaPestana()" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Crear</button>
       <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
     </div>
   `;
 }
 
-function guardarCampo(prefix) {
-  const nombre = document.getElementById('f-nuevo-campo').value.trim();
-  if (!nombre) { alert('Ingresa un nombre'); return; }
-  const endpoint = prefix === 'planillas' ? '/api/planillas/titulos' : 
-                   prefix === 'servicios' ? '/api/servicios/titulos' : 
-                   '/api/gastos/titulos';
-  api('POST', endpoint, { nombre }).then(() => {
+function guardarNuevaPestana() {
+  const label = document.getElementById('f-nueva-pestana').value.trim();
+  if (!label) { alert('Ingresa un nombre'); return; }
+  api('POST', '/api/costos/pestanas', { label }).then(() => {
     cerrarModal();
-    showToast('Campo agregado');
-    if (prefix === 'planillas') cargarPlanillas();
-    else if (prefix === 'servicios') cargarServicios();
-    else cargarGastos();
-  }).catch(() => alert('Error al agregar'));
+    showToast('Pestaña creada');
+    cargarPestanas().then(() => {
+      CATEGORIAS_COSTOS._loaded = {};
+    });
+  }).catch(e => { console.error(e); alert(e.message || 'Error al crear'); });
 }
 
-function editarTitulo(prefix, viejo) {
+function editarPestana(id) {
+  const cfg = CATEGORIAS_COSTOS[id];
+  if (!cfg) return;
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
   modal.style.display = 'block';
   body.innerHTML = `
-    <h3>Renombrar Campo</h3>
+    <h3>Renombrar Pestaña</h3>
     <label style="display:block;margin-top:1rem;">
       Nombre Actual
-      <input type="text" value="${viejo}" disabled style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;background:#f5f5f5;">
+      <input type="text" value="${cfg.label}" disabled style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;background:#f5f5f5;">
     </label>
     <label style="display:block;margin-top:1rem;">
       Nuevo Nombre
-      <input type="text" id="f-nuevo-nombre" value="${viejo}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      <input type="text" id="f-nuevo-label-pestana" value="${cfg.label}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
     </label>
     <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
-      <button onclick="guardarTitulo('${prefix}', '${viejo.replace(/'/g, "\\'")}')" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+      <button onclick="guardarEditarPestana('${id}')" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
       <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
     </div>
   `;
 }
 
-function guardarTitulo(prefix, viejo) {
-  const nuevo = document.getElementById('f-nuevo-nombre').value.trim();
-  if (!nuevo) { alert('Ingresa un nombre'); return; }
-  if (nuevo.toUpperCase() === viejo.toUpperCase()) { cerrarModal(); return; }
-  const endpoint = prefix === 'planillas' ? '/api/planillas/titulos' : 
-                   prefix === 'servicios' ? '/api/servicios/titulos' : 
-                   '/api/gastos/titulos';
-  api('PUT', endpoint, { viejo, nuevo }).then(() => {
+function guardarEditarPestana(id) {
+  const label = document.getElementById('f-nuevo-label-pestana').value.trim();
+  if (!label) { alert('Ingresa un nombre'); return; }
+  api('PUT', '/api/costos/pestanas/' + id, { label }).then(() => {
     cerrarModal();
-    showToast('Campo renombrado');
-    if (prefix === 'planillas') cargarPlanillas();
-    else if (prefix === 'servicios') cargarServicios();
-    else cargarGastos();
+    showToast('Pestaña renombrada');
+    cargarPestanas();
   }).catch(e => { console.error(e); alert('Error al editar'); });
 }
 
 function cargarCostoCategoria(prefix) {
   const cfg = CATEGORIAS_COSTOS[prefix];
+  if (!cfg) return;
   const container = document.getElementById('costos-' + prefix + '-container');
   if (!container) return;
+  const titulosDoc = cfg.titulosDoc || (prefix + '_titulos');
+  api('GET', '/api/' + prefix + '/titulos').then(r => {
+    if (r.titulos && r.titulos.length) cfg.titulos = r.titulos;
+    renderCostoCategoria(prefix, container);
+  }).catch(() => renderCostoCategoria(prefix, container));
+}
+
+function renderCostoCategoria(prefix, container) {
+  const cfg = CATEGORIAS_COSTOS[prefix];
   api('GET', '/api/costos?tipo=' + cfg.tipo).then(list => {
     const groups = {};
     cfg.titulos.forEach(t => { groups[t] = []; });
@@ -2976,7 +2995,7 @@ function cargarCostoCategoria(prefix) {
       </div>`;
     });
     if (groups['OTROS'].length) {
-      html += '<p style="color:#c62828;margin-top:0.5rem;">Nota: ' + groups['OTROS'].length + ' registro(s) de ' + cfg.tipo + ' sin clasificar quedaron sin mostrar.</p>';
+      html += '<p style="color:#c62828;margin-top:0.5rem;">Nota: ' + groups['OTROS'].length + ' registro(s) sin clasificar quedaron sin mostrar.</p>';
     }
     container.innerHTML = html;
   }).catch(e => { console.error(e); container.innerHTML = '<p>Error al cargar.</p>'; });

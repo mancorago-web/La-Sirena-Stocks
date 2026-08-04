@@ -1899,4 +1899,120 @@ app.put('/api/planillas/titulos', authMiddleware, async (req, res) => {
   }
 });
 
+// --- COSTOS: endpoints genéricos para títulos de pestañas dinámicas ---
+app.get('/api/:prefix/titulos', authMiddleware, async (req, res) => {
+  try {
+    const { prefix } = req.params;
+    const doc = await col('config').doc(prefix + '_titulos').get();
+    res.json({ titulos: doc.exists ? (doc.data().titulos || []) : [] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/:prefix/titulos', authMiddleware, async (req, res) => {
+  try {
+    const { prefix } = req.params;
+    const nombre = String(req.body.nombre || '').trim().toUpperCase();
+    if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+    const doc = await col('config').doc(prefix + '_titulos').get();
+    let titulos = doc.exists ? (doc.data().titulos || []) : [];
+    if (!titulos.some(t => t.toUpperCase() === nombre)) titulos.push(nombre);
+    await col('config').doc(prefix + '_titulos').set({ titulos, updated_at: new Date().toISOString() });
+    res.json({ ok: true, titulos });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/:prefix/titulos', authMiddleware, async (req, res) => {
+  try {
+    const { prefix } = req.params;
+    const viejo = String(req.body.viejo || '').trim();
+    const nuevo = String(req.body.nuevo || '').trim().toUpperCase();
+    if (!viejo || !nuevo) return res.status(400).json({ error: 'viejo y nuevo requeridos' });
+    const doc = await col('config').doc(prefix + '_titulos').get();
+    let titulos = doc.exists ? (doc.data().titulos || []) : [];
+    const idx = titulos.findIndex(t => t.toUpperCase() === viejo.toUpperCase());
+    if (idx === -1) return res.status(404).json({ error: 'Campo no encontrado' });
+    if (titulos.some(t => t.toUpperCase() === nuevo && t !== titulos[idx])) {
+      return res.status(400).json({ error: 'Ya existe un campo con ese nombre' });
+    }
+    titulos[idx] = nuevo;
+    await col('config').doc(prefix + '_titulos').set({ titulos, updated_at: new Date().toISOString() });
+    res.json({ ok: true, titulos });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- COSTOS: pestañas dinámicas ---
+const PESTANAS_DEFAULT = [
+  { id: 'planillas', label: 'Planillas', tipo: 'planillas', campoSub: 'planilla', campoTexto: 'nombre', colLabel: 'Nombre', phTexto: 'Nombre del trabajador', editableTitulos: true, titulosDoc: 'planillas_titulos' },
+  { id: 'servicios', label: 'Servicios', tipo: 'servicio', campoSub: 'servicio', campoTexto: 'concepto', colLabel: 'Concepto', phTexto: 'Descripción (ej. Recibo N° 123)', editableTitulos: true, titulosDoc: 'servicios_titulos' },
+  { id: 'gastos', label: 'Gastos Operativos', tipo: 'gastos', campoSub: 'gasto', campoTexto: 'concepto', colLabel: 'Concepto', phTexto: 'Descripción del gasto', editableTitulos: true, titulosDoc: 'gastos_titulos' }
+];
+
+app.get('/api/costos/pestanas', authMiddleware, async (req, res) => {
+  try {
+    const doc = await col('config').doc('costos_pestanas').get();
+    const pestanas = doc.exists ? (doc.data().pestanas || PESTANAS_DEFAULT) : PESTANAS_DEFAULT;
+    res.json({ pestanas });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/costos/pestanas', authMiddleware, async (req, res) => {
+  try {
+    const label = String(req.body.label || '').trim();
+    if (!label) return res.status(400).json({ error: 'Nombre requerido' });
+    const id = label.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+    const doc = await col('config').doc('costos_pestanas').get();
+    let pestanas = doc.exists ? (doc.data().pestanas || [...PESTANAS_DEFAULT]) : [...PESTANAS_DEFAULT];
+    if (pestanas.some(p => p.id === id)) return res.status(400).json({ error: 'Ya existe una pestaña con ese nombre' });
+    const titulosDoc = id + '_titulos';
+    const newTab = {
+      id, label: label.toUpperCase(), tipo: id, campoSub: id, campoTexto: 'concepto',
+      colLabel: 'Concepto', phTexto: 'Descripción', editableTitulos: true, titulosDoc
+    };
+    pestanas.push(newTab);
+    await col('config').doc('costos_pestanas').set({ pestanas, updated_at: new Date().toISOString() });
+    await col('config').doc(titulosDoc).set({ titulos: [], updated_at: new Date().toISOString() });
+    res.json({ ok: true, pestanas });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/costos/pestanas/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const nuevoLabel = String(req.body.label || '').trim();
+    if (!nuevoLabel) return res.status(400).json({ error: 'Nombre requerido' });
+    const doc = await col('config').doc('costos_pestanas').get();
+    let pestanas = doc.exists ? (doc.data().pestanas || [...PESTANAS_DEFAULT]) : [...PESTANAS_DEFAULT];
+    const idx = pestanas.findIndex(p => p.id === id);
+    if (idx === -1) return res.status(404).json({ error: 'Pestaña no encontrada' });
+    pestanas[idx].label = nuevoLabel.toUpperCase();
+    await col('config').doc('costos_pestanas').set({ pestanas, updated_at: new Date().toISOString() });
+    res.json({ ok: true, pestanas });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/costos/pestanas/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const doc = await col('config').doc('costos_pestanas').get();
+    let pestanas = doc.exists ? (doc.data().pestanas || [...PESTANAS_DEFAULT]) : [...PESTANAS_DEFAULT];
+    pestanas = pestanas.filter(p => p.id !== id);
+    await col('config').doc('costos_pestanas').set({ pestanas, updated_at: new Date().toISOString() });
+    res.json({ ok: true, pestanas });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = app;
