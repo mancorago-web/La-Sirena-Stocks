@@ -130,7 +130,13 @@ function irACategoria(cat) {
     if (!_loaded[cat]) {
       _loaded[cat] = true;
       if (cat === 'barra') { cargarRecetas(); cargarStockBarra(); cargarPrecios(); cargarSugerenciasStock(); }
-      if (cat === 'costos') { cargarPestanas(); }
+      if (cat === 'costos') {
+        cargarPestanas().then(() => {
+          const firstSub = document.querySelector('#tabs-costos .sub-tab[data-subtab]');
+          if (firstSub) cambiarSubTab(firstSub.dataset.subtab, 'costos');
+        });
+        return;
+      }
     }
     // Activate first sub-tab for the category
     const firstSub = document.querySelector('#tabs-' + cat + ' .sub-tab');
@@ -2834,7 +2840,7 @@ function cargarPestanas() {
     CATEGORIAS_COSTOS = {};
     pestanas.forEach(p => {
       CATEGORIAS_COSTOS[p.id] = {
-        tipo: p.tipo, titulos: [], campoSub: p.campoSub, campoTexto: p.campoTexto,
+        tipo: p.tipo, titulos: p.titulos || [], campoSub: p.campoSub, campoTexto: p.campoTexto,
         colLabel: p.colLabel, phTexto: p.phTexto, editableTitulos: p.editableTitulos !== false,
         label: p.label, titulosDoc: p.titulosDoc
       };

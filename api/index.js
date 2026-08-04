@@ -1758,7 +1758,12 @@ app.delete('/api/costos/:id', authMiddleware, async (req, res) => {
 app.get('/api/servicios/titulos', authMiddleware, async (req, res) => {
   try {
     const doc = await col('config').doc('servicios_titulos').get();
-    res.json({ titulos: doc.exists ? (doc.data().titulos || []) : [] });
+    if (doc.exists) {
+      res.json({ titulos: doc.data().titulos || [] });
+    } else {
+      const defaultPestana = PESTANAS_DEFAULT.find(p => p.id === 'servicios');
+      res.json({ titulos: defaultPestana ? defaultPestana.titulos : [] });
+    }
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1806,7 +1811,12 @@ app.put('/api/servicios/titulos', authMiddleware, async (req, res) => {
 app.get('/api/gastos/titulos', authMiddleware, async (req, res) => {
   try {
     const doc = await col('config').doc('gastos_titulos').get();
-    res.json({ titulos: doc.exists ? (doc.data().titulos || []) : [] });
+    if (doc.exists) {
+      res.json({ titulos: doc.data().titulos || [] });
+    } else {
+      const defaultPestana = PESTANAS_DEFAULT.find(p => p.id === 'gastos');
+      res.json({ titulos: defaultPestana ? defaultPestana.titulos : [] });
+    }
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1854,7 +1864,12 @@ app.put('/api/gastos/titulos', authMiddleware, async (req, res) => {
 app.get('/api/planillas/titulos', authMiddleware, async (req, res) => {
   try {
     const doc = await col('config').doc('planillas_titulos').get();
-    res.json({ titulos: doc.exists ? (doc.data().titulos || []) : [] });
+    if (doc.exists) {
+      res.json({ titulos: doc.data().titulos || [] });
+    } else {
+      const defaultPestana = PESTANAS_DEFAULT.find(p => p.id === 'planillas');
+      res.json({ titulos: defaultPestana ? defaultPestana.titulos : [] });
+    }
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1904,7 +1919,12 @@ app.get('/api/:prefix/titulos', authMiddleware, async (req, res) => {
   try {
     const { prefix } = req.params;
     const doc = await col('config').doc(prefix + '_titulos').get();
-    res.json({ titulos: doc.exists ? (doc.data().titulos || []) : [] });
+    if (doc.exists) {
+      res.json({ titulos: doc.data().titulos || [] });
+    } else {
+      const defaultPestana = PESTANAS_DEFAULT.find(p => p.id === prefix);
+      res.json({ titulos: defaultPestana ? defaultPestana.titulos : [] });
+    }
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1948,9 +1968,9 @@ app.put('/api/:prefix/titulos', authMiddleware, async (req, res) => {
 
 // --- COSTOS: pestañas dinámicas ---
 const PESTANAS_DEFAULT = [
-  { id: 'planillas', label: 'Planillas', tipo: 'planillas', campoSub: 'planilla', campoTexto: 'nombre', colLabel: 'Nombre', phTexto: 'Nombre del trabajador', editableTitulos: true, titulosDoc: 'planillas_titulos' },
-  { id: 'servicios', label: 'Servicios', tipo: 'servicio', campoSub: 'servicio', campoTexto: 'concepto', colLabel: 'Concepto', phTexto: 'Descripción (ej. Recibo N° 123)', editableTitulos: true, titulosDoc: 'servicios_titulos' },
-  { id: 'gastos', label: 'Gastos Operativos', tipo: 'gastos', campoSub: 'gasto', campoTexto: 'concepto', colLabel: 'Concepto', phTexto: 'Descripción del gasto', editableTitulos: true, titulosDoc: 'gastos_titulos' }
+  { id: 'planillas', label: 'Planillas', tipo: 'planillas', campoSub: 'planilla', campoTexto: 'nombre', colLabel: 'Nombre', phTexto: 'Nombre del trabajador', editableTitulos: true, titulosDoc: 'planillas_titulos', titulos: ['MESEROS', 'COCINEROS', 'ADMINISTRACION', 'LIMPIEZA'] },
+  { id: 'servicios', label: 'Servicios', tipo: 'servicio', campoSub: 'servicio', campoTexto: 'concepto', colLabel: 'Concepto', phTexto: 'Descripción (ej. Recibo N° 123)', editableTitulos: true, titulosDoc: 'servicios_titulos', titulos: ['ALQUILER', 'AGUA', 'LUZ', 'INTERNET', 'GAS', 'LIMPIEZA'] },
+  { id: 'gastos', label: 'Gastos Operativos', tipo: 'gastos', campoSub: 'gasto', campoTexto: 'concepto', colLabel: 'Concepto', phTexto: 'Descripción del gasto', editableTitulos: true, titulosDoc: 'gastos_titulos', titulos: ['SEGURIDAD', 'LIMPIEZA', 'MANTENIMIENTO', 'TRANSPORTE', 'OTROS'] }
 ];
 
 app.get('/api/costos/pestanas', authMiddleware, async (req, res) => {
