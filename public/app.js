@@ -2124,11 +2124,11 @@ function cargarStockBarra() {
       const total = items.reduce((sum, i) => sum + (parseFloat(i.cantidad) || 0), 0);
       return `
         <div class="accordion-item">
-          <div class="accordion-header active" onclick="toggleAcordeon(this)">
+          <div class="accordion-header" onclick="toggleAcordeon(this)">
             <span class="accordion-title">${g} <span style="font-weight:400;font-size:0.85rem;color:#777;">— ${items.length} item(s)</span></span>
-            <span class="accordion-arrow open">▶</span>
+            <span class="accordion-arrow">▶</span>
           </div>
-          <div class="accordion-body open">
+          <div class="accordion-body">
             <div class="table-wrap"><table>
               <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th><th>Mueble</th><th></th></tr></thead>
               <tbody>${items.map(fila).join('') || '<tr><td colspan="6">Vacío.</td></tr>'}</tbody>
@@ -2137,11 +2137,11 @@ function cargarStockBarra() {
         </div>`;
     }).join('') + (groups['SIN CLASIFICAR'].length ? `
         <div class="accordion-item">
-          <div class="accordion-header active" onclick="toggleAcordeon(this)">
+          <div class="accordion-header" onclick="toggleAcordeon(this)">
             <span class="accordion-title">SIN CLASIFICAR <span style="font-weight:400;font-size:0.85rem;color:#c62828;">— ${groups['SIN CLASIFICAR'].length} item(s) sin mueble asignado</span></span>
-            <span class="accordion-arrow open">▶</span>
+            <span class="accordion-arrow">▶</span>
           </div>
-          <div class="accordion-body open">
+          <div class="accordion-body">
             <div class="table-wrap"><table>
               <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th><th>Mueble</th><th></th></tr></thead>
               <tbody>${groups['SIN CLASIFICAR'].map(fila).join('')}</tbody>
