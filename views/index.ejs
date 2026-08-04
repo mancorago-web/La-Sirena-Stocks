@@ -267,30 +267,35 @@
           <div class="controles-dia" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
             <input type="text" id="buscar-stock-barra" placeholder="Buscar en stock..." list="sugerencia-stock-buscar" autocomplete="off" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:250px;" oninput="buscarTablaBarra(this.value, 'barra-stock-container', 'tr[data-stock-id]')" onchange="normalizarBusquedaStock(this)">
             <datalist id="sugerencia-stock-buscar"></datalist>
-            <input type="text" id="fecha-stocks" placeholder="Fecha" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:120px;">
+            <label style="display:flex;align-items:center;gap:0.3rem;">Fecha:
+              <input type="date" id="fecha-stock-barra" onchange="cargarStockBarra()" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
+            </label>
             <button onclick="exportarStockBarra()" style="padding:0.5rem 1rem;background:#2e7d32;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;">📊 EXPORTAR EXCEL</button>
-            <button id="nuevo-stock-input-btn" onclick="agregarStockBarra()">AGREGAR ITEM</button>
-            <datalist id="sugerencia-stock-input"></datalist>
-            <input type="number" id="nuevo-stock-cant" placeholder="Cant." step="0.01" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:90px;">
-            <select id="nuevo-stock-uni" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:90px;">
-              <option value="ml">ml</option>
-              <option value="unidad">unidad</option>
-              <option value="onzas">onzas</option>
-              <option value="gramos">gramos</option>
-              <option value="kg">kg</option>
-              <option value="lt">lt</option>
-              <option value="hojas">hojas</option>
-              <option value="gotas">gotas</option>
-              <option value="rodajas">rodajas</option>
-            </select>
-            <select id="nuevo-stock-grupo" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:170px;">
-              <option value="MUEBLE DE ARRIBA">MUEBLE DE ARRIBA</option>
-              <option value="MUEBLE DE ABAJO">MUEBLE DE ABAJO</option>
-              <option value="MUEBLE DE APOYO">MUEBLE DE APOYO</option>
-            </select>
-            <button onclick="agregarStockBarra()">AGREGAR ITEM</button>
-            <button id="btn-guardar-stock" onclick="guardarStockBarra()" style="padding:0.5rem 1rem;background:#2e7d32;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;">💾 GUARDAR STOCK</button>
+            <span id="barra-stock-add-form" style="display:inline-flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+              <input type="text" id="nuevo-stock-input" placeholder="Ingrediente" list="sugerencia-stock-input" autocomplete="off" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:170px;">
+              <datalist id="sugerencia-stock-input"></datalist>
+              <input type="number" id="nuevo-stock-cant" placeholder="Cant." step="0.01" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:80px;">
+              <select id="nuevo-stock-uni" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:90px;">
+                <option value="ml">ml</option>
+                <option value="unidad">unidad</option>
+                <option value="onzas">onzas</option>
+                <option value="gramos">gramos</option>
+                <option value="kg">kg</option>
+                <option value="lt">lt</option>
+                <option value="hojas">hojas</option>
+                <option value="gotas">gotas</option>
+                <option value="rodajas">rodajas</option>
+              </select>
+              <select id="nuevo-stock-grupo" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:170px;">
+                <option value="MUEBLE DE ARRIBA">MUEBLE DE ARRIBA</option>
+                <option value="MUEBLE DE ABAJO">MUEBLE DE ABAJO</option>
+                <option value="MUEBLE DE APOYO">MUEBLE DE APOYO</option>
+              </select>
+              <button onclick="agregarStockBarra()">AGREGAR ITEM</button>
+              <button id="btn-guardar-stock" onclick="guardarStockBarra()" style="padding:0.5rem 1rem;background:#2e7d32;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;">💾 GUARDAR STOCK</button>
+            </span>
           </div>
+          <div id="barra-stock-banner" style="display:none"></div>
         </div>
         <div id="barra-stock-container"></div>
       </div>
@@ -367,7 +372,8 @@
       <div id="sub-costos-planillas" class="sub-tab-content active">
         <div class="header-actions">
           <h2>Planillas</h2>
-          <p class="subtitulo" style="color:#888;font-size:0.85rem;">Meseros, Cocineros, Administración y Limpieza</p>
+          <p class="subtitulo" style="color:#888;font-size:0.85rem;">Campos editables: Meseros, Cocineros, Administración, Limpieza...</p>
+          <button onclick="agregarCampoPlanilla()" style="padding:0.5rem 1rem;background:#0f3460;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;">➕ AGREGAR CAMPO</button>
         </div>
         <div id="costos-planillas-container"><p>Cargando...</p></div>
       </div>

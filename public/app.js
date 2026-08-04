@@ -1455,89 +1455,29 @@ function cargarReporteDiferencias() {
 
 function normalizarBusquedaStock(el) {
   const v = el.value;
-  const id = 'fecha-stocks';
-  if (!el.id) el.id = id;
   if (v.includes(' — ')) el.value = v.split(' — ')[0].trim();
   buscarTablaBarra(el.value, 'barra-stock-container', 'tr[data-stock-id]');
 }
 
-function cargarStockBarraFecha(fecha) {
-  if (!fecha) { fecha = document.getElementById('fecha-stocks')?.value || todayStr(); }
-  api('GET', '/api/barra/stock?fecha=' + fecha).then(data => {
-    const container = document.getElementById('barra-stock-container');
-    if (!data.length) {
-      container.innerHTML = '<p>No hay ingredientes en stock para esta fecha.</p>';
-      return;
-    }
-    const groups = {};
-    GRUPOS_BARRA.forEach(g => { groups[g] = []; });
-    groups['SIN CLASIFICAR'] = [];
-    data.forEach(s => {
-      const key = (s.grupo || '').toUpperCase();
-      (groups[key] || groups['SIN CLASIFICAR']).push(s);
-    });
-    function fila(s) {
-      const opts = GRUPOS_BARRA.map(g => `<option value="${g}" ${((s.grupo || '').toUpperCase() === g) ? 'selected' : ''}>${g}</option>`).join('');
-      const uniList = UNIDADES_STOCK.includes(s.unidad) ? UNIDADES_STOCK : [...UNIDADES_STOCK, s.unidad];
-      const uniOpts = uniList.map(u => `<option value="${u}" ${s.unidad === u ? 'selected' : ''}>${u}</option>`).join('');
-      const onz = formatoOnzas(calcularOnzas(s));
-      return `<tr data-stock-id="${s.id}" data-orig-cantidad="${s.cantidad}" data-orig-unidad="${s.unidad}" data-orig-grupo="${(s.grupo || '').toUpperCase()}">
-        <td class="stock-nombre">${esc(s.ingrediente)}</td>
-        <td><input type="number" class="input-stock-cant" value="${s.cantidad}" step="0.01" min="0" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarOnzasFila(this); marcarStockDirty()"></td>
-        <td><select class="select-stock-uni" onchange="onUnidadStockChange(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${uniOpts}</select></td>
-        <td class="onzas-stock">${onz}</td>
-        <td><select class="select-stock-grupo" onchange="marcarStockDirty()" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${opts}</select></td>
-        <td>
-          <button class="editar" onclick="editarItemStock(${s.id})" style="padding:0.3rem 0.6rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">EDITAR</button>
-          <button class="danger" onclick="eliminarStockBarra(${s.id})">✕</button>
-        </td>
-      </tr>`;
-    }
-    container.innerHTML = GRUPOS_BARRA.map(g => {
-      const items = groups[g];
-      const total = items.reduce((sum, i) => sum + (parseFloat(i.cantidad) || 0), 0);
-      return `
-        <div class="accordion-item">
-          <div class="accordion-header active" onclick="toggleAcordeon(this)">
-            <span class="accordion-title">${g} <span style="font-weight:400;font-size:0.85rem;color:#777;">— ${items.length} item(s)</span></span>
-            <span class="accordion-arrow open">▶</span>
-          </div>
-          <div class="accordion-body open">
-            <div class="table-wrap"><table>
-              <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th><th>Mueble</th><th></th></tr></thead>
-              <tbody>${items.map(fila).join('') || '<tr><td colspan="6">Vacío.</td></tr>'}</tbody>
-            </table></div>
-          </div>
-        </div>`;
-    }).join('') + (groups['SIN CLASIFICAR'].length ? `
-        <div class="accordion-item">
-          <div class="accordion-header active" onclick="toggleAcordeon(this)">
-            <span class="accordion-title">SIN CLASIFICAR <span style="font-weight:400;font-size:0.85rem;color:#c62828;">— ${groups['SIN CLASIFICAR'].length} item(s) sin mueble asignado</span></span>
-            <span class="accordion-arrow open">▶</span>
-          </div>
-          <div class="accordion-body open">
-            <div class="table-wrap"><table>
-              <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th><th>Mueble</th><th></th></tr></thead>
-              <tbody>${groups['SIN CLASIFICAR'].map(fila).join('')}</tbody>
-            </table></div>
-          </div>
-        </div>` : '');
-    _stockDirty = false;
-    const b = document.getElementById('btn-guardar-stock');
-    if (b) { b.style.background = '#2e7d32'; b.textContent = '💾 GUARDAR STOCK'; }
-  }).catch(e => { console.error(e); });
-}
-
 function exportarStockBarra() {
-  const fecha = document.getElementById('fecha-stocks')?.value || todayStr();
+  const fecha = document.getElementById('fecha-stock-barra')?.value || todayStr();
+  const esHoy = fecha === todayStr();
   const wsData = [['Mueble', 'Item', 'Cantidad', 'Unidad', 'Onzas']];
   document.querySelectorAll('#barra-stock-container .accordion-item').forEach(acc => {
     const mueble = acc.querySelector('.accordion-title')?.textContent?.split(' — ')[0] || '';
     acc.querySelectorAll('tbody tr[data-stock-id]').forEach(tr => {
       const ing = tr.querySelector('.stock-nombre')?.textContent || '';
-      const cant = tr.querySelector('.input-stock-cant')?.value || '';
-      const uni = tr.querySelector('.select-stock-uni')?.value || '';
-      const onz = tr.querySelector('.onzas-stock')?.textContent || '';
+      let cant, uni, onz;
+      if (esHoy) {
+        cant = tr.querySelector('.input-stock-cant')?.value || '';
+        uni = tr.querySelector('.select-stock-uni')?.value || '';
+        onz = tr.querySelector('.onzas-stock')?.textContent || '';
+      } else {
+        const tds = tr.querySelectorAll('td');
+        cant = tds[1]?.textContent || '';
+        uni = tds[2]?.textContent || '';
+        onz = tds[3]?.textContent || '';
+      }
       wsData.push([mueble, ing, cant, uni, onz]);
     });
   });
@@ -1546,6 +1486,10 @@ function exportarStockBarra() {
   XLSX.utils.book_append_sheet(libro, hoja, 'Stock Barra');
   XLSX.writeFile(libro, `StockBarra_${fecha}.xlsx`);
 }
+
+function buscarReceta(q) {
+  const term = q.trim().toLowerCase();
+  const container = document.getElementById('recetas-container');
   if (!container) return;
   // Recipes: match by name OR by ingredient
   container.querySelectorAll('.accordion-item[data-receta-id]').forEach(recipe => {
@@ -1722,6 +1666,7 @@ initPicker('fecha-ventas', cargarVentas);
 initPicker('fecha-bajas', cargarBajas);
 initPicker('fecha-ingresos', cargarIngresos);
 // Barra: just set today's date, actual load happens via lazy-load in cambiarSubTab
+initPicker('fecha-stock-barra');
 ['fecha-barra-ingresos','fecha-barra-ventas','fecha-barra-bajas'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.value = todayStr();
@@ -2112,10 +2057,25 @@ function cargarSugerenciasStock() {
 }
 
 function cargarStockBarra() {
-  api('GET', '/api/barra/stock').then(data => {
+  const fechaEl = document.getElementById('fecha-stock-barra');
+  const fecha = fechaEl ? fechaEl.value : todayStr();
+  const esHoy = fecha === todayStr();
+  const formAdd = document.getElementById('barra-stock-add-form');
+  const banner = document.getElementById('barra-stock-banner');
+  if (formAdd) formAdd.style.display = esHoy ? '' : 'none';
+  if (banner) {
+    if (esHoy) { banner.style.display = 'none'; banner.innerHTML = ''; }
+    else {
+      banner.style.display = '';
+      banner.innerHTML = '<p style="color:#0f3460;background:#e3f2fd;padding:0.5rem 0.75rem;border-radius:6px;">📅 Vista histórica del stock del <b>' + fecha + '</b> (solo lectura). Hoy (' + todayStr() + ') es editable.</p>';
+    }
+  }
+  const url = esHoy ? '/api/barra/stock' : '/api/barra/stock?fecha=' + fecha;
+  api('GET', url).then(data => {
     const container = document.getElementById('barra-stock-container');
     if (!data.length) {
-      container.innerHTML = '<p>No hay ingredientes en stock. Agrega uno nuevo.</p>';
+      container.innerHTML = '<p>No hay ingredientes en stock' + (esHoy ? '. Agrega uno nuevo.' : ' para esta fecha.') + '</p>';
+      _stockDirty = false;
       return;
     }
     const groups = {};
@@ -2126,10 +2086,20 @@ function cargarStockBarra() {
       (groups[key] || groups['SIN CLASIFICAR']).push(s);
     });
     function fila(s) {
+      const onz = formatoOnzas(calcularOnzas(s));
+      if (!esHoy) {
+        return `<tr data-stock-id="${s.id}">
+          <td class="stock-nombre">${esc(s.ingrediente)}</td>
+          <td>${s.cantidad}</td>
+          <td>${s.unidad}</td>
+          <td class="onzas-stock">${onz}</td>
+          <td>${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
+          <td></td>
+        </tr>`;
+      }
       const opts = GRUPOS_BARRA.map(g => `<option value="${g}" ${((s.grupo || '').toUpperCase() === g) ? 'selected' : ''}>${g}</option>`).join('');
       const uniList = UNIDADES_STOCK.includes(s.unidad) ? UNIDADES_STOCK : [...UNIDADES_STOCK, s.unidad];
       const uniOpts = uniList.map(u => `<option value="${u}" ${s.unidad === u ? 'selected' : ''}>${u}</option>`).join('');
-      const onz = formatoOnzas(calcularOnzas(s));
       return `<tr data-stock-id="${s.id}" data-orig-cantidad="${s.cantidad}" data-orig-unidad="${s.unidad}" data-orig-grupo="${(s.grupo || '').toUpperCase()}">
         <td class="stock-nombre">${esc(s.ingrediente)}</td>
         <td><input type="number" class="input-stock-cant" value="${s.cantidad}" step="0.01" min="0" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarOnzasFila(this); marcarStockDirty()"></td>
@@ -2171,7 +2141,26 @@ function cargarStockBarra() {
             </table></div>
           </div>
         </div>` : '');
+    _stockDirty = false;
+    const b = document.getElementById('btn-guardar-stock');
+    if (b) { b.style.background = '#2e7d32'; b.textContent = '💾 GUARDAR STOCK'; }
+    if (esHoy) guardarSnapshotStock();
+  }).catch(e => { console.error(e); });
+}
+
+function guardarSnapshotStock() {
+  const fecha = document.getElementById('fecha-stock-barra')?.value || todayStr();
+  const items = [];
+  document.querySelectorAll('#barra-stock-container tr[data-stock-id]').forEach(tr => {
+    items.push({
+      id: tr.getAttribute('data-stock-id'),
+      ingrediente: tr.querySelector('.stock-nombre')?.textContent?.trim() || '',
+      cantidad: tr.querySelector('.input-stock-cant')?.value || 0,
+      unidad: tr.querySelector('.select-stock-uni')?.value || '',
+      grupo: tr.querySelector('.select-stock-grupo')?.value || ''
+    });
   });
+  api('POST', '/api/barra/stock/diario', { fecha, items }).catch(e => console.error('Error guardando snapshot:', e));
 }
 
 function agregarStockBarra() {
@@ -2835,13 +2824,41 @@ function eliminarCosto(id, tipo) {
   api('DELETE', '/api/costos/' + id).then(() => cargarCostos(tipo)).catch(e => { console.error(e); alert('Error al eliminar'); });
 }
 
-// --- COSTOS: categorías fijas (Servicios y Planillas) ---
+// --- COSTOS: categorías (Servicios fijos y Planillas dinámicas) ---
 const SERVICIOS = ['ALQUILER', 'AGUA', 'LUZ', 'INTERNET', 'GAS', 'LIMPIEZA'];
-const PLANILLAS = ['MESEROS', 'COCINEROS', 'ADMINISTRACION', 'LIMPIEZA'];
+const PLANILLAS_DEFAULT = ['MESEROS', 'COCINEROS', 'ADMINISTRACION', 'LIMPIEZA'];
 const CATEGORIAS_COSTOS = {
   servicios: { tipo: 'servicio', titulos: SERVICIOS, campoSub: 'servicio', campoTexto: 'desc', colLabel: 'Descripción', phTexto: 'Descripción (ej. Recibo N° 123)' },
-  planillas: { tipo: 'planillas', titulos: PLANILLAS, campoSub: 'planilla', campoTexto: 'nombre', colLabel: 'Nombre', phTexto: 'Nombre del trabajador' }
+  planillas: { tipo: 'planillas', titulos: PLANILLAS_DEFAULT, campoSub: 'planilla', campoTexto: 'nombre', colLabel: 'Nombre', phTexto: 'Nombre del trabajador', editableTitulos: true }
 };
+
+function cargarPlanillas() {
+  api('GET', '/api/planillas/titulos').then(r => {
+    if (r.titulos && r.titulos.length) CATEGORIAS_COSTOS.planillas.titulos = r.titulos;
+    cargarCostoCategoria('planillas');
+  }).catch(() => cargarCostoCategoria('planillas'));
+}
+
+function cargarServicios() { cargarCostoCategoria('servicios'); }
+
+function agregarCampoPlanilla() {
+  const nombre = prompt('Nombre del nuevo campo de planilla (ej. BARTENDERS):');
+  if (!nombre || !nombre.trim()) return;
+  api('POST', '/api/planillas/titulos', { nombre }).then(() => {
+    showToast('Campo agregado');
+    cargarPlanillas();
+  }).catch(() => alert('Error al agregar'));
+}
+
+function editarTituloPlanilla(viejo) {
+  const nuevo = prompt('Nuevo nombre para "' + viejo + '":', viejo);
+  if (!nuevo || !nuevo.trim()) return;
+  if (nuevo.trim().toUpperCase() === viejo.toUpperCase()) return;
+  api('PUT', '/api/planillas/titulos', { viejo, nuevo }).then(() => {
+    showToast('Campo renombrado');
+    cargarPlanillas();
+  }).catch(e => { console.error(e); alert('Error al editar'); });
+}
 
 function cargarCostoCategoria(prefix) {
   const cfg = CATEGORIAS_COSTOS[prefix];
@@ -2876,6 +2893,7 @@ function cargarCostoCategoria(prefix) {
       html += `<div class="accordion-item">
         <div class="accordion-header" onclick="toggleAcordeon(this)">
           <span class="accordion-title">${t} <span style="font-weight:400;font-size:0.85rem;color:#777;">— TOTAL: S/ ${total.toFixed(2)}</span></span>
+          ${cfg.editableTitulos ? `<button class="editar-titulo" title="Renombrar campo" onclick="event.stopPropagation(); editarTituloPlanilla('${esc(t).replace(/'/g, '&#39;')}')" style="margin-left:0.5rem;padding:0.2rem 0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.75rem;">✏️ Renombrar</button>` : ''}
           <span class="accordion-arrow">▶</span>
         </div>
         <div class="accordion-body">
@@ -2898,9 +2916,6 @@ function cargarCostoCategoria(prefix) {
     container.innerHTML = html;
   }).catch(e => { console.error(e); container.innerHTML = '<p>Error al cargar.</p>'; });
 }
-
-function cargarServicios() { cargarCostoCategoria('servicios'); }
-function cargarPlanillas() { cargarCostoCategoria('planillas'); }
 
 function guardarCostoCategoria(prefix, idx) {
   const cfg = CATEGORIAS_COSTOS[prefix];

@@ -762,8 +762,42 @@ function normalizeGrupo(g) {
 }
 
 app.get('/api/barra/stock', async (req, res) => {
+  const { fecha } = req.query;
+  const hoy = new Date().toISOString().split('T')[0];
+  if (fecha && fecha !== hoy) {
+    const snap = await col('barra_stock_diario').where('fecha', '==', fecha).get();
+    return res.json(snap.docs.map(d => ({ ...d.data() })));
+  }
   const snap = await col('barra_stock').orderBy('id').get();
   res.json(snap.docs.map(d => ({ id: Number(d.id), ...d.data() })));
+});
+
+// Guarda un snapshot histórico del stock para una fecha
+app.post('/api/barra/stock/diario', authMiddleware, async (req, res) => {
+  try {
+    const { fecha, items } = req.body;
+    if (!fecha || !Array.isArray(items)) return res.status(400).json({ error: 'fecha e items requeridos' });
+    const batch = db.batch();
+    const existing = await col('barra_stock_diario').where('fecha', '==', fecha).get();
+    existing.docs.forEach(d => batch.delete(d.ref));
+    items.forEach(it => {
+      const id = Number(it.id);
+      const ref = col('barra_stock_diario').doc(fecha + '_' + id);
+      batch.set(ref, {
+        id,
+        fecha,
+        ingrediente: String(it.ingrediente || ''),
+        cantidad: parseFloat(it.cantidad) || 0,
+        unidad: normalizeUnit(it.unidad),
+        grupo: String(it.grupo || '').toUpperCase(),
+        saved_at: new Date().toISOString()
+      });
+    });
+    await batch.commit();
+    res.json({ ok: true, fecha, count: items.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post('/api/barra/stock', async (req, res) => {
@@ -1715,6 +1749,55 @@ app.delete('/api/costos/:id', authMiddleware, async (req, res) => {
   try {
     await col('costos').doc(req.params.id).delete();
     res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- PLANILLAS: títulos de categorías dinámicos ---
+app.get('/api/planillas/titulos', authMiddleware, async (req, res) => {
+  try {
+    const doc = await col('config').doc('planillas_titulos').get();
+    res.json({ titulos: doc.exists ? (doc.data().titulos || []) : [] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/planillas/titulos', authMiddleware, async (req, res) => {
+  try {
+    const nombre = String(req.body.nombre || '').trim().toUpperCase();
+    if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+    const doc = await col('config').doc('planillas_titulos').get();
+    let titulos = doc.exists ? (doc.data().titulos || []) : [];
+    if (!titulos.some(t => t.toUpperCase() === nombre)) titulos.push(nombre);
+    await col('config').doc('planillas_titulos').set({ titulos, updated_at: new Date().toISOString() });
+    res.json({ ok: true, titulos });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/planillas/titulos', authMiddleware, async (req, res) => {
+  try {
+    const viejo = String(req.body.viejo || '').trim();
+    const nuevo = String(req.body.nuevo || '').trim().toUpperCase();
+    if (!viejo || !nuevo) return res.status(400).json({ error: 'viejo y nuevo requeridos' });
+    const doc = await col('config').doc('planillas_titulos').get();
+    let titulos = doc.exists ? (doc.data().titulos || []) : [];
+    const idx = titulos.findIndex(t => t.toUpperCase() === viejo.toUpperCase());
+    if (idx === -1) return res.status(404).json({ error: 'Campo no encontrado' });
+    if (titulos.some(t => t.toUpperCase() === nuevo && t !== titulos[idx])) {
+      return res.status(400).json({ error: 'Ya existe un campo con ese nombre' });
+    }
+    titulos[idx] = nuevo;
+    await col('config').doc('planillas_titulos').set({ titulos, updated_at: new Date().toISOString() });
+    // Renombrar los registros de costos que usaban el nombre viejo
+    const snap = await col('costos').where('tipo', '==', 'planillas').where('planilla', '==', viejo.toLowerCase()).get();
+    const batch = db.batch();
+    snap.docs.forEach(d => batch.update(d.ref, { planilla: nuevo.toLowerCase(), updated_at: new Date().toISOString() }));
+    if (snap.size) await batch.commit();
+    res.json({ ok: true, titulos, actualizados: snap.size });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
