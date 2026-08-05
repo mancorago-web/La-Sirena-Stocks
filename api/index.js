@@ -251,88 +251,94 @@ app.get('/api/almacenes', async (req, res) => {
 app.get('/api/almacenes/con-inventario', async (req, res) => {
   const fecha = req.query.fecha;
   if (!fecha) return res.json([]);
-  const [almsSnap, allItemsSnap] = await Promise.all([
-    col('almacenes').orderBy('orden').get(),
-    col('inventario').get(),
-  ]);
-  const itemsByAl = {};
-  allItemsSnap.docs.forEach(d => {
-    const inv = d.data();
-    const alId = inv.almacen_id;
-    if (!itemsByAl[alId]) itemsByAl[alId] = [];
-    itemsByAl[alId].push(inv);
-  });
-  let allDiasSnap = { docs: [] };
-  let prevDiasByAl = {};
-  if (fecha) {
-    allDiasSnap = await col('inventario_diario').where('fecha', '==', fecha).get();
-    // Deterministic: try the previous working day first (e.g. Wed → Mon, skipping Tue)
-    const firstPrevStr = prevWorkingDay(fecha);
-    let prevSnap = await col('inventario_diario').where('fecha', '==', firstPrevStr).get();
-    if (prevSnap.empty) {
-      // Walk further back if the immediate prev working day has no data
-      let prev = new Date(firstPrevStr + 'T12:00:00');
-      for (let tries = 0; tries < 10; tries++) {
-        prev.setDate(prev.getDate() - 1);
-        const prevStr = prev.toISOString().split('T')[0];
-        prevSnap = await col('inventario_diario').where('fecha', '==', prevStr).get();
-        if (!prevSnap.empty) break;
+  try {
+    const result = await cached('con_inv_' + fecha, 5000, async () => {
+      const [almsSnap, allItemsSnap] = await Promise.all([
+        col('almacenes').orderBy('orden').get(),
+        col('inventario').get(),
+      ]);
+      const itemsByAl = {};
+      allItemsSnap.docs.forEach(d => {
+        const inv = d.data();
+        const alId = inv.almacen_id;
+        if (!itemsByAl[alId]) itemsByAl[alId] = [];
+        itemsByAl[alId].push(inv);
+      });
+      let allDiasSnap = { docs: [] };
+      let prevDiasByAl = {};
+      if (fecha) {
+        allDiasSnap = await col('inventario_diario').where('fecha', '==', fecha).get();
+        // Deterministic: try the previous working day first (e.g. Wed → Mon, skipping Tue)
+        const firstPrevStr = prevWorkingDay(fecha);
+        let prevSnap = await col('inventario_diario').where('fecha', '==', firstPrevStr).get();
+        if (prevSnap.empty) {
+          // Walk further back if the immediate prev working day has no data
+          let prev = new Date(firstPrevStr + 'T12:00:00');
+          for (let tries = 0; tries < 10; tries++) {
+            prev.setDate(prev.getDate() - 1);
+            const prevStr = prev.toISOString().split('T')[0];
+            prevSnap = await col('inventario_diario').where('fecha', '==', prevStr).get();
+            if (!prevSnap.empty) break;
+          }
+        }
+        if (!prevSnap.empty) {
+          prevSnap.docs.forEach(d => {
+            const dd = d.data();
+            const alId = dd.almacen_id;
+            if (!prevDiasByAl[alId]) prevDiasByAl[alId] = {};
+            prevDiasByAl[alId][dd.item_id] = dd;
+          });
+        }
       }
-    }
-    if (!prevSnap.empty) {
-      prevSnap.docs.forEach(d => {
+      const diasByAl = {};
+      allDiasSnap.docs.forEach(d => {
         const dd = d.data();
         const alId = dd.almacen_id;
-        if (!prevDiasByAl[alId]) prevDiasByAl[alId] = {};
-        prevDiasByAl[alId][dd.item_id] = dd;
+        if (!diasByAl[alId]) diasByAl[alId] = {};
+        diasByAl[alId][dd.item_id] = dd;
       });
-    }
-  }
-  const diasByAl = {};
-  allDiasSnap.docs.forEach(d => {
-    const dd = d.data();
-    const alId = dd.almacen_id;
-    if (!diasByAl[alId]) diasByAl[alId] = {};
-    diasByAl[alId][dd.item_id] = dd;
-  });
-  const result = almsSnap.docs.map(alDoc => {
-    const alId = Number(alDoc.id);
-    const invItems = itemsByAl[alId] || [];
-    const diaMap = diasByAl[alId] || {};
-    const prevMap = prevDiasByAl[alId] || {};
-    const items = invItems.map(inv => {
-      const dia = diaMap[inv.item_id] || {};
-      const prevDia = prevMap[inv.item_id] || {};
-      // If today's doc exists (from propagation or user-saved), use its apertura.
-      // If not (new item or no data), fall back to prev day's cierre, then inventario base.
-      const apertura = (dia.stock_apertura ?? prevDia.stock_cierre ?? inv.stock_apertura ?? 0);
-      const ingreso = (dia.stock_ingreso ?? 0);
-      const salida = (dia.salida_almacen ?? 0);
-      const ventas = (dia.total_ventas ?? 0);
-      const falta = (dia.falta_almacen ?? 0);
-      const baja = (dia.stock_baja ?? 0);
-      const cierre = apertura + ingreso - salida - ventas - falta - baja;
-      return {
-        id: inv.item_id,
-        nombre: inv.nombre,
-        categoria: inv.categoria || '',
-        stock_apertura: apertura,
-        stock_ingreso: ingreso,
-        salida_almacen: salida,
-        total_ventas: ventas,
-        falta_almacen: falta,
-      stock_baja: baja,
-      nota_baja: dia.nota_baja || '',
-      stock_cierre: Math.round(cierre * 100) / 100,
-        cantidad_minima: inv.cantidad_minima || 0,
-        fecha_apertura: inv.fecha_apertura || '',
-        saved_by: dia.saved_by || null,
-        updated_at: dia.updated_at || null,
-      };
+      return almsSnap.docs.map(alDoc => {
+        const alId = Number(alDoc.id);
+        const invItems = itemsByAl[alId] || [];
+        const diaMap = diasByAl[alId] || {};
+        const prevMap = prevDiasByAl[alId] || {};
+        const items = invItems.map(inv => {
+          const dia = diaMap[inv.item_id] || {};
+          const prevDia = prevMap[inv.item_id] || {};
+          // If today's doc exists (from propagation or user-saved), use its apertura.
+          // If not (new item or no data), fall back to prev day's cierre, then inventario base.
+          const apertura = (dia.stock_apertura ?? prevDia.stock_cierre ?? inv.stock_apertura ?? 0);
+          const ingreso = (dia.stock_ingreso ?? 0);
+          const salida = (dia.salida_almacen ?? 0);
+          const ventas = (dia.total_ventas ?? 0);
+          const falta = (dia.falta_almacen ?? 0);
+          const baja = (dia.stock_baja ?? 0);
+          const cierre = apertura + ingreso - salida - ventas - falta - baja;
+          return {
+            id: inv.item_id,
+            nombre: inv.nombre,
+            categoria: inv.categoria || '',
+            stock_apertura: apertura,
+            stock_ingreso: ingreso,
+            salida_almacen: salida,
+            total_ventas: ventas,
+            falta_almacen: falta,
+            stock_baja: baja,
+            nota_baja: dia.nota_baja || '',
+            stock_cierre: Math.round(cierre * 100) / 100,
+            cantidad_minima: inv.cantidad_minima || 0,
+            fecha_apertura: inv.fecha_apertura || '',
+            saved_by: dia.saved_by || null,
+            updated_at: dia.updated_at || null,
+          };
+        });
+        return { id: alId, nombre: alDoc.data().nombre, items };
+      });
     });
-    return { id: alId, nombre: alDoc.data().nombre, items };
-  });
-  res.json(result);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // --- GUARDAR DÍA ---
@@ -350,6 +356,7 @@ app.post('/api/almacenes/guardar-dia', async (req, res) => {
   }));
 
   const batch = db.batch();
+  const changedKeys = new Set();
   for (const r of registros) {
     const id = docId('invdiario', fecha, r.almacen_id, r.item_id);
     const prev = existentes[id] || {};
@@ -363,6 +370,12 @@ app.post('/api/almacenes/guardar-dia', async (req, res) => {
     const baja = r.stock_baja !== undefined ? (parseFloat(r.stock_baja) || 0) : (prev.stock_baja || 0);
     const notaBaja = r.nota_baja !== undefined ? (r.nota_baja || '') : (prev.nota_baja || '');
     const cierre = apertura + ingreso - salida - ventas - falta - baja;
+    const cierreR = Math.round(cierre * 100) / 100;
+
+    // Solo se propagan los items cuyo cierre/apertura realmente cambió
+    if ((prev.stock_apertura || 0) !== apertura || (prev.stock_cierre || 0) !== cierreR) {
+      changedKeys.add(Number(r.almacen_id) + '_' + Number(r.item_id));
+    }
 
     const data = { fecha, item_id: Number(r.item_id), almacen_id: Number(r.almacen_id) };
     if (r.stock_apertura !== undefined) data.stock_apertura = apertura;
@@ -385,53 +398,64 @@ app.post('/api/almacenes/guardar-dia', async (req, res) => {
   }
   await batch.commit();
   delete _cache['inv_diario_' + fecha];
+  delete _cache['con_inv_' + fecha];
 
-  // Propagation: chain forward through ALL subsequent days
+  // Propagation: cadena hacia adelante SOLO de los items cuyo cierre/apertura cambió
   const propErrors = [];
   try {
-    let srcFecha = fecha;
-    let maxChains = 30;
-    while (maxChains-- > 0) {
-      const targetDay = getNextWorkingDay(srcFecha);
-      // Read source docs and target docs
-      const [srcSnap, tgtSnap] = await Promise.all([
-        col('inventario_diario').where('fecha', '==', srcFecha).get(),
-        col('inventario_diario').where('fecha', '==', targetDay).get(),
-      ]);
-      if (srcSnap.empty) break;
-      const tgtHasData = tgtSnap.size > 0;
-      const tgtByKey = {};
-      tgtSnap.docs.forEach(d => { const dd = d.data(); tgtByKey[dd.almacen_id + '_' + dd.item_id] = dd; });
-      const batch = db.batch();
-      for (const doc of srcSnap.docs) {
-        const d = doc.data();
-        const key = d.almacen_id + '_' + d.item_id;
-        const existing = tgtByKey[key];
-        const apertura = d.stock_cierre ?? 0;
-        const nextId = docId('invdiario', targetDay, d.almacen_id, d.item_id);
-        if (existing) {
-          const ingreso = existing.stock_ingreso ?? 0;
-          const salida = existing.salida_almacen ?? 0;
-          const ventas = existing.total_ventas ?? 0;
-          const falta = existing.falta_almacen ?? 0;
-          const baja = existing.stock_baja ?? 0;
-          const cierre = apertura + ingreso - salida - ventas - falta - baja;
-          const upd = { stock_apertura: apertura, stock_cierre: Math.round(cierre * 100) / 100, updated_at: new Date().toISOString() };
-          if (existing.nota_baja) upd.nota_baja = existing.nota_baja;
-          batch.update(col('inventario_diario').doc(nextId), upd);
-        } else {
-          batch.set(col('inventario_diario').doc(nextId), {
-            fecha: targetDay, item_id: d.item_id, almacen_id: d.almacen_id,
-            stock_apertura: apertura, stock_ingreso: 0, salida_almacen: 0,
-            total_ventas: 0, falta_almacen: 0, stock_baja: 0, stock_cierre: apertura,
-            updated_at: new Date().toISOString(),
-          });
+    if (changedKeys.size) {
+      let srcFecha = fecha;
+      let maxChains = 30;
+      while (maxChains-- > 0) {
+        const targetDay = getNextWorkingDay(srcFecha);
+        const keysArr = Array.from(changedKeys);
+        // Leer solo los docs de los items cambiados (origen y destino)
+        const srcRes = await Promise.all(keysArr.map(key => {
+          const [al, item] = key.split('_');
+          return col('inventario_diario').doc(docId('invdiario', srcFecha, Number(al), Number(item))).get();
+        }));
+        const tgtRes = await Promise.all(keysArr.map(key => {
+          const [al, item] = key.split('_');
+          return col('inventario_diario').doc(docId('invdiario', targetDay, Number(al), Number(item))).get();
+        }));
+        const srcByKey = {};
+        keysArr.forEach((key, i) => { if (srcRes[i].exists) srcByKey[key] = srcRes[i].data(); });
+        if (!Object.keys(srcByKey).length) break;
+        const tgtByKey = {};
+        keysArr.forEach((key, i) => { tgtByKey[key] = tgtRes[i].exists ? tgtRes[i].data() : null; });
+        const batch = db.batch();
+        let anyWrite = false;
+        for (const key of Object.keys(srcByKey)) {
+          const d = srcByKey[key];
+          const existing = tgtByKey[key];
+          const apertura = d.stock_cierre ?? 0;
+          const nextId = docId('invdiario', targetDay, d.almacen_id, d.item_id);
+          if (existing) {
+            const ingreso = existing.stock_ingreso ?? 0;
+            const salida = existing.salida_almacen ?? 0;
+            const ventas = existing.total_ventas ?? 0;
+            const falta = existing.falta_almacen ?? 0;
+            const baja = existing.stock_baja ?? 0;
+            const cierre = Math.round((apertura + ingreso - salida - ventas - falta - baja) * 100) / 100;
+            if (existing.stock_apertura === apertura && existing.stock_cierre === cierre) continue;
+            const upd = { stock_apertura: apertura, stock_cierre: cierre, updated_at: new Date().toISOString() };
+            if (existing.nota_baja) upd.nota_baja = existing.nota_baja;
+            batch.update(col('inventario_diario').doc(nextId), upd);
+            anyWrite = true;
+          } else {
+            batch.set(col('inventario_diario').doc(nextId), {
+              fecha: targetDay, item_id: d.item_id, almacen_id: d.almacen_id,
+              stock_apertura: apertura, stock_ingreso: 0, salida_almacen: 0,
+              total_ventas: 0, falta_almacen: 0, stock_baja: 0, stock_cierre: apertura,
+              updated_at: new Date().toISOString(),
+            });
+            anyWrite = true;
+          }
         }
+        await batch.commit();
+        if (!anyWrite) break;
+        srcFecha = targetDay;
       }
-      await batch.commit();
-      // Keep chaining only if target already had data (user had worked on it)
-      if (!tgtHasData) break;
-      srcFecha = targetDay;
     }
   } catch (e) {
     propErrors.push(e.message);
@@ -1843,10 +1867,10 @@ app.post('/api/inventario/agregar-item', authMiddleware, async (req, res) => {
         updated_at: new Date().toISOString(), saved_by: req.user.displayName || req.user.email
       });
     }
+    delete _cache['con_inv_' + fecha];
 
     res.json({ ok: true, item_id, nombre, almacen_id });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
+  } catch (e) {    res.status(500).json({ error: e.message });
   }
 });
 
@@ -1886,6 +1910,8 @@ app.delete('/api/inventario/:item_id/:almacen_id', authMiddleware, async (req, r
     const batch = db.batch();
     diaSnap.docs.forEach(d => batch.delete(d.ref));
     if (diaSnap.docs.length > 0) await batch.commit();
+    const hoy = new Date().toISOString().split('T')[0];
+    delete _cache['con_inv_' + hoy];
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
