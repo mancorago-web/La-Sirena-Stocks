@@ -129,14 +129,14 @@ function dibujarFlujoMenu() {
   const ventasTop = { x: (vr.left + vr.width / 2) - rect.left, y: vr.top - rect.top };
   const tops = mids.map(b => { const r = b.getBoundingClientRect(); return { x: (r.left + r.width / 2) - rect.left, y: r.top - rect.top }; });
   const bottoms = mids.map(b => { const r = b.getBoundingClientRect(); return { x: (r.left + r.width / 2) - rect.left, y: r.bottom - rect.top }; });
-  let paths = '<defs><marker id="flow-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#1a237e"/></marker></defs>';
+  let paths = '';
   tops.forEach(t => {
     const midY = (comprasBottom.y + t.y) / 2;
-    paths += `<path class="flow-path" marker-end="url(#flow-arrow)" d="M ${comprasBottom.x} ${comprasBottom.y} C ${comprasBottom.x} ${midY}, ${t.x} ${midY}, ${t.x} ${t.y}"/>`;
+    paths += `<path class="flow-path" d="M ${comprasBottom.x} ${comprasBottom.y} C ${comprasBottom.x} ${midY}, ${t.x} ${midY}, ${t.x} ${t.y}"/>`;
   });
   bottoms.forEach(b => {
     const midY = (b.y + ventasTop.y) / 2;
-    paths += `<path class="flow-path" marker-end="url(#flow-arrow)" d="M ${b.x} ${b.y} C ${b.x} ${midY}, ${ventasTop.x} ${midY}, ${ventasTop.x} ${ventasTop.y}"/>`;
+    paths += `<path class="flow-path" d="M ${b.x} ${b.y} C ${b.x} ${midY}, ${ventasTop.x} ${midY}, ${ventasTop.x} ${ventasTop.y}"/>`;
   });
   svg.innerHTML = paths;
 }
