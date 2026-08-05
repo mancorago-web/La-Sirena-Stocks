@@ -1498,13 +1498,16 @@ function buscarReceta(q) {
   const palabras = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const container = document.getElementById('recetas-container');
   if (!container) return;
-  // Recipes: match by name OR by ingredient (todas las palabras deben coincidir)
+  // Recipes: match by name, family OR ingredient (todas las palabras deben coincidir)
   container.querySelectorAll('.accordion-item[data-receta-id]').forEach(recipe => {
     const nombre = recipe.querySelector('.accordion-title')?.textContent?.toLowerCase() || '';
+    const familia = (recipe.closest('.accordion-body')?.parentElement
+      ?.querySelector('.accordion-header .accordion-title')?.textContent || '').toLowerCase();
     const ingredientes = Array.from(recipe.querySelectorAll('.accordion-body tbody td:first-child'))
       .map(td => (td.textContent || '').toLowerCase().trim());
     const match = !palabras.length ||
       palabras.every(p => nombre.includes(p)) ||
+      (familia && palabras.every(p => familia.includes(p))) ||
       ingredientes.some(ing => palabras.every(p => ing.includes(p)));
     recipe.style.display = match ? '' : 'none';
   });
@@ -1522,7 +1525,7 @@ function buscarReceta(q) {
 }
 
 // Buscador inteligente: empareja por letra o por palabra (todas las palabras deben coincidir),
-// funciona tanto en acordeones como en tablas planas, y busca por nombre + ingredientes.
+// funciona tanto en acordeones como en tablas planas, y busca por nombre + ingredientes + familia.
 function buscarSmart(term, containerId, selector) {
   const q = (term || '').trim();
   const container = document.getElementById(containerId);
@@ -1531,6 +1534,10 @@ function buscarSmart(term, containerId, selector) {
   function matchRow(tr) {
     if (!palabras.length) return true;
     let texto = (tr.children[0]?.textContent || '').toLowerCase();
+    // Incluir el nombre de la familia/grupo (título del acordeón contenedor)
+    const acc = tr.closest('.accordion-item');
+    const titulo = acc ? acc.querySelector('.accordion-header .accordion-title')?.textContent : '';
+    if (titulo) texto += ' ' + titulo.toLowerCase();
     const ingAttr = tr.getAttribute('data-ingredientes');
     if (ingAttr) {
       try {
