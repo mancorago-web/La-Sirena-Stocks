@@ -30,7 +30,22 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
   display: flex; justify-content: center; align-items: center; min-height: calc(100vh - 4rem);
   padding: 2rem;
 }
-.main-menu-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; width: 100%; max-width: 1100px; }
+.menu-flow-container { position: relative; width: 100%; max-width: 1100px; }
+.menu-flow-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+.flow-path { fill: none; stroke: #1a237e; stroke-width: 2; stroke-dasharray: 7 5; opacity: 0.65; }
+.main-menu-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; width: 100%;
+  max-width: 1100px; position: relative; z-index: 1;
+}
+.menu-compras { grid-column: 2 / 4; grid-row: 1; }
+.menu-stocks { grid-column: 1; grid-row: 2; }
+.menu-barra { grid-column: 2; grid-row: 2; }
+.menu-cocina { grid-column: 3; grid-row: 2; }
+.category-btn.menu-compras,
+.category-btn.menu-ventas { background: #e8f0fe; border-color: #90b4f0; }
+.category-btn.menu-compras:hover,
+.category-btn.menu-ventas:hover { border-color: #1a237e; }
+.menu-ventas { grid-column: 2 / 4; grid-row: 3; }
 .category-btn {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem;
   background: #fff; border: 2px solid #e0e0e0; border-radius: 16px; padding: 2.5rem 1.5rem;
@@ -308,6 +323,8 @@ td button.danger { border-color: #c62828; color: #c62828; }
   /* Main menu */
   .main-menu { padding: 1rem; min-height: calc(100vh - 3.5rem); }
   .main-menu-grid { grid-template-columns: 1fr; gap: 1rem; max-width: 400px; }
+  .menu-compras, .menu-ventas, .menu-stocks, .menu-barra, .menu-cocina { grid-column: auto; grid-row: auto; }
+  .menu-flow-svg { display: none; }
   .category-btn { min-height: 160px; padding: 1.5rem 1rem; }
   .category-icon { font-size: 2.5rem; }
   .category-label { font-size: 1.1rem; }
@@ -459,4 +476,5 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .category-icon { font-size: 2rem; }
   .category-label { font-size: 1rem; }
   .category-desc { display: none; }
+  .menu-compras, .menu-ventas, .menu-stocks, .menu-barra, .menu-cocina { grid-column: auto; grid-row: auto; }
 }

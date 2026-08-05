@@ -112,6 +112,38 @@ document.querySelectorAll('.tab').forEach(tab => {
 });
 
 // --- Navigation: main menu / categories ---
+function dibujarFlujoMenu() {
+  const cont = document.getElementById('menu-flow-container');
+  const svg = document.getElementById('menu-flow-svg');
+  if (!cont || !svg || cont.offsetWidth === 0) return;
+  const rect = cont.getBoundingClientRect();
+  const comprasBtn = document.getElementById('btn-compras');
+  const ventasBtn = document.getElementById('btn-ventas');
+  const mids = ['stocks', 'barra', 'cocina']
+    .map(cat => cont.querySelector('.category-btn.menu-' + cat))
+    .filter(Boolean);
+  if (!comprasBtn || !ventasBtn || !mids.length) return;
+  const cr = comprasBtn.getBoundingClientRect();
+  const vr = ventasBtn.getBoundingClientRect();
+  const comprasBottom = { x: (cr.left + cr.width / 2) - rect.left, y: cr.bottom - rect.top };
+  const ventasTop = { x: (vr.left + vr.width / 2) - rect.left, y: vr.top - rect.top };
+  const tops = mids.map(b => { const r = b.getBoundingClientRect(); return { x: (r.left + r.width / 2) - rect.left, y: r.top - rect.top }; });
+  const bottoms = mids.map(b => { const r = b.getBoundingClientRect(); return { x: (r.left + r.width / 2) - rect.left, y: r.bottom - rect.top }; });
+  let paths = '<defs><marker id="flow-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#1a237e"/></marker></defs>';
+  tops.forEach(t => {
+    const midY = (comprasBottom.y + t.y) / 2;
+    paths += `<path class="flow-path" marker-end="url(#flow-arrow)" d="M ${comprasBottom.x} ${comprasBottom.y} C ${comprasBottom.x} ${midY}, ${t.x} ${midY}, ${t.x} ${t.y}"/>`;
+  });
+  bottoms.forEach(b => {
+    const midY = (b.y + ventasTop.y) / 2;
+    paths += `<path class="flow-path" marker-end="url(#flow-arrow)" d="M ${b.x} ${b.y} C ${b.x} ${midY}, ${ventasTop.x} ${midY}, ${ventasTop.x} ${ventasTop.y}"/>`;
+  });
+  svg.innerHTML = paths;
+}
+window.addEventListener('load', dibujarFlujoMenu);
+window.addEventListener('resize', dibujarFlujoMenu);
+setTimeout(dibujarFlujoMenu, 300);
+
 function irACategoria(cat) {
   document.getElementById('main-menu').style.display = 'none';
   document.getElementById('container').style.display = 'block';
@@ -125,8 +157,10 @@ function irACategoria(cat) {
     document.querySelector('.tab[data-tab="almacenes"]').classList.add('active');
     document.getElementById('tab-almacenes').classList.add('active');
   } else {
-    document.getElementById('tabs-' + cat).style.display = '';
-    document.getElementById('tab-' + cat).classList.add('active');
+    const tabsEl = document.getElementById('tabs-' + cat);
+    if (tabsEl) tabsEl.style.display = '';
+    const tabEl = document.getElementById('tab-' + cat);
+    if (tabEl) tabEl.classList.add('active');
     if (!_loaded[cat]) {
       _loaded[cat] = true;
       if (cat === 'barra') { cargarRecetas(); cargarStockBarra(); cargarPrecios(); cargarSugerenciasStock(); }
@@ -139,7 +173,7 @@ function irACategoria(cat) {
       }
     }
     // Activate first sub-tab for the category
-    const firstSub = document.querySelector('#tabs-' + cat + ' .sub-tab');
+    const firstSub = tabsEl ? tabsEl.querySelector('.sub-tab') : null;
     if (firstSub) cambiarSubTab(firstSub.dataset.subtab, cat);
   }
 }

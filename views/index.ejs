@@ -24,29 +24,42 @@
     </div>
   </nav>
 
-  <!-- Main menu: 3 category buttons -->
+  <!-- Main menu -->
   <div id="main-menu" class="main-menu">
-    <div class="main-menu-grid">
-      <button class="category-btn" onclick="irACategoria('stocks')">
-        <span class="category-icon">📦</span>
-        <span class="category-label">STOCKS</span>
-        <span class="category-desc">Ingresos, Salidas, Ventas, Almacenes, Stocks, Reportes, Precios</span>
-      </button>
-      <button class="category-btn" onclick="irACategoria('barra')">
-        <span class="category-icon">🍸</span>
-        <span class="category-label">BARRA</span>
-        <span class="category-desc">Recetas, Stock y Base de Datos de la Barra</span>
-      </button>
-      <button class="category-btn" onclick="irACategoria('cocina')">
-        <span class="category-icon">🍳</span>
-        <span class="category-label">COCINA</span>
-        <span class="category-desc">Recetas, Stock y Base de Datos de la Cocina</span>
-      </button>
-      <button class="category-btn" onclick="irACategoria('costos')">
-        <span class="category-icon">💰</span>
-        <span class="category-label">CONSOLIDADO</span>
-        <span class="category-desc">Planillas, Servicios y Gastos Operativos</span>
-      </button>
+    <div id="menu-flow-container" class="menu-flow-container">
+      <svg id="menu-flow-svg" class="menu-flow-svg" aria-hidden="true"></svg>
+      <div class="main-menu-grid">
+        <button class="category-btn menu-compras" id="btn-compras" onclick="irACategoria('compras')">
+          <span class="category-icon">🛒</span>
+          <span class="category-label">COMPRAS</span>
+          <span class="category-desc">Compras que ingresan a Stocks, Barra y Cocina</span>
+        </button>
+        <button class="category-btn menu-stocks" onclick="irACategoria('stocks')">
+          <span class="category-icon">📦</span>
+          <span class="category-label">STOCKS</span>
+          <span class="category-desc">Ingresos, Salidas, Ventas, Almacenes, Stocks, Reportes, Precios</span>
+        </button>
+        <button class="category-btn menu-barra" onclick="irACategoria('barra')">
+          <span class="category-icon">🍸</span>
+          <span class="category-label">BARRA</span>
+          <span class="category-desc">Recetas, Stock y Base de Datos de la Barra</span>
+        </button>
+        <button class="category-btn menu-cocina" onclick="irACategoria('cocina')">
+          <span class="category-icon">🍳</span>
+          <span class="category-label">COCINA</span>
+          <span class="category-desc">Recetas, Stock y Base de Datos de la Cocina</span>
+        </button>
+        <button class="category-btn" onclick="irACategoria('costos')">
+          <span class="category-icon">💰</span>
+          <span class="category-label">CONSOLIDADO</span>
+          <span class="category-desc">Planillas, Servicios y Gastos Operativos</span>
+        </button>
+        <button class="category-btn menu-ventas" id="btn-ventas" onclick="irACategoria('ventas')">
+          <span class="category-icon">🛍️</span>
+          <span class="category-label">VENTAS</span>
+          <span class="category-desc">Ventas que salen de Stocks, Barra y Cocina</span>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -368,6 +381,32 @@
 
     <div id="tab-costos" class="tab-content">
       <div id="costos-content-area"></div>
+    </div>
+
+    <div id="tab-compras" class="tab-content">
+      <div class="header-actions">
+        <h2>COMPRAS</h2>
+      </div>
+      <div id="compras-container">
+        <div class="card" style="padding:2rem;text-align:center;color:#888;">
+          <h3 style="color:#1a237e;">🛒 COMPRAS</h3>
+          <p>Aquí se registrarán las compras que ingresan a Stocks, Barra y Cocina.</p>
+          <p style="margin-top:0.5rem;font-size:0.85rem;">(Sección en construcción)</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-ventas" class="tab-content">
+      <div class="header-actions">
+        <h2>VENTAS</h2>
+      </div>
+      <div id="ventas-container">
+        <div class="card" style="padding:2rem;text-align:center;color:#888;">
+          <h3 style="color:#1a237e;">🛍️ VENTAS</h3>
+          <p>Aquí se registrarán las ventas que salen de Stocks, Barra y Cocina.</p>
+          <p style="margin-top:0.5rem;font-size:0.85rem;">(Sección en construcción)</p>
+        </div>
+      </div>
     </div>
 
     <div id="modal" class="modal">
