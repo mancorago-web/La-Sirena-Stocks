@@ -1605,7 +1605,7 @@ function exportarExcel() {
         const salida = celdas[3]?.querySelector('input')?.value || '0';
         const ventas = celdas[4]?.querySelector('input')?.value || '0';
         const falta = celdas[5]?.querySelector('input')?.value || '0';
-        const cierre = celdas[6]?.querySelector('input')?.value || '0';
+        const cierre = celdas[7]?.querySelector('input')?.value || '0';
         wsData.push([almacen, seccion, nombre, apertura, ingreso, salida, ventas, falta, cierre]);
       }
     });
@@ -1634,7 +1634,7 @@ function exportarAlmacen(almacenId) {
       const salida = celdas[3]?.querySelector('input')?.value || '0';
       const ventas = celdas[4]?.querySelector('input')?.value || '0';
       const falta = celdas[5]?.querySelector('input')?.value || '0';
-      const cierre = celdas[6]?.querySelector('input')?.value || '0';
+      const cierre = celdas[7]?.querySelector('input')?.value || '0';
       wsData.push([seccion, nombre, apertura, ingreso, salida, ventas, falta, cierre]);
     }
   });
