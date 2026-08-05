@@ -2136,6 +2136,31 @@ app.put('/api/:prefix/titulos', authMiddleware, async (req, res) => {
   }
 });
 
+app.delete('/api/:prefix/titulos', authMiddleware, async (req, res) => {
+  try {
+    const { prefix } = req.params;
+    const nombre = String(req.body.nombre || req.query.nombre || '').trim();
+    if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+    const doc = await col('config').doc(prefix + '_titulos').get();
+    let titulos = doc.exists ? (doc.data().titulos || []) : [];
+    const idx = titulos.findIndex(t => t.toUpperCase() === nombre.toUpperCase());
+    if (idx === -1) return res.status(404).json({ error: 'Campo no encontrado' });
+    titulos.splice(idx, 1);
+    await col('config').doc(prefix + '_titulos').set({ titulos, updated_at: new Date().toISOString() });
+    // Eliminar registros de costos asociados al campo
+    const pestana = PESTANAS_DEFAULT.find(p => p.id === prefix);
+    const tipo = pestana ? pestana.tipo : prefix;
+    const campo = pestana ? pestana.campoSub : prefix;
+    const snap = await col('costos').where('tipo', '==', tipo).where(campo, '==', nombre.toLowerCase()).get();
+    const batch = db.batch();
+    snap.docs.forEach(d => batch.delete(d.ref));
+    if (snap.size) await batch.commit();
+    res.json({ ok: true, titulos, eliminados: snap.size });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- COSTOS: pestañas dinámicas ---
 const PESTANAS_DEFAULT = [
   { id: 'planillas', label: 'Planillas', tipo: 'planillas', campoSub: 'planilla', campoTexto: 'nombre', colLabel: 'Nombre', phTexto: 'Nombre del trabajador', editableTitulos: true, titulosDoc: 'planillas_titulos', titulos: ['MESEROS', 'COCINEROS', 'ADMINISTRACION', 'LIMPIEZA'] },

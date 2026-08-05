@@ -2973,6 +2973,36 @@ function guardarTitulo(prefix, viejo) {
   }).catch(e => { console.error(e); alert('Error al editar'); });
 }
 
+function confirmarEliminarTitulo(prefix, idx) {
+  const cfg = CATEGORIAS_COSTOS[prefix];
+  if (!cfg) return;
+  const nombre = cfg.titulos[idx] || '';
+  if (!nombre) return;
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modal-body');
+  modal.style.display = 'block';
+  body.innerHTML = `
+    <h3>Eliminar Campo</h3>
+    <p style="color:#666;margin-top:0.75rem;">¿Seguro que quieres eliminar el campo <b>${esc(nombre)}</b>? Se eliminarán también sus registros asociados.</p>
+    <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+      <button onclick="eliminarTitulo('${prefix}', ${idx})" style="flex:1;padding:0.5rem;background:#c62828;color:#fff;border:none;border-radius:4px;cursor:pointer;">Eliminar</button>
+      <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
+    </div>
+  `;
+}
+
+function eliminarTitulo(prefix, idx) {
+  const cfg = CATEGORIAS_COSTOS[prefix];
+  if (!cfg) return;
+  const nombre = cfg.titulos[idx] || '';
+  if (!nombre) return;
+  api('DELETE', '/api/' + prefix + '/titulos', { nombre }).then(r => {
+    cerrarModal();
+    showToast('Campo eliminado' + (r.eliminados ? ' (' + r.eliminados + ' registros)' : ''));
+    cargarCostoCategoria(prefix);
+  }).catch(e => { console.error(e); alert('Error al eliminar'); });
+}
+
 function cargarPestanas() {
   return api('GET', '/api/costos/pestanas').then(r => {
     const pestanas = r.pestanas || [];
@@ -3122,7 +3152,8 @@ function renderCostoCategoria(prefix, container) {
       html += `<div class="accordion-item">
         <div class="accordion-header" onclick="toggleAcordeon(this)">
           <span class="accordion-title">${t} <span style="font-weight:400;font-size:0.85rem;color:#777;">— TOTAL: S/ ${total.toFixed(2)}</span></span>
-          ${cfg.editableTitulos ? `<button class="editar-titulo" title="Renombrar campo" onclick="event.stopPropagation(); editarTitulo('${prefix}', '${esc(t).replace(/'/g, '&#39;')}')" style="margin-left:0.5rem;padding:0.2rem 0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.75rem;">✏️ Renombrar</button>` : ''}
+          ${cfg.editableTitulos ? `<button class="editar-titulo" title="Renombrar campo" onclick="event.stopPropagation(); editarTitulo('${prefix}', '${esc(t).replace(/'/g, '&#39;')}')" style="margin-left:0.5rem;padding:0.2rem 0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.75rem;">✏️ Renombrar</button>
+          <button class="borrar-titulo" title="Eliminar campo" onclick="event.stopPropagation(); confirmarEliminarTitulo('${prefix}', ${idx})" style="margin-left:0.3rem;padding:0.2rem 0.5rem;background:#c62828;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.75rem;">✕</button>` : ''}
           <span class="accordion-arrow">▶</span>
         </div>
         <div class="accordion-body">
