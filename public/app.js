@@ -1787,15 +1787,16 @@ function cargarRecetas(openId) {
     });
     const ordenCat = ['RECETAS BASE', 'Clásicos', 'Mojitos', 'Limonadas', 'SODAS', 'DEL BARMAN', 'Chilcanos y Sours'];
     let html = '';
-    const catsToRender = [...ordenCat.filter(c => grupos[c]), ...Object.keys(grupos).filter(c => !ordenCat.includes(c))];
+    const catsToRender = [...ordenCat, ...Object.keys(grupos).filter(c => !ordenCat.includes(c))];
     catsToRender.forEach(cat => {
+      const recs = grupos[cat] || [];
       html += `<div class="accordion-item">
         <div class="accordion-header" onclick="toggleAcordeon(this)">
-          <span class="accordion-title">${cat}</span>
+          <span class="accordion-title">${cat}${recs.length ? ` <span style="font-weight:400;font-size:0.85rem;color:#777;">— ${recs.length} receta(s)</span>` : ''}</span>
           <span class="accordion-arrow">▶</span>
         </div>
         <div class="accordion-body">
-          ${grupos[cat].map(r => renderReceta(r)).join('')}
+          ${recs.map(r => renderReceta(r)).join('') || '<p style="padding:0.75rem;color:#888;">Sin recetas aún.</p>'}
         </div>
       </div>`;
     });
@@ -2646,21 +2647,22 @@ function cargarBarraMovimientos(tipo) {
         if (!grupos[cat]) grupos[cat] = [];
         grupos[cat].push(r);
       });
-      const catsToRender = [...ordenCat.filter(c => grupos[c]), ...Object.keys(grupos).filter(c => !ordenCat.includes(c))];
+      const catsToRender = [...ordenCat, ...Object.keys(grupos).filter(c => !ordenCat.includes(c))];
       const container = document.getElementById(accId);
       if (!recetas.length) { container.innerHTML = '<p>No hay recetas registradas.</p>'; return; }
       let html = '<h3 style="margin:0 0 0.5rem 0;">RECETAS VENDIDAS</h3>';
       catsToRender.forEach(cat => {
+        const recs = grupos[cat] || [];
         html += `<div class="accordion-item">
           <div class="accordion-header" onclick="toggleAcordeon(this)">
-            <span class="accordion-title">${cat}</span>
+            <span class="accordion-title">${cat}${recs.length ? ` <span style="font-weight:400;font-size:0.85rem;color:#777;">— ${recs.length} receta(s)</span>` : ''}</span>
             <span class="accordion-arrow">▶</span>
           </div>
           <div class="accordion-body">
             <div class="table-wrap"><table>
               <thead><tr><th>Receta</th><th>Cant. Vendida</th><th>Ingredientes</th></tr></thead>
               <tbody>
-                ${grupos[cat].map(r => {
+                ${recs.map(r => {
                   const qty = recQty[r.nombre] || '';
                   const ings = r.ingredientes.map(i => i.ingrediente).join(', ');
                   return `<tr data-receta="${r.nombre}" data-ingredientes='${JSON.stringify(r.ingredientes.map(i => ({ ingrediente: i.ingrediente, cantidad: i.cantidad, unidad: i.unidad })))}'>
@@ -2668,7 +2670,7 @@ function cargarBarraMovimientos(tipo) {
                     <td><input type="number" class="input-barra-mov input-receta-qty" value="${qty}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="calcularItemsSalientes()"></td>
                     <td style="font-size:0.8rem;color:#666;">${ings}</td>
                   </tr>`;
-                }).join('')}
+                }).join('') || '<tr><td colspan="3" style="color:#888;">Sin recetas aún.</td></tr>'}
               </tbody>
             </table></div>
           </div>
