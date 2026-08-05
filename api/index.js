@@ -956,11 +956,14 @@ app.post('/api/barra/movimientos', authMiddleware, async (req, res) => {
     const { fecha, tipo, items } = req.body;
     if (!fecha || !tipo || !items) return res.status(400).json({ error: 'fecha, tipo e items requeridos' });
 
+    const batch = db.batch();
+    // Consulta única: movimientos existentes (se usan para consumo anterior y para borrar)
+    const existing = await col('barra_movimientos').where('fecha', '==', fecha).where('tipo', '==', tipo).get();
+
     // Consumo anterior de ventas (para que el descuento de stock sea idempotente al re-guardar)
     let oldConsumo = {};
     if (tipo === 'ventas') {
-      const oldSnap = await col('barra_movimientos').where('fecha', '==', fecha).where('tipo', '==', 'ventas').get();
-      oldSnap.docs.forEach(d => {
+      existing.docs.forEach(d => {
         const dd = d.data();
         if (dd.es_receta === false) {
           const key = String(dd.ingrediente || '').trim().toUpperCase();
@@ -971,9 +974,7 @@ app.post('/api/barra/movimientos', authMiddleware, async (req, res) => {
       });
     }
 
-    const batch = db.batch();
     // Delete existing movements for this fecha+tipo
-    const existing = await col('barra_movimientos').where('fecha', '==', fecha).where('tipo', '==', tipo).get();
     existing.docs.forEach(d => batch.delete(d.ref));
     // Insert new movements
     for (const item of items) {
@@ -991,55 +992,71 @@ app.post('/api/barra/movimientos', authMiddleware, async (req, res) => {
     }
     await batch.commit();
 
-    // Descontar consumo de ventas del stock de barra
+    // Descontar consumo de ventas del stock de barra (best-effort: nunca bloquea el guardado)
     if (tipo === 'ventas') {
-      const newConsumo = {};
-      items.forEach(it => {
-        if (it.es_receta === false) {
-          const key = String(it.ingrediente || '').trim().toUpperCase();
-          if (!key) return;
-          if (!newConsumo[key]) newConsumo[key] = { cant: 0, unidad: it.unidad || 'onzas', nombre: it.ingrediente };
-          newConsumo[key].cant += parseFloat(it.cantidad) || 0;
+      try {
+        const newConsumo = {};
+        items.forEach(it => {
+          if (it.es_receta === false) {
+            const key = String(it.ingrediente || '').trim().toUpperCase();
+            if (!key) return;
+            if (!newConsumo[key]) newConsumo[key] = { cant: 0, unidad: it.unidad || 'onzas', nombre: it.ingrediente };
+            newConsumo[key].cant += parseFloat(it.cantidad) || 0;
+          }
+        });
+        const keys = new Set([...Object.keys(oldConsumo), ...Object.keys(newConsumo)]);
+        const stockSnap = await col('barra_stock').get();
+        const stockByName = {};
+        const allStock = [];
+        stockSnap.docs.forEach(d => {
+          const dd = d.data();
+          const k = String(dd.ingrediente || '').trim().toUpperCase();
+          const entry = { ref: d.ref, key: d.id, data: dd };
+          if (!stockByName[k]) stockByName[k] = [];
+          stockByName[k].push(entry);
+          allStock.push(entry);
+        });
+        // Acumular el descuento por item de stock (evita doble escritura del mismo doc en el batch)
+        const ajustes = {};
+        for (const key of keys) {
+          const nc = newConsumo[key];
+          const oc = oldConsumo[key];
+          const nombre = (nc && nc.nombre) || (oc && oc.nombre) || key;
+          const deltaOz = aOnzas(nc ? nc.cant : 0, nc ? nc.unidad : 'onzas', nombre) - aOnzas(oc ? oc.cant : 0, oc ? oc.unidad : 'onzas', nombre);
+          if (!deltaOz || isNaN(deltaOz)) continue;
+          let matches = stockByName[key] || [];
+          if (!matches.length) matches = matchStockFuzzy(nombre, allStock);
+          if (!matches.length) continue;
+          let restante = deltaOz;
+          for (const m of matches) {
+            if (restante === 0) break;
+            const si = m.item;
+            const ozItem = aOnzas(si.data.cantidad, si.data.unidad, si.data.ingrediente);
+            if (ozItem === null || isNaN(ozItem)) continue;
+            const aDescontar = restante > 0 ? Math.min(ozItem, restante) : Math.max(-ozItem, restante);
+            if (!ajustes[si.key]) ajustes[si.key] = { ref: si.ref, deltaOz: 0 };
+            ajustes[si.key].deltaOz += aDescontar;
+            restante -= aDescontar;
+          }
         }
-      });
-      const keys = new Set([...Object.keys(oldConsumo), ...Object.keys(newConsumo)]);
-      const stockSnap = await col('barra_stock').get();
-      const stockByName = {};
-      const allStock = [];
-      stockSnap.docs.forEach(d => {
-        const dd = d.data();
-        const k = String(dd.ingrediente || '').trim().toUpperCase();
-        const entry = { ref: d.ref, id: Number(d.id) || 0, data: dd };
-        if (!stockByName[k]) stockByName[k] = [];
-        stockByName[k].push(entry);
-        allStock.push(entry);
-      });
-      const sBatch = db.batch();
-      let ajustados = 0;
-      for (const key of keys) {
-        const nc = newConsumo[key];
-        const oc = oldConsumo[key];
-        const nombre = (nc && nc.nombre) || (oc && oc.nombre) || key;
-        const deltaOz = aOnzas(nc ? nc.cant : 0, nc ? nc.unidad : 'onzas', nombre) - aOnzas(oc ? oc.cant : 0, oc ? oc.unidad : 'onzas', nombre);
-        if (!deltaOz || isNaN(deltaOz)) continue;
-        let matches = stockByName[key] || [];
-        if (!matches.length) matches = matchStockFuzzy(nombre, allStock);
-        if (!matches.length) continue;
-        let restante = deltaOz;
-        for (const m of matches) {
-          if (restante === 0) break;
-          const si = m.item;
-          const ozItem = aOnzas(si.data.cantidad, si.data.unidad, si.data.ingrediente);
+        // Aplicar los ajustes (una sola escritura por documento)
+        const sBatch = db.batch();
+        let ajustados = 0;
+        for (const id of Object.keys(ajustes)) {
+          const aj = ajustes[id];
+          const stockDoc = allStock.find(s => s.key === id);
+          if (!stockDoc) continue;
+          const ozItem = aOnzas(stockDoc.data.cantidad, stockDoc.data.unidad, stockDoc.data.ingrediente);
           if (ozItem === null || isNaN(ozItem)) continue;
-          const aDescontar = restante > 0 ? Math.min(ozItem, restante) : Math.max(-ozItem, restante);
-          const nuevoOz = Math.max(0, ozItem - aDescontar);
-          const nuevaCant = Math.round(desdeOnzas(nuevoOz, si.data.unidad, si.data.ingrediente) * 100) / 100;
-          sBatch.update(si.ref, { cantidad: nuevaCant, updated_at: new Date().toISOString() });
-          restante -= aDescontar;
+          const nuevoOz = Math.max(0, ozItem - aj.deltaOz);
+          const nuevaCant = Math.round(desdeOnzas(nuevoOz, stockDoc.data.unidad, stockDoc.data.ingrediente) * 100) / 100;
+          sBatch.update(aj.ref, { cantidad: nuevaCant, updated_at: new Date().toISOString() });
           ajustados++;
         }
+        if (ajustados) await sBatch.commit();
+      } catch (e) {
+        console.error('Error descontando stock de ventas:', e.message);
       }
-      if (ajustados) await sBatch.commit();
     }
 
     res.json({ ok: true });
