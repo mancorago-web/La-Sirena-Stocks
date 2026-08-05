@@ -200,7 +200,7 @@
           <h2>Ingresos Barra</h2>
           <div class="controles-dia">
             <label>Fecha: <input type="date" id="fecha-barra-ingresos" onchange="cargarBarraMovimientos('ingresos')"></label>
-            <input type="text" id="buscar-barra-ingresos" placeholder="Buscar item..." oninput="buscarEnTabla(this.value,'accordion-barra-ingresos')">
+            <input type="text" id="buscar-barra-ingresos" placeholder="Buscar item..." oninput="buscarSmart(this.value,'accordion-barra-ingresos','tr[data-ing]')">
             <button class="btn-guardar-dia" onclick="guardarBarraMovimientos('ingresos')">💾 GUARDAR INGRESOS</button>
             <button class="btn-detalles" onclick="verDetallesBarra('ingresos')">📋 DETALLES</button>
           </div>
@@ -226,7 +226,7 @@
           <h2>Bajas Barra</h2>
           <div class="controles-dia">
             <label>Fecha: <input type="date" id="fecha-barra-bajas" onchange="cargarBarraMovimientos('bajas')"></label>
-            <input type="text" id="buscar-barra-bajas" placeholder="Buscar item..." oninput="buscarEnTabla(this.value,'accordion-barra-bajas')">
+            <input type="text" id="buscar-barra-bajas" placeholder="Buscar item..." oninput="buscarSmart(this.value,'accordion-barra-bajas','tr[data-ing]')">
             <button class="btn-guardar-dia" onclick="guardarBarraMovimientos('bajas')">💾 GUARDAR BAJAS</button>
             <button class="btn-detalles" onclick="verDetallesBarra('bajas')">📋 DETALLES</button>
           </div>

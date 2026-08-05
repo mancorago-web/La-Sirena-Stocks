@@ -1495,15 +1495,17 @@ function exportarStockBarra() {
 }
 
 function buscarReceta(q) {
-  const term = q.trim().toLowerCase();
+  const palabras = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const container = document.getElementById('recetas-container');
   if (!container) return;
-  // Recipes: match by name OR by ingredient
+  // Recipes: match by name OR by ingredient (todas las palabras deben coincidir)
   container.querySelectorAll('.accordion-item[data-receta-id]').forEach(recipe => {
     const nombre = recipe.querySelector('.accordion-title')?.textContent?.toLowerCase() || '';
     const ingredientes = Array.from(recipe.querySelectorAll('.accordion-body tbody td:first-child'))
       .map(td => (td.textContent || '').toLowerCase().trim());
-    const match = !term || nombre.includes(term) || ingredientes.some(ing => ing.includes(term));
+    const match = !palabras.length ||
+      palabras.every(p => nombre.includes(p)) ||
+      ingredientes.some(ing => palabras.every(p => ing.includes(p)));
     recipe.style.display = match ? '' : 'none';
   });
   // Categories: show only those with matching recipes; expand them while searching
@@ -1519,53 +1521,71 @@ function buscarReceta(q) {
   });
 }
 
-function buscarEnTabla(term, containerId) {
-  const q = term.trim().toLowerCase();
-  document.querySelectorAll('#' + containerId + ' .accordion-item').forEach(item => {
-    let visible = false;
-    item.querySelectorAll('tr[data-item-id]').forEach(tr => {
-      const name = tr.children[0]?.textContent?.toLowerCase() || '';
-      const match = !q || name.includes(q);
-      tr.style.display = match ? '' : 'none';
-      if (match) visible = true;
+// Buscador inteligente: empareja por letra o por palabra (todas las palabras deben coincidir),
+// funciona tanto en acordeones como en tablas planas, y busca por nombre + ingredientes.
+function buscarSmart(term, containerId, selector) {
+  const q = (term || '').trim();
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const palabras = q.toLowerCase().split(/\s+/).filter(Boolean);
+  function matchRow(tr) {
+    if (!palabras.length) return true;
+    let texto = (tr.children[0]?.textContent || '').toLowerCase();
+    const ingAttr = tr.getAttribute('data-ingredientes');
+    if (ingAttr) {
+      try {
+        texto += ' ' + JSON.parse(ingAttr).map(i => (i.ingrediente || '')).join(' ').toLowerCase();
+      } catch (e) {}
+    }
+    return palabras.every(p => texto.includes(p));
+  }
+  const accordions = container.querySelectorAll('.accordion-item');
+  if (accordions.length) {
+    accordions.forEach(item => {
+      let visible = false;
+      item.querySelectorAll(selector).forEach(tr => {
+        const m = matchRow(tr);
+        tr.style.display = m ? '' : 'none';
+        if (m) visible = true;
+      });
+      item.style.display = (visible || !palabras.length) ? '' : 'none';
+      const header = item.querySelector('.accordion-header');
+      const body = item.querySelector('.accordion-body');
+      const arrow = header ? header.querySelector('.accordion-arrow') : null;
+      if (palabras.length && visible && header && !header.classList.contains('active')) {
+        header.classList.add('active');
+        if (body) body.classList.add('open');
+        if (arrow) arrow.classList.add('open');
+      } else if (!palabras.length && header && header.classList.contains('active')) {
+        header.classList.remove('active');
+        if (body) body.classList.remove('open');
+        if (arrow) arrow.classList.remove('open');
+      }
     });
-    item.style.display = visible || !q ? '' : 'none';
+    return;
+  }
+  // Tabla plana (sin acordeones)
+  const wraps = container.querySelectorAll('.table-wrap');
+  const targets = wraps.length ? wraps : container.querySelectorAll('table');
+  targets.forEach(tbl => {
+    const rows = tbl.querySelectorAll(selector);
+    if (!rows.length) return;
+    let visible = false;
+    rows.forEach(tr => {
+      const m = matchRow(tr);
+      tr.style.display = m ? '' : 'none';
+      if (m) visible = true;
+    });
+    tbl.style.display = (visible || !palabras.length) ? '' : 'none';
   });
 }
 
+function buscarEnTabla(term, containerId) {
+  buscarSmart(term, containerId, 'tr[data-item-id]');
+}
+
 function buscarTablaBarra(term, containerId, selector) {
-  const q = (term || '').trim().toLowerCase();
-  const container = document.getElementById(containerId);
-  if (!container) return;
-  container.querySelectorAll('.accordion-item').forEach(item => {
-    let visible = false;
-    item.querySelectorAll(selector).forEach(tr => {
-      let texto = tr.textContent.toLowerCase();
-      const ingAttr = tr.getAttribute('data-ingredientes');
-      if (ingAttr) {
-        try {
-          const ings = JSON.parse(ingAttr);
-          texto += ' ' + ings.map(i => i.ingrediente || '').join(' ');
-        } catch (e) {}
-      }
-      const match = !q || texto.includes(q);
-      tr.style.display = match ? '' : 'none';
-      if (match) visible = true;
-    });
-    item.style.display = (visible || !q) ? '' : 'none';
-    const header = item.querySelector('.accordion-header');
-    const body = item.querySelector('.accordion-body');
-    const arrow = header ? header.querySelector('.accordion-arrow') : null;
-    if (q && visible && header && !header.classList.contains('active')) {
-      header.classList.add('active');
-      if (body) body.classList.add('open');
-      if (arrow) arrow.classList.add('open');
-    } else if (!q && header && header.classList.contains('active')) {
-      header.classList.remove('active');
-      if (body) body.classList.remove('open');
-      if (arrow) arrow.classList.remove('open');
-    }
-  });
+  buscarSmart(term, containerId, selector);
 }
 
 function exportarExcel() {
