@@ -330,14 +330,17 @@ td button.danger { border-color: #c62828; color: #c62828; }
     white-space: nowrap;
   }
 
-  /* Main menu */
+  /* Main menu (igual a PC) */
   .main-menu { padding: 1rem; min-height: calc(100vh - 3.5rem); }
-  .main-menu-grid { grid-template-columns: 1fr; gap: 1rem; max-width: 400px; }
-  .menu-compras, .menu-ventas, .menu-stocks, .menu-barra, .menu-cocina { grid-column: auto; grid-row: auto; }
-  .menu-flow-svg { display: none; }
-  .category-btn { min-height: 160px; padding: 1.5rem 1rem; }
-  .category-icon { font-size: 2.5rem; }
-  .category-label { font-size: 1.1rem; }
+  .main-menu-grid { grid-template-columns: repeat(4, 1fr); gap: 0.6rem; max-width: 100%; }
+  .category-btn { min-height: 110px; padding: 0.7rem 0.3rem; }
+  .category-icon { font-size: 1.6rem; }
+  .category-label { font-size: 0.72rem; letter-spacing: 0.5px; }
+  .category-desc { display: none; }
+  .category-btn.menu-compras, .category-btn.menu-ventas { min-height: 70px; padding: 0.5rem 0.3rem; }
+  .category-btn.menu-compras .category-icon, .category-btn.menu-ventas .category-icon { font-size: 1.2rem; }
+  .category-btn.menu-compras .category-label, .category-btn.menu-ventas .category-label { font-size: 0.65rem; }
+  .category-btn.menu-compras .category-desc, .category-btn.menu-ventas .category-desc { display: none; }
   .user-info {
     width: 100%;
     display: flex !important;
@@ -482,9 +485,11 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .input-num { width: 48px; font-size: 0.7rem; }
   .accordion-actions button { font-size: 0.65rem; padding: 0.3rem 0.4rem; }
   .main-menu { padding: 0.75rem; }
-  .category-btn { min-height: 130px; padding: 1rem 0.75rem; }
-  .category-icon { font-size: 2rem; }
-  .category-label { font-size: 1rem; }
+  .category-btn { min-height: 95px; padding: 0.6rem 0.25rem; }
+  .category-icon { font-size: 1.4rem; }
+  .category-label { font-size: 0.66rem; }
   .category-desc { display: none; }
-  .menu-compras, .menu-ventas, .menu-stocks, .menu-barra, .menu-cocina { grid-column: auto; grid-row: auto; }
+  .category-btn.menu-compras, .category-btn.menu-ventas { min-height: 60px; padding: 0.4rem 0.25rem; }
+  .category-btn.menu-compras .category-icon, .category-btn.menu-ventas .category-icon { font-size: 1.05rem; }
+  .category-btn.menu-compras .category-label, .category-btn.menu-ventas .category-label { font-size: 0.6rem; }
 }
