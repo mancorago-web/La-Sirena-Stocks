@@ -2187,7 +2187,29 @@ function cargarStockBarra() {
     const b = document.getElementById('btn-guardar-stock');
     if (b) { b.style.background = '#2e7d32'; b.textContent = '💾 GUARDAR STOCK'; }
     if (esHoy) guardarSnapshotStock();
+    cargarConsumoNoRegistrado(fecha, container);
   }).catch(e => { console.error(e); });
+}
+
+function cargarConsumoNoRegistrado(fecha, container) {
+  api('GET', '/api/barra/consumo-no-registrado?fecha=' + encodeURIComponent(fecha)).then(r => {
+    const items = r.noRegistrados || [];
+    if (!items.length) return;
+    const html = `
+      <div class="accordion-item" style="border:1px solid #c62828;">
+        <div class="accordion-header" onclick="toggleAcordeon(this)">
+          <span class="accordion-title">⚠️ ITEMS CONSUMIDOS NO REGISTRADOS <span style="font-weight:400;font-size:0.85rem;color:#c62828;">— ${items.length} item(s) sin stock</span></span>
+          <span class="accordion-arrow">▶</span>
+        </div>
+        <div class="accordion-body">
+          <div class="table-wrap"><table>
+            <thead><tr><th>Ingrediente</th><th>Consumido</th><th>Unidad</th></tr></thead>
+            <tbody>${items.map(it => `<tr><td>${esc(it.ingrediente)}</td><td>${it.cantidad}</td><td>${it.unidad}</td></tr>`).join('')}</tbody>
+          </table></div>
+        </div>
+      </div>`;
+    container.insertAdjacentHTML('beforeend', html);
+  }).catch(() => {});
 }
 
 function guardarSnapshotStock() {

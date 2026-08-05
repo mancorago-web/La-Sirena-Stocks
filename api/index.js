@@ -928,6 +928,29 @@ function desdeOnzas(onzas, unidad, nombre) {
   return null;
 }
 
+// --- Emparejamiento flexible por palabras clave ---
+function tokens(s) {
+  return String(s || '')
+    .toLowerCase()
+    .split(/[^a-z0-9áéíóúñü]+/)
+    .filter(w => w.length > 1 && !['x', 'de', 'y', 'el', 'la', 'los', 'las', 'con', 'por', 'para', 'del', 'al', 'lt', 'ml', 'cc', 'oz', 'gr', 'kg', 'bot', 'botella', 'bote'].includes(w) && !/^\d/.test(w));
+}
+
+function matchStockFuzzy(nombre, stockItems) {
+  const ingTok = tokens(nombre);
+  if (!ingTok.length) return [];
+  const scored = [];
+  stockItems.forEach(si => {
+    const st = tokens(si.data.ingrediente || si.ingrediente || '');
+    if (!st.length) return;
+    // Todas las palabras del ingrediente deben estar en el nombre del stock
+    if (!ingTok.every(w => st.includes(w))) return;
+    scored.push({ item: si, score: ingTok.length / Math.max(1, st.length) });
+  });
+  scored.sort((a, b) => b.score - a.score || (Number(a.item.id) || 0) - (Number(b.item.id) || 0));
+  return scored;
+}
+
 app.post('/api/barra/movimientos', authMiddleware, async (req, res) => {
   try {
     const { fecha, tipo, items } = req.body;
@@ -942,7 +965,7 @@ app.post('/api/barra/movimientos', authMiddleware, async (req, res) => {
         if (dd.es_receta === false) {
           const key = String(dd.ingrediente || '').trim().toUpperCase();
           if (!key) return;
-          if (!oldConsumo[key]) oldConsumo[key] = { cant: 0, unidad: dd.unidad || 'onzas' };
+          if (!oldConsumo[key]) oldConsumo[key] = { cant: 0, unidad: dd.unidad || 'onzas', nombre: dd.ingrediente };
           oldConsumo[key].cant += parseFloat(dd.cantidad) || 0;
         }
       });
@@ -975,36 +998,42 @@ app.post('/api/barra/movimientos', authMiddleware, async (req, res) => {
         if (it.es_receta === false) {
           const key = String(it.ingrediente || '').trim().toUpperCase();
           if (!key) return;
-          if (!newConsumo[key]) newConsumo[key] = { cant: 0, unidad: it.unidad || 'onzas' };
+          if (!newConsumo[key]) newConsumo[key] = { cant: 0, unidad: it.unidad || 'onzas', nombre: it.ingrediente };
           newConsumo[key].cant += parseFloat(it.cantidad) || 0;
         }
       });
       const keys = new Set([...Object.keys(oldConsumo), ...Object.keys(newConsumo)]);
       const stockSnap = await col('barra_stock').get();
       const stockByName = {};
+      const allStock = [];
       stockSnap.docs.forEach(d => {
         const dd = d.data();
         const k = String(dd.ingrediente || '').trim().toUpperCase();
+        const entry = { ref: d.ref, id: Number(d.id) || 0, data: dd };
         if (!stockByName[k]) stockByName[k] = [];
-        stockByName[k].push({ ref: d.ref, data: dd });
+        stockByName[k].push(entry);
+        allStock.push(entry);
       });
       const sBatch = db.batch();
       let ajustados = 0;
       for (const key of keys) {
         const nc = newConsumo[key];
         const oc = oldConsumo[key];
-        const deltaOz = aOnzas(nc ? nc.cant : 0, nc ? nc.unidad : 'onzas', key) - aOnzas(oc ? oc.cant : 0, oc ? oc.unidad : 'onzas', key);
+        const nombre = (nc && nc.nombre) || (oc && oc.nombre) || key;
+        const deltaOz = aOnzas(nc ? nc.cant : 0, nc ? nc.unidad : 'onzas', nombre) - aOnzas(oc ? oc.cant : 0, oc ? oc.unidad : 'onzas', nombre);
         if (!deltaOz || isNaN(deltaOz)) continue;
-        const stockItems = stockByName[key] || [];
-        if (!stockItems.length) continue;
+        let matches = stockByName[key] || [];
+        if (!matches.length) matches = matchStockFuzzy(nombre, allStock);
+        if (!matches.length) continue;
         let restante = deltaOz;
-        for (const si of stockItems) {
+        for (const m of matches) {
           if (restante === 0) break;
+          const si = m.item;
           const ozItem = aOnzas(si.data.cantidad, si.data.unidad, si.data.ingrediente);
           if (ozItem === null || isNaN(ozItem)) continue;
           const aDescontar = restante > 0 ? Math.min(ozItem, restante) : Math.max(-ozItem, restante);
           const nuevoOz = Math.max(0, ozItem - aDescontar);
-          const nuevaCant = desdeOnzas(nuevoOz, si.data.unidad, si.data.ingrediente);
+          const nuevaCant = Math.round(desdeOnzas(nuevoOz, si.data.unidad, si.data.ingrediente) * 100) / 100;
           sBatch.update(si.ref, { cantidad: nuevaCant, updated_at: new Date().toISOString() });
           restante -= aDescontar;
           ajustados++;
@@ -1017,7 +1046,47 @@ app.post('/api/barra/movimientos', authMiddleware, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- REPORTES ---
+// Consumo de ventas que NO tiene item de stock registrado (para la sección informativa)
+app.get('/api/barra/consumo-no-registrado', async (req, res) => {
+  try {
+    const hoy = new Date().toISOString().split('T')[0];
+    const fecha = req.query.fecha || hoy;
+    // Fuente de stock: hoy -> barra_stock; fecha pasada -> snapshot diario
+    let stockDocs = [];
+    if (fecha && fecha !== hoy) {
+      const snap = await col('barra_stock_diario').where('fecha', '==', fecha).get();
+      stockDocs = snap.docs.map(d => d.data());
+    } else {
+      const snap = await col('barra_stock').get();
+      stockDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    }
+    // Consumo de ventas de la fecha
+    const movSnap = await col('barra_movimientos').where('fecha', '==', fecha).where('tipo', '==', 'ventas').get();
+    const consumo = {};
+    movSnap.docs.forEach(d => {
+      const a = d.data();
+      if (a.es_receta === false) {
+        const key = String(a.ingrediente || '').trim().toUpperCase();
+        if (!key) return;
+        if (!consumo[key]) consumo[key] = { cant: 0, unidad: a.unidad || 'onzas', nombre: a.ingrediente };
+        consumo[key].cant += parseFloat(a.cantidad) || 0;
+      }
+    });
+    const stockItems = stockDocs.map((s, i) => ({ id: i, data: s }));
+    const noRegistrados = [];
+    for (const key of Object.keys(consumo)) {
+      const c = consumo[key];
+      const exact = stockDocs.some(s => String(s.ingrediente || '').trim().toUpperCase() === key);
+      const fuzzy = !exact ? matchStockFuzzy(c.nombre, stockItems) : [];
+      if (!exact && !fuzzy.length) {
+        noRegistrados.push({ ingrediente: c.nombre, cantidad: c.cant, unidad: c.unidad });
+      }
+    }
+    res.json({ fecha, noRegistrados });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 app.get('/api/reportes/diferencias', async (req, res) => {
   let fechaInicio = req.query.fecha_inicio;
   let fechaFin = req.query.fecha_fin;
