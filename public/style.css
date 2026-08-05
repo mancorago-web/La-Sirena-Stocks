@@ -37,15 +37,25 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; width: 100%;
   max-width: 1100px; position: relative; z-index: 1;
 }
-.menu-compras { grid-column: 2 / 4; grid-row: 1; }
+.menu-compras { grid-column: 2; grid-row: 1; }
 .menu-stocks { grid-column: 1; grid-row: 2; }
 .menu-barra { grid-column: 2; grid-row: 2; }
 .menu-cocina { grid-column: 3; grid-row: 2; }
+.menu-costos { grid-column: 4; grid-row: 2; }
 .category-btn.menu-compras,
-.category-btn.menu-ventas { background: #e8f0fe; border-color: #90b4f0; }
+.category-btn.menu-ventas {
+  background: #e8f0fe; border-color: #90b4f0;
+  padding: 1.1rem 1rem; min-height: 120px;
+}
 .category-btn.menu-compras:hover,
 .category-btn.menu-ventas:hover { border-color: #1a237e; }
-.menu-ventas { grid-column: 2 / 4; grid-row: 3; }
+.category-btn.menu-compras .category-icon,
+.category-btn.menu-ventas .category-icon { font-size: 1.9rem; }
+.category-btn.menu-compras .category-label,
+.category-btn.menu-ventas .category-label { font-size: 1rem; }
+.category-btn.menu-compras .category-desc,
+.category-btn.menu-ventas .category-desc { font-size: 0.68rem; }
+.menu-ventas { grid-column: 2; grid-row: 3; }
 .category-btn {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem;
   background: #fff; border: 2px solid #e0e0e0; border-radius: 16px; padding: 2.5rem 1.5rem;
