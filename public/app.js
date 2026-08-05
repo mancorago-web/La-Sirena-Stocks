@@ -2834,6 +2834,65 @@ function eliminarCosto(id, tipo) {
 // --- COSTOS: pestañas dinámicas ---
 let CATEGORIAS_COSTOS = {};
 
+function agregarCampo(prefix) {
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modal-body');
+  modal.style.display = 'block';
+  body.innerHTML = `
+    <h3>Agregar Campo</h3>
+    <label style="display:block;margin-top:1rem;">
+      Nombre del Campo
+      <input type="text" id="f-nuevo-campo" placeholder="Ej: BARTENDERS" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+    </label>
+    <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+      <button onclick="guardarCampo('${prefix}')" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+      <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
+    </div>
+  `;
+}
+
+function guardarCampo(prefix) {
+  const nombre = document.getElementById('f-nuevo-campo').value.trim();
+  if (!nombre) { alert('Ingresa un nombre'); return; }
+  api('POST', '/api/' + prefix + '/titulos', { nombre }).then(() => {
+    cerrarModal();
+    showToast('Campo agregado');
+    cargarCostoCategoria(prefix);
+  }).catch(e => { console.error(e); alert('Error al agregar'); });
+}
+
+function editarTitulo(prefix, viejo) {
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modal-body');
+  modal.style.display = 'block';
+  body.innerHTML = `
+    <h3>Renombrar Campo</h3>
+    <label style="display:block;margin-top:1rem;">
+      Nombre Actual
+      <input type="text" value="${viejo}" disabled style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;background:#f5f5f5;">
+    </label>
+    <label style="display:block;margin-top:1rem;">
+      Nuevo Nombre
+      <input type="text" id="f-nuevo-nombre" value="${viejo}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+    </label>
+    <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+      <button onclick="guardarTitulo('${prefix}', '${viejo.replace(/'/g, "\\'")}')" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+      <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
+    </div>
+  `;
+}
+
+function guardarTitulo(prefix, viejo) {
+  const nuevo = document.getElementById('f-nuevo-nombre').value.trim();
+  if (!nuevo) { alert('Ingresa un nombre'); return; }
+  if (nuevo.toUpperCase() === viejo.toUpperCase()) { cerrarModal(); return; }
+  api('PUT', '/api/' + prefix + '/titulos', { viejo, nuevo }).then(() => {
+    cerrarModal();
+    showToast('Campo renombrado');
+    cargarCostoCategoria(prefix);
+  }).catch(e => { console.error(e); alert('Error al editar'); });
+}
+
 function cargarPestanas() {
   return api('GET', '/api/costos/pestanas').then(r => {
     const pestanas = r.pestanas || [];
