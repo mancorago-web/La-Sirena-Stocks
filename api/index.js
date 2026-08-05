@@ -889,10 +889,65 @@ app.get('/api/barra/movimientos', authMiddleware, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- Conversión a onzas (misma regla que el frontend: 750ml = 25 onzas, 30ml/onza) ---
+function botellaParaMl(nombre) {
+  const t = String(nombre || '').toLowerCase();
+  const m = t.match(/(\d+(?:[.,]\d+)?)\s*(ml|cc|l|lt)\b/);
+  if (!m) return null;
+  const v = parseFloat(m[1].replace(',', '.'));
+  return (m[2] === 'ml' || m[2] === 'cc') ? v : v * 1000;
+}
+
+function aOnzas(cant, unidad, nombre) {
+  const u = normalizeUnit(unidad);
+  const c = parseFloat(cant) || 0;
+  if (u === 'onzas') return c;
+  if (u === 'ml') return c / 30;
+  if (u === 'lt') return (c * 1000) / 30;
+  if (u === 'gramos') return c / 28.3495;
+  if (u === 'kg') return (c * 1000) / 28.3495;
+  if (u === 'unidad' || u === 'botella') {
+    const ml = botellaParaMl(nombre);
+    return ml ? (c * ml) / 30 : null;
+  }
+  return null;
+}
+
+function desdeOnzas(onzas, unidad, nombre) {
+  const u = normalizeUnit(unidad);
+  const oz = parseFloat(onzas) || 0;
+  if (u === 'onzas') return oz;
+  if (u === 'ml') return oz * 30;
+  if (u === 'lt') return (oz * 30) / 1000;
+  if (u === 'gramos') return oz * 28.3495;
+  if (u === 'kg') return (oz * 28.3495) / 1000;
+  if (u === 'unidad' || u === 'botella') {
+    const ml = botellaParaMl(nombre);
+    return ml ? (oz * 30) / ml : null;
+  }
+  return null;
+}
+
 app.post('/api/barra/movimientos', authMiddleware, async (req, res) => {
   try {
     const { fecha, tipo, items } = req.body;
     if (!fecha || !tipo || !items) return res.status(400).json({ error: 'fecha, tipo e items requeridos' });
+
+    // Consumo anterior de ventas (para que el descuento de stock sea idempotente al re-guardar)
+    let oldConsumo = {};
+    if (tipo === 'ventas') {
+      const oldSnap = await col('barra_movimientos').where('fecha', '==', fecha).where('tipo', '==', 'ventas').get();
+      oldSnap.docs.forEach(d => {
+        const dd = d.data();
+        if (dd.es_receta === false) {
+          const key = String(dd.ingrediente || '').trim().toUpperCase();
+          if (!key) return;
+          if (!oldConsumo[key]) oldConsumo[key] = { cant: 0, unidad: dd.unidad || 'onzas' };
+          oldConsumo[key].cant += parseFloat(dd.cantidad) || 0;
+        }
+      });
+    }
+
     const batch = db.batch();
     // Delete existing movements for this fecha+tipo
     const existing = await col('barra_movimientos').where('fecha', '==', fecha).where('tipo', '==', tipo).get();
@@ -912,6 +967,52 @@ app.post('/api/barra/movimientos', authMiddleware, async (req, res) => {
       batch.set(ref, doc);
     }
     await batch.commit();
+
+    // Descontar consumo de ventas del stock de barra
+    if (tipo === 'ventas') {
+      const newConsumo = {};
+      items.forEach(it => {
+        if (it.es_receta === false) {
+          const key = String(it.ingrediente || '').trim().toUpperCase();
+          if (!key) return;
+          if (!newConsumo[key]) newConsumo[key] = { cant: 0, unidad: it.unidad || 'onzas' };
+          newConsumo[key].cant += parseFloat(it.cantidad) || 0;
+        }
+      });
+      const keys = new Set([...Object.keys(oldConsumo), ...Object.keys(newConsumo)]);
+      const stockSnap = await col('barra_stock').get();
+      const stockByName = {};
+      stockSnap.docs.forEach(d => {
+        const dd = d.data();
+        const k = String(dd.ingrediente || '').trim().toUpperCase();
+        if (!stockByName[k]) stockByName[k] = [];
+        stockByName[k].push({ ref: d.ref, data: dd });
+      });
+      const sBatch = db.batch();
+      let ajustados = 0;
+      for (const key of keys) {
+        const nc = newConsumo[key];
+        const oc = oldConsumo[key];
+        const deltaOz = aOnzas(nc ? nc.cant : 0, nc ? nc.unidad : 'onzas', key) - aOnzas(oc ? oc.cant : 0, oc ? oc.unidad : 'onzas', key);
+        if (!deltaOz || isNaN(deltaOz)) continue;
+        const stockItems = stockByName[key] || [];
+        if (!stockItems.length) continue;
+        let restante = deltaOz;
+        for (const si of stockItems) {
+          if (restante === 0) break;
+          const ozItem = aOnzas(si.data.cantidad, si.data.unidad, si.data.ingrediente);
+          if (ozItem === null || isNaN(ozItem)) continue;
+          const aDescontar = restante > 0 ? Math.min(ozItem, restante) : Math.max(-ozItem, restante);
+          const nuevoOz = Math.max(0, ozItem - aDescontar);
+          const nuevaCant = desdeOnzas(nuevoOz, si.data.unidad, si.data.ingrediente);
+          sBatch.update(si.ref, { cantidad: nuevaCant, updated_at: new Date().toISOString() });
+          restante -= aDescontar;
+          ajustados++;
+        }
+      }
+      if (ajustados) await sBatch.commit();
+    }
+
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

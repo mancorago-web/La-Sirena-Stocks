@@ -2730,6 +2730,7 @@ function guardarBarraMovimientos(tipo) {
     api('POST', '/api/barra/movimientos', { fecha, tipo, items }).then(() => {
       showToast('Venta Guardada');
       cargarBarraMovimientos(tipo);
+      cargarStockBarra();
     }).catch(e => { console.error(e); alert('Error al guardar'); });
   } else {
     const items = [];
