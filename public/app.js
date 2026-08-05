@@ -1533,6 +1533,41 @@ function buscarEnTabla(term, containerId) {
   });
 }
 
+function buscarTablaBarra(term, containerId, selector) {
+  const q = (term || '').trim().toLowerCase();
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.querySelectorAll('.accordion-item').forEach(item => {
+    let visible = false;
+    item.querySelectorAll(selector).forEach(tr => {
+      let texto = tr.textContent.toLowerCase();
+      const ingAttr = tr.getAttribute('data-ingredientes');
+      if (ingAttr) {
+        try {
+          const ings = JSON.parse(ingAttr);
+          texto += ' ' + ings.map(i => i.ingrediente || '').join(' ');
+        } catch (e) {}
+      }
+      const match = !q || texto.includes(q);
+      tr.style.display = match ? '' : 'none';
+      if (match) visible = true;
+    });
+    item.style.display = (visible || !q) ? '' : 'none';
+    const header = item.querySelector('.accordion-header');
+    const body = item.querySelector('.accordion-body');
+    const arrow = header ? header.querySelector('.accordion-arrow') : null;
+    if (q && visible && header && !header.classList.contains('active')) {
+      header.classList.add('active');
+      if (body) body.classList.add('open');
+      if (arrow) arrow.classList.add('open');
+    } else if (!q && header && header.classList.contains('active')) {
+      header.classList.remove('active');
+      if (body) body.classList.remove('open');
+      if (arrow) arrow.classList.remove('open');
+    }
+  });
+}
+
 function exportarExcel() {
   const fecha = document.getElementById('fecha-almacenes')?.value || new Date().toISOString().split('T')[0];
   const wsData = [['Almacén', 'Sección', 'Item', 'Stock Total Apertura', 'Ingreso', 'Salida Almacén', 'Total Ventas', 'Falta', 'Stock Total Cierre']];
