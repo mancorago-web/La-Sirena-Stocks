@@ -410,32 +410,52 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
   const propErrors = [];
   try {
     if (changedKeys.size) {
+      const keysArr = Array.from(changedKeys);
+      // Generar la secuencia de días hábiles (hasta 30)
+      const secuencia = [];
       let srcFecha = fecha;
-      let maxChains = 30;
-      while (maxChains-- > 0) {
+      for (let i = 0; i < 30; i++) {
         const targetDay = getNextWorkingDay(srcFecha);
-        const keysArr = Array.from(changedKeys);
-        // Leer solo los docs de los items cambiados (origen y destino)
-        const srcRes = await Promise.all(keysArr.map(key => {
+        secuencia.push({ src: srcFecha, tgt: targetDay });
+        srcFecha = targetDay;
+      }
+      // Leer TODOS los docs (origen+destino de cada día) en PARALELO
+      const reads = [];
+      const idxMap = [];
+      secuencia.forEach(({ src, tgt }, si) => {
+        keysArr.forEach(key => {
           const [al, item] = key.split('_');
-          return col('inventario_diario').doc(docId('invdiario', srcFecha, Number(al), Number(item))).get();
-        }));
-        const tgtRes = await Promise.all(keysArr.map(key => {
-          const [al, item] = key.split('_');
-          return col('inventario_diario').doc(docId('invdiario', targetDay, Number(al), Number(item))).get();
-        }));
-        const srcByKey = {};
-        keysArr.forEach((key, i) => { if (srcRes[i].exists) srcByKey[key] = srcRes[i].data(); });
-        if (!Object.keys(srcByKey).length) break;
-        const tgtByKey = {};
-        keysArr.forEach((key, i) => { tgtByKey[key] = tgtRes[i].exists ? tgtRes[i].data() : null; });
-        const batch = db.batch();
-        let anyWrite = false;
-        for (const key of Object.keys(srcByKey)) {
-          const d = srcByKey[key];
-          const existing = tgtByKey[key];
-          const apertura = d.stock_cierre ?? 0;
-          const nextId = docId('invdiario', targetDay, d.almacen_id, d.item_id);
+          idxMap.push({ si, key, tipo: 'src', id: docId('invdiario', src, Number(al), Number(item)) });
+          idxMap.push({ si, key, tipo: 'tgt', id: docId('invdiario', tgt, Number(al), Number(item)) });
+          reads.push(col('inventario_diario').doc(idxMap[idxMap.length - 2].id).get());
+          reads.push(col('inventario_diario').doc(idxMap[idxMap.length - 1].id).get());
+        });
+      });
+      const results = await Promise.all(reads);
+      const srcData = {};
+      const tgtData = {};
+      idxMap.forEach((m, i) => {
+        const d = results[i];
+        if (m.tipo === 'src') {
+          if (d.exists) { if (!srcData[m.si]) srcData[m.si] = {}; srcData[m.si][m.key] = d.data(); }
+        } else {
+          if (!tgtData[m.si]) tgtData[m.si] = {};
+          tgtData[m.si][m.key] = d.exists ? d.data() : null;
+        }
+      });
+      // Calcular la cadena en memoria (el cierre de un día alimenta la apertura del siguiente)
+      const prevCierre = {};
+      const perDayWrites = {};
+      for (let si = 0; si < secuencia.length; si++) {
+        const srcs = srcData[si] || {};
+        const tgts = tgtData[si] || {};
+        if (!Object.keys(srcs).length) break;
+        const tgt = secuencia[si].tgt;
+        for (const key of Object.keys(srcs)) {
+          const d = srcs[key];
+          const existing = tgts[key];
+          const apertura = prevCierre[key] !== undefined ? prevCierre[key] : (d.stock_cierre ?? 0);
+          const nextId = docId('invdiario', tgt, d.almacen_id, d.item_id);
           if (existing) {
             const ingreso = existing.stock_ingreso ?? 0;
             const salida = existing.salida_almacen ?? 0;
@@ -443,25 +463,35 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
             const falta = existing.falta_almacen ?? 0;
             const baja = existing.stock_baja ?? 0;
             const cierre = Math.round((apertura + ingreso - salida - ventas - falta - baja) * 100) / 100;
+            prevCierre[key] = cierre;
             if (existing.stock_apertura === apertura && existing.stock_cierre === cierre) continue;
             const upd = { stock_apertura: apertura, stock_cierre: cierre, updated_at: new Date().toISOString() };
             if (existing.nota_baja) upd.nota_baja = existing.nota_baja;
-            batch.update(col('inventario_diario').doc(nextId), upd);
-            anyWrite = true;
+            if (!perDayWrites[si]) perDayWrites[si] = [];
+            perDayWrites[si].push({ ref: col('inventario_diario').doc(nextId), type: 'update', data: upd });
           } else {
-            batch.set(col('inventario_diario').doc(nextId), {
-              fecha: targetDay, item_id: d.item_id, almacen_id: d.almacen_id,
+            const cierre = apertura;
+            prevCierre[key] = cierre;
+            if (!perDayWrites[si]) perDayWrites[si] = [];
+            perDayWrites[si].push({ ref: col('inventario_diario').doc(nextId), type: 'set', data: {
+              fecha: tgt, item_id: d.item_id, almacen_id: d.almacen_id,
               stock_apertura: apertura, stock_ingreso: 0, salida_almacen: 0,
               total_ventas: 0, falta_almacen: 0, stock_baja: 0, stock_cierre: apertura,
               updated_at: new Date().toISOString(),
-            });
-            anyWrite = true;
+            } });
           }
         }
-        await batch.commit();
-        if (!anyWrite) break;
-        srcFecha = targetDay;
       }
+      // Escribir por día (un batch por día, en paralelo) — evita superar el límite de 500 por batch
+      const commits = Object.keys(perDayWrites).map(si => {
+        const batch = db.batch();
+        perDayWrites[si].forEach(w => {
+          if (w.type === 'update') batch.update(w.ref, w.data);
+          else batch.set(w.ref, w.data);
+        });
+        return batch.commit();
+      });
+      if (commits.length) await Promise.all(commits);
     }
   } catch (e) {
     propErrors.push(e.message);
