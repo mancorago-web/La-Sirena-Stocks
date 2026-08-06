@@ -615,7 +615,12 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
             await col('inventario').doc(docId('inventario', maxItemId, alId)).set(nuevoItem);
             match = { item_id: maxItemId, almacen_id: alId };
           }
-          registrosStocks.push({ almacen_id: match.almacen_id, item_id: match.item_id, stock_ingreso: cantidad });
+          // SUMAR al ingreso ya registrado del día (no sobrescribir)
+          const diaId = docId('invdiario', fecha, match.almacen_id, match.item_id);
+          const diaSnap = await col('inventario_diario').doc(diaId).get();
+          const cur = diaSnap.exists ? (parseFloat(diaSnap.data().stock_ingreso) || 0) : 0;
+          const nuevoTotal = cur + cantidad;
+          registrosStocks.push({ almacen_id: match.almacen_id, item_id: match.item_id, stock_ingreso: nuevoTotal });
           almacenes.push(match.almacen_id);
         }
         if (almacenes.length) resumen.stocks.push({ nombre, cantidad, almacenes });
@@ -969,7 +974,12 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
             await col('inventario').doc(docId('inventario', maxItemId, alId)).set({ item_id: maxItemId, almacen_id: alId, nombre, categoria: '', stock_apertura: 0, cantidad_minima: 0 });
             match = { item_id: maxItemId, almacen_id: alId };
           }
-          registrosStocks.push({ almacen_id: match.almacen_id, item_id: match.item_id, total_ventas: cantidad });
+          // SUMAR a las ventas ya registradas del día (no sobrescribir)
+          const diaId = docId('invdiario', fecha, match.almacen_id, match.item_id);
+          const diaSnap = await col('inventario_diario').doc(diaId).get();
+          const cur = diaSnap.exists ? (parseFloat(diaSnap.data().total_ventas) || 0) : 0;
+          const nuevoTotal = cur + cantidad;
+          registrosStocks.push({ almacen_id: match.almacen_id, item_id: match.item_id, total_ventas: nuevoTotal });
           almacenes.push(match.almacen_id);
         }
         if (almacenes.length) resumen.stocks.push({ nombre, cantidad, almacenes });
