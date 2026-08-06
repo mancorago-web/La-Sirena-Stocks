@@ -401,7 +401,7 @@
             <option value="barra">BARRA</option>
             <option value="cocina">COCINA</option>
           </select>
-          <button class="btn-detalles" onclick="agregarCompra()">➕ AGREGAR</button>
+          <button class="btn-detalles" id="btn-agregar-compra" onclick="agregarCompra()">➕ AGREGAR</button>
         </div>
         <div id="compras-almacenes" style="display:none;margin-top:0.75rem;padding:0.75rem;background:#e8f0fe;border-radius:8px;">
           <strong style="font-size:0.85rem;color:#1a237e;">Elige los almacenes donde ingresa esta compra (STOCKS):</strong>
@@ -433,7 +433,7 @@
           <input type="text" id="nueva-venta-input" placeholder="Buscar item / receta..." list="sugerencia-ventas" autocomplete="off" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:180px;">
           <datalist id="sugerencia-ventas"></datalist>
           <input type="number" id="nueva-venta-cant" placeholder="Cantidad" step="0.01" min="0" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;width:110px;">
-          <button class="btn-detalles" onclick="agregarVenta()">➕ AGREGAR</button>
+          <button class="btn-detalles" id="btn-agregar-venta" onclick="agregarVenta()">➕ AGREGAR</button>
         </div>
         <div id="ventas-almacenes" style="display:none;margin-top:0.75rem;padding:0.75rem;background:#e8f0fe;border-radius:8px;">
           <strong style="font-size:0.85rem;color:#1a237e;">Elige los almacenes de donde sale esta venta (STOCKS):</strong>
@@ -466,6 +466,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=20"></script>
+  <script src="/app.js?v=21"></script>
 </body>
 </html>

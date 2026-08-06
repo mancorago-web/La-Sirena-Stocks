@@ -3157,49 +3157,36 @@ function agregarVenta() {
   const cantidad = parseFloat(document.getElementById('nueva-venta-cant').value);
   const destino = document.getElementById('nueva-venta-destino').value;
   if (!nombre || isNaN(cantidad) || cantidad <= 0) { alert('Ingresa un item/receta y una cantidad'); return; }
-  let almacenes = [];
-  if (destino === 'stocks') {
-    const ids = ventasAlmacenesSeleccionados();
-    almacenes = ventasAlmacenes.filter(a => ids.includes(Number(a.id))).map(a => ({ almacen_id: Number(a.id), almacen_nombre: a.nombre }));
-  }
-  ventasCart.push({ nombre, cantidad, destino, almacenes });
-  document.getElementById('nueva-venta-input').value = '';
-  document.getElementById('nueva-venta-cant').value = '';
-  showToast('Agregado: ' + nombre + ' x' + cantidad + ' (' + destino + '). Presiona 💾 GUARDAR para registrar.');
-}
-
-function guardarVentasCentral() {
   const fecha = document.getElementById('fecha-ventas-menu')?.value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
-  if (!ventasCart.length) { alert('No hay items en la venta'); return; }
-  const btn = document.querySelector('#tab-ventas .btn-guardar-dia');
-  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
-  const payload = ventasCart.map(it => ({
-    nombre: it.nombre,
-    cantidad: it.cantidad,
-    destino: it.destino,
-    almacenes: it.destino === 'stocks' && it.almacenes ? it.almacenes.map(a => a.almacen_id) : undefined
-  }));
-  api('POST', '/api/ventas/guardar', { fecha, items: payload }).then(r => {
-    if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR'; }
+  let almacenes;
+  if (destino === 'stocks') {
+    const ids = ventasAlmacenesSeleccionados();
+    almacenes = ventasAlmacenes.filter(a => ids.includes(Number(a.id))).map(a => Number(a.id));
+  }
+  const btn = document.getElementById('btn-agregar-venta');
+  if (btn) btn.disabled = true;
+  api('POST', '/api/ventas/guardar', { fecha, items: [{ nombre, cantidad, destino, almacenes }] }).then(r => {
+    if (btn) btn.disabled = false;
     const res = r.resumen || {};
-    let msg = 'Ventas guardadas.';
-    if (res.stocks && res.stocks.length) msg += ' Stocks: ' + res.stocks.length + ' item(s).';
-    if (res.barra && res.barra.length) msg += ' Barra: ' + res.barra.length + ' item(s).';
-    if (res.cocina && res.cocina.length) msg += ' Cocina: ' + res.cocina.length + ' item(s).';
-    if (res.noEncontrados && res.noEncontrados.length) msg += ' No encontrados: ' + res.noEncontrados.map(n => n.nombre).join(', ');
+    let msg = 'Venta registrada: ' + nombre + ' x' + cantidad;
+    if (res.noEncontrados && res.noEncontrados.length) msg += ' (no encontrado)';
     showToast(msg);
-    ventasCart = [];
+    document.getElementById('nueva-venta-input').value = '';
+    document.getElementById('nueva-venta-cant').value = '';
     cargarVentasDetalle(fecha);
     _invCache = { fecha: null, data: null, pending: null };
     if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fecha);
     if (typeof cargarStockBarra === 'function') cargarStockBarra();
-    if (typeof cargarVentasAlmacen === 'function') cargarVentasAlmacen(fecha);
   }).catch(e => {
     console.error(e);
-    if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR'; }
-    alert('Error al guardar');
+    if (btn) btn.disabled = false;
+    alert('Error al registrar');
   });
+}
+
+function guardarVentasCentral() {
+  agregarVenta();
 }
 
 function cargarVentasDetalle(fecha) {
@@ -3259,53 +3246,38 @@ function agregarCompra() {
   const cantidad = parseFloat(document.getElementById('nueva-compra-cant').value);
   const destino = document.getElementById('nueva-compra-destino').value;
   if (!nombre || isNaN(cantidad) || cantidad <= 0) { alert('Ingresa un item y una cantidad'); return; }
-  let almacenes = [];
-  let muebles = [];
+  const fecha = document.getElementById('fecha-compras')?.value;
+  if (!fecha) { alert('Selecciona una fecha'); return; }
+  let almacenes;
+  let muebles;
   if (destino === 'stocks') {
     const ids = comprasAlmacenesSeleccionados();
-    almacenes = comprasAlmacenes.filter(a => ids.includes(Number(a.id))).map(a => ({ almacen_id: Number(a.id), almacen_nombre: a.nombre }));
+    almacenes = comprasAlmacenes.filter(a => ids.includes(Number(a.id))).map(a => Number(a.id));
   } else if (destino === 'barra') {
     muebles = comprasMueblesSeleccionados();
   }
-  comprasCart.push({ nombre, cantidad, unidad: 'unidad', destino, almacenes, muebles });
-  document.getElementById('nueva-compra-input').value = '';
-  document.getElementById('nueva-compra-cant').value = '';
-  showToast('Agregado: ' + nombre + ' x' + cantidad + ' (' + destino + '). Presiona 💾 GUARDAR para registrar.');
-}
-
-function guardarCompras() {
-  const fecha = document.getElementById('fecha-compras')?.value;
-  if (!fecha) { alert('Selecciona una fecha'); return; }
-  if (!comprasCart.length) { alert('No hay items en la compra'); return; }
-  const btn = document.querySelector('#tab-compras .btn-guardar-dia');
-  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
-  const payload = comprasCart.map(it => ({
-    nombre: it.nombre,
-    cantidad: it.cantidad,
-    unidad: it.unidad || 'unidad',
-    destino: it.destino,
-    almacenes: it.destino === 'stocks' && it.almacenes ? it.almacenes.map(a => a.almacen_id) : undefined,
-    muebles: it.destino === 'barra' && it.muebles ? it.muebles : undefined
-  }));
-  api('POST', '/api/compras/guardar', { fecha, items: payload }).then(r => {
-    if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR'; }
+  const btn = document.getElementById('btn-agregar-compra');
+  if (btn) btn.disabled = true;
+  api('POST', '/api/compras/guardar', { fecha, items: [{ nombre, cantidad, unidad: 'unidad', destino, almacenes, muebles }] }).then(r => {
+    if (btn) btn.disabled = false;
     const res = r.resumen || {};
-    let msg = 'Compras guardadas.';
-    if (res.stocks && res.stocks.length) msg += ' Stocks: ' + res.stocks.length + ' item(s).';
-    if (res.barra && res.barra.length) msg += ' Barra: ' + res.barra.length + ' item(s).';
-    if (res.cocina && res.cocina.length) msg += ' Cocina: ' + res.cocina.length + ' item(s).';
-    if (res.noEncontrados && res.noEncontrados.length) msg += ' No encontrados: ' + res.noEncontrados.map(n => n.nombre).join(', ');
+    let msg = 'Compra registrada: ' + nombre + ' x' + cantidad;
+    if (res.noEncontrados && res.noEncontrados.length) msg += ' (no encontrado)';
     showToast(msg);
-    comprasCart = [];
+    document.getElementById('nueva-compra-input').value = '';
+    document.getElementById('nueva-compra-cant').value = '';
     cargarComprasDetalle(fecha);
-    // Limpiar caché de inventario para que STOCKS muestre el ingreso recién registrado
     _invCache = { fecha: null, data: null, pending: null };
     if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fecha);
   }).catch(e => {
     console.error(e);
-    if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR'; }
-    alert('Error al guardar');
+    if (btn) btn.disabled = false;
+    alert('Error al registrar');
   });
+}
+
+function guardarCompras() {
+  agregarCompra();
 }
 
 // --- COSTOS: pestañas dinámicas ---
