@@ -3011,7 +3011,8 @@ function cargarCompras() {
     }
     renderComprasCart();
     onCambiarDestinoCompra();
-  }).catch(() => { renderComprasCart(); });
+    cargarComprasDetalle(fecha);
+  }).catch(() => { renderComprasCart(); cargarComprasDetalle(fecha); });
 }
 
 function comprasAlmacenesSeleccionados() {
@@ -3020,6 +3021,28 @@ function comprasAlmacenesSeleccionados() {
 
 function comprasMueblesSeleccionados() {
   return Array.from(document.querySelectorAll('.compra-mueble:checked')).map(cb => cb.value);
+}
+
+function cargarComprasDetalle(fecha) {
+  const c = document.getElementById('compras-detalle-container');
+  if (!c) return;
+  api('GET', '/api/compras/detalle?fecha=' + encodeURIComponent(fecha || todayStr())).then(list => {
+    if (!list || !list.length) {
+      c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE COMPRAS/INGRESOS</h3><p style="color:#888;">Aún no hay compras registradas en esta fecha.</p>';
+      return;
+    }
+    const filas = list.map(r => {
+      let det = '';
+      if (r.destino === 'stocks') det = 'STOCKS → ' + (r.almacenes || []).join(', ');
+      else if (r.destino === 'barra') det = 'BARRA → ' + (r.muebles || []).join(', ');
+      else if (r.destino === 'cocina') det = 'COCINA';
+      const t = r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
+      return `<tr><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${esc(det)}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td></tr>`;
+    }).join('');
+    c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE COMPRAS/INGRESOS</h3>' +
+      '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Destino</th><th>Hora</th><th>Usuario</th></tr></thead><tbody>' +
+      filas + '</tbody></table></div>';
+  }).catch(() => { c.innerHTML = '<p style="color:#888;">DETALLE DE COMPRAS/INGRESOS</p>'; });
 }
 
 function agregarCompra() {
@@ -3095,6 +3118,7 @@ function guardarCompras() {
     showToast(msg);
     comprasCart = [];
     renderComprasCart();
+    cargarComprasDetalle(fecha);
     // Limpiar caché de inventario para que STOCKS muestre el ingreso recién registrado
     _invCache = { fecha: null, data: null, pending: null };
     if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fecha);

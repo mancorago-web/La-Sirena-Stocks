@@ -665,7 +665,45 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       await batch.commit();
     }
 
+    // Registrar el log de cada compra (para el detalle de COMPRAS/INGRESOS)
+    if (resumen.stocks.length || resumen.barra.length || resumen.cocina.length) {
+      const logBatch = db.batch();
+      resumen.stocks.forEach(r => {
+        logBatch.set(col('compras').doc(), {
+          fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: 'unidad', destino: 'stocks',
+          almacenes: r.almacenes || [], saved_by: savedBy, created_at: new Date().toISOString()
+        });
+      });
+      resumen.barra.forEach(r => {
+        logBatch.set(col('compras').doc(), {
+          fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: r.unidad || 'unidad', destino: 'barra',
+          muebles: r.muebles || [], saved_by: savedBy, created_at: new Date().toISOString()
+        });
+      });
+      resumen.cocina.forEach(r => {
+        logBatch.set(col('compras').doc(), {
+          fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: r.unidad || 'unidad', destino: 'cocina',
+          saved_by: savedBy, created_at: new Date().toISOString()
+        });
+      });
+      await logBatch.commit();
+    }
+
     res.json({ ok: true, resumen });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- COMPRAS: detalle de compras/ingresos registrados por fecha ---
+app.get('/api/compras/detalle', async (req, res) => {
+  try {
+    const fecha = req.query.fecha;
+    if (!fecha) return res.json([]);
+    const snap = await col('compras').where('fecha', '==', fecha).get();
+    const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    list.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+    res.json(list);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
