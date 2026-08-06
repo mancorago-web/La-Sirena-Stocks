@@ -740,7 +740,14 @@ app.delete('/api/compras/:id', authMiddleware, async (req, res) => {
       const registros = [];
       for (const alId of almacenes) {
         const match = cands.find(c => Number(c.almacen_id) === alId);
-        if (match) registros.push({ almacen_id: match.almacen_id, item_id: match.item_id, stock_ingreso: -cantidad });
+        if (match) {
+          // Restar al ingreso actual del día (no dejar negativo)
+          const diaId = docId('invdiario', fecha, match.almacen_id, match.item_id);
+          const diaSnap = await col('inventario_diario').doc(diaId).get();
+          const cur = diaSnap.exists ? (parseFloat(diaSnap.data().stock_ingreso) || 0) : 0;
+          const nuevo = Math.max(0, cur - cantidad);
+          registros.push({ almacen_id: match.almacen_id, item_id: match.item_id, stock_ingreso: nuevo });
+        }
       }
       if (registros.length) await guardarDiaInterno(fecha, registros, savedBy);
     } else if (log.destino === 'barra') {
