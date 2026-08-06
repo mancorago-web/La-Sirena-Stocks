@@ -3490,7 +3490,7 @@ function cargarPestanas() {
       CATEGORIAS_COSTOS[p.id] = {
         tipo: p.tipo, titulos: p.titulos || [], campoSub: p.campoSub, campoTexto: p.campoTexto,
         colLabel: p.colLabel, phTexto: p.phTexto, editableTitulos: p.editableTitulos !== false,
-        label: p.label, titulosDoc: p.titulosDoc
+        label: p.label, titulosDoc: p.titulosDoc, grupos: p.grupos || null
       };
     });
     renderizarPestanas(pestanas);
@@ -3593,6 +3593,7 @@ function cargarCostoCategoria(prefix) {
   if (!cfg) return;
   const container = document.getElementById('costos-' + prefix + '-container');
   if (!container) return;
+  if (cfg.grupos && cfg.grupos.length) { renderCostoGrupos(prefix, container, cfg); return; }
   const titulosDoc = cfg.titulosDoc || (prefix + '_titulos');
   api('GET', '/api/' + prefix + '/titulos').then(r => {
     if (r.titulos && r.titulos.length) cfg.titulos = r.titulos;
@@ -3680,11 +3681,96 @@ function eliminarCostoCategoria(prefix, id) {
   api('DELETE', '/api/costos/' + id).then(() => cargarCostoCategoria(prefix)).catch(e => { console.error(e); alert('Error al eliminar'); });
 }
 
+function renderCostoGrupos(prefix, container, cfg) {
+  const grupos = cfg.grupos;
+  Promise.all(grupos.map(g => api('GET', '/api/costos?tipo=' + g.tipo))).then(lists => {
+    let totalGeneral = 0;
+    let html = '';
+    grupos.forEach((g, gi) => {
+      const list = lists[gi] || [];
+      const groups = {};
+      g.titulos.forEach(t => { groups[t] = []; });
+      groups['OTROS'] = [];
+      let subTotal = 0;
+      list.forEach(c => {
+        subTotal += c.monto || 0;
+        let key = (c[g.campoSub] || '').toUpperCase();
+        if (!groups[key]) {
+          const up = (c.concepto || '').toUpperCase();
+          key = g.titulos.find(t => up.includes(t)) || 'OTROS';
+        }
+        groups[key].push(c);
+      });
+      totalGeneral += subTotal;
+      html += `<div class="grupo-header"><span>${g.label}</span><span class="grupo-subtotal">S/ ${subTotal.toFixed(2)}</span></div>`;
+      g.titulos.forEach((t, idx) => {
+        const records = groups[t].sort((a, b) => String(a.fecha || '').localeCompare(String(b.fecha || '')));
+        const total = records.reduce((s, r) => s + (r.monto || 0), 0);
+        const rows = records.map(r => {
+          const u = DISPLAY_NAMES[r.saved_by] || r.saved_by || '-';
+          return `<tr>
+            <td>${r[g.campoTexto] || r.concepto || '-'}</td>
+            <td>${r.fecha || '-'}</td>
+            <td>S/ ${(r.monto || 0).toFixed(2)}</td>
+            <td>${u}</td>
+            <td><button class="danger" onclick="eliminarCostoCategoriaGrupo('${prefix}', ${gi}, '${r.id}')">✕</button></td>
+          </tr>`;
+        }).join('');
+        html += `<div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAcordeon(this)">
+            <span class="accordion-title">${t} <span style="font-weight:400;font-size:0.85rem;color:#777;">— TOTAL: S/ ${total.toFixed(2)}</span></span>
+            <span class="accordion-arrow">▶</span>
+          </div>
+          <div class="accordion-body">
+            <div class="table-wrap"><table>
+              <thead><tr><th>${g.colLabel}</th><th>Fecha</th><th>Monto</th><th>Usuario</th><th></th></tr></thead>
+              <tbody>${rows || '<tr><td colspan="5">Sin registros.</td></tr>'}</tbody>
+            </table></div>
+            <div style="margin-top:0.75rem;padding:0.75rem;background:#f9f9f9;border-radius:8px;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+              <input type="text" id="nuevo-${prefix}-g${gi}-texto-${idx}" placeholder="${g.phTexto}" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:160px;">
+              <label>Fecha: <input type="date" id="nuevo-${prefix}-g${gi}-fecha-${idx}" value="${todayStr()}" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></label>
+              <input type="number" id="nuevo-${prefix}-g${gi}-monto-${idx}" placeholder="Monto (S/)" step="0.01" min="0" oninput="actualizarAutosuma('${prefix}')" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;width:120px;">
+              <button class="btn-guardar-dia" onclick="guardarCostoGrupo('${prefix}', ${gi}, ${idx})">AGREGAR</button>
+            </div>
+          </div>
+        </div>`;
+      });
+      if (groups['OTROS'].length) html += `<p style="color:#c62828;margin-top:0.5rem;">Nota: ${groups['OTROS'].length} registro(s) sin clasificar en ${g.label}.</p>`;
+    });
+    const box = `<div class="autosuma-box" id="autosuma-${prefix}" data-base="${totalGeneral}">
+      <span class="autosuma-label">TOTAL</span>
+      <span class="autosuma-monto">S/ ${totalGeneral.toFixed(2)}</span>
+    </div>`;
+    container.innerHTML = box + html;
+  }).catch(e => { console.error(e); container.innerHTML = '<p>Error al cargar.</p>'; });
+}
+
+function guardarCostoGrupo(prefix, gi, idx) {
+  const cfg = CATEGORIAS_COSTOS[prefix];
+  const g = cfg.grupos[gi];
+  const sub = g.titulos[idx];
+  const texto = document.getElementById('nuevo-' + prefix + '-g' + gi + '-texto-' + idx)?.value.trim() || sub;
+  const fecha = document.getElementById('nuevo-' + prefix + '-g' + gi + '-fecha-' + idx)?.value;
+  const monto = parseFloat(document.getElementById('nuevo-' + prefix + '-g' + gi + '-monto-' + idx)?.value);
+  if (!fecha || isNaN(monto)) { alert('Ingresa fecha y monto'); return; }
+  const body = { fecha, tipo: g.tipo, concepto: texto, monto };
+  body[g.campoSub] = sub.toLowerCase();
+  api('POST', '/api/costos', body).then(() => {
+    showToast('Registro de ' + sub + ' guardado');
+    cargarCostoCategoria(prefix);
+  }).catch(e => { console.error(e); alert('Error al guardar'); });
+}
+
+function eliminarCostoCategoriaGrupo(prefix, gi, id) {
+  if (!confirm('¿Eliminar este registro?')) return;
+  api('DELETE', '/api/costos/' + id).then(() => cargarCostoCategoria(prefix)).catch(e => { console.error(e); alert('Error al eliminar'); });
+}
+
 function actualizarAutosuma(prefix) {
   const box = document.getElementById('autosuma-' + prefix);
   if (!box) return;
   const base = parseFloat(box.dataset.base) || 0;
-  const inputs = document.querySelectorAll('#costos-' + prefix + '-container input[id^="nuevo-' + prefix + '-monto-"]');
+  const inputs = document.querySelectorAll('#costos-' + prefix + '-container input[id^="nuevo-' + prefix + '"][id*="monto-"]');
   let suma = 0;
   inputs.forEach(inp => { const v = parseFloat(inp.value); if (!isNaN(v)) suma += v; });
   const monto = box.querySelector('.autosuma-monto');
