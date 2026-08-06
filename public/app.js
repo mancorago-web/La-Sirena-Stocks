@@ -3165,7 +3165,7 @@ function agregarVenta() {
   ventasCart.push({ nombre, cantidad, destino, almacenes });
   document.getElementById('nueva-venta-input').value = '';
   document.getElementById('nueva-venta-cant').value = '';
-  showToast('Agregado: ' + nombre + ' x' + cantidad + ' (' + destino + '). Total: ' + ventasCart.length + ' item(s).');
+  showToast('Agregado: ' + nombre + ' x' + cantidad + ' (' + destino + '). Presiona 💾 GUARDAR para registrar.');
 }
 
 function guardarVentasCentral() {
@@ -3270,7 +3270,7 @@ function agregarCompra() {
   comprasCart.push({ nombre, cantidad, unidad: 'unidad', destino, almacenes, muebles });
   document.getElementById('nueva-compra-input').value = '';
   document.getElementById('nueva-compra-cant').value = '';
-  showToast('Agregado: ' + nombre + ' x' + cantidad + ' (' + destino + '). Total: ' + comprasCart.length + ' item(s).');
+  showToast('Agregado: ' + nombre + ' x' + cantidad + ' (' + destino + '). Presiona 💾 GUARDAR para registrar.');
 }
 
 function guardarCompras() {
