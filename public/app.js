@@ -104,10 +104,18 @@ document.querySelectorAll('.tab').forEach(tab => {
     tab.classList.add('active');
     const name = tab.dataset.tab;
     document.getElementById('tab-' + name).classList.add('active');
-    if (_loaded[name]) return;
-    _loaded[name] = true;
-    if (name === 'reportes') cargarReportes();
-    if (name === 'precios') cargarPreciosAlmacen();
+    // Recargar siempre para mantener todo actualizado en cadena
+    const loaders = {
+      almacenes: () => cargarAlmacenes(document.getElementById('fecha-almacenes')?.value),
+      ingresos: () => cargarIngresos(document.getElementById('fecha-ingresos')?.value),
+      salidas: () => cargarSalidas(document.getElementById('fecha-salidas')?.value),
+      ventas: () => cargarVentas(document.getElementById('fecha-ventas')?.value),
+      bajas: () => cargarBajas(document.getElementById('fecha-bajas')?.value),
+      stocks: () => cargarStocks(),
+      reportes: () => cargarReportes(),
+      precios: () => cargarPreciosAlmacen()
+    };
+    if (loaders[name]) loaders[name]();
   });
 });
 
@@ -3177,6 +3185,7 @@ function agregarVenta() {
     cargarVentasDetalle(fecha);
     _invCache = { fecha: null, data: null, pending: null };
     if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fecha);
+    if (typeof cargarVentas === 'function') cargarVentas(fecha);
     if (typeof cargarStockBarra === 'function') cargarStockBarra();
   }).catch(e => {
     console.error(e);
