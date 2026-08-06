@@ -2959,9 +2959,11 @@ let comprasCart = [];
 let comprasAlmacenes = [];
 
 function onCambiarDestinoCompra() {
-  const sel = document.getElementById('compras-almacenes');
   const destino = document.getElementById('nueva-compra-destino').value;
-  if (sel) sel.style.display = destino === 'stocks' ? '' : 'none';
+  const alSel = document.getElementById('compras-almacenes');
+  const muSel = document.getElementById('compras-muebles');
+  if (alSel) alSel.style.display = destino === 'stocks' ? '' : 'none';
+  if (muSel) muSel.style.display = destino === 'barra' ? '' : 'none';
 }
 
 function cargarCompras() {
@@ -2988,6 +2990,12 @@ function cargarCompras() {
         '<label style="font-size:0.82rem;display:inline-flex;align-items:center;gap:0.25rem;"><input type="checkbox" class="compra-almacen" value="' + Number(a.id) + '" checked> ' + esc(a.nombre) + '</label>'
       ).join('');
     }
+    const muList = document.getElementById('compras-muebles-lista');
+    if (muList) {
+      muList.innerHTML = GRUPOS_BARRA.map(g =>
+        '<label style="font-size:0.82rem;display:inline-flex;align-items:center;gap:0.25rem;"><input type="checkbox" class="compra-mueble" value="' + esc(g) + '" checked> ' + esc(g) + '</label>'
+      ).join('');
+    }
     renderComprasCart();
     onCambiarDestinoCompra();
   }).catch(() => { renderComprasCart(); });
@@ -2997,17 +3005,24 @@ function comprasAlmacenesSeleccionados() {
   return Array.from(document.querySelectorAll('.compra-almacen:checked')).map(cb => Number(cb.value));
 }
 
+function comprasMueblesSeleccionados() {
+  return Array.from(document.querySelectorAll('.compra-mueble:checked')).map(cb => cb.value);
+}
+
 function agregarCompra() {
   const nombre = document.getElementById('nueva-compra-input').value.trim();
   const cantidad = parseFloat(document.getElementById('nueva-compra-cant').value);
   const destino = document.getElementById('nueva-compra-destino').value;
   if (!nombre || isNaN(cantidad) || cantidad <= 0) { alert('Ingresa un item y una cantidad'); return; }
   let almacenes = [];
+  let muebles = [];
   if (destino === 'stocks') {
     const ids = comprasAlmacenesSeleccionados();
     almacenes = comprasAlmacenes.filter(a => ids.includes(Number(a.id))).map(a => ({ almacen_id: Number(a.id), almacen_nombre: a.nombre }));
+  } else if (destino === 'barra') {
+    muebles = comprasMueblesSeleccionados();
   }
-  comprasCart.push({ nombre, cantidad, unidad: 'unidad', destino, almacenes });
+  comprasCart.push({ nombre, cantidad, unidad: 'unidad', destino, almacenes, muebles });
   document.getElementById('nueva-compra-input').value = '';
   document.getElementById('nueva-compra-cant').value = '';
   renderComprasCart();
@@ -3023,7 +3038,9 @@ function renderComprasCart() {
         ? '<div style="font-size:0.78rem;color:#1a237e;line-height:1.4;">STOCKS → ' + it.almacenes.map(a => esc(a.almacen_nombre)).join(', ') + '</div>'
         : '<span style="color:#c62828;font-size:0.78rem;">STOCKS (sin almacenes)</span>';
     } else if (it.destino === 'barra') {
-      dest = '<span style="color:#0f3460;font-weight:600;font-size:0.8rem;">BARRA</span>';
+      dest = it.muebles && it.muebles.length
+        ? '<div style="font-size:0.78rem;color:#0f3460;line-height:1.4;">BARRA → ' + it.muebles.map(m => esc(m)).join(', ') + '</div>'
+        : '<span style="color:#c62828;font-size:0.78rem;">BARRA (sin mueble)</span>';
     } else if (it.destino === 'cocina') {
       dest = '<span style="color:#0f3460;font-weight:600;font-size:0.8rem;">COCINA</span>';
     }
@@ -3051,7 +3068,8 @@ function guardarCompras() {
     cantidad: it.cantidad,
     unidad: it.unidad || 'unidad',
     destino: it.destino,
-    almacenes: it.destino === 'stocks' && it.almacenes ? it.almacenes.map(a => a.almacen_id) : undefined
+    almacenes: it.destino === 'stocks' && it.almacenes ? it.almacenes.map(a => a.almacen_id) : undefined,
+    muebles: it.destino === 'barra' && it.muebles ? it.muebles : undefined
   }));
   api('POST', '/api/compras/guardar', { fecha, items: payload }).then(r => {
     if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR'; }

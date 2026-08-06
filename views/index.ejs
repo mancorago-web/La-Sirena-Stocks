@@ -407,6 +407,10 @@
           <strong style="font-size:0.85rem;color:#1a237e;">Elige los almacenes donde ingresa esta compra (STOCKS):</strong>
           <div id="compras-almacenes-lista" style="display:flex;flex-wrap:wrap;gap:0.6rem 1rem;margin-top:0.4rem;"></div>
         </div>
+        <div id="compras-muebles" style="display:none;margin-top:0.75rem;padding:0.75rem;background:#e8f0fe;border-radius:8px;">
+          <strong style="font-size:0.85rem;color:#1a237e;">Elige el mueble del stock de BARRA donde ingresa esta compra:</strong>
+          <div id="compras-muebles-lista" style="display:flex;flex-wrap:wrap;gap:0.6rem 1rem;margin-top:0.4rem;"></div>
+        </div>
       </div>
       <div id="compras-cart-container"><p style="color:#888;">Busca el item, agrega la cantidad y presiona GUARDAR. La compra se reparte automáticamente a STOCKS o BARRA según el item.</p></div>
     </div>
@@ -447,6 +451,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=8"></script>
+  <script src="/app.js?v=9"></script>
 </body>
 </html>

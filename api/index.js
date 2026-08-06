@@ -570,8 +570,8 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
         if (almacenes.length) resumen.stocks.push({ nombre, cantidad, almacenes });
         else resumen.noEncontrados.push({ nombre, cantidad, destino: 'stocks', msg: 'sin almacenes seleccionados' });
       } else if (destino === 'barra') {
-        movsBarra.push({ ingrediente: nombre, cantidad, unidad: it.unidad || 'unidad' });
-        resumen.barra.push({ nombre, cantidad, unidad: it.unidad || 'unidad' });
+        movsBarra.push({ ingrediente: nombre, cantidad, unidad: it.unidad || 'unidad', muebles: Array.isArray(it.muebles) ? it.muebles : [] });
+        resumen.barra.push({ nombre, cantidad, unidad: it.unidad || 'unidad', muebles: Array.isArray(it.muebles) ? it.muebles : [] });
       } else if (destino === 'cocina') {
         cocinaCompras.push({ nombre, cantidad, unidad: it.unidad || 'unidad' });
         resumen.cocina.push({ nombre, cantidad, unidad: it.unidad || 'unidad' });
@@ -585,35 +585,57 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       await guardarDiaInterno(fecha, registrosStocks, savedBy);
     }
 
-    // Aplicar a BARRA (movimientos de ingreso + sumar al stock de barra)
+    // Aplicar a BARRA (movimientos de ingreso + sumar al stock de barra según mueble)
     if (movsBarra.length) {
       const batch = db.batch();
       for (const m of movsBarra) {
         batch.set(col('barra_movimientos').doc(), {
           fecha, tipo: 'ingresos', ingrediente: m.ingrediente, cantidad: m.cantidad,
-          unidad: m.unidad, saved_by: savedBy, created_at: new Date().toISOString()
+          unidad: m.unidad, muebles: m.muebles || [], saved_by: savedBy, created_at: new Date().toISOString()
         });
       }
       await batch.commit();
-      // Sumar al stock de barra (barra_stock) con conversión a onzas
+      // Sumar al stock de barra (barra_stock) según el mueble elegido, con conversión a onzas
       const stockSnap = await col('barra_stock').get();
+      let maxBarraId = 0;
+      const stockByNameGrupo = {};
+      stockSnap.docs.forEach(d => {
+        const a = d.data();
+        const k = String(a.ingrediente || '').trim().toUpperCase();
+        const g = String(a.grupo || '').toUpperCase();
+        if (!stockByNameGrupo[k]) stockByNameGrupo[k] = {};
+        if (!stockByNameGrupo[k][g]) stockByNameGrupo[k][g] = { ref: d.ref, data: a };
+        if (Number(d.id) > maxBarraId) maxBarraId = Number(d.id);
+      });
       const stockBatch = db.batch();
       let ajustados = 0;
       for (const m of movsBarra) {
         const key = String(m.ingrediente || '').trim().toUpperCase();
         const compraOz = aOnzas(m.cantidad, m.unidad, m.ingrediente);
         if (compraOz === null || isNaN(compraOz)) continue;
-        stockSnap.docs.forEach(d => {
-          const a = d.data();
-          if (String(a.ingrediente || '').trim().toUpperCase() === key) {
-            const stockOz = aOnzas(a.cantidad, a.unidad, a.ingrediente);
-            if (stockOz === null || isNaN(stockOz)) return;
+        const muebles = Array.isArray(m.muebles) && m.muebles.length ? m.muebles : GRUPOS_BARRA;
+        for (const mueble of muebles) {
+          const g = String(mueble || '').toUpperCase();
+          const existente = (stockByNameGrupo[key] || {})[g];
+          if (existente) {
+            const stockOz = aOnzas(existente.data.cantidad, existente.data.unidad, existente.data.ingrediente);
+            if (stockOz === null || isNaN(stockOz)) continue;
             const nuevaOz = Math.max(0, stockOz + compraOz);
-            const nueva = Math.round(desdeOnzas(nuevaOz, a.unidad, a.ingrediente) * 100) / 100;
-            stockBatch.update(d.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
+            const nueva = Math.round(desdeOnzas(nuevaOz, existente.data.unidad, existente.data.ingrediente) * 100) / 100;
+            stockBatch.update(existente.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
+            ajustados++;
+          } else {
+            // Crear el item en ese mueble si no existe
+            maxBarraId += 1;
+            stockBatch.set(col('barra_stock').doc(String(maxBarraId)), {
+              id: maxBarraId, ingrediente: m.ingrediente, cantidad: m.cantidad,
+              unidad: m.unidad, grupo: g, updated_at: new Date().toISOString()
+            });
+            if (!stockByNameGrupo[key]) stockByNameGrupo[key] = {};
+            stockByNameGrupo[key][g] = { ref: null, data: { cantidad: m.cantidad, unidad: m.unidad, ingrediente: m.ingrediente } };
             ajustados++;
           }
-        });
+        }
       }
       if (ajustados) await stockBatch.commit();
     }
