@@ -2991,7 +2991,7 @@ function cargarCompras() {
     comprasAlmacenes = alms || [];
     const cont = document.getElementById('compras-almacenes-lista');
     if (cont) {
-      const chk = (a) => '<label style="font-size:0.82rem;display:flex;align-items:center;gap:0.25rem;padding:0.18rem 0;"><input type="checkbox" class="compra-almacen" value="' + Number(a.id) + '" checked> ' + esc(a.nombre) + '</label>';
+      const chk = (a) => '<label style="font-size:0.82rem;display:flex;align-items:center;gap:0.25rem;padding:0.18rem 0;"><input type="checkbox" class="compra-almacen" value="' + Number(a.id) + '"> ' + esc(a.nombre) + '</label>';
       const izquierda = comprasAlmacenes.filter(a => !/ARRIBA/i.test(a.nombre));
       const derecha = comprasAlmacenes.filter(a => /ARRIBA/i.test(a.nombre));
       cont.innerHTML =
@@ -3120,7 +3120,7 @@ function cargarVentasCentral() {
     ventasAlmacenes = alms || [];
     const cont = document.getElementById('ventas-almacenes-lista');
     if (cont) {
-      const chk = (a) => '<label style="font-size:0.82rem;display:flex;align-items:center;gap:0.25rem;padding:0.18rem 0;"><input type="checkbox" class="venta-almacen" value="' + Number(a.id) + '" checked> ' + esc(a.nombre) + '</label>';
+      const chk = (a) => '<label style="font-size:0.82rem;display:flex;align-items:center;gap:0.25rem;padding:0.18rem 0;"><input type="checkbox" class="venta-almacen" value="' + Number(a.id) + '"> ' + esc(a.nombre) + '</label>';
       const izquierda = ventasAlmacenes.filter(a => !/ARRIBA/i.test(a.nombre));
       const derecha = ventasAlmacenes.filter(a => /ARRIBA/i.test(a.nombre));
       cont.innerHTML =
