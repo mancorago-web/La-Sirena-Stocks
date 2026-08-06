@@ -3096,7 +3096,11 @@ function cargarSugerenciasVentas(destino) {
       let html = '';
       (recetas || []).forEach(r => {
         const n = (r.nombre || '').trim().toUpperCase();
-        if (n && !seen.has(n)) { seen.add(n); html += '<option value="' + n.replace(/"/g, '&quot;') + '"></option>'; }
+        if (!n) return;
+        const key = n.replace(/\s+/g, '');
+        if (seen.has(key)) return;
+        seen.add(key);
+        html += '<option value="' + n.replace(/"/g, '&quot;') + '"></option>';
       });
       dl.innerHTML = html;
     }).catch(() => {});
@@ -3108,7 +3112,11 @@ function cargarSugerenciasVentas(destino) {
     let html = '';
     (inv || []).forEach(a => (a.items || []).forEach(i => {
       const n = (i.nombre || '').trim().toUpperCase();
-      if (n && !seen.has(n)) { seen.add(n); html += '<option value="' + n.replace(/"/g, '&quot;') + '"></option>'; }
+      if (!n) return;
+      const key = n.replace(/\s+/g, '');
+      if (seen.has(key)) return;
+      seen.add(key);
+      html += '<option value="' + n.replace(/"/g, '&quot;') + '"></option>';
     }));
     dl.innerHTML = html;
   }).catch(() => {});
