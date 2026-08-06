@@ -3250,7 +3250,10 @@ function eliminarVenta(id) {
   const entry = ventasDetalleMap[id];
   const fecha = (entry && entry.fecha) || document.getElementById('fecha-ventas-menu')?.value || todayStr();
   let body;
-  if (entry && !entry.log_id) {
+  if (entry && entry.grupo) {
+    if (entry.destino === 'stocks') body = { fecha, grupo: true, destino: 'stocks', item_id: entry.item_id, almacen_id: (entry.almacenes || [])[0], log_ids: entry.log_ids };
+    else if (entry.destino === 'barra') body = { fecha, grupo: true, destino: 'barra', nombre: entry.nombre, log_ids: entry.log_ids };
+  } else if (entry && !entry.log_id) {
     if (entry.destino === 'stocks') {
       const parts = String(id).split('_');
       body = { fecha, manual: true, destino: 'stocks', item_id: Number(parts[1]), almacen_id: Number(parts[2]) };

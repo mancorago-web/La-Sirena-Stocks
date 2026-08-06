@@ -1061,36 +1061,79 @@ app.get('/api/ventas/detalle', async (req, res) => {
     const fecha = req.query.fecha;
     if (!fecha) return res.json([]);
     const list = [];
-    // 1. Ventas registradas desde el apartado VENTAS (log central)
+
+    // Índice STOCKS (nombre normalizado -> items) y nombres
+    const invSnap = await col('inventario').get();
+    const stocksNorm = {};
+    const nombreByKey = {};
+    invSnap.docs.forEach(d => {
+      const a = d.data();
+      const norm = String(a.nombre || '').trim().toUpperCase().replace(/\s+/g, '');
+      if (!norm) return;
+      if (!stocksNorm[norm]) stocksNorm[norm] = [];
+      stocksNorm[norm].push({ item_id: a.item_id, almacen_id: a.almacen_id });
+      nombreByKey[a.item_id + '_' + a.almacen_id] = a.nombre;
+    });
+    const matchStocks = (nombre) => {
+      const norm = String(nombre || '').trim().toUpperCase().replace(/\s+/g, '');
+      if (!norm) return [];
+      if (stocksNorm[norm]) return stocksNorm[norm];
+      const cands = [];
+      for (const [k, arr] of Object.entries(stocksNorm)) { if (k.includes(norm) || norm.includes(k)) cands.push(...arr); }
+      return cands;
+    };
+
     const log = await col('ventas').where('fecha', '==', fecha).get();
-    const stocksLogKeys = new Set();
-    const barraLogKeys = new Set();
+
+    // STOCKS: agrupar por (almacen, item) usando el inventario diario como total
+    const dia = await col('inventario_diario').where('fecha', '==', fecha).get();
+    const stocksGroups = {};
+    dia.docs.map(d => d.data()).filter(a => (a.total_ventas || 0) > 0).forEach(a => {
+      const key = a.almacen_id + '_' + a.item_id;
+      stocksGroups[key] = { almacen_id: a.almacen_id, item_id: a.item_id, nombre: nombreByKey[key] || String(a.item_id), cantidad: a.total_ventas, log_ids: [], created_at: a.updated_at || '', saved_by: a.saved_by || '-' };
+    });
     log.docs.forEach(d => {
       const a = d.data();
-      list.push({ id: d.id, log_id: d.id, ...a });
-      const k = String(a.nombre || '').trim().toUpperCase();
-      if (a.destino === 'stocks') stocksLogKeys.add(k + '|' + (a.cantidad || 0) + '|' + ((a.almacenes || []).join(',')));
-      if (a.destino === 'barra') barraLogKeys.add(k + '|' + (a.cantidad || 0));
+      if (a.destino !== 'stocks') return;
+      const cands = matchStocks(a.nombre);
+      (a.almacenes || []).forEach(al => {
+        const m = cands.find(c => Number(c.almacen_id) === Number(al));
+        if (!m) return;
+        const key = Number(al) + '_' + m.item_id;
+        if (stocksGroups[key]) { stocksGroups[key].log_ids.push(d.id); stocksGroups[key].saved_by = a.saved_by || stocksGroups[key].saved_by; }
+      });
+    });
+    Object.keys(stocksGroups).forEach(key => {
+      const g = stocksGroups[key];
+      list.push({ id: 'grp_stocks_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'stocks', almacenes: [g.almacen_id], item_id: g.item_id, log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at });
     });
 
-    // 2. Ventas de STOCKS (inventario_diario total_ventas > 0) — manual o central
-    const dia = await col('inventario_diario').where('fecha', '==', fecha).get();
-    const invSnap = await col('inventario').get();
-    const nombreByKey = {};
-    invSnap.docs.forEach(d => { const a = d.data(); nombreByKey[a.item_id + '_' + a.almacen_id] = a.nombre; });
-    dia.docs.map(d => d.data()).filter(a => (a.total_ventas || 0) > 0).forEach(a => {
-      const key = a.item_id + '_' + a.almacen_id;
-      const nombre = nombreByKey[key] || String(a.item_id);
-      // Saltar si ya está en el log central (mismo item + cantidad + almacén)
-      if (stocksLogKeys.has(String(nombre).trim().toUpperCase() + '|' + (a.total_ventas || 0) + '|' + a.almacen_id)) return;
-      list.push({ id: 'stocks_' + key, log_id: null, fecha, nombre, cantidad: a.total_ventas, unidad: 'unidad', destino: 'stocks', almacenes: [a.almacen_id], saved_by: a.saved_by || '-', created_at: a.updated_at || '' });
+    // BARRA: agrupar por receta
+    const barraLogKeys = new Set();
+    const barraGroups = {};
+    log.docs.forEach(d => {
+      const a = d.data();
+      if (a.destino !== 'barra') return;
+      const key = String(a.nombre || '').trim().toUpperCase();
+      barraLogKeys.add(key + '|' + (a.cantidad || 0));
+      if (!barraGroups[key]) barraGroups[key] = { nombre: a.nombre, cantidad: 0, log_ids: [], created_at: '', saved_by: a.saved_by || '-' };
+      barraGroups[key].cantidad += a.cantidad || 0;
+      barraGroups[key].log_ids.push(d.id);
+      if (!barraGroups[key].created_at || (a.created_at && a.created_at < barraGroups[key].created_at)) barraGroups[key].created_at = a.created_at;
+      barraGroups[key].saved_by = a.saved_by || barraGroups[key].saved_by;
     });
-
-    // 3. Ventas de BARRA (barra_movimientos tipo ventas, recetas) — manual o central
     const bm = await col('barra_movimientos').where('fecha', '==', fecha).where('tipo', '==', 'ventas').get();
     bm.docs.map(d => d.data()).filter(a => a.es_receta !== false).forEach(a => {
-      if (barraLogKeys.has(String(a.ingrediente || '').trim().toUpperCase() + '|' + (a.cantidad || 0))) return;
-      list.push({ id: 'barra_' + a.ingrediente + '_' + (a.cantidad || 0), log_id: null, fecha, nombre: a.ingrediente, cantidad: a.cantidad, unidad: a.unidad || 'unidad', destino: 'barra', saved_by: a.saved_by || '-', created_at: a.created_at || '' });
+      const key = String(a.ingrediente || '').trim().toUpperCase();
+      if (barraLogKeys.has(key + '|' + (a.cantidad || 0))) return; // ya está en el log
+      if (!barraGroups[key]) barraGroups[key] = { nombre: a.ingrediente, cantidad: 0, log_ids: [], created_at: '', saved_by: a.saved_by || '-' };
+      barraGroups[key].cantidad += a.cantidad || 0;
+      if (!barraGroups[key].created_at || (a.created_at && a.created_at < barraGroups[key].created_at)) barraGroups[key].created_at = a.created_at;
+      barraGroups[key].saved_by = a.saved_by || barraGroups[key].saved_by;
+    });
+    Object.keys(barraGroups).forEach(key => {
+      const g = barraGroups[key];
+      list.push({ id: 'grp_barra_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'barra', log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at });
     });
 
     list.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
@@ -1105,6 +1148,40 @@ app.delete('/api/ventas/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const savedBy = req.user?.name || req.user?.email || 'unknown';
+
+    // --- Ventas agrupadas (grupo por item+destino, borra todo el grupo en cadena) ---
+    if (req.body && req.body.grupo) {
+      const fecha = req.body.fecha;
+      if (!fecha) return res.status(400).json({ error: 'fecha requerida' });
+      if (Array.isArray(req.body.log_ids) && req.body.log_ids.length) {
+        const batch = db.batch();
+        req.body.log_ids.forEach(lid => batch.delete(col('ventas').doc(lid)));
+        await batch.commit();
+      }
+      if (req.body.destino === 'stocks') {
+        const item = Number(req.body.item_id);
+        const al = Number(req.body.almacen_id);
+        if (item && al) await guardarDiaInterno(fecha, [{ almacen_id: al, item_id: item, total_ventas: 0 }], savedBy);
+      } else if (req.body.destino === 'barra') {
+        const nombre = String(req.body.nombre || '');
+        const bm = await col('barra_movimientos').where('fecha', '==', fecha).where('tipo', '==', 'ventas').get();
+        const batch = db.batch();
+        const consumos = [];
+        let borrado = false;
+        bm.docs.forEach(d => {
+          const a = d.data();
+          if (a.es_receta !== false && String(a.ingrediente || '').toUpperCase() === String(nombre).toUpperCase()) {
+            batch.delete(d.ref); borrado = true;
+          } else if (a.es_receta === false && a.receta && String(a.receta).toUpperCase() === String(nombre).toUpperCase()) {
+            batch.delete(d.ref); borrado = true;
+            consumos.push({ ingrediente: a.ingrediente, cantidad: a.cantidad, unidad: a.unidad || 'unidad' });
+          }
+        });
+        if (borrado) await batch.commit();
+        if (consumos.length) await sumarStockBarra(consumos);
+      }
+      return res.json({ ok: true });
+    }
 
     // --- Ventas registradas manualmente (STOCK/VENTAS o BARRA/VENTAS) ---
     if (req.body && req.body.manual) {
