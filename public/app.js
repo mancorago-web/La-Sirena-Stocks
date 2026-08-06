@@ -120,6 +120,17 @@ document.querySelectorAll('.tab').forEach(tab => {
 });
 
 // --- Navigation: main menu / categories ---
+let _ocultarCero = true;
+function toggleVerCero() {
+  _ocultarCero = !_ocultarCero;
+  const btn = document.getElementById('btn-ver-cero');
+  if (btn) {
+    btn.textContent = _ocultarCero ? '🙈' : '👁️';
+    btn.title = _ocultarCero ? 'Mostrar items con stock 0' : 'Ocultar items con stock 0';
+  }
+  const fecha = document.getElementById('fecha-almacenes')?.value;
+  cargarAlmacenes(fecha);
+}
 function dibujarFlujoMenu() {
   const cont = document.getElementById('menu-flow-container');
   const svg = document.getElementById('menu-flow-svg');
@@ -328,6 +339,10 @@ function cargarAlmacenes(fecha) {
   });
   if (!fecha) fecha = document.getElementById('fecha-almacenes').value;
   getInventario(fecha).then(data => {
+    // Ocultar items con stock 0 (toggle del ojo)
+    if (_ocultarCero) {
+      data.forEach(a => { a.items = (a.items || []).filter(i => (i.stock_apertura || 0) !== 0 || (i.stock_cierre || 0) !== 0); });
+    }
     const categoriasPorAlmacen = {
       1: [
         { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
