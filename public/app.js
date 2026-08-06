@@ -3121,7 +3121,7 @@ function confirmarEliminarCompra(id) {
 
 function eliminarCompra(id) {
   const fecha = document.getElementById('fecha-compras')?.value || todayStr();
-  api('DELETE', '/api/compras/' + id).then(() => {
+  api('DELETE', '/api/compras/' + id + '?fecha=' + encodeURIComponent(fecha)).then(() => {
     cerrarModal();
     showToast('Compra/Ingreso eliminado');
     cargarComprasDetalle(fecha);

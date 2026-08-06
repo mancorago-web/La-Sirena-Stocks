@@ -743,10 +743,38 @@ app.get('/api/compras/detalle', async (req, res) => {
   try {
     const fecha = req.query.fecha;
     if (!fecha) return res.json([]);
-    const snap = await col('compras').where('fecha', '==', fecha).get();
-    const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    list.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
-    res.json(list);
+    // BARRA y COCINA desde el log; los de STOCKS se derivan de inventario_diario (fuente única)
+    const logSnap = await col('compras').where('fecha', '==', fecha).get();
+    const lista = logSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.destino !== 'stocks');
+    const [invSnap, diaSnap] = await Promise.all([
+      col('inventario').get(),
+      col('inventario_diario').where('fecha', '==', fecha).get()
+    ]);
+    const nombres = {};
+    invSnap.docs.forEach(d => {
+      const a = d.data();
+      if (a.almacen_id !== undefined && a.item_id !== undefined) nombres[a.almacen_id + ':' + a.item_id] = a.nombre;
+    });
+    diaSnap.docs.forEach(d => {
+      const a = d.data();
+      const ing = parseFloat(a.stock_ingreso) || 0;
+      if (ing <= 0) return;
+      const nombre = nombres[a.almacen_id + ':' + a.item_id];
+      if (!nombre) return;
+      lista.push({
+        id: 'inv:' + a.almacen_id + ':' + a.item_id,
+        fecha,
+        nombre,
+        cantidad: ing,
+        unidad: 'unidad',
+        destino: 'stocks',
+        almacenes: [Number(a.almacen_id)],
+        saved_by: a.saved_by || '-',
+        created_at: a.updated_at || new Date().toISOString()
+      });
+    });
+    lista.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+    res.json(lista);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -756,11 +784,20 @@ app.get('/api/compras/detalle', async (req, res) => {
 app.delete('/api/compras/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
+    const fecha = String(req.query.fecha || '');
+    if (String(id).startsWith('inv:')) {
+      const parts = String(id).split(':');
+      const almacenId = Number(parts[1]);
+      const itemId = Number(parts[2]);
+      if (!fecha || isNaN(almacenId) || isNaN(itemId)) return res.status(400).json({ error: 'Parámetros inválidos' });
+      const savedBy = req.user?.name || req.user?.email || 'unknown';
+      await guardarDiaInterno(fecha, [{ almacen_id: almacenId, item_id: itemId, stock_ingreso: 0 }], savedBy);
+      return res.json({ ok: true });
+    }
     const logRef = col('compras').doc(id);
     const logSnap = await logRef.get();
     if (!logSnap.exists) return res.status(404).json({ error: 'Registro no encontrado' });
     const log = logSnap.data();
-    const fecha = log.fecha;
     const nombre = log.nombre;
     const cantidad = parseFloat(log.cantidad) || 0;
     const savedBy = req.user?.name || req.user?.email || 'unknown';
