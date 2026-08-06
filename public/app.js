@@ -3032,8 +3032,12 @@ function cargarComprasDetalle(fecha) {
       return;
     }
     const filas = list.map(r => {
+      const alNombre = (id) => {
+        const a = comprasAlmacenes.find(x => Number(x.id) === Number(id));
+        return a ? a.nombre : ('Almacén ' + id);
+      };
       let det = '';
-      if (r.destino === 'stocks') det = 'STOCKS → ' + (r.almacenes || []).join(', ');
+      if (r.destino === 'stocks') det = 'STOCKS → ' + (r.almacenes || []).map(alNombre).join(', ');
       else if (r.destino === 'barra') det = 'BARRA → ' + (r.muebles || []).join(', ');
       else if (r.destino === 'cocina') det = 'COCINA';
       const t = r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
