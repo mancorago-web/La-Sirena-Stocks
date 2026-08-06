@@ -1053,7 +1053,15 @@ app.get('/api/ventas/detalle', async (req, res) => {
     const list = [];
     // 1. Ventas registradas desde el apartado VENTAS (log central)
     const log = await col('ventas').where('fecha', '==', fecha).get();
-    log.docs.forEach(d => list.push({ id: d.id, log_id: d.id, ...d.data() }));
+    const stocksLogKeys = new Set();
+    const barraLogKeys = new Set();
+    log.docs.forEach(d => {
+      const a = d.data();
+      list.push({ id: d.id, log_id: d.id, ...a });
+      const k = String(a.nombre || '').trim().toUpperCase();
+      if (a.destino === 'stocks') stocksLogKeys.add(k + '|' + (a.cantidad || 0) + '|' + ((a.almacenes || []).join(',')));
+      if (a.destino === 'barra') barraLogKeys.add(k + '|' + (a.cantidad || 0));
+    });
 
     // 2. Ventas de STOCKS (inventario_diario total_ventas > 0) — manual o central
     const dia = await col('inventario_diario').where('fecha', '==', fecha).get();
@@ -1062,12 +1070,16 @@ app.get('/api/ventas/detalle', async (req, res) => {
     invSnap.docs.forEach(d => { const a = d.data(); nombreByKey[a.item_id + '_' + a.almacen_id] = a.nombre; });
     dia.docs.map(d => d.data()).filter(a => (a.total_ventas || 0) > 0).forEach(a => {
       const key = a.item_id + '_' + a.almacen_id;
-      list.push({ id: 'stocks_' + key, log_id: null, fecha, nombre: nombreByKey[key] || String(a.item_id), cantidad: a.total_ventas, unidad: 'unidad', destino: 'stocks', almacenes: [a.almacen_id], saved_by: a.saved_by || '-', created_at: a.updated_at || '' });
+      const nombre = nombreByKey[key] || String(a.item_id);
+      // Saltar si ya está en el log central (mismo item + cantidad + almacén)
+      if (stocksLogKeys.has(String(nombre).trim().toUpperCase() + '|' + (a.total_ventas || 0) + '|' + a.almacen_id)) return;
+      list.push({ id: 'stocks_' + key, log_id: null, fecha, nombre, cantidad: a.total_ventas, unidad: 'unidad', destino: 'stocks', almacenes: [a.almacen_id], saved_by: a.saved_by || '-', created_at: a.updated_at || '' });
     });
 
     // 3. Ventas de BARRA (barra_movimientos tipo ventas, recetas) — manual o central
     const bm = await col('barra_movimientos').where('fecha', '==', fecha).where('tipo', '==', 'ventas').get();
     bm.docs.map(d => d.data()).filter(a => a.es_receta !== false).forEach(a => {
+      if (barraLogKeys.has(String(a.ingrediente || '').trim().toUpperCase() + '|' + (a.cantidad || 0))) return;
       list.push({ id: 'barra_' + a.ingrediente + '_' + (a.cantidad || 0), log_id: null, fecha, nombre: a.ingrediente, cantidad: a.cantidad, unidad: a.unidad || 'unidad', destino: 'barra', saved_by: a.saved_by || '-', created_at: a.created_at || '' });
     });
 
