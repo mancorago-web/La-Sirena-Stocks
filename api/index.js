@@ -1085,11 +1085,11 @@ app.get('/api/ventas/detalle', async (req, res) => {
 
     const log = await col('ventas').where('fecha', '==', fecha).get();
 
-    // STOCKS: agrupar por (almacen, item) usando el inventario diario como total
+    // STOCKS: agrupar por (item, almacen) usando el inventario diario como total
     const dia = await col('inventario_diario').where('fecha', '==', fecha).get();
     const stocksGroups = {};
     dia.docs.map(d => d.data()).filter(a => (a.total_ventas || 0) > 0).forEach(a => {
-      const key = a.almacen_id + '_' + a.item_id;
+      const key = a.item_id + '_' + a.almacen_id;
       stocksGroups[key] = { almacen_id: a.almacen_id, item_id: a.item_id, nombre: nombreByKey[key] || String(a.item_id), cantidad: a.total_ventas, log_ids: [], created_at: a.updated_at || '', saved_by: a.saved_by || '-' };
     });
     log.docs.forEach(d => {
@@ -1099,7 +1099,7 @@ app.get('/api/ventas/detalle', async (req, res) => {
       (a.almacenes || []).forEach(al => {
         const m = cands.find(c => Number(c.almacen_id) === Number(al));
         if (!m) return;
-        const key = Number(al) + '_' + m.item_id;
+        const key = m.item_id + '_' + Number(al);
         if (stocksGroups[key]) { stocksGroups[key].log_ids.push(d.id); stocksGroups[key].saved_by = a.saved_by || stocksGroups[key].saved_by; }
       });
     });
