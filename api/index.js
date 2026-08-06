@@ -486,6 +486,35 @@ function prevWorkingDay(fecha) {
   return d.toISOString().split('T')[0];
 }
 
+// --- COMPRAS: consulta de destino de un item (almacenes de STOCKS + si es de BARRA) ---
+app.get('/api/compras/destino', async (req, res) => {
+  try {
+    const nombre = String(req.query.nombre || '').trim();
+    if (!nombre) return res.json({ stocks: [], barra: false });
+    const key = nombre.toUpperCase();
+    const [almsSnap, invSnap, precSnap, stockSnap] = await Promise.all([
+      col('almacenes').get(),
+      col('inventario').get(),
+      col('barra_precios').get(),
+      col('barra_stock').get(),
+    ]);
+    const alNombres = {};
+    almsSnap.docs.forEach(d => { alNombres[Number(d.id)] = d.data().nombre; });
+    const stocks = [];
+    invSnap.docs.forEach(d => {
+      const a = d.data();
+      if (String(a.nombre || '').trim().toUpperCase() === key) {
+        stocks.push({ almacen_id: a.almacen_id, almacen_nombre: alNombres[a.almacen_id] || ('Almacén ' + a.almacen_id) });
+      }
+    });
+    const barraPrecio = precSnap.docs.some(d => String(d.data().ingrediente || '').trim().toUpperCase() === key);
+    const barraStock = stockSnap.docs.some(d => String(d.data().ingrediente || '').trim().toUpperCase() === key);
+    res.json({ stocks, barra: barraPrecio || barraStock });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- COMPRAS: guardado centralizado (enruta a STOCKS o BARRA según el item) ---
 app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
   try {
@@ -522,6 +551,8 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       if (cantidad <= 0) continue;
       const key = nombre.toUpperCase();
       const stocks = stocksByNombre[key] || [];
+      const esBarra = barraByNombre.has(key);
+      const aBarra = it.aBarra === true;
       if (stocks.length) {
         const almacenes = [];
         for (const s of stocks) {
@@ -529,7 +560,11 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
           almacenes.push(s.almacen_id);
         }
         resumen.stocks.push({ nombre, cantidad, almacenes });
-      } else if (barraByNombre.has(key)) {
+        if (esBarra && aBarra) {
+          movsBarra.push({ ingrediente: nombre, cantidad, unidad: it.unidad || 'unidad' });
+          resumen.barra.push({ nombre, cantidad, unidad: it.unidad || 'unidad' });
+        }
+      } else if (esBarra && aBarra) {
         movsBarra.push({ ingrediente: nombre, cantidad, unidad: it.unidad || 'unidad' });
         resumen.barra.push({ nombre, cantidad, unidad: it.unidad || 'unidad' });
       } else {
