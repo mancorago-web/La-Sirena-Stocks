@@ -159,7 +159,8 @@ function irACategoria(cat) {
   } else {
     const tabsEl = document.getElementById('tabs-' + cat);
     if (tabsEl) tabsEl.style.display = '';
-    const tabEl = document.getElementById('tab-' + cat);
+    const tabId = cat === 'ventas' ? 'tab-ventas-central' : 'tab-' + cat;
+    const tabEl = document.getElementById(tabId);
     if (tabEl) tabEl.classList.add('active');
     if (!_loaded[cat]) {
       _loaded[cat] = true;
