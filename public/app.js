@@ -1541,20 +1541,19 @@ function exportarStockBarra() {
 }
 
 function buscarReceta(q) {
-  const palabras = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const term = (q || '').trim();
+  const palabras = term.toLowerCase().split(/\s+/).filter(Boolean);
   const container = document.getElementById('recetas-container');
   if (!container) return;
-  // Recipes: match by name, family OR ingredient (todas las palabras deben coincidir)
+  // Recipes: match por letra/palabra sobre nombre + familia + todos los ingredientes
   container.querySelectorAll('.accordion-item[data-receta-id]').forEach(recipe => {
     const nombre = recipe.querySelector('.accordion-title')?.textContent?.toLowerCase() || '';
     const familia = (recipe.closest('.accordion-body')?.parentElement
       ?.querySelector('.accordion-header .accordion-title')?.textContent || '').toLowerCase();
     const ingredientes = Array.from(recipe.querySelectorAll('.accordion-body tbody td:first-child'))
       .map(td => (td.textContent || '').toLowerCase().trim());
-    const match = !palabras.length ||
-      palabras.every(p => nombre.includes(p)) ||
-      (familia && palabras.every(p => familia.includes(p))) ||
-      ingredientes.some(ing => palabras.every(p => ing.includes(p)));
+    const texto = (nombre + ' ' + familia + ' ' + ingredientes.join(' ')).toLowerCase();
+    const match = !palabras.length || palabras.every(p => texto.includes(p));
     recipe.style.display = match ? '' : 'none';
   });
   // Categories: show only those with matching recipes; expand them while searching
