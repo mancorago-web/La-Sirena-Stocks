@@ -385,15 +385,27 @@
 
     <div id="tab-compras" class="tab-content">
       <div class="header-actions">
-        <h2>COMPRAS</h2>
-      </div>
-      <div id="compras-container">
-        <div class="card" style="padding:2rem;text-align:center;color:#888;">
-          <h3 style="color:#1a237e;">🛒 COMPRAS</h3>
-          <p>Aquí se registrarán las compras que ingresan a Stocks, Barra y Cocina.</p>
-          <p style="margin-top:0.5rem;font-size:0.85rem;">(Sección en construcción)</p>
+        <h2>Compras</h2>
+        <div class="controles-dia">
+          <label>Fecha: <input type="date" id="fecha-compras" onchange=""></label>
+          <button class="btn-guardar-dia" onclick="guardarCompras()">💾 GUARDAR</button>
         </div>
       </div>
+      <div style="margin-bottom:1rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;padding:1rem;background:#f9f9f9;border-radius:8px;">
+        <input type="text" id="nueva-compra-input" placeholder="Buscar item (ej. COCA COLA)..." list="sugerencia-compras" autocomplete="off" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:180px;">
+        <datalist id="sugerencia-compras"></datalist>
+        <input type="number" id="nueva-compra-cant" placeholder="Cantidad" step="0.01" min="0" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;width:110px;">
+        <select id="nueva-compra-uni" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;">
+          <option value="unidad">unidad</option>
+          <option value="onzas">onzas</option>
+          <option value="gramos">gramos</option>
+          <option value="kg">kg</option>
+          <option value="lt">lt</option>
+          <option value="ml">ml</option>
+        </select>
+        <button class="btn-detalles" onclick="agregarCompra()">➕ AGREGAR</button>
+      </div>
+      <div id="compras-cart-container"><p style="color:#888;">Busca el item, agrega la cantidad y presiona GUARDAR. La compra se reparte automáticamente a STOCKS o BARRA según el item.</p></div>
     </div>
 
     <div id="tab-ventas" class="tab-content">

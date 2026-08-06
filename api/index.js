@@ -342,10 +342,8 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
 });
 
 // --- GUARDAR DÍA ---
-app.post('/api/almacenes/guardar-dia', async (req, res) => {
-  const { fecha, registros } = req.body;
-  if (!fecha || !registros) return res.status(400).json({ error: 'fecha y registros requeridos' });
-  const savedBy = req.body.saved_by || (req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown');
+async function guardarDiaInterno(fecha, registros, savedBy) {
+  if (!fecha || !registros) throw new Error('fecha y registros requeridos');
 
   // Read existing docs for all records to merge partial updates
   const existentes = {};
@@ -462,7 +460,17 @@ app.post('/api/almacenes/guardar-dia', async (req, res) => {
     console.error('Propagation error:', e.message);
   }
 
-  res.json({ ok: true, propagated: propErrors.length === 0 });
+  return { ok: true, propagated: propErrors.length === 0 };
+}
+
+app.post('/api/almacenes/guardar-dia', async (req, res) => {
+  try {
+    const savedBy = req.body.saved_by || (req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown');
+    const result = await guardarDiaInterno(req.body.fecha, req.body.registros, savedBy);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 function getNextWorkingDay(fecha) {
@@ -477,6 +485,101 @@ function prevWorkingDay(fecha) {
   while (d.getDay() === 2) d.setDate(d.getDate() - 1);
   return d.toISOString().split('T')[0];
 }
+
+// --- COMPRAS: guardado centralizado (enruta a STOCKS o BARRA según el item) ---
+app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
+  try {
+    const { fecha, items } = req.body;
+    if (!fecha || !Array.isArray(items)) return res.status(400).json({ error: 'fecha e items requeridos' });
+    const savedBy = req.user?.name || req.user?.email || 'unknown';
+
+    // Índices para enrutar: STOCKS (inventario) y BARRA (barra_precios)
+    const [invSnap, precSnap] = await Promise.all([
+      col('inventario').get(),
+      col('barra_precios').get(),
+    ]);
+    const stocksByNombre = {};
+    invSnap.docs.forEach(d => {
+      const a = d.data();
+      const k = String(a.nombre || '').trim().toUpperCase();
+      if (!stocksByNombre[k]) stocksByNombre[k] = [];
+      stocksByNombre[k].push({ item_id: a.item_id, almacen_id: a.almacen_id });
+    });
+    const barraByNombre = new Set();
+    precSnap.docs.forEach(d => {
+      const k = String(d.data().ingrediente || '').trim().toUpperCase();
+      if (k) barraByNombre.add(k);
+    });
+
+    const registrosStocks = [];
+    const movsBarra = [];
+    const resumen = { stocks: [], barra: [], noEncontrados: [] };
+
+    for (const it of items) {
+      const nombre = String(it.nombre || '').trim();
+      if (!nombre) continue;
+      const cantidad = parseFloat(it.cantidad) || 0;
+      if (cantidad <= 0) continue;
+      const key = nombre.toUpperCase();
+      const stocks = stocksByNombre[key] || [];
+      if (stocks.length) {
+        const almacenes = [];
+        for (const s of stocks) {
+          registrosStocks.push({ almacen_id: s.almacen_id, item_id: s.item_id, stock_ingreso: cantidad });
+          almacenes.push(s.almacen_id);
+        }
+        resumen.stocks.push({ nombre, cantidad, almacenes });
+      } else if (barraByNombre.has(key)) {
+        movsBarra.push({ ingrediente: nombre, cantidad, unidad: it.unidad || 'unidad' });
+        resumen.barra.push({ nombre, cantidad, unidad: it.unidad || 'unidad' });
+      } else {
+        resumen.noEncontrados.push({ nombre, cantidad });
+      }
+    }
+
+    // Aplicar a STOCKS (inventario_diario + propagación)
+    if (registrosStocks.length) {
+      await guardarDiaInterno(fecha, registrosStocks, savedBy);
+    }
+
+    // Aplicar a BARRA (movimientos de ingreso + sumar al stock de barra)
+    if (movsBarra.length) {
+      const batch = db.batch();
+      for (const m of movsBarra) {
+        batch.set(col('barra_movimientos').doc(), {
+          fecha, tipo: 'ingresos', ingrediente: m.ingrediente, cantidad: m.cantidad,
+          unidad: m.unidad, saved_by: savedBy, created_at: new Date().toISOString()
+        });
+      }
+      await batch.commit();
+      // Sumar al stock de barra (barra_stock) con conversión a onzas
+      const stockSnap = await col('barra_stock').get();
+      const stockBatch = db.batch();
+      let ajustados = 0;
+      for (const m of movsBarra) {
+        const key = String(m.ingrediente || '').trim().toUpperCase();
+        const compraOz = aOnzas(m.cantidad, m.unidad, m.ingrediente);
+        if (compraOz === null || isNaN(compraOz)) continue;
+        stockSnap.docs.forEach(d => {
+          const a = d.data();
+          if (String(a.ingrediente || '').trim().toUpperCase() === key) {
+            const stockOz = aOnzas(a.cantidad, a.unidad, a.ingrediente);
+            if (stockOz === null || isNaN(stockOz)) return;
+            const nuevaOz = Math.max(0, stockOz + compraOz);
+            const nueva = Math.round(desdeOnzas(nuevaOz, a.unidad, a.ingrediente) * 100) / 100;
+            stockBatch.update(d.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
+            ajustados++;
+          }
+        });
+      }
+      if (ajustados) await stockBatch.commit();
+    }
+
+    res.json({ ok: true, resumen });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // --- REPAIR: propagate last known data to a target fecha ---
 app.post('/api/repair/propagar', async (req, res) => {

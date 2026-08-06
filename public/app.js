@@ -164,6 +164,7 @@ function irACategoria(cat) {
     if (!_loaded[cat]) {
       _loaded[cat] = true;
       if (cat === 'barra') { cargarRecetas(); cargarStockBarra(); cargarPrecios(); cargarSugerenciasStock(); }
+      if (cat === 'compras') { cargarCompras(); }
       if (cat === 'costos') {
         cargarPestanas().then(() => {
           const firstSub = document.querySelector('#tabs-costos .sub-tab[data-subtab]');
@@ -1768,6 +1769,7 @@ initPicker('fecha-salidas', cargarSalidas);
 initPicker('fecha-ventas', cargarVentas);
 initPicker('fecha-bajas', cargarBajas);
 initPicker('fecha-ingresos', cargarIngresos);
+initPicker('fecha-compras', cargarCompras);
 // Barra: just set today's date, actual load happens via lazy-load in cambiarSubTab
 initPicker('fecha-stock-barra');
 ['fecha-barra-ingresos','fecha-barra-ventas','fecha-barra-bajas'].forEach(id => {
@@ -2950,6 +2952,79 @@ function guardarCosto(tipo) {
 function eliminarCosto(id, tipo) {
   if (!confirm('¿Eliminar este registro?')) return;
   api('DELETE', '/api/costos/' + id).then(() => cargarCostos(tipo)).catch(e => { console.error(e); alert('Error al eliminar'); });
+}
+
+// --- COMPRAS: registro centralizado (reparte a STOCKS o BARRA) ---
+let comprasCart = [];
+
+function cargarCompras() {
+  const fecha = document.getElementById('fecha-compras')?.value || todayStr();
+  Promise.all([getInventario(fecha), api('GET', '/api/barra/precios')]).then(([inv, precios]) => {
+    const dl = document.getElementById('sugerencia-compras');
+    if (!dl) return;
+    const seen = new Set();
+    let html = '';
+    (inv || []).forEach(a => (a.items || []).forEach(i => {
+      const n = (i.nombre || '').trim();
+      if (n && !seen.has(n.toUpperCase())) { seen.add(n.toUpperCase()); html += '<option value="' + n.replace(/"/g, '&quot;') + '"></option>'; }
+    }));
+    (precios || []).forEach(p => {
+      const n = (p.ingrediente || '').trim();
+      if (n && !seen.has(n.toUpperCase())) { seen.add(n.toUpperCase()); html += '<option value="' + n.replace(/"/g, '&quot;') + '"></option>'; }
+    });
+    dl.innerHTML = html;
+  }).catch(() => {});
+}
+
+function agregarCompra() {
+  const nombre = document.getElementById('nueva-compra-input').value.trim();
+  const cantidad = parseFloat(document.getElementById('nueva-compra-cant').value);
+  const unidad = document.getElementById('nueva-compra-uni').value;
+  if (!nombre || isNaN(cantidad) || cantidad <= 0) { alert('Ingresa un item y una cantidad'); return; }
+  comprasCart.push({ nombre, cantidad, unidad });
+  document.getElementById('nueva-compra-input').value = '';
+  document.getElementById('nueva-compra-cant').value = '';
+  renderComprasCart();
+}
+
+function renderComprasCart() {
+  const c = document.getElementById('compras-cart-container');
+  if (!c) return;
+  if (!comprasCart.length) {
+    c.innerHTML = '<p style="color:#888;">Busca el item, agrega la cantidad y presiona GUARDAR. La compra se reparte automáticamente a STOCKS o BARRA según el item.</p>';
+    return;
+  }
+  c.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Unidad</th><th></th></tr></thead><tbody>' +
+    comprasCart.map((it, i) => `<tr><td>${esc(it.nombre)}</td><td>${it.cantidad}</td><td>${it.unidad}</td><td><button class="danger" onclick="quitarCompra(${i})">✕</button></td></tr>`).join('') +
+    '</tbody></table></div>';
+}
+
+function quitarCompra(i) {
+  comprasCart.splice(i, 1);
+  renderComprasCart();
+}
+
+function guardarCompras() {
+  const fecha = document.getElementById('fecha-compras')?.value;
+  if (!fecha) { alert('Selecciona una fecha'); return; }
+  if (!comprasCart.length) { alert('No hay items en la compra'); return; }
+  const btn = document.querySelector('#tab-compras .btn-guardar-dia');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+  api('POST', '/api/compras/guardar', { fecha, items: comprasCart }).then(r => {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR'; }
+    const res = r.resumen || {};
+    let msg = 'Compras guardadas.';
+    if (res.stocks && res.stocks.length) msg += ' Stocks: ' + res.stocks.length + ' item(s).';
+    if (res.barra && res.barra.length) msg += ' Barra: ' + res.barra.length + ' item(s).';
+    if (res.noEncontrados && res.noEncontrados.length) msg += ' No encontrados: ' + res.noEncontrados.map(n => n.nombre).join(', ');
+    showToast(msg);
+    comprasCart = [];
+    renderComprasCart();
+  }).catch(e => {
+    console.error(e);
+    if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR'; }
+    alert('Error al guardar');
+  });
 }
 
 // --- COSTOS: pestañas dinámicas ---
