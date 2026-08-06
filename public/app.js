@@ -173,8 +173,6 @@ function irACategoria(cat) {
     if (!_loaded[cat]) {
       _loaded[cat] = true;
       if (cat === 'barra') { cargarRecetas(); cargarStockBarra(); cargarPrecios(); cargarSugerenciasStock(); }
-      if (cat === 'compras') { cargarCompras(); }
-      if (cat === 'ventas') { cargarVentasCentral(); }
       if (cat === 'costos') {
         cargarPestanas().then(() => {
           const firstSub = document.querySelector('#tabs-costos .sub-tab[data-subtab]');
@@ -183,6 +181,9 @@ function irACategoria(cat) {
         return;
       }
     }
+    // Siempre recargar COMPRAS y VENTAS para no perder datos ni mostrar datos viejos
+    if (cat === 'compras') { cargarCompras(); }
+    if (cat === 'ventas') { cargarVentasCentral(); }
     // Activate first sub-tab for the category
     const firstSub = tabsEl ? tabsEl.querySelector('.sub-tab') : null;
     if (firstSub) cambiarSubTab(firstSub.dataset.subtab, cat);
@@ -1767,10 +1768,12 @@ function exportarSalidaAlmacen(almacenId) {
   XLSX.writeFile(libro, `Salidas_${almacen}_${fecha}.xlsx`);
 }
 
-function initPicker(id, fn) {
+function initPicker(id, fn, persist) {
   const el = document.getElementById(id);
   if (el) {
-    el.value = todayStr();
+    const saved = persist ? localStorage.getItem('fecha_' + id) : null;
+    el.value = saved || todayStr();
+    if (persist) el.addEventListener('change', () => localStorage.setItem('fecha_' + id, el.value));
     if (fn) fn(el.value);
   }
 }
@@ -1779,8 +1782,8 @@ initPicker('fecha-salidas', cargarSalidas);
 initPicker('fecha-ventas', cargarVentas);
 initPicker('fecha-bajas', cargarBajas);
 initPicker('fecha-ingresos', cargarIngresos);
-initPicker('fecha-compras', cargarCompras);
-initPicker('fecha-ventas-menu', cargarVentasCentral);
+initPicker('fecha-compras', cargarCompras, true);
+initPicker('fecha-ventas-menu', cargarVentasCentral, true);
 // Barra: just set today's date, actual load happens via lazy-load in cambiarSubTab
 initPicker('fecha-stock-barra');
 ['fecha-barra-ingresos','fecha-barra-ventas','fecha-barra-bajas'].forEach(id => {
