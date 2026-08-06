@@ -166,6 +166,16 @@ td button.danger { border-color: #c62828; color: #c62828; }
 }
 .grupo-subtotal { color: #0f3460; font-size: 1.1rem; }
 
+.costos-fecha-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  margin-bottom: 0.5rem;
+}
+.costos-fecha-row label { font-weight: 700; color: #0f3460; }
+.costos-fecha-row input[type="date"] { padding: 0.45rem; border: 1px solid #ccc; border-radius: 4px; }
+
 .accordion-item {
   background: #fff;
   border-radius: 8px;

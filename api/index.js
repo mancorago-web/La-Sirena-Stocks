@@ -2793,6 +2793,60 @@ app.delete('/api/costos/:id', authMiddleware, async (req, res) => {
   }
 });
 
+app.post('/api/costos/reemplazar', authMiddleware, async (req, res) => {
+  try {
+    const { fecha, grupos } = req.body;
+    if (!fecha || !Array.isArray(grupos) || !grupos.length) return res.status(400).json({ error: 'fecha y grupos requeridos' });
+    const gruposNorm = grupos.map(g => ({
+      tipo: String(g.tipo).toLowerCase(),
+      campoSub: String(g.campoSub || ''),
+      campos: (g.campos || []).map(c => ({
+        valor: String(c.valor || '').toUpperCase(),
+        concepto: String(c.concepto || '').trim(),
+        monto: (c.monto === null || c.monto === undefined || String(c.monto).trim() === '') ? null : Math.round((parseFloat(c.monto) || 0) * 100) / 100
+      }))
+    }));
+    const byTipo = {};
+    gruposNorm.forEach(g => { byTipo[g.tipo] = g; });
+    const all = await col('costos').where('fecha', '==', fecha).get();
+    const batch = db.batch();
+    let eliminados = 0, creados = 0;
+    all.docs.forEach(d => {
+      const data = d.data();
+      const tipo = String(data.tipo || '').toLowerCase();
+      const g = byTipo[tipo];
+      if (!g) return;
+      const valorDoc = g.campoSub ? String(data[g.campoSub] || '').toUpperCase() : '';
+      const conceptoDoc = String(data.concepto || '').toUpperCase();
+      const match = g.campos.find(c => (valorDoc && valorDoc === c.valor) || (conceptoDoc && conceptoDoc === c.valor));
+      if (match) { batch.delete(d.ref); eliminados++; }
+    });
+    gruposNorm.forEach(g => {
+      g.campos.forEach(c => {
+        if (c.monto === null || c.monto === undefined) return;
+        const ref = col('costos').doc();
+        const data = {
+          id: ref.id,
+          fecha,
+          tipo: g.tipo,
+          concepto: c.concepto,
+          monto: c.monto,
+          saved_by: req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        if (g.campoSub) data[g.campoSub] = c.valor.toLowerCase();
+        batch.set(ref, data);
+        creados++;
+      });
+    });
+    await batch.commit();
+    res.json({ ok: true, eliminados, creados });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- SERVICIOS: títulos de categorías dinámicos ---
 app.get('/api/servicios/titulos', authMiddleware, async (req, res) => {
   try {
