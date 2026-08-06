@@ -2998,22 +2998,20 @@ function agregarCompra() {
 function renderComprasCart() {
   const c = document.getElementById('compras-cart-container');
   if (!c) return;
-  if (!comprasCart.length) {
-    c.innerHTML = '<p style="color:#888;">Busca el item, agrega la cantidad y presiona GUARDAR. La compra se reparte automáticamente a STOCKS o BARRA según el item.</p>';
-    return;
-  }
+  const rows = comprasCart.map((it, i) => {
+    let dest = '';
+    if (it.stocks && it.stocks.length) {
+      dest += '<div style="font-size:0.78rem;color:#1a237e;line-height:1.4;">STOCKS → ' + it.stocks.map(s => esc(s.almacen_nombre)).join(', ') + '</div>';
+    }
+    if (it.esBarra) {
+      dest += '<label style="font-size:0.78rem;color:#0f3460;display:inline-flex;align-items:center;gap:0.25rem;margin-top:0.15rem;"><input type="checkbox" ' + (it.aBarra ? 'checked' : '') + ' onchange="toggleCompraBarra(' + i + ', this.checked)"> Ingresar a BARRA</label>';
+    }
+    if (!dest) dest = '<span style="color:#c62828;font-size:0.78rem;">No registrado</span>';
+    return `<tr><td>${esc(it.nombre)}</td><td>${it.cantidad}</td><td>${it.unidad}</td><td>${dest}</td><td><button class="danger" onclick="quitarCompra(${i})">✕</button></td></tr>`;
+  });
+  const emptyRow = comprasCart.length ? '' : '<tr><td colspan="5" style="color:#888;">Sin items aún. Agrega uno arriba y aquí verás su destino (almacenes de STOCKS / BARRA).</td></tr>';
   c.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Unidad</th><th>Destino</th><th></th></tr></thead><tbody>' +
-    comprasCart.map((it, i) => {
-      let dest = '';
-      if (it.stocks && it.stocks.length) {
-        dest += '<div style="font-size:0.78rem;color:#1a237e;line-height:1.4;">STOCKS → ' + it.stocks.map(s => esc(s.almacen_nombre)).join(', ') + '</div>';
-      }
-      if (it.esBarra) {
-        dest += '<label style="font-size:0.78rem;color:#0f3460;display:inline-flex;align-items:center;gap:0.25rem;margin-top:0.15rem;"><input type="checkbox" ' + (it.aBarra ? 'checked' : '') + ' onchange="toggleCompraBarra(' + i + ', this.checked)"> Ingresar a BARRA</label>';
-      }
-      if (!dest) dest = '<span style="color:#c62828;font-size:0.78rem;">No registrado</span>';
-      return `<tr><td>${esc(it.nombre)}</td><td>${it.cantidad}</td><td>${it.unidad}</td><td>${dest}</td><td><button class="danger" onclick="quitarCompra(${i})">✕</button></td></tr>`;
-    }).join('') +
+    rows.join('') + emptyRow +
     '</tbody></table></div>';
 }
 
