@@ -2980,11 +2980,11 @@ function cargarCompras() {
 function agregarCompra() {
   const nombre = document.getElementById('nueva-compra-input').value.trim();
   const cantidad = parseFloat(document.getElementById('nueva-compra-cant').value);
-  const unidad = document.getElementById('nueva-compra-uni').value;
   const destino = document.getElementById('nueva-compra-destino').value;
   if (!nombre || isNaN(cantidad) || cantidad <= 0) { alert('Ingresa un item y una cantidad'); return; }
-  const pushItem = (stocks) => {
-    comprasCart.push({ nombre, cantidad, unidad, destino, stocks: stocks || [] });
+  const pushItem = (almacenes) => {
+    const alms = (almacenes || []).map(a => ({ ...a, selected: true }));
+    comprasCart.push({ nombre, cantidad, unidad: 'unidad', destino, almacenes: alms });
     document.getElementById('nueva-compra-input').value = '';
     document.getElementById('nueva-compra-cant').value = '';
     renderComprasCart();
@@ -3004,24 +3004,28 @@ function renderComprasCart() {
   const rows = comprasCart.map((it, i) => {
     let dest = '';
     if (it.destino === 'stocks') {
-      dest = it.stocks && it.stocks.length
-        ? '<div style="font-size:0.78rem;color:#1a237e;line-height:1.4;">STOCKS → ' + it.stocks.map(s => esc(s.almacen_nombre)).join(', ') + '</div>'
+      dest = it.almacenes && it.almacenes.length
+        ? '<div style="font-size:0.78rem;color:#1a237e;line-height:1.5;">' + it.almacenes.map((a, ai) =>
+            '<label style="display:block;"><input type="checkbox" ' + (a.selected ? 'checked' : '') + ' onchange="toggleCompraAlmacen(' + i + ',' + ai + ', this.checked)"> ' + esc(a.almacen_nombre) + '</label>'
+          ).join('') + '</div>'
         : '<span style="color:#c62828;font-size:0.78rem;">STOCKS (no encontrado)</span>';
     } else if (it.destino === 'barra') {
       dest = '<span style="color:#0f3460;font-weight:600;font-size:0.8rem;">BARRA</span>';
     } else if (it.destino === 'cocina') {
       dest = '<span style="color:#0f3460;font-weight:600;font-size:0.8rem;">COCINA</span>';
     }
-    return `<tr><td>${esc(it.nombre)}</td><td>${it.cantidad}</td><td>${it.unidad}</td><td>${dest}</td><td><button class="danger" onclick="quitarCompra(${i})">✕</button></td></tr>`;
+    return `<tr><td>${esc(it.nombre)}</td><td>${it.cantidad}</td><td>${dest}</td><td><button class="danger" onclick="quitarCompra(${i})">✕</button></td></tr>`;
   });
-  const emptyRow = comprasCart.length ? '' : '<tr><td colspan="5" style="color:#888;">Sin items aún. Elige el item, cantidad, unidad, DESTINO y presiona AGREGAR.</td></tr>';
-  c.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Unidad</th><th>Destino</th><th></th></tr></thead><tbody>' +
+  const emptyRow = comprasCart.length ? '' : '<tr><td colspan="4" style="color:#888;">Sin items aún. Elige el item, cantidad, DESTINO y presiona AGREGAR.</td></tr>';
+  c.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Destino</th><th></th></tr></thead><tbody>' +
     rows.join('') + emptyRow +
     '</tbody></table></div>';
 }
 
-function toggleCompraBarra(i, checked) {
-  if (comprasCart[i]) comprasCart[i].aBarra = checked;
+function toggleCompraAlmacen(i, ai, checked) {
+  if (comprasCart[i] && comprasCart[i].almacenes && comprasCart[i].almacenes[ai]) {
+    comprasCart[i].almacenes[ai].selected = checked;
+  }
 }
 
 function quitarCompra(i) {
@@ -3035,7 +3039,14 @@ function guardarCompras() {
   if (!comprasCart.length) { alert('No hay items en la compra'); return; }
   const btn = document.querySelector('#tab-compras .btn-guardar-dia');
   if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
-  api('POST', '/api/compras/guardar', { fecha, items: comprasCart }).then(r => {
+  const payload = comprasCart.map(it => ({
+    nombre: it.nombre,
+    cantidad: it.cantidad,
+    unidad: it.unidad || 'unidad',
+    destino: it.destino,
+    almacenes: it.destino === 'stocks' && it.almacenes ? it.almacenes.filter(a => a.selected).map(a => a.almacen_id) : undefined
+  }));
+  api('POST', '/api/compras/guardar', { fecha, items: payload }).then(r => {
     if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR'; }
     const res = r.resumen || {};
     let msg = 'Compras guardadas.';

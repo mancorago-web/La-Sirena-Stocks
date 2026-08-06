@@ -547,12 +547,18 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       if (destino === 'stocks') {
         const stocks = stocksByNombre[key] || [];
         if (stocks.length) {
+          // Si el usuario eligió almacenes específicos, respetar la selección
+          const seleccionados = Array.isArray(it.almacenes) && it.almacenes.length
+            ? new Set(it.almacenes.map(a => Number(a)))
+            : null;
           const almacenes = [];
           for (const s of stocks) {
+            if (seleccionados && !seleccionados.has(Number(s.almacen_id))) continue;
             registrosStocks.push({ almacen_id: s.almacen_id, item_id: s.item_id, stock_ingreso: cantidad });
             almacenes.push(s.almacen_id);
           }
-          resumen.stocks.push({ nombre, cantidad, almacenes });
+          if (almacenes.length) resumen.stocks.push({ nombre, cantidad, almacenes });
+          else resumen.noEncontrados.push({ nombre, cantidad, destino: 'stocks', msg: 'sin almacenes seleccionados' });
         } else {
           resumen.noEncontrados.push({ nombre, cantidad, destino: 'stocks' });
         }
