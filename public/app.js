@@ -2988,9 +2988,20 @@ function cargarCompras() {
     comprasAlmacenes = alms || [];
     const cont = document.getElementById('compras-almacenes-lista');
     if (cont) {
-      cont.innerHTML = comprasAlmacenes.map(a =>
-        '<label style="font-size:0.82rem;display:inline-flex;align-items:center;gap:0.25rem;"><input type="checkbox" class="compra-almacen" value="' + Number(a.id) + '" checked> ' + esc(a.nombre) + '</label>'
-      ).join('');
+      const chk = (a) => '<label style="font-size:0.82rem;display:flex;align-items:center;gap:0.25rem;padding:0.18rem 0;"><input type="checkbox" class="compra-almacen" value="' + Number(a.id) + '" checked> ' + esc(a.nombre) + '</label>';
+      const izquierda = comprasAlmacenes.filter(a => !/ARRIBA/i.test(a.nombre));
+      const derecha = comprasAlmacenes.filter(a => /ARRIBA/i.test(a.nombre));
+      cont.innerHTML =
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem 1.5rem;align-items:start;">' +
+          '<div>' +
+            '<div style="font-size:0.72rem;font-weight:700;color:#666;margin-bottom:0.2rem;">ENTRADA / ABAJO</div>' +
+            izquierda.map(chk).join('') +
+          '</div>' +
+          '<div>' +
+            '<div style="font-size:0.72rem;font-weight:700;color:#666;margin-bottom:0.2rem;">ARRIBA</div>' +
+            derecha.map(chk).join('') +
+          '</div>' +
+        '</div>';
     }
     const muList = document.getElementById('compras-muebles-lista');
     if (muList) {
