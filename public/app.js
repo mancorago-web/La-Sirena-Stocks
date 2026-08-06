@@ -3076,14 +3076,13 @@ function comprasMueblesSeleccionados() {
   return Array.from(document.querySelectorAll('.compra-mueble:checked')).map(cb => cb.value);
 }
 
-let _comprasDetalleSeq = 0;
 function cargarComprasDetalle(fecha) {
   const c = document.getElementById('compras-detalle-container');
   if (!c) return;
   const fechaFinal = fecha || document.getElementById('fecha-compras')?.value || todayStr();
-  const seq = ++_comprasDetalleSeq;
   api('GET', '/api/compras/detalle?fecha=' + encodeURIComponent(fechaFinal)).then(list => {
-    if (seq !== _comprasDetalleSeq) return; // ignorar llamadas viejas
+    const actual = document.getElementById('fecha-compras')?.value || todayStr();
+    if (actual !== fechaFinal) return; // la fecha cambió, ignorar respuesta vieja
     if (!list || !list.length) {
       c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE COMPRAS/INGRESOS</h3><p style="color:#888;">Aún no hay compras registradas en esta fecha.</p>';
       return;
@@ -3103,7 +3102,7 @@ function cargarComprasDetalle(fecha) {
     c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE COMPRAS/INGRESOS</h3>' +
       '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Destino</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
       filas + '</tbody></table></div>';
-  }).catch(() => { if (seq === _comprasDetalleSeq) c.innerHTML = '<p style="color:#888;">DETALLE DE COMPRAS/INGRESOS</p>'; });
+  }).catch(() => { const actual = document.getElementById('fecha-compras')?.value || todayStr(); if (actual === fechaFinal) c.innerHTML = '<p style="color:#888;">DETALLE DE COMPRAS/INGRESOS</p>'; });
 }
 
 function confirmarEliminarCompra(id) {
@@ -3278,15 +3277,15 @@ function guardarVentasCentral() {
 }
 
 let ventasDetalleMap = {};
-let _ventasDetalleSeq = 0;
 
 function cargarVentasDetalle(fecha) {
   const c = document.getElementById('ventas-detalle-container');
   if (!c) return;
   const fechaFinal = fecha || document.getElementById('fecha-ventas-menu')?.value || todayStr();
-  const seq = ++_ventasDetalleSeq;
   api('GET', '/api/ventas/detalle?fecha=' + encodeURIComponent(fechaFinal)).then(list => {
-    if (seq !== _ventasDetalleSeq) return; // ignorar llamadas viejas
+    // Solo renderizar si la fecha aún es la seleccionada (evita que una consulta vieja sobreescriba)
+    const actual = document.getElementById('fecha-ventas-menu')?.value || todayStr();
+    if (actual !== fechaFinal) return;
     if (!list || !list.length) {
       ventasDetalleMap = {};
       c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE VENTAS</h3><p style="color:#888;">Aún no hay ventas registradas en esta fecha.</p>';
@@ -3309,7 +3308,7 @@ function cargarVentasDetalle(fecha) {
     c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE VENTAS</h3>' +
       '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Destino</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
       filas + '</tbody></table></div>';
-  }).catch(() => { if (seq === _ventasDetalleSeq) c.innerHTML = '<p style="color:#888;">DETALLE DE VENTAS</p>'; });
+  }).catch(() => { const actual = document.getElementById('fecha-ventas-menu')?.value || todayStr(); if (actual === fechaFinal) c.innerHTML = '<p style="color:#888;">DETALLE DE VENTAS</p>'; });
 }
 
 function confirmarEliminarVenta(id) {
