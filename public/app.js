@@ -3168,7 +3168,7 @@ function agregarVenta() {
   showToast('Agregado: ' + nombre + ' x' + cantidad + ' (' + destino + '). Total: ' + ventasCart.length + ' item(s).');
 }
 
-function guardarVentas() {
+function guardarVentasCentral() {
   const fecha = document.getElementById('fecha-ventas-menu')?.value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
   if (!ventasCart.length) { alert('No hay items en la venta'); return; }
