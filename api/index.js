@@ -809,6 +809,305 @@ app.delete('/api/compras/:id', authMiddleware, async (req, res) => {
   }
 });
 
+// --- VENTAS: helpers de stock de barra (descontar / sumar consumo de recetas) ---
+async function descontarStockBarra(consumos) {
+  const stockSnap = await col('barra_stock').get();
+  const allStock = stockSnap.docs.map(d => ({ ref: d.ref, id: Number(d.id) || 0, data: d.data() }));
+  const byNombre = {};
+  allStock.forEach(s => {
+    const k = String(s.data.ingrediente || '').trim().toUpperCase();
+    if (!byNombre[k]) byNombre[k] = [];
+    byNombre[k].push(s);
+  });
+  const batch = db.batch();
+  let ajustados = 0;
+  for (const c of consumos) {
+    const key = String(c.ingrediente || '').trim().toUpperCase();
+    const deltaOz = aOnzas(c.cantidad, c.unidad, c.ingrediente);
+    if (deltaOz === null || isNaN(deltaOz)) continue;
+    let matches = byNombre[key] || [];
+    if (!matches.length) matches = matchStockFuzzy(c.ingrediente, allStock);
+    if (!matches.length) continue;
+    let restante = deltaOz;
+    for (const m of matches) {
+      if (restante === 0) break;
+      const si = m.item || m;
+      const ozItem = aOnzas(si.data.cantidad, si.data.unidad, si.data.ingrediente);
+      if (ozItem === null || isNaN(ozItem)) continue;
+      const aDescontar = Math.min(ozItem, restante);
+      const nuevoOz = Math.max(0, ozItem - aDescontar);
+      const nueva = Math.round(desdeOnzas(nuevoOz, si.data.unidad, si.data.ingrediente) * 100) / 100;
+      batch.update(si.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
+      restante -= aDescontar;
+      ajustados++;
+    }
+  }
+  if (ajustados) await batch.commit();
+}
+
+async function sumarStockBarra(consumos) {
+  const stockSnap = await col('barra_stock').get();
+  const allStock = stockSnap.docs.map(d => ({ ref: d.ref, id: Number(d.id) || 0, data: d.data() }));
+  const byNombre = {};
+  allStock.forEach(s => {
+    const k = String(s.data.ingrediente || '').trim().toUpperCase();
+    if (!byNombre[k]) byNombre[k] = [];
+    byNombre[k].push(s);
+  });
+  const batch = db.batch();
+  let ajustados = 0;
+  for (const c of consumos) {
+    const key = String(c.ingrediente || '').trim().toUpperCase();
+    const deltaOz = aOnzas(c.cantidad, c.unidad, c.ingrediente);
+    if (deltaOz === null || isNaN(deltaOz)) continue;
+    let matches = byNombre[key] || [];
+    if (!matches.length) matches = matchStockFuzzy(c.ingrediente, allStock);
+    if (!matches.length) continue;
+    for (const m of matches) {
+      const si = m.item || m;
+      const ozItem = aOnzas(si.data.cantidad, si.data.unidad, si.data.ingrediente);
+      if (ozItem === null || isNaN(ozItem)) continue;
+      const nuevaOz = Math.max(0, ozItem + deltaOz);
+      const nueva = Math.round(desdeOnzas(nuevaOz, si.data.unidad, si.data.ingrediente) * 100) / 100;
+      batch.update(si.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
+      ajustados++;
+    }
+  }
+  if (ajustados) await batch.commit();
+}
+
+// --- VENTAS: guardado centralizado (salen de STOCKS, BARRA o COCINA) ---
+app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
+  try {
+    const { fecha, items } = req.body;
+    if (!fecha || !Array.isArray(items)) return res.status(400).json({ error: 'fecha e items requeridos' });
+    const savedBy = req.user?.name || req.user?.email || 'unknown';
+
+    const invSnap = await col('inventario').get();
+    const stocksNorm = {};
+    let maxItemId = 0;
+    invSnap.docs.forEach(d => {
+      const a = d.data();
+      const norm = String(a.nombre || '').trim().toUpperCase().replace(/\s+/g, '');
+      if (!norm) return;
+      if (!stocksNorm[norm]) stocksNorm[norm] = [];
+      stocksNorm[norm].push({ item_id: a.item_id, almacen_id: a.almacen_id });
+      if (Number(a.item_id) > maxItemId) maxItemId = Number(a.item_id);
+    });
+    const matchStocks = (nombre) => {
+      const norm = String(nombre || '').trim().toUpperCase().replace(/\s+/g, '');
+      if (!norm) return [];
+      if (stocksNorm[norm]) return stocksNorm[norm];
+      const cands = [];
+      for (const [key, arr] of Object.entries(stocksNorm)) {
+        if (key.includes(norm) || norm.includes(key)) cands.push(...arr);
+      }
+      return cands;
+    };
+
+    const registrosStocks = [];
+    const ventasBarra = [];
+    const cocinaVentas = [];
+    const resumen = { stocks: [], barra: [], cocina: [], noEncontrados: [] };
+
+    for (const it of items) {
+      const nombre = String(it.nombre || '').trim();
+      if (!nombre) continue;
+      const cantidad = parseFloat(it.cantidad) || 0;
+      if (cantidad <= 0) continue;
+      const destino = String(it.destino || 'stocks').toLowerCase();
+      if (destino === 'stocks') {
+        const candidatos = matchStocks(nombre);
+        let seleccionados;
+        if (Array.isArray(it.almacenes) && it.almacenes.length) {
+          seleccionados = Array.from(new Set(it.almacenes.map(a => Number(a))));
+        } else {
+          seleccionados = Array.from(new Set(candidatos.map(c => Number(c.almacen_id))));
+        }
+        const almacenes = [];
+        for (const alId of seleccionados) {
+          let match = candidatos.find(c => Number(c.almacen_id) === alId);
+          if (!match) {
+            maxItemId += 1;
+            await col('inventario').doc(docId('inventario', maxItemId, alId)).set({ item_id: maxItemId, almacen_id: alId, nombre, categoria: '', stock_apertura: 0, cantidad_minima: 0 });
+            match = { item_id: maxItemId, almacen_id: alId };
+          }
+          registrosStocks.push({ almacen_id: match.almacen_id, item_id: match.item_id, total_ventas: cantidad });
+          almacenes.push(match.almacen_id);
+        }
+        if (almacenes.length) resumen.stocks.push({ nombre, cantidad, almacenes });
+        else resumen.noEncontrados.push({ nombre, cantidad, destino: 'stocks' });
+      } else if (destino === 'barra') {
+        ventasBarra.push({ nombre, cantidad });
+        resumen.barra.push({ nombre, cantidad });
+      } else if (destino === 'cocina') {
+        cocinaVentas.push({ nombre, cantidad });
+        resumen.cocina.push({ nombre, cantidad });
+      } else {
+        resumen.noEncontrados.push({ nombre, cantidad, destino });
+      }
+    }
+
+    // Aplicar a STOCKS (total_ventas en inventario_diario + propagación)
+    if (registrosStocks.length) {
+      await guardarDiaInterno(fecha, registrosStocks, savedBy);
+    }
+
+    // Aplicar a BARRA (movimientos de venta de recetas + descontar stock)
+    if (ventasBarra.length) {
+      const recSnap = await col('recetas').get();
+      const ingSnap = await col('receta_ingredientes').get();
+      const recetasMap = {};
+      recSnap.docs.forEach(d => { const a = d.data(); recetasMap[String(a.nombre).trim().toUpperCase()] = { id: d.id, nombre: a.nombre }; });
+      const ingByRec = {};
+      ingSnap.docs.forEach(d => { const a = d.data(); if (!ingByRec[a.receta_id]) ingByRec[a.receta_id] = []; ingByRec[a.receta_id].push(a); });
+      const batch = db.batch();
+      const consumos = [];
+      for (const v of ventasBarra) {
+        const rec = recetasMap[String(v.nombre).trim().toUpperCase()];
+        const recNombre = rec ? rec.nombre : v.nombre;
+        const recId = rec ? rec.id : null;
+        batch.set(col('barra_movimientos').doc(), {
+          fecha, tipo: 'ventas', ingrediente: recNombre, cantidad: v.cantidad, unidad: 'unidad',
+          es_receta: true, receta: recNombre, saved_by: savedBy, created_at: new Date().toISOString()
+        });
+        if (recId) {
+          (ingByRec[recId] || []).forEach(ing => {
+            const cant = Math.round(((parseFloat(ing.cantidad) || 0) * v.cantidad) * 100) / 100;
+            consumos.push({ ingrediente: ing.ingrediente, cantidad: cant, unidad: ing.unidad || 'unidad' });
+            batch.set(col('barra_movimientos').doc(), {
+              fecha, tipo: 'ventas', ingrediente: ing.ingrediente, cantidad: cant, unidad: ing.unidad || 'unidad',
+              es_receta: false, receta: recNombre, saved_by: savedBy, created_at: new Date().toISOString()
+            });
+          });
+        }
+      }
+      await batch.commit();
+      await descontarStockBarra(consumos);
+    }
+
+    // Aplicar a COCINA
+    if (cocinaVentas.length) {
+      const batch = db.batch();
+      cocinaVentas.forEach(v => batch.set(col('cocina_ventas').doc(), { fecha, nombre: v.nombre, cantidad: v.cantidad, unidad: 'unidad', saved_by: savedBy, created_at: new Date().toISOString() }));
+      await batch.commit();
+    }
+
+    // Log de ventas (detalle)
+    if (resumen.stocks.length || resumen.barra.length || resumen.cocina.length) {
+      const logBatch = db.batch();
+      resumen.stocks.forEach(r => logBatch.set(col('ventas').doc(), { fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: 'unidad', destino: 'stocks', almacenes: r.almacenes || [], saved_by: savedBy, created_at: new Date().toISOString() }));
+      resumen.barra.forEach(r => logBatch.set(col('ventas').doc(), { fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: 'unidad', destino: 'barra', saved_by: savedBy, created_at: new Date().toISOString() }));
+      resumen.cocina.forEach(r => logBatch.set(col('ventas').doc(), { fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: 'unidad', destino: 'cocina', saved_by: savedBy, created_at: new Date().toISOString() }));
+      await logBatch.commit();
+    }
+
+    res.json({ ok: true, resumen });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- VENTAS: detalle por fecha ---
+app.get('/api/ventas/detalle', async (req, res) => {
+  try {
+    const fecha = req.query.fecha;
+    if (!fecha) return res.json([]);
+    const snap = await col('ventas').where('fecha', '==', fecha).get();
+    const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    list.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+    res.json(list);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- VENTAS: eliminar una venta (efecto en cadena) ---
+app.delete('/api/ventas/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const logRef = col('ventas').doc(id);
+    const logSnap = await logRef.get();
+    if (!logSnap.exists) return res.status(404).json({ error: 'Registro no encontrado' });
+    const log = logSnap.data();
+    const fecha = log.fecha;
+    const nombre = log.nombre;
+    const cantidad = parseFloat(log.cantidad) || 0;
+    const savedBy = req.user?.name || req.user?.email || 'unknown';
+
+    if (log.destino === 'stocks') {
+      const invSnap = await col('inventario').get();
+      const stocksNorm = {};
+      invSnap.docs.forEach(d => {
+        const a = d.data();
+        const norm = String(a.nombre || '').trim().toUpperCase().replace(/\s+/g, '');
+        if (!norm) return;
+        if (!stocksNorm[norm]) stocksNorm[norm] = [];
+        stocksNorm[norm].push({ item_id: a.item_id, almacen_id: a.almacen_id });
+      });
+      const norm = String(nombre).trim().toUpperCase().replace(/\s+/g, '');
+      const cands = stocksNorm[norm] || [];
+      const almacenes = Array.isArray(log.almacenes) && log.almacenes.length ? log.almacenes.map(Number) : [];
+      const registros = [];
+      for (const alId of almacenes) {
+        const match = cands.find(c => Number(c.almacen_id) === alId);
+        if (match) {
+          const diaId = docId('invdiario', fecha, match.almacen_id, match.item_id);
+          const diaSnap = await col('inventario_diario').doc(diaId).get();
+          const cur = diaSnap.exists ? (parseFloat(diaSnap.data().total_ventas) || 0) : 0;
+          const nuevo = Math.max(0, cur - cantidad);
+          registros.push({ almacen_id: match.almacen_id, item_id: match.item_id, total_ventas: nuevo });
+        }
+      }
+      if (registros.length) await guardarDiaInterno(fecha, registros, savedBy);
+    } else if (log.destino === 'barra') {
+      // Quitar movimientos de venta de la receta y sumar de vuelta el consumo al stock
+      const bm = await col('barra_movimientos').where('fecha', '==', fecha).where('tipo', '==', 'ventas').get();
+      const batch = db.batch();
+      let borrado = false;
+      bm.docs.forEach(d => {
+        const a = d.data();
+        if (String(a.ingrediente || '').toUpperCase() === String(nombre).toUpperCase() &&
+            Math.abs((parseFloat(a.cantidad) || 0) - cantidad) < 0.001 && a.es_receta !== false) {
+          batch.delete(d.ref);
+          borrado = true;
+        }
+      });
+      // Consumo de ingredientes asociados a esa receta
+      const consumos = [];
+      bm.docs.forEach(d => {
+        const a = d.data();
+        if (a.es_receta === false && a.receta && String(a.receta).toUpperCase() === String(nombre).toUpperCase()) {
+          batch.delete(d.ref);
+          borrado = true;
+          consumos.push({ ingrediente: a.ingrediente, cantidad: a.cantidad, unidad: a.unidad || 'unidad' });
+        }
+      });
+      if (borrado) await batch.commit();
+      if (consumos.length) await sumarStockBarra(consumos);
+    } else if (log.destino === 'cocina') {
+      const cc = await col('cocina_ventas').where('fecha', '==', fecha).get();
+      const batch = db.batch();
+      let borrado = false;
+      cc.docs.forEach(d => {
+        const a = d.data();
+        if (String(a.nombre || '').toUpperCase() === String(nombre).toUpperCase() &&
+            Math.abs((parseFloat(a.cantidad) || 0) - cantidad) < 0.001) {
+          batch.delete(d.ref);
+          borrado = true;
+        }
+      });
+      if (borrado) await batch.commit();
+    }
+
+    await logRef.delete();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
 // --- REPAIR: propagate last known data to a target fecha ---
 app.post('/api/repair/propagar', async (req, res) => {
   try {

@@ -418,14 +418,29 @@
     <div id="tab-ventas" class="tab-content">
       <div class="header-actions">
         <h2>VENTAS</h2>
-      </div>
-      <div id="ventas-container">
-        <div class="card" style="padding:2rem;text-align:center;color:#888;">
-          <h3 style="color:#1a237e;">🛍️ VENTAS</h3>
-          <p>Aquí se registrarán las ventas que salen de Stocks, Barra y Cocina.</p>
-          <p style="margin-top:0.5rem;font-size:0.85rem;">(Sección en construcción)</p>
+        <div class="controles-dia">
+          <label>Fecha: <input type="date" id="fecha-ventas-menu" onchange=""></label>
+          <button class="btn-guardar-dia" onclick="guardarVentas()">💾 GUARDAR</button>
         </div>
       </div>
+      <div style="margin-bottom:1rem;padding:1rem;background:#f9f9f9;border-radius:8px;">
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+          <select id="nueva-venta-destino" onchange="onCambiarDestinoVenta()" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-weight:700;color:#1a237e;">
+            <option value="stocks">STOCKS</option>
+            <option value="barra">BARRA</option>
+            <option value="cocina">COCINA</option>
+          </select>
+          <input type="text" id="nueva-venta-input" placeholder="Buscar item / receta..." list="sugerencia-ventas" autocomplete="off" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:180px;">
+          <datalist id="sugerencia-ventas"></datalist>
+          <input type="number" id="nueva-venta-cant" placeholder="Cantidad" step="0.01" min="0" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;width:110px;">
+          <button class="btn-detalles" onclick="agregarVenta()">➕ AGREGAR</button>
+        </div>
+        <div id="ventas-almacenes" style="display:none;margin-top:0.75rem;padding:0.75rem;background:#e8f0fe;border-radius:8px;">
+          <strong style="font-size:0.85rem;color:#1a237e;">Elige los almacenes de donde sale esta venta (STOCKS):</strong>
+          <div id="ventas-almacenes-lista" style="display:flex;flex-wrap:wrap;gap:0.6rem 1rem;margin-top:0.4rem;"></div>
+        </div>
+      </div>
+      <div id="ventas-detalle-container" style="margin-top:1.5rem;"></div>
     </div>
 
     <div id="modal" class="modal">
@@ -451,6 +466,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=17"></script>
+  <script src="/app.js?v=18"></script>
 </body>
 </html>

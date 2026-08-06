@@ -165,6 +165,7 @@ function irACategoria(cat) {
       _loaded[cat] = true;
       if (cat === 'barra') { cargarRecetas(); cargarStockBarra(); cargarPrecios(); cargarSugerenciasStock(); }
       if (cat === 'compras') { cargarCompras(); }
+      if (cat === 'ventas') { cargarVentasCentral(); }
       if (cat === 'costos') {
         cargarPestanas().then(() => {
           const firstSub = document.querySelector('#tabs-costos .sub-tab[data-subtab]');
@@ -1770,6 +1771,7 @@ initPicker('fecha-ventas', cargarVentas);
 initPicker('fecha-bajas', cargarBajas);
 initPicker('fecha-ingresos', cargarIngresos);
 initPicker('fecha-compras', cargarCompras);
+initPicker('fecha-ventas-menu', cargarVentasCentral);
 // Barra: just set today's date, actual load happens via lazy-load in cambiarSubTab
 initPicker('fecha-stock-barra');
 ['fecha-barra-ingresos','fecha-barra-ventas','fecha-barra-bajas'].forEach(id => {
@@ -3070,6 +3072,165 @@ function eliminarCompra(id) {
     cargarComprasDetalle(fecha);
     _invCache = { fecha: null, data: null, pending: null };
     if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fecha);
+  }).catch(e => { console.error(e); alert('Error al eliminar'); });
+}
+
+// --- VENTAS: registro centralizado (salen de STOCKS, BARRA o COCINA) ---
+let ventasCart = [];
+let ventasAlmacenes = [];
+
+function onCambiarDestinoVenta() {
+  const destino = document.getElementById('nueva-venta-destino').value;
+  const alSel = document.getElementById('ventas-almacenes');
+  if (alSel) alSel.style.display = destino === 'stocks' ? '' : 'none';
+  cargarSugerenciasVentas(destino);
+}
+
+function cargarSugerenciasVentas(destino) {
+  const dl = document.getElementById('sugerencia-ventas');
+  if (!dl) return;
+  if (destino === 'barra') {
+    api('GET', '/api/recetas').then(recetas => {
+      const seen = new Set();
+      let html = '';
+      (recetas || []).forEach(r => {
+        const n = (r.nombre || '').trim().toUpperCase();
+        if (n && !seen.has(n)) { seen.add(n); html += '<option value="' + n.replace(/"/g, '&quot;') + '"></option>'; }
+      });
+      dl.innerHTML = html;
+    }).catch(() => {});
+    return;
+  }
+  const fecha = document.getElementById('fecha-ventas-menu')?.value || todayStr();
+  getInventario(fecha).then(inv => {
+    const seen = new Set();
+    let html = '';
+    (inv || []).forEach(a => (a.items || []).forEach(i => {
+      const n = (i.nombre || '').trim().toUpperCase();
+      if (n && !seen.has(n)) { seen.add(n); html += '<option value="' + n.replace(/"/g, '&quot;') + '"></option>'; }
+    }));
+    dl.innerHTML = html;
+  }).catch(() => {});
+}
+
+function cargarVentasCentral() {
+  const fecha = document.getElementById('fecha-ventas-menu')?.value || todayStr();
+  api('GET', '/api/almacenes').then(alms => {
+    ventasAlmacenes = alms || [];
+    const cont = document.getElementById('ventas-almacenes-lista');
+    if (cont) {
+      cont.innerHTML = ventasAlmacenes.map(a =>
+        '<label style="font-size:0.82rem;display:flex;align-items:center;gap:0.25rem;padding:0.18rem 0;"><input type="checkbox" class="venta-almacen" value="' + Number(a.id) + '" checked> ' + esc(a.nombre) + '</label>'
+      ).join('');
+    }
+  }).catch(() => {});
+  onCambiarDestinoVenta();
+  cargarVentasDetalle(fecha);
+}
+
+function ventasAlmacenesSeleccionados() {
+  return Array.from(document.querySelectorAll('.venta-almacen:checked')).map(cb => Number(cb.value));
+}
+
+function agregarVenta() {
+  const nombre = document.getElementById('nueva-venta-input').value.trim();
+  const cantidad = parseFloat(document.getElementById('nueva-venta-cant').value);
+  const destino = document.getElementById('nueva-venta-destino').value;
+  if (!nombre || isNaN(cantidad) || cantidad <= 0) { alert('Ingresa un item/receta y una cantidad'); return; }
+  let almacenes = [];
+  if (destino === 'stocks') {
+    const ids = ventasAlmacenesSeleccionados();
+    almacenes = ventasAlmacenes.filter(a => ids.includes(Number(a.id))).map(a => ({ almacen_id: Number(a.id), almacen_nombre: a.nombre }));
+  }
+  ventasCart.push({ nombre, cantidad, destino, almacenes });
+  document.getElementById('nueva-venta-input').value = '';
+  document.getElementById('nueva-venta-cant').value = '';
+  showToast('Agregado: ' + nombre + ' x' + cantidad + ' (' + destino + '). Total: ' + ventasCart.length + ' item(s).');
+}
+
+function guardarVentas() {
+  const fecha = document.getElementById('fecha-ventas-menu')?.value;
+  if (!fecha) { alert('Selecciona una fecha'); return; }
+  if (!ventasCart.length) { alert('No hay items en la venta'); return; }
+  const btn = document.querySelector('#tab-ventas .btn-guardar-dia');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+  const payload = ventasCart.map(it => ({
+    nombre: it.nombre,
+    cantidad: it.cantidad,
+    destino: it.destino,
+    almacenes: it.destino === 'stocks' && it.almacenes ? it.almacenes.map(a => a.almacen_id) : undefined
+  }));
+  api('POST', '/api/ventas/guardar', { fecha, items: payload }).then(r => {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR'; }
+    const res = r.resumen || {};
+    let msg = 'Ventas guardadas.';
+    if (res.stocks && res.stocks.length) msg += ' Stocks: ' + res.stocks.length + ' item(s).';
+    if (res.barra && res.barra.length) msg += ' Barra: ' + res.barra.length + ' item(s).';
+    if (res.cocina && res.cocina.length) msg += ' Cocina: ' + res.cocina.length + ' item(s).';
+    if (res.noEncontrados && res.noEncontrados.length) msg += ' No encontrados: ' + res.noEncontrados.map(n => n.nombre).join(', ');
+    showToast(msg);
+    ventasCart = [];
+    cargarVentasDetalle(fecha);
+    _invCache = { fecha: null, data: null, pending: null };
+    if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fecha);
+    if (typeof cargarStockBarra === 'function') cargarStockBarra();
+    if (typeof cargarVentasAlmacen === 'function') cargarVentasAlmacen(fecha);
+  }).catch(e => {
+    console.error(e);
+    if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR'; }
+    alert('Error al guardar');
+  });
+}
+
+function cargarVentasDetalle(fecha) {
+  const c = document.getElementById('ventas-detalle-container');
+  if (!c) return;
+  api('GET', '/api/ventas/detalle?fecha=' + encodeURIComponent(fecha || todayStr())).then(list => {
+    if (!list || !list.length) {
+      c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE VENTAS</h3><p style="color:#888;">Aún no hay ventas registradas en esta fecha.</p>';
+      return;
+    }
+    const alNombre = (id) => {
+      const a = ventasAlmacenes.find(x => Number(x.id) === Number(id));
+      return a ? a.nombre : ('Almacén ' + id);
+    };
+    const filas = list.map(r => {
+      let det = '';
+      if (r.destino === 'stocks') det = 'STOCKS → ' + (r.almacenes || []).map(alNombre).join(', ');
+      else if (r.destino === 'barra') det = 'BARRA (receta)';
+      else if (r.destino === 'cocina') det = 'COCINA';
+      const t = r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
+      return `<tr><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${esc(det)}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td><button class="danger" onclick="confirmarEliminarVenta('${r.id}')">✕</button></td></tr>`;
+    }).join('');
+    c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE VENTAS</h3>' +
+      '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Destino</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
+      filas + '</tbody></table></div>';
+  }).catch(() => { c.innerHTML = '<p style="color:#888;">DETALLE DE VENTAS</p>'; });
+}
+
+function confirmarEliminarVenta(id) {
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modal-body');
+  modal.style.display = 'block';
+  body.innerHTML = `
+    <h3>Eliminar Venta</h3>
+    <p style="color:#666;margin-top:0.75rem;">¿Seguro que quieres eliminar esta venta? Se revertirá en STOCKS/BARRA correspondiente.</p>
+    <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+      <button onclick="eliminarVenta('${id}')" style="flex:1;padding:0.5rem;background:#c62828;color:#fff;border:none;border-radius:4px;cursor:pointer;">Eliminar</button>
+      <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
+    </div>
+  `;
+}
+
+function eliminarVenta(id) {
+  const fecha = document.getElementById('fecha-ventas-menu')?.value || todayStr();
+  api('DELETE', '/api/ventas/' + id).then(() => {
+    cerrarModal();
+    showToast('Venta eliminada');
+    cargarVentasDetalle(fecha);
+    _invCache = { fecha: null, data: null, pending: null };
+    if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fecha);
+    if (typeof cargarStockBarra === 'function') cargarStockBarra();
   }).catch(e => { console.error(e); alert('Error al eliminar'); });
 }
 
