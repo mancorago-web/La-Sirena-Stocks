@@ -72,6 +72,13 @@ module.exports = app;
 const app = express();
 
 app.use(express.json());
+// No-cache para archivos estaticos (app.js, style.css) para evitar versiones viejas
+app.use((req, res, next) => {
+  if (req.path === '/app.js' || req.path === '/style.css') {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // --- DIAGNOSTIC (no auth, must be BEFORE auth middleware) ---
