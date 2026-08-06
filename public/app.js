@@ -3095,6 +3095,9 @@ function guardarCompras() {
     showToast(msg);
     comprasCart = [];
     renderComprasCart();
+    // Limpiar caché de inventario para que STOCKS muestre el ingreso recién registrado
+    _invCache = { fecha: null, data: null, pending: null };
+    if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fecha);
   }).catch(e => {
     console.error(e);
     if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR'; }
