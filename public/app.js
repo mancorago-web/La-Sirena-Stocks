@@ -2973,7 +2973,8 @@ function cargarCompras() {
       if (n && !seen.has(n.toUpperCase())) { seen.add(n.toUpperCase()); html += '<option value="' + n.replace(/"/g, '&quot;') + '"></option>'; }
     });
     dl.innerHTML = html;
-  }).catch(() => {});
+    renderComprasCart();
+  }).catch(() => { renderComprasCart(); });
 }
 
 function agregarCompra() {
