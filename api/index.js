@@ -522,17 +522,29 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
     if (!fecha || !Array.isArray(items)) return res.status(400).json({ error: 'fecha e items requeridos' });
     const savedBy = req.user?.name || req.user?.email || 'unknown';
 
-    // Índice para enrutar a STOCKS (inventario)
+    // Índice para enrutar a STOCKS (inventario), normalizado (sin espacios, mayúsculas)
     const invSnap = await col('inventario').get();
-    const stocksByNombre = {};
+    const stocksNorm = {};
     let maxItemId = 0;
     invSnap.docs.forEach(d => {
       const a = d.data();
-      const k = String(a.nombre || '').trim().toUpperCase();
-      if (!stocksByNombre[k]) stocksByNombre[k] = [];
-      stocksByNombre[k].push({ item_id: a.item_id, almacen_id: a.almacen_id });
+      const norm = String(a.nombre || '').trim().toUpperCase().replace(/\s+/g, '');
+      if (!norm) return;
+      if (!stocksNorm[norm]) stocksNorm[norm] = [];
+      stocksNorm[norm].push({ item_id: a.item_id, almacen_id: a.almacen_id });
       if (Number(a.item_id) > maxItemId) maxItemId = Number(a.item_id);
     });
+    // Coincidencia flexible: igual por nombre normalizado, o que el nombre del item contenga el buscado
+    const matchStocks = (nombre) => {
+      const norm = String(nombre || '').trim().toUpperCase().replace(/\s+/g, '');
+      if (!norm) return [];
+      if (stocksNorm[norm]) return stocksNorm[norm];
+      const cands = [];
+      for (const [key, arr] of Object.entries(stocksNorm)) {
+        if (key.includes(norm) || norm.includes(key)) cands.push(...arr);
+      }
+      return cands;
+    };
 
     const registrosStocks = [];
     const movsBarra = [];
@@ -547,16 +559,17 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       const key = nombre.toUpperCase();
       const destino = String(it.destino || 'stocks').toLowerCase();
       if (destino === 'stocks') {
-        // Almacenes elegidos por el usuario (o todos donde existe el item)
+        const candidatos = matchStocks(nombre);
+        // Almacenes elegidos por el usuario (o todos donde coincide el item)
         let seleccionados;
         if (Array.isArray(it.almacenes) && it.almacenes.length) {
           seleccionados = Array.from(new Set(it.almacenes.map(a => Number(a))));
         } else {
-          seleccionados = (stocksByNombre[key] || []).map(s => Number(s.almacen_id));
+          seleccionados = Array.from(new Set(candidatos.map(c => Number(c.almacen_id))));
         }
         const almacenes = [];
         for (const alId of seleccionados) {
-          let match = (stocksByNombre[key] || []).find(s => Number(s.almacen_id) === alId);
+          let match = candidatos.find(c => Number(c.almacen_id) === alId);
           if (!match) {
             // Crear el item en ese almacén si no existe
             maxItemId += 1;
