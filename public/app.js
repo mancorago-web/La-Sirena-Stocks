@@ -1781,8 +1781,8 @@ initPicker('fecha-salidas', cargarSalidas);
 initPicker('fecha-ventas', cargarVentas);
 initPicker('fecha-bajas', cargarBajas);
 initPicker('fecha-ingresos', cargarIngresos);
-initPicker('fecha-compras', cargarCompras, true);
-initPicker('fecha-ventas-menu', cargarVentasCentral, true);
+initPicker('fecha-compras', cargarCompras);
+initPicker('fecha-ventas-menu', cargarVentasCentral);
 // Barra: just set today's date, actual load happens via lazy-load in cambiarSubTab
 initPicker('fecha-stock-barra');
 ['fecha-barra-ingresos','fecha-barra-ventas','fecha-barra-bajas'].forEach(id => {
