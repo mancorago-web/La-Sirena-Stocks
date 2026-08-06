@@ -1046,7 +1046,12 @@ app.delete('/api/ventas/:id', authMiddleware, async (req, res) => {
         stocksNorm[norm].push({ item_id: a.item_id, almacen_id: a.almacen_id });
       });
       const norm = String(nombre).trim().toUpperCase().replace(/\s+/g, '');
-      const cands = stocksNorm[norm] || [];
+      let cands = stocksNorm[norm] || [];
+      if (!cands.length) {
+        for (const [key, arr] of Object.entries(stocksNorm)) {
+          if (key.includes(norm) || norm.includes(key)) cands.push(...arr);
+        }
+      }
       const almacenes = Array.isArray(log.almacenes) && log.almacenes.length ? log.almacenes.map(Number) : [];
       const registros = [];
       for (const alId of almacenes) {
