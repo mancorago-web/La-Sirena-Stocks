@@ -403,6 +403,11 @@
           <option value="lt">lt</option>
           <option value="ml">ml</option>
         </select>
+        <select id="nueva-compra-destino" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-weight:700;color:#1a237e;">
+          <option value="stocks">STOCKS</option>
+          <option value="barra">BARRA</option>
+          <option value="cocina">COCINA</option>
+        </select>
         <button class="btn-detalles" onclick="agregarCompra()">➕ AGREGAR</button>
       </div>
       <div id="compras-cart-container"><p style="color:#888;">Busca el item, agrega la cantidad y presiona GUARDAR. La compra se reparte automáticamente a STOCKS o BARRA según el item.</p></div>
@@ -444,6 +449,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=5"></script>
+  <script src="/app.js?v=6"></script>
 </body>
 </html>

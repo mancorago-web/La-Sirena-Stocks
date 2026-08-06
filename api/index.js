@@ -522,11 +522,8 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
     if (!fecha || !Array.isArray(items)) return res.status(400).json({ error: 'fecha e items requeridos' });
     const savedBy = req.user?.name || req.user?.email || 'unknown';
 
-    // Índices para enrutar: STOCKS (inventario) y BARRA (barra_precios)
-    const [invSnap, precSnap] = await Promise.all([
-      col('inventario').get(),
-      col('barra_precios').get(),
-    ]);
+    // Índice para enrutar a STOCKS (inventario)
+    const invSnap = await col('inventario').get();
     const stocksByNombre = {};
     invSnap.docs.forEach(d => {
       const a = d.data();
@@ -534,15 +531,11 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       if (!stocksByNombre[k]) stocksByNombre[k] = [];
       stocksByNombre[k].push({ item_id: a.item_id, almacen_id: a.almacen_id });
     });
-    const barraByNombre = new Set();
-    precSnap.docs.forEach(d => {
-      const k = String(d.data().ingrediente || '').trim().toUpperCase();
-      if (k) barraByNombre.add(k);
-    });
 
     const registrosStocks = [];
     const movsBarra = [];
-    const resumen = { stocks: [], barra: [], noEncontrados: [] };
+    const cocinaCompras = [];
+    const resumen = { stocks: [], barra: [], cocina: [], noEncontrados: [] };
 
     for (const it of items) {
       const nombre = String(it.nombre || '').trim();
@@ -550,25 +543,27 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       const cantidad = parseFloat(it.cantidad) || 0;
       if (cantidad <= 0) continue;
       const key = nombre.toUpperCase();
-      const stocks = stocksByNombre[key] || [];
-      const esBarra = barraByNombre.has(key);
-      const aBarra = it.aBarra === true;
-      if (stocks.length) {
-        const almacenes = [];
-        for (const s of stocks) {
-          registrosStocks.push({ almacen_id: s.almacen_id, item_id: s.item_id, stock_ingreso: cantidad });
-          almacenes.push(s.almacen_id);
+      const destino = String(it.destino || 'stocks').toLowerCase();
+      if (destino === 'stocks') {
+        const stocks = stocksByNombre[key] || [];
+        if (stocks.length) {
+          const almacenes = [];
+          for (const s of stocks) {
+            registrosStocks.push({ almacen_id: s.almacen_id, item_id: s.item_id, stock_ingreso: cantidad });
+            almacenes.push(s.almacen_id);
+          }
+          resumen.stocks.push({ nombre, cantidad, almacenes });
+        } else {
+          resumen.noEncontrados.push({ nombre, cantidad, destino: 'stocks' });
         }
-        resumen.stocks.push({ nombre, cantidad, almacenes });
-        if (esBarra && aBarra) {
-          movsBarra.push({ ingrediente: nombre, cantidad, unidad: it.unidad || 'unidad' });
-          resumen.barra.push({ nombre, cantidad, unidad: it.unidad || 'unidad' });
-        }
-      } else if (esBarra && aBarra) {
+      } else if (destino === 'barra') {
         movsBarra.push({ ingrediente: nombre, cantidad, unidad: it.unidad || 'unidad' });
         resumen.barra.push({ nombre, cantidad, unidad: it.unidad || 'unidad' });
+      } else if (destino === 'cocina') {
+        cocinaCompras.push({ nombre, cantidad, unidad: it.unidad || 'unidad' });
+        resumen.cocina.push({ nombre, cantidad, unidad: it.unidad || 'unidad' });
       } else {
-        resumen.noEncontrados.push({ nombre, cantidad });
+        resumen.noEncontrados.push({ nombre, cantidad, destino });
       }
     }
 
@@ -608,6 +603,18 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
         });
       }
       if (ajustados) await stockBatch.commit();
+    }
+
+    // Aplicar a COCINA (registro de compras; sin inventario de cocina por ahora)
+    if (cocinaCompras.length) {
+      const batch = db.batch();
+      for (const m of cocinaCompras) {
+        batch.set(col('cocina_compras').doc(), {
+          fecha, nombre: m.nombre, cantidad: m.cantidad, unidad: m.unidad,
+          saved_by: savedBy, created_at: new Date().toISOString()
+        });
+      }
+      await batch.commit();
     }
 
     res.json({ ok: true, resumen });
