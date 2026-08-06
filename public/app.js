@@ -3201,11 +3201,14 @@ function guardarVentasCentral() {
   agregarVenta();
 }
 
+let ventasDetalleMap = {};
+
 function cargarVentasDetalle(fecha) {
   const c = document.getElementById('ventas-detalle-container');
   if (!c) return;
   api('GET', '/api/ventas/detalle?fecha=' + encodeURIComponent(fecha || todayStr())).then(list => {
     if (!list || !list.length) {
+      ventasDetalleMap = {};
       c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE VENTAS</h3><p style="color:#888;">Aún no hay ventas registradas en esta fecha.</p>';
       return;
     }
@@ -3213,14 +3216,15 @@ function cargarVentasDetalle(fecha) {
       const a = ventasAlmacenes.find(x => Number(x.id) === Number(id));
       return a ? a.nombre : ('Almacén ' + id);
     };
+    ventasDetalleMap = {};
+    list.forEach(r => { ventasDetalleMap[r.id] = r; });
     const filas = list.map(r => {
       let det = '';
       if (r.destino === 'stocks') det = 'STOCKS → ' + (r.almacenes || []).map(alNombre).join(', ');
       else if (r.destino === 'barra') det = 'BARRA (receta)';
       else if (r.destino === 'cocina') det = 'COCINA';
       const t = r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
-      const xBtn = r.log_id ? `<button class="danger" onclick="confirmarEliminarVenta('${r.id}')">✕</button>` : '';
-      return `<tr><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${esc(det)}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td>${xBtn}</td></tr>`;
+      return `<tr><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${esc(det)}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td><button class="danger" onclick="confirmarEliminarVenta('${r.id}')">✕</button></td></tr>`;
     }).join('');
     c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE VENTAS</h3>' +
       '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Destino</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
@@ -3243,13 +3247,24 @@ function confirmarEliminarVenta(id) {
 }
 
 function eliminarVenta(id) {
-  const fecha = document.getElementById('fecha-ventas-menu')?.value || todayStr();
-  api('DELETE', '/api/ventas/' + id).then(() => {
+  const entry = ventasDetalleMap[id];
+  const fecha = (entry && entry.fecha) || document.getElementById('fecha-ventas-menu')?.value || todayStr();
+  let body;
+  if (entry && !entry.log_id) {
+    if (entry.destino === 'stocks') {
+      const parts = String(id).split('_');
+      body = { fecha, manual: true, destino: 'stocks', item_id: Number(parts[1]), almacen_id: Number(parts[2]) };
+    } else if (entry.destino === 'barra') {
+      body = { fecha, manual: true, destino: 'barra', nombre: entry.nombre, cantidad: entry.cantidad };
+    }
+  }
+  api('DELETE', '/api/ventas/' + id, body).then(() => {
     cerrarModal();
     showToast('Venta eliminada');
     cargarVentasDetalle(fecha);
     _invCache = { fecha: null, data: null, pending: null };
     if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fecha);
+    if (typeof cargarVentas === 'function') cargarVentas(fecha);
     if (typeof cargarStockBarra === 'function') cargarStockBarra();
   }).catch(e => { console.error(e); alert('Error al eliminar'); });
 }

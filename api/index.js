@@ -1094,6 +1094,43 @@ app.get('/api/ventas/detalle', async (req, res) => {
 app.delete('/api/ventas/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
+    const savedBy = req.user?.name || req.user?.email || 'unknown';
+
+    // --- Ventas registradas manualmente (STOCK/VENTAS o BARRA/VENTAS) ---
+    if (req.body && req.body.manual) {
+      const fecha = req.body.fecha;
+      if (!fecha) return res.status(400).json({ error: 'fecha requerida' });
+      if (req.body.destino === 'stocks') {
+        const item = Number(req.body.item_id);
+        const al = Number(req.body.almacen_id);
+        if (!item || !al) return res.status(400).json({ error: 'item/almacen requeridos' });
+        await guardarDiaInterno(fecha, [{ almacen_id: al, item_id: item, total_ventas: 0 }], savedBy);
+        return res.json({ ok: true });
+      }
+      if (req.body.destino === 'barra') {
+        const nombre = String(req.body.nombre || '');
+        const cant = parseFloat(req.body.cantidad) || 0;
+        const bm = await col('barra_movimientos').where('fecha', '==', fecha).where('tipo', '==', 'ventas').get();
+        const batch = db.batch();
+        const consumos = [];
+        let borrado = false;
+        bm.docs.forEach(d => {
+          const a = d.data();
+          if (a.es_receta !== false && String(a.ingrediente || '').toUpperCase() === String(nombre).toUpperCase() &&
+              Math.abs((parseFloat(a.cantidad) || 0) - cant) < 0.001) {
+            batch.delete(d.ref); borrado = true;
+          } else if (a.es_receta === false && a.receta && String(a.receta).toUpperCase() === String(nombre).toUpperCase()) {
+            batch.delete(d.ref); borrado = true;
+            consumos.push({ ingrediente: a.ingrediente, cantidad: a.cantidad, unidad: a.unidad || 'unidad' });
+          }
+        });
+        if (borrado) await batch.commit();
+        if (consumos.length) await sumarStockBarra(consumos);
+        return res.json({ ok: true });
+      }
+    }
+
+    // --- Ventas del log central (apartado VENTAS) ---
     const logRef = col('ventas').doc(id);
     const logSnap = await logRef.get();
     if (!logSnap.exists) return res.status(404).json({ error: 'Registro no encontrado' });
@@ -1101,7 +1138,6 @@ app.delete('/api/ventas/:id', authMiddleware, async (req, res) => {
     const fecha = log.fecha;
     const nombre = log.nombre;
     const cantidad = parseFloat(log.cantidad) || 0;
-    const savedBy = req.user?.name || req.user?.email || 'unknown';
 
     if (log.destino === 'stocks') {
       const invSnap = await col('inventario').get();
