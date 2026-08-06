@@ -3132,27 +3132,59 @@ function cargarSugerenciasVentas(destino) {
   }).catch(() => {});
 }
 
+function onBuscarItemVenta(valor) {
+  if (document.getElementById('nueva-venta-destino')?.value === 'stocks') {
+    actualizarAlmacenesVenta(valor);
+  }
+}
+
+function renderVentasAlmacenes(lista) {
+  const cont = document.getElementById('ventas-almacenes-lista');
+  if (!cont) return;
+  const chk = (x) => '<label style="font-size:0.82rem;display:flex;align-items:center;gap:0.25rem;padding:0.18rem 0;"><input type="checkbox" class="venta-almacen" value="' + Number(x.id) + '"> ' + esc(x.nombre) + (x.cantidad !== null && x.cantidad !== undefined ? ' <span style="color:#c62828;font-weight:700;">(' + x.cantidad + ')</span>' : '') + '</label>';
+  const izquierda = lista.filter(x => !/ARRIBA/i.test(x.nombre));
+  const derecha = lista.filter(x => /ARRIBA/i.test(x.nombre));
+  cont.innerHTML =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem 1.5rem;align-items:start;">' +
+      '<div>' +
+        '<div style="font-size:0.72rem;font-weight:700;color:#666;margin-bottom:0.2rem;">ENTRADA / ABAJO</div>' +
+        izquierda.map(chk).join('') +
+        (!izquierda.length ? '<div style="color:#999;font-size:0.78rem;">Sin almacenes</div>' : '') +
+      '</div>' +
+      '<div>' +
+        '<div style="font-size:0.72rem;font-weight:700;color:#666;margin-bottom:0.2rem;">ARRIBA</div>' +
+        derecha.map(chk).join('') +
+        (!derecha.length ? '<div style="color:#999;font-size:0.78rem;">Sin almacenes</div>' : '') +
+      '</div>' +
+    '</div>';
+}
+
+function actualizarAlmacenesVenta(nombre) {
+  const q = (nombre || '').trim().toLowerCase().replace(/\s+/g, '');
+  const fecha = document.getElementById('fecha-ventas-menu')?.value || todayStr();
+  getInventario(fecha).then(inv => {
+    const list = [];
+    (inv || []).forEach(a => {
+      let item = null;
+      if (q) {
+        item = (a.items || []).find(i => String(i.nombre || '').toLowerCase().replace(/\s+/g, '').includes(q));
+      }
+      if (!q) {
+        list.push({ id: a.id, nombre: a.nombre, cantidad: null });
+      } else if (item) {
+        const cant = item.stock_cierre !== undefined ? item.stock_cierre : item.stock_apertura;
+        list.push({ id: a.id, nombre: a.nombre, cantidad: cant });
+      }
+    });
+    renderVentasAlmacenes(list);
+  }).catch(() => {});
+}
+
 function cargarVentasCentral() {
   const fecha = document.getElementById('fecha-ventas-menu')?.value || todayStr();
   api('GET', '/api/almacenes').then(alms => {
     ventasAlmacenes = alms || [];
-    const cont = document.getElementById('ventas-almacenes-lista');
-    if (cont) {
-      const chk = (a) => '<label style="font-size:0.82rem;display:flex;align-items:center;gap:0.25rem;padding:0.18rem 0;"><input type="checkbox" class="venta-almacen" value="' + Number(a.id) + '"> ' + esc(a.nombre) + '</label>';
-      const izquierda = ventasAlmacenes.filter(a => !/ARRIBA/i.test(a.nombre));
-      const derecha = ventasAlmacenes.filter(a => /ARRIBA/i.test(a.nombre));
-      cont.innerHTML =
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem 1.5rem;align-items:start;">' +
-          '<div>' +
-            '<div style="font-size:0.72rem;font-weight:700;color:#666;margin-bottom:0.2rem;">ENTRADA / ABAJO</div>' +
-            izquierda.map(chk).join('') +
-          '</div>' +
-          '<div>' +
-            '<div style="font-size:0.72rem;font-weight:700;color:#666;margin-bottom:0.2rem;">ARRIBA</div>' +
-            derecha.map(chk).join('') +
-          '</div>' +
-        '</div>';
-    }
+    renderVentasAlmacenes(ventasAlmacenes.map(a => ({ id: Number(a.id), nombre: a.nombre, cantidad: null })));
   }).catch(() => {});
   onCambiarDestinoVenta();
   cargarVentasDetalle(fecha);
