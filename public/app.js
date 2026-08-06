@@ -3120,9 +3120,20 @@ function cargarVentasCentral() {
     ventasAlmacenes = alms || [];
     const cont = document.getElementById('ventas-almacenes-lista');
     if (cont) {
-      cont.innerHTML = ventasAlmacenes.map(a =>
-        '<label style="font-size:0.82rem;display:flex;align-items:center;gap:0.25rem;padding:0.18rem 0;"><input type="checkbox" class="venta-almacen" value="' + Number(a.id) + '" checked> ' + esc(a.nombre) + '</label>'
-      ).join('');
+      const chk = (a) => '<label style="font-size:0.82rem;display:flex;align-items:center;gap:0.25rem;padding:0.18rem 0;"><input type="checkbox" class="venta-almacen" value="' + Number(a.id) + '" checked> ' + esc(a.nombre) + '</label>';
+      const izquierda = ventasAlmacenes.filter(a => !/ARRIBA/i.test(a.nombre));
+      const derecha = ventasAlmacenes.filter(a => /ARRIBA/i.test(a.nombre));
+      cont.innerHTML =
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem 1.5rem;align-items:start;">' +
+          '<div>' +
+            '<div style="font-size:0.72rem;font-weight:700;color:#666;margin-bottom:0.2rem;">ENTRADA / ABAJO</div>' +
+            izquierda.map(chk).join('') +
+          '</div>' +
+          '<div>' +
+            '<div style="font-size:0.72rem;font-weight:700;color:#666;margin-bottom:0.2rem;">ARRIBA</div>' +
+            derecha.map(chk).join('') +
+          '</div>' +
+        '</div>';
     }
   }).catch(() => {});
   onCambiarDestinoVenta();
