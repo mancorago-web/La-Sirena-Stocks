@@ -3614,7 +3614,11 @@ function renderCostoCategoria(prefix, container) {
       }
       groups[key].push(c);
     });
-    let html = '';
+    const totalGeneral = list.reduce((s, r) => s + (r.monto || 0), 0);
+    let html = `<div class="autosuma-box" id="autosuma-${prefix}" data-base="${totalGeneral}">
+      <span class="autosuma-label">TOTAL</span>
+      <span class="autosuma-monto">S/ ${totalGeneral.toFixed(2)}</span>
+    </div>`;
     cfg.titulos.forEach((t, idx) => {
       const records = groups[t].sort((a, b) => String(a.fecha || '').localeCompare(String(b.fecha || '')));
       const total = records.reduce((sum, r) => sum + (r.monto || 0), 0);
@@ -3643,7 +3647,7 @@ function renderCostoCategoria(prefix, container) {
           <div style="margin-top:0.75rem;padding:0.75rem;background:#f9f9f9;border-radius:8px;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
             <input type="text" id="nuevo-${prefix}-texto-${idx}" placeholder="${cfg.phTexto}" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:160px;">
             <label>Fecha: <input type="date" id="nuevo-${prefix}-fecha-${idx}" value="${todayStr()}" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></label>
-            <input type="number" id="nuevo-${prefix}-monto-${idx}" placeholder="Monto (S/)" step="0.01" min="0" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;width:120px;">
+            <input type="number" id="nuevo-${prefix}-monto-${idx}" placeholder="Monto (S/)" step="0.01" min="0" oninput="actualizarAutosuma('${prefix}')" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;width:120px;">
             <button class="btn-guardar-dia" onclick="guardarCostoCategoria('${prefix}', ${idx})">AGREGAR</button>
           </div>
         </div>
@@ -3674,4 +3678,15 @@ function guardarCostoCategoria(prefix, idx) {
 function eliminarCostoCategoria(prefix, id) {
   if (!confirm('¿Eliminar este registro?')) return;
   api('DELETE', '/api/costos/' + id).then(() => cargarCostoCategoria(prefix)).catch(e => { console.error(e); alert('Error al eliminar'); });
+}
+
+function actualizarAutosuma(prefix) {
+  const box = document.getElementById('autosuma-' + prefix);
+  if (!box) return;
+  const base = parseFloat(box.dataset.base) || 0;
+  const inputs = document.querySelectorAll('#costos-' + prefix + '-container input[id^="nuevo-' + prefix + '-monto-"]');
+  let suma = 0;
+  inputs.forEach(inp => { const v = parseFloat(inp.value); if (!isNaN(v)) suma += v; });
+  const monto = box.querySelector('.autosuma-monto');
+  if (monto) monto.textContent = 'S/ ' + (base + suma).toFixed(2);
 }

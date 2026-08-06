@@ -135,6 +135,21 @@ td button.danger { border-color: #c62828; color: #c62828; }
 .entrada { color: #2e7d32; font-weight: 600; }
 .salida { color: #c62828; font-weight: 600; }
 
+.autosuma-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.75rem;
+  background: #0f3460;
+  color: #fff;
+  border-radius: 8px;
+  font-weight: 700;
+}
+.autosuma-box .autosuma-label { font-size: 0.9rem; letter-spacing: 0.05em; }
+.autosuma-box .autosuma-monto { font-size: 1.5rem; }
+
 .accordion-item {
   background: #fff;
   border-radius: 8px;
