@@ -3009,10 +3009,9 @@ function cargarCompras() {
         '<label style="font-size:0.82rem;display:inline-flex;align-items:center;gap:0.25rem;"><input type="checkbox" class="compra-mueble" value="' + esc(g) + '" checked> ' + esc(g) + '</label>'
       ).join('');
     }
-    renderComprasCart();
     onCambiarDestinoCompra();
     cargarComprasDetalle(fecha);
-  }).catch(() => { renderComprasCart(); cargarComprasDetalle(fecha); });
+  }).catch(() => { cargarComprasDetalle(fecha); });
 }
 
 function comprasAlmacenesSeleccionados() {
@@ -3041,12 +3040,37 @@ function cargarComprasDetalle(fecha) {
       else if (r.destino === 'barra') det = 'BARRA → ' + (r.muebles || []).join(', ');
       else if (r.destino === 'cocina') det = 'COCINA';
       const t = r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
-      return `<tr><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${esc(det)}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td></tr>`;
+      return `<tr><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${esc(det)}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td><button class="danger" onclick="confirmarEliminarCompra('${r.id}')">✕</button></td></tr>`;
     }).join('');
     c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE COMPRAS/INGRESOS</h3>' +
-      '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Destino</th><th>Hora</th><th>Usuario</th></tr></thead><tbody>' +
+      '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Destino</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
       filas + '</tbody></table></div>';
   }).catch(() => { c.innerHTML = '<p style="color:#888;">DETALLE DE COMPRAS/INGRESOS</p>'; });
+}
+
+function confirmarEliminarCompra(id) {
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modal-body');
+  modal.style.display = 'block';
+  body.innerHTML = `
+    <h3>Eliminar Compra/Ingreso</h3>
+    <p style="color:#666;margin-top:0.75rem;">¿Seguro que quieres eliminar este registro? Se revertirá el ingreso en STOCKS/BARRA correspondiente.</p>
+    <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+      <button onclick="eliminarCompra('${id}')" style="flex:1;padding:0.5rem;background:#c62828;color:#fff;border:none;border-radius:4px;cursor:pointer;">Eliminar</button>
+      <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
+    </div>
+  `;
+}
+
+function eliminarCompra(id) {
+  const fecha = document.getElementById('fecha-compras')?.value || todayStr();
+  api('DELETE', '/api/compras/' + id).then(() => {
+    cerrarModal();
+    showToast('Compra/Ingreso eliminado');
+    cargarComprasDetalle(fecha);
+    _invCache = { fecha: null, data: null, pending: null };
+    if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fecha);
+  }).catch(e => { console.error(e); alert('Error al eliminar'); });
 }
 
 function agregarCompra() {
@@ -3065,36 +3089,7 @@ function agregarCompra() {
   comprasCart.push({ nombre, cantidad, unidad: 'unidad', destino, almacenes, muebles });
   document.getElementById('nueva-compra-input').value = '';
   document.getElementById('nueva-compra-cant').value = '';
-  renderComprasCart();
-}
-
-function renderComprasCart() {
-  const c = document.getElementById('compras-cart-container');
-  if (!c) return;
-  const rows = comprasCart.map((it, i) => {
-    let dest = '';
-    if (it.destino === 'stocks') {
-      dest = it.almacenes && it.almacenes.length
-        ? '<div style="font-size:0.78rem;color:#1a237e;line-height:1.4;">STOCKS → ' + it.almacenes.map(a => esc(a.almacen_nombre)).join(', ') + '</div>'
-        : '<span style="color:#c62828;font-size:0.78rem;">STOCKS (sin almacenes)</span>';
-    } else if (it.destino === 'barra') {
-      dest = it.muebles && it.muebles.length
-        ? '<div style="font-size:0.78rem;color:#0f3460;line-height:1.4;">BARRA → ' + it.muebles.map(m => esc(m)).join(', ') + '</div>'
-        : '<span style="color:#c62828;font-size:0.78rem;">BARRA (sin mueble)</span>';
-    } else if (it.destino === 'cocina') {
-      dest = '<span style="color:#0f3460;font-weight:600;font-size:0.8rem;">COCINA</span>';
-    }
-    return `<tr><td>${esc(it.nombre)}</td><td>${it.cantidad}</td><td>${dest}</td><td><button class="danger" onclick="quitarCompra(${i})">✕</button></td></tr>`;
-  });
-  const emptyRow = comprasCart.length ? '' : '<tr><td colspan="4" style="color:#888;">Sin items aún. Elige el item, cantidad, DESTINO y presiona AGREGAR.</td></tr>';
-  c.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Destino</th><th></th></tr></thead><tbody>' +
-    rows.join('') + emptyRow +
-    '</tbody></table></div>';
-}
-
-function quitarCompra(i) {
-  comprasCart.splice(i, 1);
-  renderComprasCart();
+  showToast('Agregado: ' + nombre + ' x' + cantidad + ' (' + destino + '). Total: ' + comprasCart.length + ' item(s).');
 }
 
 function guardarCompras() {
@@ -3121,7 +3116,6 @@ function guardarCompras() {
     if (res.noEncontrados && res.noEncontrados.length) msg += ' No encontrados: ' + res.noEncontrados.map(n => n.nombre).join(', ');
     showToast(msg);
     comprasCart = [];
-    renderComprasCart();
     cargarComprasDetalle(fecha);
     // Limpiar caché de inventario para que STOCKS muestre el ingreso recién registrado
     _invCache = { fecha: null, data: null, pending: null };

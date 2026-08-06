@@ -709,6 +709,98 @@ app.get('/api/compras/detalle', async (req, res) => {
   }
 });
 
+// --- COMPRAS: eliminar una compra/ingreso registrada (efecto en cadena) ---
+app.delete('/api/compras/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const logRef = col('compras').doc(id);
+    const logSnap = await logRef.get();
+    if (!logSnap.exists) return res.status(404).json({ error: 'Registro no encontrado' });
+    const log = logSnap.data();
+    const fecha = log.fecha;
+    const nombre = log.nombre;
+    const cantidad = parseFloat(log.cantidad) || 0;
+    const savedBy = req.user?.name || req.user?.email || 'unknown';
+
+    if (log.destino === 'stocks') {
+      // Revertir el ingreso en inventario_diario (resta + propagación)
+      const invSnap = await col('inventario').get();
+      const stocksNorm = {};
+      invSnap.docs.forEach(d => {
+        const a = d.data();
+        const norm = String(a.nombre || '').trim().toUpperCase().replace(/\s+/g, '');
+        if (!norm) return;
+        if (!stocksNorm[norm]) stocksNorm[norm] = [];
+        stocksNorm[norm].push({ item_id: a.item_id, almacen_id: a.almacen_id });
+      });
+      const norm = String(nombre).trim().toUpperCase().replace(/\s+/g, '');
+      const cands = stocksNorm[norm] || [];
+      const almacenes = Array.isArray(log.almacenes) && log.almacenes.length ? log.almacenes.map(Number) : [];
+      const registros = [];
+      for (const alId of almacenes) {
+        const match = cands.find(c => Number(c.almacen_id) === alId);
+        if (match) registros.push({ almacen_id: match.almacen_id, item_id: match.item_id, stock_ingreso: -cantidad });
+      }
+      if (registros.length) await guardarDiaInterno(fecha, registros, savedBy);
+    } else if (log.destino === 'barra') {
+      // Eliminar movimientos de ingreso de barra de la fecha
+      const bm = await col('barra_movimientos').where('fecha', '==', fecha).where('tipo', '==', 'ingresos').get();
+      const batch = db.batch();
+      let borrado = false;
+      bm.docs.forEach(d => {
+        const a = d.data();
+        if (String(a.ingrediente || '').toUpperCase() === String(nombre).toUpperCase() &&
+            Math.abs((parseFloat(a.cantidad) || 0) - cantidad) < 0.001) {
+          batch.delete(d.ref);
+          borrado = true;
+        }
+      });
+      if (borrado) await batch.commit();
+      // Restar del stock de barra según muebles
+      const stockSnap = await col('barra_stock').get();
+      const key = String(nombre).trim().toUpperCase();
+      const muebles = Array.isArray(log.muebles) && log.muebles.length ? log.muebles : GRUPOS_BARRA;
+      const compraOz = aOnzas(cantidad, log.unidad || 'unidad', nombre);
+      const stockBatch = db.batch();
+      let ajustados = 0;
+      if (compraOz !== null && !isNaN(compraOz)) {
+        stockSnap.docs.forEach(d => {
+          const a = d.data();
+          const g = String(a.grupo || '').toUpperCase();
+          if (String(a.ingrediente || '').trim().toUpperCase() === key && muebles.map(m => String(m).toUpperCase()).includes(g)) {
+            const stockOz = aOnzas(a.cantidad, a.unidad, a.ingrediente);
+            if (stockOz === null || isNaN(stockOz)) return;
+            const nuevaOz = Math.max(0, stockOz - compraOz);
+            const nueva = Math.round(desdeOnzas(nuevaOz, a.unidad, a.ingrediente) * 100) / 100;
+            stockBatch.update(d.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
+            ajustados++;
+          }
+        });
+      }
+      if (ajustados) await stockBatch.commit();
+    } else if (log.destino === 'cocina') {
+      const cc = await col('cocina_compras').where('fecha', '==', fecha).get();
+      const batch = db.batch();
+      let borrado = false;
+      cc.docs.forEach(d => {
+        const a = d.data();
+        if (String(a.nombre || '').toUpperCase() === String(nombre).toUpperCase() &&
+            Math.abs((parseFloat(a.cantidad) || 0) - cantidad) < 0.001) {
+          batch.delete(d.ref);
+          borrado = true;
+        }
+      });
+      if (borrado) await batch.commit();
+    }
+
+    // Eliminar el registro del log
+    await logRef.delete();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- REPAIR: propagate last known data to a target fecha ---
 app.post('/api/repair/propagar', async (req, res) => {
   try {
