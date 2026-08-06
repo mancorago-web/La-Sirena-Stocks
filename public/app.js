@@ -2973,14 +2973,16 @@ function cargarCompras() {
     if (dl) {
       const seen = new Set();
       let html = '';
-      (inv || []).forEach(a => (a.items || []).forEach(i => {
-        const n = (i.nombre || '').trim();
-        if (n && !seen.has(n.toUpperCase())) { seen.add(n.toUpperCase()); html += '<option value="' + n.replace(/"/g, '&quot;') + '"></option>'; }
-      }));
-      (precios || []).forEach(p => {
-        const n = (p.ingrediente || '').trim();
-        if (n && !seen.has(n.toUpperCase())) { seen.add(n.toUpperCase()); html += '<option value="' + n.replace(/"/g, '&quot;') + '"></option>'; }
-      });
+      const addSug = (n) => {
+        const nombre = (n || '').trim().toUpperCase();
+        if (!nombre) return;
+        const key = nombre.replace(/\s+/g, '');
+        if (seen.has(key)) return;
+        seen.add(key);
+        html += '<option value="' + nombre.replace(/"/g, '&quot;') + '"></option>';
+      };
+      (inv || []).forEach(a => (a.items || []).forEach(i => addSug(i.nombre)));
+      (precios || []).forEach(p => addSug(p.ingrediente));
       dl.innerHTML = html;
     }
     comprasAlmacenes = alms || [];
