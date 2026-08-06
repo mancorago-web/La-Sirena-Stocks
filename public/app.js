@@ -3219,7 +3219,8 @@ function cargarVentasDetalle(fecha) {
       else if (r.destino === 'barra') det = 'BARRA (receta)';
       else if (r.destino === 'cocina') det = 'COCINA';
       const t = r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
-      return `<tr><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${esc(det)}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td><button class="danger" onclick="confirmarEliminarVenta('${r.id}')">✕</button></td></tr>`;
+      const xBtn = r.log_id ? `<button class="danger" onclick="confirmarEliminarVenta('${r.id}')">✕</button>` : '';
+      return `<tr><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${esc(det)}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td>${xBtn}</td></tr>`;
     }).join('');
     c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE VENTAS</h3>' +
       '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Destino</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +

@@ -1050,8 +1050,27 @@ app.get('/api/ventas/detalle', async (req, res) => {
   try {
     const fecha = req.query.fecha;
     if (!fecha) return res.json([]);
-    const snap = await col('ventas').where('fecha', '==', fecha).get();
-    const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const list = [];
+    // 1. Ventas registradas desde el apartado VENTAS (log central)
+    const log = await col('ventas').where('fecha', '==', fecha).get();
+    log.docs.forEach(d => list.push({ id: d.id, log_id: d.id, ...d.data() }));
+
+    // 2. Ventas de STOCKS (inventario_diario total_ventas > 0) — manual o central
+    const dia = await col('inventario_diario').where('fecha', '==', fecha).get();
+    const invSnap = await col('inventario').get();
+    const nombreByKey = {};
+    invSnap.docs.forEach(d => { const a = d.data(); nombreByKey[a.item_id + '_' + a.almacen_id] = a.nombre; });
+    dia.docs.map(d => d.data()).filter(a => (a.total_ventas || 0) > 0).forEach(a => {
+      const key = a.item_id + '_' + a.almacen_id;
+      list.push({ id: 'stocks_' + key, log_id: null, fecha, nombre: nombreByKey[key] || String(a.item_id), cantidad: a.total_ventas, unidad: 'unidad', destino: 'stocks', almacenes: [a.almacen_id], saved_by: a.saved_by || '-', created_at: a.updated_at || '' });
+    });
+
+    // 3. Ventas de BARRA (barra_movimientos tipo ventas, recetas) — manual o central
+    const bm = await col('barra_movimientos').where('fecha', '==', fecha).where('tipo', '==', 'ventas').get();
+    bm.docs.map(d => d.data()).filter(a => a.es_receta !== false).forEach(a => {
+      list.push({ id: 'barra_' + a.ingrediente + '_' + (a.cantidad || 0), log_id: null, fecha, nombre: a.ingrediente, cantidad: a.cantidad, unidad: a.unidad || 'unidad', destino: 'barra', saved_by: a.saved_by || '-', created_at: a.created_at || '' });
+    });
+
     list.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
     res.json(list);
   } catch (e) {
