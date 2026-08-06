@@ -391,16 +391,22 @@
           <button class="btn-guardar-dia" onclick="guardarCompras()">💾 GUARDAR</button>
         </div>
       </div>
-      <div style="margin-bottom:1rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;padding:1rem;background:#f9f9f9;border-radius:8px;">
-        <input type="text" id="nueva-compra-input" placeholder="Buscar item (ej. COCA COLA)..." list="sugerencia-compras" autocomplete="off" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:180px;">
-        <datalist id="sugerencia-compras"></datalist>
-        <input type="number" id="nueva-compra-cant" placeholder="Cantidad" step="0.01" min="0" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;width:110px;">
-        <select id="nueva-compra-destino" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-weight:700;color:#1a237e;">
-          <option value="stocks">STOCKS</option>
-          <option value="barra">BARRA</option>
-          <option value="cocina">COCINA</option>
-        </select>
-        <button class="btn-detalles" onclick="agregarCompra()">➕ AGREGAR</button>
+      <div style="margin-bottom:1rem;padding:1rem;background:#f9f9f9;border-radius:8px;">
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+          <input type="text" id="nueva-compra-input" placeholder="Buscar item (ej. COCA COLA)..." list="sugerencia-compras" autocomplete="off" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:180px;">
+          <datalist id="sugerencia-compras"></datalist>
+          <input type="number" id="nueva-compra-cant" placeholder="Cantidad" step="0.01" min="0" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;width:110px;">
+          <select id="nueva-compra-destino" onchange="onCambiarDestinoCompra()" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-weight:700;color:#1a237e;">
+            <option value="stocks">STOCKS</option>
+            <option value="barra">BARRA</option>
+            <option value="cocina">COCINA</option>
+          </select>
+          <button class="btn-detalles" onclick="agregarCompra()">➕ AGREGAR</button>
+        </div>
+        <div id="compras-almacenes" style="display:none;margin-top:0.75rem;padding:0.75rem;background:#e8f0fe;border-radius:8px;">
+          <strong style="font-size:0.85rem;color:#1a237e;">Elige los almacenes donde ingresa esta compra (STOCKS):</strong>
+          <div id="compras-almacenes-lista" style="display:flex;flex-wrap:wrap;gap:0.6rem 1rem;margin-top:0.4rem;"></div>
+        </div>
       </div>
       <div id="compras-cart-container"><p style="color:#888;">Busca el item, agrega la cantidad y presiona GUARDAR. La compra se reparte automáticamente a STOCKS o BARRA según el item.</p></div>
     </div>
@@ -441,6 +447,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=7"></script>
+  <script src="/app.js?v=8"></script>
 </body>
 </html>

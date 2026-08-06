@@ -525,11 +525,13 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
     // Índice para enrutar a STOCKS (inventario)
     const invSnap = await col('inventario').get();
     const stocksByNombre = {};
+    let maxItemId = 0;
     invSnap.docs.forEach(d => {
       const a = d.data();
       const k = String(a.nombre || '').trim().toUpperCase();
       if (!stocksByNombre[k]) stocksByNombre[k] = [];
       stocksByNombre[k].push({ item_id: a.item_id, almacen_id: a.almacen_id });
+      if (Number(a.item_id) > maxItemId) maxItemId = Number(a.item_id);
     });
 
     const registrosStocks = [];
@@ -545,23 +547,28 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       const key = nombre.toUpperCase();
       const destino = String(it.destino || 'stocks').toLowerCase();
       if (destino === 'stocks') {
-        const stocks = stocksByNombre[key] || [];
-        if (stocks.length) {
-          // Si el usuario eligió almacenes específicos, respetar la selección
-          const seleccionados = Array.isArray(it.almacenes) && it.almacenes.length
-            ? new Set(it.almacenes.map(a => Number(a)))
-            : null;
-          const almacenes = [];
-          for (const s of stocks) {
-            if (seleccionados && !seleccionados.has(Number(s.almacen_id))) continue;
-            registrosStocks.push({ almacen_id: s.almacen_id, item_id: s.item_id, stock_ingreso: cantidad });
-            almacenes.push(s.almacen_id);
-          }
-          if (almacenes.length) resumen.stocks.push({ nombre, cantidad, almacenes });
-          else resumen.noEncontrados.push({ nombre, cantidad, destino: 'stocks', msg: 'sin almacenes seleccionados' });
+        // Almacenes elegidos por el usuario (o todos donde existe el item)
+        let seleccionados;
+        if (Array.isArray(it.almacenes) && it.almacenes.length) {
+          seleccionados = Array.from(new Set(it.almacenes.map(a => Number(a))));
         } else {
-          resumen.noEncontrados.push({ nombre, cantidad, destino: 'stocks' });
+          seleccionados = (stocksByNombre[key] || []).map(s => Number(s.almacen_id));
         }
+        const almacenes = [];
+        for (const alId of seleccionados) {
+          let match = (stocksByNombre[key] || []).find(s => Number(s.almacen_id) === alId);
+          if (!match) {
+            // Crear el item en ese almacén si no existe
+            maxItemId += 1;
+            const nuevoItem = { item_id: maxItemId, almacen_id: alId, nombre, categoria: '', stock_apertura: 0, cantidad_minima: 0 };
+            await col('inventario').doc(docId('inventario', maxItemId, alId)).set(nuevoItem);
+            match = { item_id: maxItemId, almacen_id: alId };
+          }
+          registrosStocks.push({ almacen_id: match.almacen_id, item_id: match.item_id, stock_ingreso: cantidad });
+          almacenes.push(match.almacen_id);
+        }
+        if (almacenes.length) resumen.stocks.push({ nombre, cantidad, almacenes });
+        else resumen.noEncontrados.push({ nombre, cantidad, destino: 'stocks', msg: 'sin almacenes seleccionados' });
       } else if (destino === 'barra') {
         movsBarra.push({ ingrediente: nombre, cantidad, unidad: it.unidad || 'unidad' });
         resumen.barra.push({ nombre, cantidad, unidad: it.unidad || 'unidad' });

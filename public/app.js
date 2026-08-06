@@ -2956,25 +2956,45 @@ function eliminarCosto(id, tipo) {
 
 // --- COMPRAS: registro centralizado (reparte a STOCKS o BARRA) ---
 let comprasCart = [];
+let comprasAlmacenes = [];
+
+function onCambiarDestinoCompra() {
+  const sel = document.getElementById('compras-almacenes');
+  const destino = document.getElementById('nueva-compra-destino').value;
+  if (sel) sel.style.display = destino === 'stocks' ? '' : 'none';
+}
 
 function cargarCompras() {
   const fecha = document.getElementById('fecha-compras')?.value || todayStr();
-  Promise.all([getInventario(fecha), api('GET', '/api/barra/precios')]).then(([inv, precios]) => {
+  Promise.all([getInventario(fecha), api('GET', '/api/barra/precios'), api('GET', '/api/almacenes')]).then(([inv, precios, alms]) => {
     const dl = document.getElementById('sugerencia-compras');
-    if (!dl) return;
-    const seen = new Set();
-    let html = '';
-    (inv || []).forEach(a => (a.items || []).forEach(i => {
-      const n = (i.nombre || '').trim();
-      if (n && !seen.has(n.toUpperCase())) { seen.add(n.toUpperCase()); html += '<option value="' + n.replace(/"/g, '&quot;') + '"></option>'; }
-    }));
-    (precios || []).forEach(p => {
-      const n = (p.ingrediente || '').trim();
-      if (n && !seen.has(n.toUpperCase())) { seen.add(n.toUpperCase()); html += '<option value="' + n.replace(/"/g, '&quot;') + '"></option>'; }
-    });
-    dl.innerHTML = html;
+    if (dl) {
+      const seen = new Set();
+      let html = '';
+      (inv || []).forEach(a => (a.items || []).forEach(i => {
+        const n = (i.nombre || '').trim();
+        if (n && !seen.has(n.toUpperCase())) { seen.add(n.toUpperCase()); html += '<option value="' + n.replace(/"/g, '&quot;') + '"></option>'; }
+      }));
+      (precios || []).forEach(p => {
+        const n = (p.ingrediente || '').trim();
+        if (n && !seen.has(n.toUpperCase())) { seen.add(n.toUpperCase()); html += '<option value="' + n.replace(/"/g, '&quot;') + '"></option>'; }
+      });
+      dl.innerHTML = html;
+    }
+    comprasAlmacenes = alms || [];
+    const cont = document.getElementById('compras-almacenes-lista');
+    if (cont) {
+      cont.innerHTML = comprasAlmacenes.map(a =>
+        '<label style="font-size:0.82rem;display:inline-flex;align-items:center;gap:0.25rem;"><input type="checkbox" class="compra-almacen" value="' + Number(a.id) + '" checked> ' + esc(a.nombre) + '</label>'
+      ).join('');
+    }
     renderComprasCart();
+    onCambiarDestinoCompra();
   }).catch(() => { renderComprasCart(); });
+}
+
+function comprasAlmacenesSeleccionados() {
+  return Array.from(document.querySelectorAll('.compra-almacen:checked')).map(cb => Number(cb.value));
 }
 
 function agregarCompra() {
@@ -2982,20 +3002,15 @@ function agregarCompra() {
   const cantidad = parseFloat(document.getElementById('nueva-compra-cant').value);
   const destino = document.getElementById('nueva-compra-destino').value;
   if (!nombre || isNaN(cantidad) || cantidad <= 0) { alert('Ingresa un item y una cantidad'); return; }
-  const pushItem = (almacenes) => {
-    const alms = (almacenes || []).map(a => ({ ...a, selected: true }));
-    comprasCart.push({ nombre, cantidad, unidad: 'unidad', destino, almacenes: alms });
-    document.getElementById('nueva-compra-input').value = '';
-    document.getElementById('nueva-compra-cant').value = '';
-    renderComprasCart();
-  };
+  let almacenes = [];
   if (destino === 'stocks') {
-    api('GET', '/api/compras/destino?nombre=' + encodeURIComponent(nombre)).then(d => {
-      pushItem((d && d.stocks) || []);
-    }).catch(() => pushItem([]));
-  } else {
-    pushItem([]);
+    const ids = comprasAlmacenesSeleccionados();
+    almacenes = comprasAlmacenes.filter(a => ids.includes(Number(a.id))).map(a => ({ almacen_id: Number(a.id), almacen_nombre: a.nombre }));
   }
+  comprasCart.push({ nombre, cantidad, unidad: 'unidad', destino, almacenes });
+  document.getElementById('nueva-compra-input').value = '';
+  document.getElementById('nueva-compra-cant').value = '';
+  renderComprasCart();
 }
 
 function renderComprasCart() {
@@ -3005,10 +3020,8 @@ function renderComprasCart() {
     let dest = '';
     if (it.destino === 'stocks') {
       dest = it.almacenes && it.almacenes.length
-        ? '<div style="font-size:0.78rem;color:#1a237e;line-height:1.5;">' + it.almacenes.map((a, ai) =>
-            '<label style="display:block;"><input type="checkbox" ' + (a.selected ? 'checked' : '') + ' onchange="toggleCompraAlmacen(' + i + ',' + ai + ', this.checked)"> ' + esc(a.almacen_nombre) + '</label>'
-          ).join('') + '</div>'
-        : '<span style="color:#c62828;font-size:0.78rem;">STOCKS (no encontrado)</span>';
+        ? '<div style="font-size:0.78rem;color:#1a237e;line-height:1.4;">STOCKS → ' + it.almacenes.map(a => esc(a.almacen_nombre)).join(', ') + '</div>'
+        : '<span style="color:#c62828;font-size:0.78rem;">STOCKS (sin almacenes)</span>';
     } else if (it.destino === 'barra') {
       dest = '<span style="color:#0f3460;font-weight:600;font-size:0.8rem;">BARRA</span>';
     } else if (it.destino === 'cocina') {
@@ -3020,12 +3033,6 @@ function renderComprasCart() {
   c.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Destino</th><th></th></tr></thead><tbody>' +
     rows.join('') + emptyRow +
     '</tbody></table></div>';
-}
-
-function toggleCompraAlmacen(i, ai, checked) {
-  if (comprasCart[i] && comprasCart[i].almacenes && comprasCart[i].almacenes[ai]) {
-    comprasCart[i].almacenes[ai].selected = checked;
-  }
 }
 
 function quitarCompra(i) {
@@ -3044,7 +3051,7 @@ function guardarCompras() {
     cantidad: it.cantidad,
     unidad: it.unidad || 'unidad',
     destino: it.destino,
-    almacenes: it.destino === 'stocks' && it.almacenes ? it.almacenes.filter(a => a.selected).map(a => a.almacen_id) : undefined
+    almacenes: it.destino === 'stocks' && it.almacenes ? it.almacenes.map(a => a.almacen_id) : undefined
   }));
   api('POST', '/api/compras/guardar', { fecha, items: payload }).then(r => {
     if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR'; }
