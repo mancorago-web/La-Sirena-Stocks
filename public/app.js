@@ -164,10 +164,12 @@ window.addEventListener('load', () => { dibujarFlujoMenu(); actualizarContadores
 function actualizarContadoresMenu() {
   const s = document.getElementById('menu-items-stocks');
   const b = document.getElementById('menu-items-barra');
-  if (!s && !b) return;
+  const c = document.getElementById('menu-items-cocina');
+  if (!s && !b && !c) return;
   api('GET', '/api/resumen/items?fecha=' + todayStr()).then(r => {
     if (s) s.textContent = 'Items: ' + (r.stocks === undefined ? '—' : r.stocks);
     if (b) b.textContent = 'Items: ' + (r.barra === undefined ? '—' : r.barra);
+    if (c) c.textContent = 'Items: ' + (r.cocina === undefined ? '—' : r.cocina);
   }).catch(() => {});
 }
 window.addEventListener('resize', dibujarFlujoMenu);

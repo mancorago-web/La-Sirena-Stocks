@@ -375,7 +375,10 @@ app.get('/api/resumen/items', async (req, res) => {
     const barraSnap = await col('barra_stock').get();
     let totalBarra = 0;
     barraSnap.docs.forEach(d => { totalBarra += parseFloat(d.data().cantidad) || 0; });
-    res.json({ stocks: Math.round(totalStocks * 100) / 100, barra: Math.round(totalBarra * 100) / 100 });
+    const cocinaSnap = await col('cocina_stock').get();
+    let totalCocina = 0;
+    cocinaSnap.docs.forEach(d => { totalCocina += parseFloat(d.data().cantidad) || 0; });
+    res.json({ stocks: Math.round(totalStocks * 100) / 100, barra: Math.round(totalBarra * 100) / 100, cocina: Math.round(totalCocina * 100) / 100 });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
