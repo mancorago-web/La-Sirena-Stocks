@@ -3426,9 +3426,29 @@ function guardarEdicionPrecio(id) {
 
 // --- PRECIOS POR ALMACEN ---
 function cargarBaseDatosStocks() {
-  api('GET', '/api/stock/precios').then(data => {
+  Promise.all([
+    api('GET', '/api/stock/precios'),
+    api('GET', '/api/stock/precios/items')
+  ]).then(([data, itemNames]) => {
+    // Sincronizar: crear entradas faltantes para items de STOCKS/ALMACENES (uno por item, sin duplicados)
+    const exist = new Set((data || []).map(s => (s.nombre || '').toUpperCase()));
+    const faltantes = (itemNames || []).filter(n => !exist.has(n.toUpperCase()));
+    if (faltantes.length) {
+      return Promise.all(faltantes.map(n => api('POST', '/api/stock/precios', { nombre: n, unidad: 'UNIDAD', precio: 0, unidad_venta: 'UNIDAD', precio_venta: 0 })))
+        .then(() => api('GET', '/api/stock/precios'));
+    }
+    return data;
+  }).then(data => {
     const container = document.getElementById('accordion-precios');
     if (!container) return;
+    // Deduplicar por nombre (un solo dato por item en la base de datos)
+    const seen = new Set();
+    data = (data || []).filter(s => {
+      const k = (s.nombre || '').toUpperCase();
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
     if (!data.length) {
       container.innerHTML = '<p>No hay items en la base de datos. Agrega uno nuevo.</p>';
       return;

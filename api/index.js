@@ -2237,6 +2237,22 @@ app.get('/api/stock/precios', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Nombres únicos de items de STOCKS/ALMACENES (fuente para la base de datos, sin duplicados)
+app.get('/api/stock/precios/items', async (req, res) => {
+  try {
+    const snap = await col('inventario').get();
+    const seen = new Set();
+    const names = [];
+    snap.docs.forEach(d => {
+      const n = String(d.data().nombre || '').trim();
+      const k = n.toUpperCase();
+      if (n && !seen.has(k)) { seen.add(k); names.push(n); }
+    });
+    names.sort((a, b) => a.localeCompare(b));
+    res.json(names);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/api/stock/precios', async (req, res) => {
   try {
     const { nombre, unidad, precio, unidad_venta, precio_venta } = req.body;
