@@ -346,6 +346,7 @@
         <div class="header-actions">
           <h2>Stock Cocina</h2>
           <div class="controles-dia">
+            <label>Fecha: <input type="date" id="fecha-cocina-stock" onchange="cargarStockCocina()"></label>
             <input type="text" id="nuevo-cocina-stock-input" placeholder="Nuevo ingrediente..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:200px;">
             <input type="number" id="nuevo-cocina-stock-cant" placeholder="Cantidad" step="0.01" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:100px;">
             <select id="nuevo-cocina-stock-uni" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
@@ -364,7 +365,7 @@
               <option value="POLLO">Pollo</option>
             </select>
             <button class="btn-guardar-dia" onclick="agregarStockCocina()">➕ AGREGAR</button>
-            <button class="btn-guardar-dia" id="btn-guardar-cocina-stock" onclick="guardarStockCocina()">💾 GUARDAR</button>
+            <button class="btn-guardar-dia" onclick="guardarCocinaDia()">💾 GUARDAR</button>
           </div>
         </div>
         <div id="cocina-stock-container"><p>Sin stock aún.</p></div>
@@ -478,6 +479,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=37"></script>
+  <script src="/app.js?v=38"></script>
 </body>
 </html>

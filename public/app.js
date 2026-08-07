@@ -2427,43 +2427,48 @@ function eliminarStockBarra(id) {
   api('DELETE', '/api/barra/stock/' + id).then(() => cargarStockBarra());
 }
 
-// --- COCINA: Stock con familias ---
+// --- COCINA: Stock con familias (flujo diario estilo ALMACENES) ---
 const FAMILIAS_COCINA = ['FRUTAS', 'VERDURAS', 'CARNE', 'PESCADO', 'POLLO'];
-let _cocinaStockDirty = false;
 
 function cargarStockCocina() {
-  api('GET', '/api/cocina/stock').then(data => {
+  const fechaEl = document.getElementById('fecha-cocina-stock');
+  if (fechaEl && !fechaEl.value) fechaEl.value = todayStr();
+  const fecha = fechaEl ? fechaEl.value : todayStr();
+  api('GET', '/api/cocina/stock/con-inventario?fecha=' + encodeURIComponent(fecha)).then(grupos => {
     const container = document.getElementById('cocina-stock-container');
     if (!container) return;
-    if (!data.length) {
+    const gruposArr = grupos || [];
+    const todos = gruposArr.reduce((acc, g) => acc.concat(g.items || []), []);
+    if (!todos.length) {
       container.innerHTML = '<p>No hay ingredientes en stock de cocina. Agrega uno nuevo.</p>';
-      _cocinaStockDirty = false;
       return;
     }
-    const groups = {};
-    FAMILIAS_COCINA.forEach(f => { groups[f] = []; });
-    groups['SIN CLASIFICAR'] = [];
-    data.forEach(s => {
-      const key = (s.familia || '').toUpperCase();
-      (groups[key] || groups['SIN CLASIFICAR']).push(s);
+    const byFam = {};
+    FAMILIAS_COCINA.forEach(f => { byFam[f] = []; });
+    byFam['SIN CLASIFICAR'] = [];
+    gruposArr.forEach(g => {
+      const fam = (g.familia || 'SIN CLASIFICAR').toUpperCase();
+      const target = byFam[fam] || byFam['SIN CLASIFICAR'];
+      (g.items || []).forEach(i => target.push(i));
     });
-    function fila(s) {
-      const uniList = UNIDADES_STOCK.includes(s.unidad) ? UNIDADES_STOCK : [...UNIDADES_STOCK, s.unidad];
-      const uniOpts = uniList.map(u => `<option value="${u}" ${s.unidad === u ? 'selected' : ''}>${u}</option>`).join('');
-      const famOpts = FAMILIAS_COCINA.map(f => `<option value="${f}" ${((s.familia || '').toUpperCase() === f) ? 'selected' : ''}>${f}</option>`).join('');
-      return `<tr data-cocina-id="${s.id}" data-orig-cantidad="${s.cantidad}" data-orig-unidad="${s.unidad}" data-orig-familia="${(s.familia || '').toUpperCase()}">
-        <td class="cocina-nombre">${esc(s.ingrediente)}</td>
-        <td><input type="number" class="input-cocina-cant" value="${s.cantidad}" step="0.01" min="0" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="marcarCocinaStockDirty()"></td>
-        <td><select class="select-cocina-uni" onchange="marcarCocinaStockDirty()" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${uniOpts}</select></td>
-        <td><select class="select-cocina-familia" onchange="marcarCocinaStockDirty()" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;font-weight:700;color:#1a237e;">${famOpts}</select></td>
-        <td>
-          <button class="editar" onclick="editarStockCocina(${s.id})" style="padding:0.3rem 0.6rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">EDITAR</button>
-          <button class="danger" onclick="eliminarStockCocina(${s.id})">✕</button>
+    function fila(i) {
+      return `<tr data-cocina-id="${i.id}" data-cantidad="${i.cantidad}" data-unidad="${esc(i.unidad)}" data-familia="${esc(i.familia)}">
+        <td>${esc(i.nombre)}</td>
+        <td><input type="number" class="input-num input-apertura" value="${i.stock_apertura || 0}" step="0.01" oninput="calcCierre(this)"></td>
+        <td><input type="number" class="input-num input-ingreso" value="${i.stock_ingreso || 0}" step="0.01" oninput="calcCierre(this)"></td>
+        <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01" oninput="calcCierre(this)"></td>
+        <td><input type="number" class="input-num input-ventas" value="${i.total_ventas || 0}" step="0.01" oninput="calcCierre(this)"></td>
+        <td><input type="number" class="input-num input-falta" value="${i.falta_almacen || 0}" step="0.01" oninput="calcCierre(this)"></td>
+        <td><input type="hidden" class="input-baja" value="${i.stock_baja || 0}">
+        <td><input type="number" class="input-num input-cierre" value="${i.stock_cierre || 0}" step="0.01" readonly></td>
+        <td style="white-space:nowrap">
+          <button onclick="editarStockCocina(${i.id})" style="background:#0f3460;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">EDITAR</button>
+          <button onclick="eliminarStockCocina(${i.id})" style="background:#c62828;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">✕</button>
         </td>
       </tr>`;
     }
     container.innerHTML = FAMILIAS_COCINA.map(f => {
-      const items = groups[f];
+      const items = byFam[f];
       return `
         <div class="accordion-item">
           <div class="accordion-header" onclick="toggleAcordeon(this)">
@@ -2472,34 +2477,48 @@ function cargarStockCocina() {
           </div>
           <div class="accordion-body">
             <div class="table-wrap"><table>
-              <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>Familia</th><th></th></tr></thead>
-              <tbody>${items.map(fila).join('') || '<tr><td colspan="5">Vacío.</td></tr>'}</tbody>
+              <thead><tr><th>Item</th><th>Apertura</th><th>Ingreso</th><th>Salida</th><th>Ventas</th><th>Falta</th><th>Cierre</th><th></th></tr></thead>
+              <tbody>${items.map(fila).join('') || '<tr><td colspan="8">Vacío.</td></tr>'}</tbody>
             </table></div>
           </div>
         </div>`;
-    }).join('') + (groups['SIN CLASIFICAR'].length ? `
+    }).join('') + (byFam['SIN CLASIFICAR'].length ? `
         <div class="accordion-item">
           <div class="accordion-header" onclick="toggleAcordeon(this)">
-            <span class="accordion-title">SIN CLASIFICAR <span style="font-weight:400;font-size:0.85rem;color:#c62828;">— ${groups['SIN CLASIFICAR'].length} item(s) sin familia</span></span>
+            <span class="accordion-title">SIN CLASIFICAR <span style="font-weight:400;font-size:0.85rem;color:#c62828;">— ${byFam['SIN CLASIFICAR'].length} item(s) sin familia</span></span>
             <span class="accordion-arrow">▶</span>
           </div>
           <div class="accordion-body">
             <div class="table-wrap"><table>
-              <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>Familia</th><th></th></tr></thead>
-              <tbody>${groups['SIN CLASIFICAR'].map(fila).join('')}</tbody>
+              <thead><tr><th>Item</th><th>Apertura</th><th>Ingreso</th><th>Salida</th><th>Ventas</th><th>Falta</th><th>Cierre</th><th></th></tr></thead>
+              <tbody>${byFam['SIN CLASIFICAR'].map(fila).join('')}</tbody>
             </table></div>
           </div>
         </div>` : '');
-    _cocinaStockDirty = false;
-    const b = document.getElementById('btn-guardar-cocina-stock');
-    if (b) b.style.background = '#2e7d32';
+    container.querySelectorAll('tr[data-cocina-id]').forEach(tr => calcCierre(tr.querySelector('.input-apertura')));
   }).catch(e => console.error(e));
 }
 
-function marcarCocinaStockDirty() {
-  _cocinaStockDirty = true;
-  const b = document.getElementById('btn-guardar-cocina-stock');
-  if (b) b.style.background = '#c62828';
+function guardarCocinaDia() {
+  const fecha = document.getElementById('fecha-cocina-stock').value;
+  if (!fecha) { alert('Selecciona una fecha'); return; }
+  const registros = [];
+  document.querySelectorAll('#cocina-stock-container tr[data-cocina-id]').forEach(tr => {
+    registros.push({
+      item_id: Number(tr.getAttribute('data-cocina-id')),
+      stock_apertura: parseFloat(tr.querySelector('.input-apertura').value) || 0,
+      stock_ingreso: parseFloat(tr.querySelector('.input-ingreso').value) || 0,
+      salida_almacen: parseFloat(tr.querySelector('.input-salida').value) || 0,
+      total_ventas: parseFloat(tr.querySelector('.input-ventas').value) || 0,
+      falta_almacen: parseFloat(tr.querySelector('.input-falta').value) || 0,
+      stock_baja: parseFloat(tr.querySelector('.input-baja')?.value) || 0,
+    });
+  });
+  if (!registros.length) { alert('No hay items por guardar'); return; }
+  api('POST', '/api/cocina/stock/guardar-dia', { fecha, registros }).then(() => {
+    showToast('Datos Guardados');
+    cargarStockCocina();
+  }).catch(() => alert('Error al guardar'));
 }
 
 function agregarStockCocina() {
@@ -2515,42 +2534,15 @@ function agregarStockCocina() {
   }).catch(() => alert('Error al agregar'));
 }
 
-function guardarStockCocina() {
-  const rows = document.querySelectorAll('#cocina-stock-container tr[data-cocina-id]');
-  const updates = [];
-  rows.forEach(tr => {
-    const id = Number(tr.getAttribute('data-cocina-id'));
-    const cantN = parseFloat(tr.querySelector('.input-cocina-cant').value) || 0;
-    const uni = tr.querySelector('.select-cocina-uni').value;
-    const fam = tr.querySelector('.select-cocina-familia').value;
-    const oCant = parseFloat(tr.getAttribute('data-orig-cantidad')) || 0;
-    const oUni = tr.getAttribute('data-orig-unidad');
-    const oFam = tr.getAttribute('data-orig-familia');
-    const body = {};
-    if (cantN !== oCant) body.cantidad = cantN;
-    if (uni !== oUni) body.unidad = uni;
-    if (fam !== oFam) body.familia = fam;
-    if (Object.keys(body).length) updates.push(api('PUT', '/api/cocina/stock/' + id, body));
-  });
-  if (!updates.length) { showToast('Sin cambios por guardar'); return; }
-  Promise.all(updates).then(() => {
-    _cocinaStockDirty = false;
-    const b = document.getElementById('btn-guardar-cocina-stock');
-    if (b) b.style.background = '#2e7d32';
-    showToast('Stock guardado');
-    cargarStockCocina();
-  }).catch(() => alert('Error al guardar'));
-}
-
 function editarStockCocina(id) {
   const tr = document.querySelector('#cocina-stock-container tr[data-cocina-id="' + id + '"]');
   if (!tr) return;
   showModal('editar-cocina-stock', {
     id,
-    nombre: tr.querySelector('.cocina-nombre').textContent.trim(),
-    cantidad: tr.querySelector('.input-cocina-cant').value,
-    unidad: tr.querySelector('.select-cocina-uni').value,
-    familia: tr.querySelector('.select-cocina-familia').value
+    nombre: tr.querySelector('td').textContent.trim(),
+    cantidad: tr.getAttribute('data-cantidad') || 0,
+    unidad: tr.getAttribute('data-unidad') || 'unidad',
+    familia: tr.getAttribute('data-familia') || ''
   });
 }
 

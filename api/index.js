@@ -1791,6 +1791,155 @@ app.delete('/api/cocina/stock/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// COCINA: inventario diario por familias (igual que STOCK/ALMACENES)
+app.get('/api/cocina/stock/con-inventario', async (req, res) => {
+  const fecha = req.query.fecha;
+  if (!fecha) return res.json([]);
+  try {
+    const [stockSnap, diaSnap, prevSnap] = await Promise.all([
+      col('cocina_stock').orderBy('id').get(),
+      col('cocina_stock_diario').where('fecha', '==', fecha).get(),
+      col('cocina_stock_diario').where('fecha', '==', prevWorkingDay(fecha)).get(),
+    ]);
+    const diaMap = {};
+    diaSnap.docs.forEach(d => { const dd = d.data(); diaMap[Number(dd.item_id)] = dd; });
+    const prevMap = {};
+    prevSnap.docs.forEach(d => { const dd = d.data(); prevMap[Number(dd.item_id)] = dd; });
+    const groups = {};
+    stockSnap.docs.forEach(d => {
+      const item = d.data();
+      const fam = (item.familia || 'SIN CLASIFICAR').toUpperCase();
+      const dia = diaMap[Number(item.id)] || {};
+      const prev = prevMap[Number(item.id)] || {};
+      const apertura = (dia.stock_apertura ?? prev.stock_cierre ?? item.cantidad ?? 0);
+      const ingreso = dia.stock_ingreso ?? 0;
+      const salida = dia.salida_almacen ?? 0;
+      const ventas = dia.total_ventas ?? 0;
+      const falta = dia.falta_almacen ?? 0;
+      const baja = dia.stock_baja ?? 0;
+      const cierre = apertura + ingreso - salida - ventas - falta - baja;
+      if (!groups[fam]) groups[fam] = [];
+      groups[fam].push({
+        id: Number(item.id),
+        nombre: item.ingrediente,
+        unidad: item.unidad || 'unidad',
+        familia: fam,
+        cantidad: item.cantidad || 0,
+        stock_apertura: apertura,
+        stock_ingreso: ingreso,
+        salida_almacen: salida,
+        total_ventas: ventas,
+        falta_almacen: falta,
+        stock_baja: baja,
+        stock_cierre: Math.round(cierre * 100) / 100,
+      });
+    });
+    res.json(Object.keys(groups).map(f => ({ familia: f, items: groups[f] })));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+async function guardarCocinaDiaInterno(fecha, registros, savedBy) {
+  if (!fecha || !Array.isArray(registros)) throw new Error('fecha y registros requeridos');
+  const existentes = {};
+  await Promise.all(registros.map(async r => {
+    const id = docId('cocdia', fecha, r.item_id);
+    const snap = await col('cocina_stock_diario').doc(id).get();
+    existentes[id] = snap.exists ? snap.data() : {};
+  }));
+  const batch = db.batch();
+  const changedKeys = new Set();
+  for (const r of registros) {
+    const id = docId('cocdia', fecha, r.item_id);
+    const prev = existentes[id] || {};
+    const apertura = r.stock_apertura !== undefined ? (parseFloat(r.stock_apertura) || 0) : (prev.stock_apertura || 0);
+    const ingreso = r.stock_ingreso !== undefined ? (parseFloat(r.stock_ingreso) || 0) : (prev.stock_ingreso || 0);
+    const salida = r.salida_almacen !== undefined ? (parseFloat(r.salida_almacen) || 0) : (prev.salida_almacen || 0);
+    const ventas = r.total_ventas !== undefined ? (parseFloat(r.total_ventas) || 0) : (prev.total_ventas || 0);
+    const falta = r.falta_almacen !== undefined ? (parseFloat(r.falta_almacen) || 0) : (prev.falta_almacen || 0);
+    const baja = r.stock_baja !== undefined ? (parseFloat(r.stock_baja) || 0) : (prev.stock_baja || 0);
+    const cierre = Math.round((apertura + ingreso - salida - ventas - falta - baja) * 100) / 100;
+    if ((prev.stock_apertura || 0) !== apertura || (prev.stock_cierre || 0) !== cierre) {
+      changedKeys.add(Number(r.item_id));
+    }
+    const data = { fecha, item_id: Number(r.item_id) };
+    if (r.stock_apertura !== undefined) data.stock_apertura = apertura;
+    if (r.stock_ingreso !== undefined) data.stock_ingreso = ingreso;
+    if (r.salida_almacen !== undefined) data.salida_almacen = salida;
+    if (r.total_ventas !== undefined) data.total_ventas = ventas;
+    if (r.falta_almacen !== undefined) data.falta_almacen = falta;
+    if (r.stock_baja !== undefined) data.stock_baja = baja;
+    data.stock_cierre = cierre;
+    data.saved_by = savedBy;
+    data.updated_at = new Date().toISOString();
+    batch.set(col('cocina_stock_diario').doc(id), data, { merge: true });
+  }
+  await batch.commit();
+
+  // Propagación hacia adelante del cierre como apertura del siguiente día hábil
+  if (changedKeys.size) {
+    const keysArr = Array.from(changedKeys);
+    const secuencia = [];
+    let srcFecha = fecha;
+    for (let i = 0; i < 30; i++) {
+      const targetDay = getNextWorkingDay(srcFecha);
+      secuencia.push({ src: srcFecha, tgt: targetDay });
+      srcFecha = targetDay;
+    }
+    const prevCierre = {};
+    const perDayWrites = {};
+    for (const key of keysArr) {
+      const itemId = Number(key);
+      let cierre = null;
+      for (let si = 0; si < secuencia.length; si++) {
+        const src = secuencia[si].src;
+        const tgt = secuencia[si].tgt;
+        if (cierre === null) {
+          const srcSnap = await col('cocina_stock_diario').doc(docId('cocdia', src, itemId)).get();
+          cierre = srcSnap.exists ? (srcSnap.data().stock_cierre ?? 0) : 0;
+        }
+        const nextId = docId('cocdia', tgt, itemId);
+        const tgtSnap = await col('cocina_stock_diario').doc(nextId).get();
+        if (tgtSnap.exists) {
+          const t = tgtSnap.data();
+          const apertura = prevCierre[itemId] !== undefined ? prevCierre[itemId] : cierre;
+          const nuevo = Math.round((apertura + (t.stock_ingreso ?? 0) - (t.salida_almacen ?? 0) - (t.total_ventas ?? 0) - (t.falta_almacen ?? 0) - (t.stock_baja ?? 0)) * 100) / 100;
+          prevCierre[itemId] = nuevo;
+          if (t.stock_apertura === apertura && t.stock_cierre === nuevo) continue;
+          if (!perDayWrites[si]) perDayWrites[si] = [];
+          perDayWrites[si].push({ ref: col('cocina_stock_diario').doc(nextId), type: 'update', data: { stock_apertura: apertura, stock_cierre: nuevo, updated_at: new Date().toISOString() } });
+        } else {
+          const apertura = prevCierre[itemId] !== undefined ? prevCierre[itemId] : cierre;
+          prevCierre[itemId] = apertura;
+          if (!perDayWrites[si]) perDayWrites[si] = [];
+          perDayWrites[si].push({ ref: col('cocina_stock_diario').doc(nextId), type: 'set', data: {
+            fecha: tgt, item_id: itemId, stock_apertura: apertura, stock_ingreso: 0, salida_almacen: 0,
+            total_ventas: 0, falta_almacen: 0, stock_baja: 0, stock_cierre: apertura, updated_at: new Date().toISOString()
+          } });
+        }
+      }
+    }
+    const commits = Object.keys(perDayWrites).map(si => {
+      const b = db.batch();
+      perDayWrites[si].forEach(w => { if (w.type === 'update') b.update(w.ref, w.data); else b.set(w.ref, w.data); });
+      return b.commit();
+    });
+    if (commits.length) await Promise.all(commits);
+  }
+  return { ok: true };
+}
+
+app.post('/api/cocina/stock/guardar-dia', async (req, res) => {
+  try {
+    const savedBy = req.body.saved_by || (req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown');
+    const result = await guardarCocinaDiaInterno(req.body.fecha, req.body.registros, savedBy);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- BARRA PRECIOS ---
 app.get('/api/barra/precios', async (req, res) => {
   const snap = await col('barra_precios').orderBy('ingrediente').get();
