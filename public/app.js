@@ -196,7 +196,7 @@ function irACategoria(cat) {
     if (!_loaded[cat]) {
       _loaded[cat] = true;
       if (cat === 'barra') { cargarRecetas(); cargarStockBarra(); cargarPrecios(); cargarSugerenciasStock(); }
-      if (cat === 'cocina') { cargarStockCocina(); }
+      if (cat === 'cocina') { cargarStockCocina(); cargarRecetasCocina(); }
       if (cat === 'costos') {
         cargarPestanas().then(() => {
           const firstSub = document.querySelector('#tabs-costos .sub-tab[data-subtab]');
@@ -2595,6 +2595,72 @@ function eliminarStockCocina(id) {
 function cargarCocinaMovimientos(tipo) {
   const fecha = document.getElementById('fecha-cocina-' + tipo)?.value || todayStr();
   const accId = 'accordion-cocina-' + tipo;
+  if (tipo === 'ventas') {
+    Promise.all([
+      api('GET', '/api/cocina/recetas'),
+      api('GET', '/api/cocina/movimientos?fecha=' + fecha + '&tipo=ventas')
+    ]).then(([recetas, movs]) => {
+      const container = document.getElementById(accId);
+      if (!container) return;
+      if (!recetas.length) { container.innerHTML = '<p>No hay recetas. Crea recetas en COCINA/RECETAS para registrar ventas.</p>'; return; }
+      const ordenCat = ['PLATOS', 'ENTRADAS', 'SOPAS', 'CARNES', 'MARISCOS', 'POLLO', 'GUARNICIONES', 'POSTRES', 'OTROS'];
+      const recQty = {};
+      movs.filter(m => m.es_receta !== false).forEach(m => { recQty[m.ingrediente] = m.cantidad; });
+      const grupos = {};
+      recetas.forEach(r => { const cat = r.categoria || 'PLATOS'; if (!grupos[cat]) grupos[cat] = []; grupos[cat].push(r); });
+      const catsToRender = [...ordenCat, ...Object.keys(grupos).filter(c => !ordenCat.includes(c))];
+      let html = '<h3 style="margin:0 0 0.5rem 0;">RECETAS VENDIDAS</h3>';
+      catsToRender.forEach(cat => {
+        const recs = grupos[cat] || [];
+        if (!recs.length) return;
+        html += `<div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAcordeon(this)">
+            <span class="accordion-title">${cat} <span style="font-weight:400;font-size:0.85rem;color:#777;">— ${recs.length} receta(s)</span></span>
+            <span class="accordion-arrow">▶</span>
+          </div>
+          <div class="accordion-body">
+            <div class="table-wrap"><table>
+              <thead><tr><th>Receta</th><th>Cant. Vendida</th><th>Ingredientes</th></tr></thead>
+              <tbody>
+                ${recs.map(r => {
+                  const qty = recQty[r.nombre] || '';
+                  const ings = (r.ingredientes || []).map(i => i.ingrediente).join(', ');
+                  return `<tr data-receta="${esc(r.nombre)}" data-ingredientes='${JSON.stringify((r.ingredientes || []).map(i => ({ ingrediente: i.ingrediente, cantidad: i.cantidad, unidad: i.unidad })))}'>
+                    <td>${esc(r.nombre)}</td>
+                    <td><input type="number" class="input-cocina-receta-qty" value="${qty}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="calcularItemsSalientesCocina()"></td>
+                    <td style="font-size:0.8rem;color:#666;">${ings}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table></div>
+          </div>
+        </div>`;
+      });
+      html += '<div id="items-salientes-cocina"><h3 style="margin:1rem 0 0.5rem 0;">ITEMS SALIENTES</h3>';
+      const ingSaved = movs.filter(m => m.es_receta === false);
+      if (ingSaved.length) {
+        const agg = {};
+        const units = {};
+        ingSaved.forEach(m => {
+          const key = String(m.ingrediente || '').trim().toUpperCase().replace(/\s+/g, ' ');
+          agg[key] = (agg[key] || 0) + (parseFloat(m.cantidad) || 0);
+          units[key] = m.unidad || 'unidad';
+        });
+        const keys = Object.keys(agg).sort();
+        html += '<div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th>Cantidad Consumida</th><th>Unidad</th></tr></thead><tbody>';
+        keys.forEach(key => { html += `<tr><td>${key}</td><td>${(agg[key] || 0).toFixed(2)}</td><td>${units[key] || 'unidad'}</td></tr>`; });
+        html += '</tbody></table></div>';
+      } else {
+        html += '<p style="color:#888;">Calculado automáticamente al ingresar cantidades de recetas.</p>';
+      }
+      html += '</div>';
+      container.innerHTML = html;
+      const bp = document.getElementById('buscar-cocina-ventas');
+      if (bp && bp.value) buscarTablaBarra(bp.value, accId, 'tr[data-receta]');
+    }).catch(e => console.error(e));
+    return;
+  }
+  // INGRESOS / SALIDAS
   Promise.all([
     api('GET', '/api/cocina/stock'),
     api('GET', '/api/cocina/movimientos?fecha=' + fecha + '&tipo=' + tipo)
@@ -2626,18 +2692,56 @@ function cargarCocinaMovimientos(tipo) {
 function guardarCocinaMovimientos(tipo) {
   const fecha = document.getElementById('fecha-cocina-' + tipo)?.value || todayStr();
   if (!fecha) { alert('Selecciona una fecha'); return; }
-  const items = [];
-  document.querySelectorAll('#accordion-cocina-' + tipo + ' tr[data-ing]').forEach(tr => {
-    const cant = parseFloat(tr.querySelector('.input-cocina-mov').value) || 0;
-    if (cant > 0) {
-      items.push({ ingrediente: tr.dataset.ing, cantidad: cant, unidad: tr.dataset.uni || 'unidad' });
-    }
-  });
-  if (!items.length) { alert('Ingresa cantidades para guardar'); return; }
+  let items = [];
+  if (tipo === 'ventas') {
+    document.querySelectorAll('#accordion-cocina-ventas tr[data-receta]').forEach(tr => {
+      const qty = parseFloat(tr.querySelector('.input-cocina-receta-qty').value) || 0;
+      if (qty > 0) {
+        items.push({ ingrediente: tr.dataset.receta, cantidad: qty, unidad: 'unidad', es_receta: true });
+        (JSON.parse(tr.dataset.ingredientes || '[]')).forEach(ing => {
+          items.push({ ingrediente: ing.ingrediente, cantidad: (ing.cantidad || 0) * qty, unidad: ing.unidad || 'unidad', es_receta: false, receta: tr.dataset.receta });
+        });
+      }
+    });
+    if (!items.length) { alert('Ingresa cantidades de recetas vendidas'); return; }
+  } else {
+    document.querySelectorAll('#accordion-cocina-' + tipo + ' tr[data-ing]').forEach(tr => {
+      const cant = parseFloat(tr.querySelector('.input-cocina-mov').value) || 0;
+      if (cant > 0) items.push({ ingrediente: tr.dataset.ing, cantidad: cant, unidad: tr.dataset.uni || 'unidad' });
+    });
+    if (!items.length) { alert('Ingresa cantidades para guardar'); return; }
+  }
   api('POST', '/api/cocina/movimientos', { fecha, tipo, items }).then(() => {
     showToast(tipo === 'ingresos' ? 'Ingresos Guardados' : tipo === 'salidas' ? 'Salidas Guardadas' : 'Ventas Guardadas');
     cargarCocinaMovimientos(tipo);
+    if (tipo === 'ventas') { cargarStockCocina(); actualizarContadoresMenu(); }
   }).catch(e => { console.error(e); alert('Error al guardar'); });
+}
+
+function calcularItemsSalientesCocina() {
+  const seccion = document.getElementById('items-salientes-cocina');
+  if (!seccion) return;
+  const totals = {};
+  const units = {};
+  document.querySelectorAll('#accordion-cocina-ventas tr[data-receta]').forEach(tr => {
+    const qty = parseFloat(tr.querySelector('.input-cocina-receta-qty').value) || 0;
+    if (qty > 0) {
+      (JSON.parse(tr.dataset.ingredientes || '[]')).forEach(ing => {
+        const name = String(ing.ingrediente || '').trim().toUpperCase().replace(/\s+/g, ' ');
+        totals[name] = (totals[name] || 0) + ((ing.cantidad || 0) * qty);
+        units[name] = ing.unidad || 'unidad';
+      });
+    }
+  });
+  const keys = Object.keys(totals).sort();
+  let html = '<h3 style="margin:1rem 0 0.5rem 0;">ITEMS SALIENTES</h3>';
+  if (!keys.length) { html += '<p style="color:#888;">Calculado automáticamente al ingresar cantidades de recetas.</p>'; }
+  else {
+    html += '<div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th>Cantidad Consumida</th><th>Unidad</th></tr></thead><tbody>';
+    keys.forEach(key => { html += `<tr><td>${key}</td><td>${totals[key].toFixed(2)}</td><td>${units[key] || 'unidad'}</td></tr>`; });
+    html += '</tbody></table></div>';
+  }
+  seccion.innerHTML = html;
 }
 
 function verDetallesCocina(tipo) {
@@ -2646,9 +2750,10 @@ function verDetallesCocina(tipo) {
   const label = tipo === 'ingresos' ? 'Ingresos' : tipo === 'salidas' ? 'Salidas' : 'Ventas';
   api('GET', '/api/cocina/movimientos?fecha=' + fecha + '&tipo=' + tipo).then(movs => {
     let html = '<h3>Detalle de ' + label + ' Cocina — ' + fecha + '</h3>';
+    if (tipo === 'ventas') movs = movs.filter(m => m.es_receta !== false);
     if (!movs.length) { html += '<p>No hay movimientos registrados en esta fecha.</p>'; }
     else {
-      html += '<div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
+      html += '<div class="table-wrap"><table><thead><tr><th>Receta</th><th>Cantidad</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
       movs.forEach(m => {
         const t = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
         const u = DISPLAY_NAMES[m.saved_by] || m.saved_by || '-';
@@ -2660,6 +2765,207 @@ function verDetallesCocina(tipo) {
     document.getElementById('modal').style.display = 'block';
   }).catch(() => alert('Error al cargar detalle'));
 }
+
+// --- COCINA: Recetas ---
+function renderRecetaCocina(r) {
+  return `<div class="accordion-item" data-receta-id="${r.id}">
+    <div class="accordion-header" onclick="toggleAcordeon(this)">
+      <span class="accordion-title">${esc(r.nombre)}</span>
+      <span class="accordion-actions" onclick="event.stopPropagation()">
+        <button onclick="editarRecetaCocina(${r.id})" style="margin-right:0.3rem">EDITAR</button>
+        <button class="danger" onclick="eliminarRecetaCocina(${r.id})">ELIMINAR</button>
+      </span>
+      <span class="accordion-arrow">▶</span>
+    </div>
+    <div class="accordion-body">
+      <div class="table-wrap"><table>
+        <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th></tr></thead>
+        <tbody>
+          ${(r.ingredientes || []).map(ing => `<tr><td>${esc(ing.ingrediente)}</td><td>${ing.cantidad}</td><td>${ing.unidad}</td></tr>`).join('') || '<tr><td colspan="3">Sin ingredientes.</td></tr>'}
+        </tbody>
+      </table></div>
+    </div>
+  </div>`;
+}
+
+function cargarRecetasCocina(openId) {
+  api('GET', '/api/cocina/recetas').then(data => {
+    const container = document.getElementById('cocina-recetas-container');
+    if (!container) return;
+    if (!data.length) { container.innerHTML = '<p>No hay recetas. Agrega una nueva.</p>'; return; }
+    const grupos = {};
+    data.forEach(r => { const cat = r.categoria || 'PLATOS'; if (!grupos[cat]) grupos[cat] = []; grupos[cat].push(r); });
+    const ordenCat = ['PLATOS', 'ENTRADAS', 'SOPAS', 'CARNES', 'MARISCOS', 'POLLO', 'GUARNICIONES', 'POSTRES', 'OTROS'];
+    const catsToRender = [...ordenCat, ...Object.keys(grupos).filter(c => !ordenCat.includes(c))];
+    let html = '';
+    catsToRender.forEach(cat => {
+      const recs = grupos[cat] || [];
+      if (!recs.length) return;
+      html += `<div class="accordion-item">
+        <div class="accordion-header" onclick="toggleAcordeon(this)">
+          <span class="accordion-title">${cat} <span style="font-weight:400;font-size:0.85rem;color:#777;">— ${recs.length} receta(s)</span></span>
+          <span class="accordion-arrow">▶</span>
+        </div>
+        <div class="accordion-body">${recs.map(renderRecetaCocina).join('')}</div>
+      </div>`;
+    });
+    container.innerHTML = html;
+    if (openId !== undefined) {
+      const el = container.querySelector(`[data-receta-id="${openId}"]`);
+      if (el) {
+        const catBody = el.parentElement;
+        const parent = catBody && catBody.classList.contains('accordion-body') ? catBody.parentElement : null;
+        if (parent) { const ch = parent.querySelector('.accordion-header'); if (ch && !ch.classList.contains('active')) toggleAcordeon(ch); }
+        const rh = el.querySelector('.accordion-header');
+        if (rh && !rh.classList.contains('active')) toggleAcordeon(rh);
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }).catch(e => console.error(e));
+}
+
+function guardarRecetaCocina() {
+  const input = document.getElementById('nueva-receta-cocina-input');
+  const cat = document.getElementById('nueva-receta-cocina-cat').value;
+  const nombre = input.value.trim();
+  if (!nombre) { alert('Ingresa un nombre'); return; }
+  api('POST', '/api/cocina/recetas', { nombre, categoria: cat }).then(() => {
+    input.value = '';
+    cargarRecetasCocina();
+  }).catch(() => alert('Error al crear receta'));
+}
+
+function eliminarRecetaCocina(id) {
+  if (!confirm('¿Eliminar esta receta?')) return;
+  api('DELETE', '/api/cocina/recetas/' + id).then(() => cargarRecetasCocina()).catch(() => alert('Error al eliminar'));
+}
+
+function editarRecetaCocina(id) {
+  api('GET', '/api/cocina/recetas').then(recetas => {
+    const r = recetas.find(rec => rec.id === id);
+    if (!r) { alert('Receta no encontrada'); return; }
+    api('GET', '/api/cocina/stock').then(stock => {
+      const dl = document.getElementById('recetas-base-datalist');
+      if (dl) dl.innerHTML = (stock || []).map(p => `<option value="${esc(p.ingrediente)}">`).join('');
+      const cats = ['PLATOS', 'ENTRADAS', 'SOPAS', 'CARNES', 'MARISCOS', 'POLLO', 'GUARNICIONES', 'POSTRES', 'OTROS'];
+      document.getElementById('modal-body').innerHTML = `
+        <h3 style="margin-top:0">EDITAR RECETA</h3>
+        <label style="font-weight:600;display:block;margin-bottom:0.2rem">Nombre</label>
+        <input id="edit-receta-cocina-nombre" value="${esc(r.nombre)}" style="width:100%;margin-bottom:0.5rem;">
+        <label style="font-weight:600;display:block;margin-bottom:0.2rem">Categoría</label>
+        <select id="edit-receta-cocina-categoria" style="width:100%;margin-bottom:1rem;">
+          ${cats.map(c => `<option value="${c}" ${r.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}
+        </select>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th></th></tr></thead>
+          <tbody id="edit-cocina-ingredientes-tbody">
+            ${(r.ingredientes || []).map(ing => `
+              <tr data-edit-ing-idx="${ing.id}">
+                <td><input class="edit-cocina-ing-nombre" value="${esc(ing.ingrediente)}" list="recetas-base-datalist" style="width:100%"></td>
+                <td><input class="edit-cocina-ing-cant" type="number" step="0.01" value="${ing.cantidad}" style="width:80px"></td>
+                <td><select class="edit-cocina-ing-uni" style="width:90px">
+                  <option value="unidad" ${normalizeUnit(ing.unidad) === 'unidad' ? 'selected' : ''}>unidad</option>
+                  <option value="kg" ${normalizeUnit(ing.unidad) === 'kg' ? 'selected' : ''}>kg</option>
+                  <option value="gramos" ${normalizeUnit(ing.unidad) === 'gramos' ? 'selected' : ''}>gramos</option>
+                  <option value="lt" ${normalizeUnit(ing.unidad) === 'lt' ? 'selected' : ''}>lt</option>
+                  <option value="ml" ${normalizeUnit(ing.unidad) === 'ml' ? 'selected' : ''}>ml</option>
+                  <option value="onzas" ${normalizeUnit(ing.unidad) === 'onzas' ? 'selected' : ''}>onzas</option>
+                </select></td>
+                <td><button class="danger" onclick="this.closest('tr').remove()">✕</button></td>
+              </tr>`).join('')}
+          </tbody>
+        </table></div>
+        <button onclick="agregarFilaIngredienteCocina()" style="margin:0.5rem 0">+ AGREGAR INGREDIENTE</button>
+        <br>
+        <button onclick="guardarEdicionRecetaCocina(${id})" style="margin-top:0.5rem">GUARDAR</button>
+        <button onclick="cerrarModal()" style="margin-top:0.5rem;margin-left:0.5rem">CANCELAR</button>
+      `;
+      document.getElementById('modal').style.display = 'block';
+    }).catch(() => alert('Error cargando stock'));
+  }).catch(() => alert('Error al cargar receta'));
+}
+
+function agregarFilaIngredienteCocina() {
+  const tbody = document.getElementById('edit-cocina-ingredientes-tbody');
+  if (!tbody) return;
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input class="edit-cocina-ing-nombre" value="" list="recetas-base-datalist" style="width:100%" placeholder="Ingrediente"></td>
+    <td><input class="edit-cocina-ing-cant" type="number" step="0.01" value="0" style="width:80px"></td>
+    <td><select class="edit-cocina-ing-uni" style="width:90px">
+      <option value="unidad" selected>unidad</option>
+      <option value="kg">kg</option>
+      <option value="gramos">gramos</option>
+      <option value="lt">lt</option>
+      <option value="ml">ml</option>
+      <option value="onzas">onzas</option>
+    </select></td>
+    <td><button class="danger" onclick="this.closest('tr').remove()">✕</button></td>
+  `;
+  tbody.appendChild(tr);
+}
+
+function guardarEdicionRecetaCocina(id) {
+  const nombre = document.getElementById('edit-receta-cocina-nombre').value.trim();
+  const categoria = document.getElementById('edit-receta-cocina-categoria').value;
+  if (!nombre) { alert('Nombre requerido'); return; }
+  const ingredientes = [];
+  document.querySelectorAll('#edit-cocina-ingredientes-tbody tr').forEach(tr => {
+    const nomIn = tr.querySelector('.edit-cocina-ing-nombre');
+    const cantIn = tr.querySelector('.edit-cocina-ing-cant');
+    const uniIn = tr.querySelector('.edit-cocina-ing-uni');
+    if (nomIn && nomIn.value.trim()) {
+      ingredientes.push({ ingrediente: nomIn.value.trim(), cantidad: parseFloat(cantIn.value) || 0, unidad: normalizeUnit(uniIn.value) });
+    }
+  });
+  api('PUT', '/api/cocina/recetas/' + id + '/with-ingredientes', { nombre, categoria, ingredientes }).then(() => {
+    cerrarModal();
+    showToast('Receta actualizada');
+    cargarRecetasCocina();
+  }).catch(() => alert('Error al guardar receta'));
+}
+
+function buscarRecetaCocina(q) {
+  const term = (q || '').trim();
+  const palabras = term.toLowerCase().split(/\s+/).filter(Boolean);
+  const container = document.getElementById('cocina-recetas-container');
+  if (!container) return;
+  container.querySelectorAll('.accordion-item[data-receta-id]').forEach(recipe => {
+    const nombre = recipe.querySelector('.accordion-title')?.textContent?.toLowerCase() || '';
+    const familia = (recipe.closest('.accordion-body')?.parentElement?.querySelector('.accordion-header .accordion-title')?.textContent || '').toLowerCase();
+    const ingredientes = Array.from(recipe.querySelectorAll('.accordion-body tbody td:first-child')).map(td => (td.textContent || '').toLowerCase().trim());
+    const texto = (nombre + ' ' + familia + ' ' + ingredientes.join(' ')).toLowerCase();
+    recipe.style.display = (!palabras.length || palabras.every(p => texto.includes(p))) ? '' : 'none';
+  });
+  Array.from(container.children).forEach(cat => {
+    if (!cat.classList.contains('accordion-item')) return;
+    const recipes = cat.querySelectorAll('.accordion-item[data-receta-id]');
+    const anyVisible = Array.from(recipes).some(r => r.style.display !== 'none');
+    cat.style.display = !term || anyVisible ? '' : 'none';
+    if (term && anyVisible) {
+      const header = cat.querySelector('.accordion-header');
+      if (header && !header.classList.contains('active')) toggleAcordeon(header);
+    }
+  });
+}
+
+function exportarRecetasCocina() {
+  api('GET', '/api/cocina/recetas').then(data => {
+    const wsData = [['Categoría', 'Receta', 'Ingrediente', 'Cantidad', 'Unidad']];
+    data.forEach(r => {
+      if (r.ingredientes && r.ingredientes.length) {
+        r.ingredientes.forEach(ing => wsData.push([r.categoria || 'Platos', r.nombre, ing.ingrediente, ing.cantidad, ing.unidad]));
+      } else {
+        wsData.push([r.categoria || 'Platos', r.nombre, '—', '', '']);
+      }
+    });
+    const libro = XLSX.utils.book_new();
+    const hoja = XLSX.utils.aoa_to_sheet(wsData);
+    XLSX.utils.book_append_sheet(libro, hoja, 'Recetas');
+    XLSX.writeFile(libro, 'Recetas_Cocina.xlsx');
+  });
+}
+
 
 // --- BARRA: Base de Datos (precios) ---
 function cargarPrecios() {

@@ -367,7 +367,7 @@
           <h2>Ventas Cocina</h2>
           <div class="controles-dia">
             <label>Fecha: <input type="date" id="fecha-cocina-ventas" onchange="cargarCocinaMovimientos('ventas')"></label>
-            <input type="text" id="buscar-cocina-ventas" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-cocina-ventas')">
+            <input type="text" id="buscar-cocina-ventas" placeholder="Buscar receta..." oninput="buscarTablaBarra(this.value, 'accordion-cocina-ventas', 'tr[data-receta]')">
             <button class="btn-guardar-dia" onclick="guardarCocinaMovimientos('ventas')">💾 GUARDAR VENTAS</button>
             <button class="btn-detalles" onclick="verDetallesCocina('ventas')">📋 DETALLES</button>
           </div>
@@ -378,11 +378,27 @@
       <div id="sub-cocina-recetas" class="sub-tab-content active">
         <div class="header-actions">
           <h2>Recetas</h2>
-          <div class="controles-dia">
-            <button class="btn-guardar-dia" onclick="alert('Próximamente')">➕ AGREGAR RECETA</button>
+          <div class="controles-dia" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+            <input type="text" id="buscar-receta-cocina" placeholder="Buscar receta o ingrediente..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:250px;" oninput="buscarRecetaCocina(this.value)">
+            <button onclick="exportarRecetasCocina()">EXPORTAR</button>
           </div>
         </div>
-        <div id="cocina-recetas-container"><p>Sin recetas aún.</p></div>
+        <div style="margin-bottom:1rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;padding:1rem;background:#f9f9f9;border-radius:8px;">
+          <input type="text" id="nueva-receta-cocina-input" placeholder="Nueva receta..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:150px;">
+          <select id="nueva-receta-cocina-cat" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;">
+            <option value="PLATOS">Platos</option>
+            <option value="ENTRADAS">Entradas</option>
+            <option value="SOPAS">Sopas</option>
+            <option value="CARNES">Carnes</option>
+            <option value="MARISCOS">Mariscos</option>
+            <option value="POLLO">Pollo</option>
+            <option value="GUARNICIONES">Guarniciones</option>
+            <option value="POSTRES">Postres</option>
+            <option value="OTROS">Otros</option>
+          </select>
+          <button onclick="guardarRecetaCocina()">AGREGAR RECETA</button>
+        </div>
+        <div id="cocina-recetas-container"></div>
       </div>
 
       <div id="sub-cocina-stock" class="sub-tab-content">
@@ -505,6 +521,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=41"></script>
+  <script src="/app.js?v=42"></script>
 </body>
 </html>

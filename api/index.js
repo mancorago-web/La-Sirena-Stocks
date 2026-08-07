@@ -1959,23 +1959,212 @@ app.post('/api/cocina/movimientos', authMiddleware, async (req, res) => {
     if (!fecha || !tipo || !items) return res.status(400).json({ error: 'fecha, tipo e items requeridos' });
     const batch = db.batch();
     const existing = await col('cocina_movimientos').where('fecha', '==', fecha).where('tipo', '==', tipo).get();
+
+    // Consumo anterior de ventas (idempotencia: al re-guardar se revierte antes de descontar de nuevo)
+    let oldConsumo = {};
+    if (tipo === 'ventas') {
+      existing.docs.forEach(d => {
+        const dd = d.data();
+        if (dd.es_receta === false) {
+          const key = String(dd.ingrediente || '').trim().toUpperCase();
+          if (!key) return;
+          if (!oldConsumo[key]) oldConsumo[key] = { cant: 0, unidad: dd.unidad || 'unidad', nombre: dd.ingrediente };
+          oldConsumo[key].cant += parseFloat(dd.cantidad) || 0;
+        }
+      });
+    }
+
     existing.docs.forEach(d => batch.delete(d.ref));
     for (const item of items) {
       if (!item.cantidad || item.cantidad <= 0) continue;
       const ref = col('cocina_movimientos').doc();
-      batch.set(ref, {
+      const doc = {
         fecha, tipo, ingrediente: item.ingrediente,
         cantidad: item.cantidad, unidad: item.unidad || 'unidad',
         saved_by: req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown',
         created_at: new Date().toISOString()
-      });
+      };
+      if (item.es_receta !== undefined) doc.es_receta = item.es_receta;
+      if (item.receta) doc.receta = item.receta;
+      batch.set(ref, doc);
     }
     await batch.commit();
+
+    // Descontar el consumo de ventas del stock de cocina (best-effort)
+    if (tipo === 'ventas') {
+      try {
+        const newConsumo = {};
+        items.forEach(it => {
+          if (it.es_receta === false) {
+            const key = String(it.ingrediente || '').trim().toUpperCase();
+            if (!key) return;
+            if (!newConsumo[key]) newConsumo[key] = { cant: 0, unidad: it.unidad || 'unidad', nombre: it.ingrediente };
+            newConsumo[key].cant += parseFloat(it.cantidad) || 0;
+          }
+        });
+        const keys = new Set([...Object.keys(oldConsumo), ...Object.keys(newConsumo)]);
+        const stockSnap = await col('cocina_stock').get();
+        const stockByName = {};
+        const allStock = [];
+        stockSnap.docs.forEach(d => {
+          const dd = d.data();
+          const k = String(dd.ingrediente || '').trim().toUpperCase();
+          const entry = { ref: d.ref, key: d.id, data: dd };
+          if (!stockByName[k]) stockByName[k] = [];
+          stockByName[k].push(entry);
+          allStock.push(entry);
+        });
+        const ajustes = {};
+        for (const key of keys) {
+          const nc = newConsumo[key];
+          const oc = oldConsumo[key];
+          const nombre = (nc && nc.nombre) || (oc && oc.nombre) || key;
+          const deltaCant = (nc ? nc.cant : 0) - (oc ? oc.cant : 0);
+          if (!deltaCant || isNaN(deltaCant)) continue;
+          const uni = (nc && nc.unidad) || (oc && oc.unidad) || 'unidad';
+          let matches = stockByName[key] || [];
+          if (!matches.length) matches = matchStockFuzzy(nombre, allStock);
+          if (!matches.length) continue;
+          const m = matches[0];
+          const stockCant = parseFloat(m.data.cantidad) || 0;
+          const conv = cocinaAjustar(deltaCant, uni, m.data.unidad || 'unidad');
+          if (conv === null || conv === undefined) continue;
+          const nuevaCant = Math.max(0, Math.round((stockCant - conv) * 100) / 100);
+          if (!ajustes[m.key]) ajustes[m.key] = { ref: m.ref, nuevaCant };
+        }
+        const sBatch = db.batch();
+        let ajustados = 0;
+        for (const id of Object.keys(ajustes)) {
+          sBatch.update(ajustes[id].ref, { cantidad: ajustes[id].nuevaCant, updated_at: new Date().toISOString() });
+          ajustados++;
+        }
+        if (ajustados) await sBatch.commit();
+      } catch (e) {
+        console.error('Error descontando stock de cocina:', e.message);
+      }
+    }
+
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
+
+// Conversión de unidades para descuento de stock de cocina (peso y volumen)
+function cocinaAjustar(cant, fromUnit, toUnit) {
+  const u1 = normalizeUnit(fromUnit);
+  const u2 = normalizeUnit(toUnit);
+  if (u1 === u2) return parseFloat(cant) || 0;
+  const peso = { 'kg': 1000, 'gramos': 1, 'gr': 1, 'onzas': 28.3495 };
+  const vol = { 'lt': 1000, 'ml': 1 };
+  if (peso[u1] && peso[u2]) return (parseFloat(cant) || 0) * peso[u1] / peso[u2];
+  if (vol[u1] && vol[u2]) return (parseFloat(cant) || 0) * vol[u1] / vol[u2];
+  return null;
+}
+
+// --- COCINA: Recetas ---
+app.get('/api/cocina/recetas', async (req, res) => {
+  try {
+    const [recSnap, ingSnap] = await Promise.all([
+      col('cocina_recetas').orderBy('nombre').get(),
+      col('cocina_receta_ingredientes').orderBy('id').get(),
+    ]);
+    const ingByRec = {};
+    ingSnap.docs.forEach(idoc => {
+      const ing = { id: Number(idoc.id), ...idoc.data() };
+      const rid = ing.receta_id;
+      if (!ingByRec[rid]) ingByRec[rid] = [];
+      ingByRec[rid].push(ing);
+    });
+    const result = recSnap.docs.map(d => {
+      const r = { id: Number(d.id), ...d.data() };
+      r.ingredientes = ingByRec[r.id] || [];
+      return r;
+    });
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/cocina/recetas', async (req, res) => {
+  try {
+    const { nombre, categoria } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+    const all = await col('cocina_recetas').get();
+    const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
+    await col('cocina_recetas').doc(String(nextId)).set({
+      id: nextId, nombre, categoria: categoria || 'Platos',
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+    });
+    res.json({ id: nextId });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/cocina/recetas/:id', async (req, res) => {
+  try {
+    const { nombre, categoria } = req.body;
+    await col('cocina_recetas').doc(req.params.id).update({
+      nombre, categoria: categoria || 'Platos', updated_at: new Date().toISOString()
+    });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/cocina/recetas/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const ingSnap = await col('cocina_receta_ingredientes').where('receta_id', '==', Number(id)).get();
+    const batch = db.batch();
+    ingSnap.docs.forEach(d => batch.delete(d.ref));
+    batch.delete(col('cocina_recetas').doc(id));
+    await batch.commit();
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/cocina/recetas/:id/with-ingredientes', async (req, res) => {
+  try {
+    const { nombre, categoria, ingredientes } = req.body;
+    const id = req.params.id;
+    await col('cocina_recetas').doc(id).update({
+      nombre, categoria: categoria || 'Platos', updated_at: new Date().toISOString()
+    });
+    const oldSnap = await col('cocina_receta_ingredientes').where('receta_id', '==', Number(id)).get();
+    const batch = db.batch();
+    oldSnap.docs.forEach(d => batch.delete(d.ref));
+    if (ingredientes && ingredientes.length) {
+      const all = await col('cocina_receta_ingredientes').get();
+      let maxId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) : 0;
+      for (const ing of ingredientes) {
+        maxId++;
+        const ref = col('cocina_receta_ingredientes').doc(String(maxId));
+        batch.set(ref, { id: maxId, receta_id: Number(id), ingrediente: ing.ingrediente, cantidad: ing.cantidad || 0, unidad: normalizeUnit(ing.unidad) });
+      }
+    }
+    await batch.commit();
+    // Asegurar que los ingredientes existan en cocina_stock (las recetas jalan del stock)
+    if (ingredientes && ingredientes.length) {
+      await Promise.all(ingredientes.map(ing => ensureIngredienteCocinaStock(ing.ingrediente, ing.unidad)));
+    }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+async function ensureIngredienteCocinaStock(ingrediente, unidad) {
+  const nombre = String(ingrediente || '').trim();
+  if (!nombre) return;
+  const key = nombre.toUpperCase();
+  const snap = await col('cocina_stock').get();
+  let found = null;
+  snap.docs.forEach(d => { if (String(d.data().ingrediente || '').toUpperCase() === key) found = d; });
+  if (found) return;
+  const all = await col('cocina_stock').get();
+  const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
+  await col('cocina_stock').doc(String(nextId)).set({
+    id: nextId, ingrediente: nombre, cantidad: 0, unidad: normalizeUnit(unidad),
+    familia: 'SIN CLASIFICAR', created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+  });
+}
+
 
 // --- BARRA PRECIOS ---
 app.get('/api/barra/precios', async (req, res) => {
