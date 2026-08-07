@@ -3521,7 +3521,8 @@ function cargarPestanas() {
       CATEGORIAS_COSTOS[p.id] = {
         tipo: p.tipo, titulos: p.titulos || [], campoSub: p.campoSub, campoTexto: p.campoTexto,
         colLabel: p.colLabel, phTexto: p.phTexto, editableTitulos: p.editableTitulos !== false,
-        label: p.label, titulosDoc: p.titulosDoc, grupos: p.grupos || null, fechaGlobal: p.fechaGlobal === true
+        label: p.label, titulosDoc: p.titulosDoc, grupos: p.grupos || null, fechaGlobal: p.fechaGlobal === true,
+        gastosFijos: p.gastosFijosOrigen ? { origen: p.gastosFijosOrigen } : null
       };
     });
     renderizarPestanas(pestanas);
@@ -3634,7 +3635,16 @@ function cargarCostoCategoria(prefix) {
 
 function renderCostoCategoria(prefix, container) {
   const cfg = CATEGORIAS_COSTOS[prefix];
-  api('GET', '/api/costos?tipo=' + cfg.tipo).then(list => {
+  let gfConfig = null;
+  if (cfg.gastosFijos && cfg.gastosFijos.origen) {
+    const origen = CATEGORIAS_COSTOS[cfg.gastosFijos.origen];
+    if (origen && origen.grupos && origen.grupos.length) gfConfig = { grupos: origen.grupos };
+  }
+  const mes = document.getElementById('mes-pestana-' + prefix)?.value || todayStr().slice(0, 7);
+  const peticiones = [api('GET', '/api/costos?tipo=' + cfg.tipo)];
+  if (gfConfig) gfConfig.grupos.forEach(g => peticiones.push(api('GET', '/api/costos?tipo=' + g.tipo + '&mes=' + mes)));
+  Promise.all(peticiones).then(resultados => {
+    const list = resultados[0];
     const groups = {};
     cfg.titulos.forEach(t => { groups[t] = []; });
     groups['OTROS'] = [];
@@ -3646,12 +3656,37 @@ function renderCostoCategoria(prefix, container) {
       }
       groups[key].push(c);
     });
-    const totalGeneral = list.reduce((s, r) => s + (r.monto || 0), 0);
-    let html = `<div class="autosuma-box" id="autosuma-${prefix}" data-base="${totalGeneral}">
+    let gfTotal = 0;
+    let gfHtml = '';
+    if (gfConfig) {
+      const built = buildCostoGruposHTML(gfConfig.grupos, resultados.slice(1), prefix, true);
+      gfHtml = built.html;
+      gfTotal = built.totalGeneral;
+    }
+    const totalGeneral = list.reduce((s, r) => s + (r.monto || 0), 0) + gfTotal;
+    let html = '';
+    if (gfConfig) {
+      html += `<div class="costos-fecha-row">
+        <label>MES</label>
+        <input type="month" id="mes-pestana-${prefix}" value="${mes}" onchange="cargarCostoCategoria('${prefix}')">
+      </div>
+      <div style="font-size:0.75rem;color:#888;margin:-0.25rem 0 0.75rem 0;">Los montos se acumulan durante el mes y se reinician a S/ 0 el 1ro del mes siguiente.</div>`;
+    }
+    html += `<div class="autosuma-box" id="autosuma-${prefix}" data-base="${totalGeneral}">
       <span class="autosuma-label">TOTAL</span>
       <span class="autosuma-monto">S/ ${totalGeneral.toFixed(2)}</span>
     </div>`;
     cfg.titulos.forEach((t, idx) => {
+      if (gfConfig && String(t).toUpperCase() === 'GASTOS FIJOS') {
+        html += `<div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAcordeon(this)">
+            <span class="accordion-title">${t} <span style="font-weight:400;font-size:0.85rem;color:#777;">— TOTAL: S/ ${gfTotal.toFixed(2)}</span></span>
+            <span class="accordion-arrow">▶</span>
+          </div>
+          <div class="accordion-body">${gfHtml}</div>
+        </div>`;
+        return;
+      }
       const records = groups[t].sort((a, b) => String(a.fecha || '').localeCompare(String(b.fecha || '')));
       const total = records.reduce((sum, r) => sum + (r.monto || 0), 0);
       const rows = records.map(r => {
@@ -3794,70 +3829,79 @@ function renderCostoGruposGlobal(prefix, container, cfg, grupos) {
 function renderCostoGruposPorCampo(prefix, container, cfg, grupos) {
   const mes = document.getElementById('mes-pestana-' + prefix)?.value || todayStr().slice(0, 7);
   Promise.all(grupos.map(g => api('GET', '/api/costos?tipo=' + g.tipo + '&mes=' + mes))).then(lists => {
-    let totalGeneral = 0;
-    let html = '';
-    grupos.forEach((g, gi) => {
-      const list = lists[gi] || [];
-      const groups = {};
-      g.titulos.forEach(t => { groups[t] = []; });
-      groups['OTROS'] = [];
-      let subTotal = 0;
-      list.forEach(c => {
-        subTotal += c.monto || 0;
-        let key = (c[g.campoSub] || '').toUpperCase();
-        if (!groups[key]) {
-          const up = (c.concepto || '').toUpperCase();
-          key = g.titulos.find(t => up.includes(t)) || 'OTROS';
-        }
-        groups[key].push(c);
-      });
-      totalGeneral += subTotal;
-      html += `<div class="grupo-header"><span>${g.label}</span><span class="grupo-subtotal">S/ ${subTotal.toFixed(2)}</span></div>`;
-      g.titulos.forEach((t, idx) => {
-        const records = groups[t].sort((a, b) => String(a.fecha || '').localeCompare(String(b.fecha || '')));
-        const total = records.reduce((s, r) => s + (r.monto || 0), 0);
-        const rows = records.map(r => {
-          const u = DISPLAY_NAMES[r.saved_by] || r.saved_by || '-';
-          return `<tr>
-            <td>${r[g.campoTexto] || r.concepto || '-'}</td>
-            <td>${r.fecha || '-'}</td>
-            <td>S/ ${(r.monto || 0).toFixed(2)}</td>
-            <td>${u}</td>
-            <td><button class="danger" onclick="eliminarCostoCategoriaGrupo('${prefix}', ${gi}, '${r.id}')">✕</button></td>
-          </tr>`;
-        }).join('');
-        html += `<div class="accordion-item">
-          <div class="accordion-header" onclick="toggleAcordeon(this)">
-            <span class="accordion-title">${t} <span style="font-weight:400;font-size:0.85rem;color:#777;">— TOTAL: S/ ${total.toFixed(2)}</span></span>
-            <span class="accordion-arrow">▶</span>
-          </div>
-          <div class="accordion-body">
-            <div class="table-wrap"><table>
-              <thead><tr><th>${g.colLabel}</th><th>Fecha</th><th>Monto</th><th>Usuario</th><th></th></tr></thead>
-              <tbody>${rows || '<tr><td colspan="5">Sin registros.</td></tr>'}</tbody>
-            </table></div>
-            <div style="margin-top:0.75rem;padding:0.75rem;background:#f9f9f9;border-radius:8px;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-              <input type="text" id="nuevo-${prefix}-g${gi}-texto-${idx}" placeholder="${g.phTexto}" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:160px;">
-              <label>Fecha: <input type="date" id="nuevo-${prefix}-g${gi}-fecha-${idx}" value="${todayStr()}" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></label>
-              <input type="number" id="nuevo-${prefix}-g${gi}-monto-${idx}" placeholder="Monto (S/)" step="0.01" min="0" oninput="actualizarAutosuma('${prefix}')" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;width:120px;">
-              <button class="btn-guardar-dia" onclick="guardarCostoGrupo('${prefix}', ${gi}, ${idx})">AGREGAR</button>
-            </div>
-          </div>
-        </div>`;
-      });
-      if (groups['OTROS'].length) html += `<p style="color:#c62828;margin-top:0.5rem;">Nota: ${groups['OTROS'].length} registro(s) sin clasificar en ${g.label}.</p>`;
-    });
-    const box = `<div class="autosuma-box" id="autosuma-${prefix}" data-base="${totalGeneral}">
+    const built = buildCostoGruposHTML(grupos, lists, prefix, false);
+    const box = `<div class="autosuma-box" id="autosuma-${prefix}" data-base="${built.totalGeneral}">
       <span class="autosuma-label">TOTAL</span>
-      <span class="autosuma-monto">S/ ${totalGeneral.toFixed(2)}</span>
+      <span class="autosuma-monto">S/ ${built.totalGeneral.toFixed(2)}</span>
     </div>`;
     const top = `<div class="costos-fecha-row">
       <label>MES</label>
       <input type="month" id="mes-pestana-${prefix}" value="${mes}" onchange="cargarCostoCategoria('${prefix}')">
     </div>
     <div style="font-size:0.75rem;color:#888;margin:-0.25rem 0 0.75rem 0;">Los montos se acumulan durante el mes y se reinician a S/ 0 el 1ro del mes siguiente.</div>`;
-    container.innerHTML = top + box + html;
+    container.innerHTML = top + box + built.html;
   }).catch(e => { console.error(e); container.innerHTML = '<p>Error al cargar.</p>'; });
+}
+
+// Renderiza los grupos de una pestaña (readonly = solo vista, sin agregar ni eliminar)
+function buildCostoGruposHTML(grupos, lists, prefix, readonly) {
+  let totalGeneral = 0;
+  let html = '';
+  grupos.forEach((g, gi) => {
+    const list = lists[gi] || [];
+    const groups = {};
+    g.titulos.forEach(t => { groups[t] = []; });
+    groups['OTROS'] = [];
+    let subTotal = 0;
+    list.forEach(c => {
+      subTotal += c.monto || 0;
+      let key = (c[g.campoSub] || '').toUpperCase();
+      if (!groups[key]) {
+        const up = (c.concepto || '').toUpperCase();
+        key = g.titulos.find(t => up.includes(t)) || 'OTROS';
+      }
+      groups[key].push(c);
+    });
+    totalGeneral += subTotal;
+    html += `<div class="grupo-header"><span>${g.label}</span><span class="grupo-subtotal">S/ ${subTotal.toFixed(2)}</span></div>`;
+    g.titulos.forEach((t, idx) => {
+      const records = groups[t].sort((a, b) => String(a.fecha || '').localeCompare(String(b.fecha || '')));
+      const total = records.reduce((s, r) => s + (r.monto || 0), 0);
+      const rows = records.map(r => {
+        const u = DISPLAY_NAMES[r.saved_by] || r.saved_by || '-';
+        const colAccion = readonly ? '' : `<td><button class="danger" onclick="eliminarCostoCategoriaGrupo('${prefix}', ${gi}, '${r.id}')">✕</button></td>`;
+        return `<tr>
+          <td>${r[g.campoTexto] || r.concepto || '-'}</td>
+          <td>${r.fecha || '-'}</td>
+          <td>S/ ${(r.monto || 0).toFixed(2)}</td>
+          <td>${u}</td>
+          ${colAccion}
+        </tr>`;
+      }).join('');
+      const colspan = readonly ? 4 : 5;
+      const form = readonly ? '' : `<div style="margin-top:0.75rem;padding:0.75rem;background:#f9f9f9;border-radius:8px;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+        <input type="text" id="nuevo-${prefix}-g${gi}-texto-${idx}" placeholder="${g.phTexto}" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:160px;">
+        <label>Fecha: <input type="date" id="nuevo-${prefix}-g${gi}-fecha-${idx}" value="${todayStr()}" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></label>
+        <input type="number" id="nuevo-${prefix}-g${gi}-monto-${idx}" placeholder="Monto (S/)" step="0.01" min="0" oninput="actualizarAutosuma('${prefix}')" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;width:120px;">
+        <button class="btn-guardar-dia" onclick="guardarCostoGrupo('${prefix}', ${gi}, ${idx})">AGREGAR</button>
+      </div>`;
+      html += `<div class="accordion-item">
+        <div class="accordion-header" onclick="toggleAcordeon(this)">
+          <span class="accordion-title">${t} <span style="font-weight:400;font-size:0.85rem;color:#777;">— TOTAL: S/ ${total.toFixed(2)}</span></span>
+          <span class="accordion-arrow">▶</span>
+        </div>
+        <div class="accordion-body">
+          <div class="table-wrap"><table>
+            <thead><tr><th>${g.colLabel}</th><th>Fecha</th><th>Monto</th><th>Usuario</th>${readonly ? '' : '<th></th>'}</tr></thead>
+            <tbody>${rows || `<tr><td colspan="${colspan}">Sin registros.</td></tr>`}</tbody>
+          </table></div>
+          ${form}
+        </div>
+      </div>`;
+    });
+    if (groups['OTROS'].length) html += `<p style="color:#c62828;margin-top:0.5rem;">Nota: ${groups['OTROS'].length} registro(s) sin clasificar en ${g.label}.</p>`;
+  });
+  return { html, totalGeneral };
 }
 
 function guardarCostoGrupo(prefix, gi, idx) {
