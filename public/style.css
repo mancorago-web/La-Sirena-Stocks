@@ -498,10 +498,9 @@ td button.danger { border-color: #c62828; color: #c62828; }
 
 /* Override inline width on mobile for controls */
 @media (max-width: 768px) {
-  #buscar-receta, #buscar-stock-barra, #buscar-precios,
+  #buscar-receta, #buscar-stock-barra, #buscar-precios, #buscar-cocina-stock,
   #nuevo-stock-input, #nuevo-stock-cant, #nuevo-stock-uni,
   #nuevo-precio-input, #nuevo-precio-precio,
-  #nuevo-cocina-stock-input, #nuevo-cocina-stock-cant, #nuevo-cocina-stock-uni, #nuevo-cocina-stock-familia,
   #nuevo-cocina-precio-input, #nuevo-cocina-precio-precio {
     width: 100% !important;
   }

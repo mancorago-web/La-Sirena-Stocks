@@ -1273,6 +1273,32 @@ function showModal(tipo, data) {
         <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
       </div>
     `;
+  } else if (tipo === 'item-cocina') {
+    const uniOpts = UNIDADES_STOCK.map(u => `<option value="${u}">${u}</option>`).join('');
+    const famOpts = FAMILIAS_COCINA.map(f => `<option value="${f}" ${((data.familia || '').toUpperCase() === f) ? 'selected' : ''}>${f}</option>`).join('');
+    body.innerHTML = `
+      <h3>Agregar Item de Cocina</h3>
+      <label style="display:block;margin-top:1rem;">
+        Nombre del Item
+        <input id="f-cocina-nombre" placeholder="Ej: Tomate" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Cantidad
+        <input type="number" id="f-cocina-cantidad" step="0.01" min="0" value="0" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Unidad
+        <select id="f-cocina-unidad" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">${uniOpts}</select>
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Familia
+        <select id="f-cocina-familia" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">${famOpts}</select>
+      </label>
+      <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+        <button onclick="guardarNuevoItemCocina()" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+        <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
+      </div>
+    `;
   } else if (tipo === 'editar-cocina-stock') {
     const uniOpts = UNIDADES_STOCK.map(u => `<option value="${u}" ${data.unidad === u ? 'selected' : ''}>${u}</option>`).join('');
     const famOpts = FAMILIAS_COCINA.map(f => `<option value="${f}" ${data.familia === f ? 'selected' : ''}>${f}</option>`).join('');
@@ -2438,11 +2464,6 @@ function cargarStockCocina() {
     const container = document.getElementById('cocina-stock-container');
     if (!container) return;
     const gruposArr = grupos || [];
-    const todos = gruposArr.reduce((acc, g) => acc.concat(g.items || []), []);
-    if (!todos.length) {
-      container.innerHTML = '<p>No hay ingredientes en stock de cocina. Agrega uno nuevo.</p>';
-      return;
-    }
     const byFam = {};
     FAMILIAS_COCINA.forEach(f => { byFam[f] = []; });
     byFam['SIN CLASIFICAR'] = [];
@@ -2467,8 +2488,7 @@ function cargarStockCocina() {
         </td>
       </tr>`;
     }
-    container.innerHTML = FAMILIAS_COCINA.map(f => {
-      const items = byFam[f];
+    function familiaAccordion(f, items, extraClass) {
       return `
         <div class="accordion-item">
           <div class="accordion-header" onclick="toggleAcordeon(this)">
@@ -2480,21 +2500,12 @@ function cargarStockCocina() {
               <thead><tr><th>Item</th><th>Apertura</th><th>Ingreso</th><th>Salida</th><th>Ventas</th><th>Falta</th><th>Cierre</th><th></th></tr></thead>
               <tbody>${items.map(fila).join('') || '<tr><td colspan="8">Vacío.</td></tr>'}</tbody>
             </table></div>
+            <button class="btn-agregar-item" onclick="agregarItemCocina('${f}')">+ Agregar Item</button>
           </div>
         </div>`;
-    }).join('') + (byFam['SIN CLASIFICAR'].length ? `
-        <div class="accordion-item">
-          <div class="accordion-header" onclick="toggleAcordeon(this)">
-            <span class="accordion-title">SIN CLASIFICAR <span style="font-weight:400;font-size:0.85rem;color:#c62828;">— ${byFam['SIN CLASIFICAR'].length} item(s) sin familia</span></span>
-            <span class="accordion-arrow">▶</span>
-          </div>
-          <div class="accordion-body">
-            <div class="table-wrap"><table>
-              <thead><tr><th>Item</th><th>Apertura</th><th>Ingreso</th><th>Salida</th><th>Ventas</th><th>Falta</th><th>Cierre</th><th></th></tr></thead>
-              <tbody>${byFam['SIN CLASIFICAR'].map(fila).join('')}</tbody>
-            </table></div>
-          </div>
-        </div>` : '');
+    }
+    container.innerHTML = FAMILIAS_COCINA.map(f => familiaAccordion(f, byFam[f])).join('') +
+      (byFam['SIN CLASIFICAR'].length ? familiaAccordion('SIN CLASIFICAR', byFam['SIN CLASIFICAR'], 'c62828') : '');
     container.querySelectorAll('tr[data-cocina-id]').forEach(tr => calcCierre(tr.querySelector('.input-apertura')));
   }).catch(e => console.error(e));
 }
@@ -2521,15 +2532,19 @@ function guardarCocinaDia() {
   }).catch(() => alert('Error al guardar'));
 }
 
-function agregarStockCocina() {
-  const ingrediente = document.getElementById('nuevo-cocina-stock-input').value.trim();
-  const cantidad = parseFloat(document.getElementById('nuevo-cocina-stock-cant').value) || 0;
-  const unidad = document.getElementById('nuevo-cocina-stock-uni').value;
-  const familia = document.getElementById('nuevo-cocina-stock-familia').value;
-  if (!ingrediente) { alert('Ingresa el nombre del ingrediente'); return; }
-  api('POST', '/api/cocina/stock', { ingrediente, cantidad, unidad: normalizeUnit(unidad), familia }).then(() => {
-    document.getElementById('nuevo-cocina-stock-input').value = '';
-    document.getElementById('nuevo-cocina-stock-cant').value = '';
+function agregarItemCocina(familia) {
+  showModal('item-cocina', { familia });
+}
+
+function guardarNuevoItemCocina() {
+  const nombre = document.getElementById('f-cocina-nombre').value.trim();
+  const cantidad = parseFloat(document.getElementById('f-cocina-cantidad').value) || 0;
+  const unidad = document.getElementById('f-cocina-unidad').value;
+  const familia = document.getElementById('f-cocina-familia').value;
+  if (!nombre) { alert('Ingresa el nombre'); return; }
+  api('POST', '/api/cocina/stock', { ingrediente: nombre, cantidad, unidad, familia }).then(() => {
+    cerrarModal();
+    showToast('Item agregado');
     cargarStockCocina();
   }).catch(() => alert('Error al agregar'));
 }
