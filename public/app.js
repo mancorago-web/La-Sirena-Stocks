@@ -2682,9 +2682,15 @@ function cargarCocinaMovimientos(tipo) {
     if (!stock.length) { container.innerHTML = '<p>No hay items en COCINA/STOCK.</p>'; return; }
     const movByIng = {};
     movs.forEach(m => { movByIng[m.ingrediente] = m; });
+    const esIngreso = tipo === 'ingresos';
+    const colOrigen = esIngreso ? '<th>Origen</th>' : '';
+    const cellOrigen = (mov) => esIngreso ? `<td><select class="select-origen-cocina" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">
+      <option value="proveedor" ${mov.origen==='proveedor'?'selected':''}>PROVEEDOR</option>
+      <option value="stocks" ${mov.origen==='stocks'?'selected':''}>STOCKS</option>
+    </select></td>` : '';
     container.innerHTML = `
       <div class="table-wrap"><table>
-        <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th></tr></thead>
+        <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th>${colOrigen}</tr></thead>
         <tbody>
           ${stock.map(s => {
             const mov = movByIng[s.ingrediente] || {};
@@ -2692,6 +2698,7 @@ function cargarCocinaMovimientos(tipo) {
               <td>${esc(s.ingrediente)}</td>
               <td><input type="number" class="input-cocina-mov" value="${mov.cantidad || ''}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
               <td>${esc(s.unidad || 'unidad')}</td>
+              ${cellOrigen(mov)}
             </tr>`;
           }).join('')}
         </tbody>
@@ -2719,7 +2726,11 @@ function guardarCocinaMovimientos(tipo) {
   } else {
     document.querySelectorAll('#accordion-cocina-' + tipo + ' tr[data-ing]').forEach(tr => {
       const cant = parseFloat(tr.querySelector('.input-cocina-mov').value) || 0;
-      if (cant > 0) items.push({ ingrediente: tr.dataset.ing, cantidad: cant, unidad: tr.dataset.uni || 'unidad' });
+      if (cant > 0) {
+        const item = { ingrediente: tr.dataset.ing, cantidad: cant, unidad: tr.dataset.uni || 'unidad' };
+        if (tipo === 'ingresos') item.origen = tr.querySelector('.select-origen-cocina')?.value || 'proveedor';
+        items.push(item);
+      }
     });
     if (!items.length) { alert('Ingresa cantidades para guardar'); return; }
   }
@@ -2765,11 +2776,13 @@ function verDetallesCocina(tipo) {
     if (tipo === 'ventas') movs = movs.filter(m => m.es_receta !== false);
     if (!movs.length) { html += '<p>No hay movimientos registrados en esta fecha.</p>'; }
     else {
-      html += '<div class="table-wrap"><table><thead><tr><th>Receta</th><th>Cantidad</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
+      const colOrigen = tipo === 'ingresos' ? '<th>Origen</th>' : '';
+      html += '<div class="table-wrap"><table><thead><tr><th>Receta</th><th>Cantidad</th>' + colOrigen + '<th>Usuario</th><th>Hora</th></tr></thead><tbody>';
       movs.forEach(m => {
         const t = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
         const u = DISPLAY_NAMES[m.saved_by] || m.saved_by || '-';
-        html += '<tr><td>' + esc(m.ingrediente) + '</td><td>' + (m.cantidad || 0) + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
+        const origen = tipo === 'ingresos' ? '<td>' + ((m.origen || '').toUpperCase() || '—') + '</td>' : '';
+        html += '<tr><td>' + esc(m.ingrediente) + '</td><td>' + (m.cantidad || 0) + '</td>' + origen + '<td>' + u + '</td><td>' + t + '</td></tr>';
       });
       html += '</tbody></table></div>';
     }
@@ -3814,9 +3827,15 @@ function cargarBarraMovimientos(tipo) {
       movs.forEach(m => { movByIng[m.ingrediente] = m; });
       const container = document.getElementById(accId);
       if (!precios.length) { container.innerHTML = '<p>No hay items en BASE DE DATOS.</p>'; return; }
+      const esIngreso = tipo === 'ingresos';
+      const colOrigen = esIngreso ? '<th>Origen</th>' : '';
+      const cellOrigen = (mov) => esIngreso ? `<td><select class="select-origen-ingreso" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">
+        <option value="proveedor" ${mov.origen==='proveedor'?'selected':''}>PROVEEDOR</option>
+        <option value="stocks" ${mov.origen==='stocks'?'selected':''}>STOCKS</option>
+      </select></td>` : '';
       container.innerHTML = `
         <div class="table-wrap"><table>
-          <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th></tr></thead>
+          <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th>${colOrigen}</tr></thead>
           <tbody>
             ${precios.map(p => {
               const mov = movByIng[p.ingrediente] || {};
@@ -3825,6 +3844,7 @@ function cargarBarraMovimientos(tipo) {
                 <td>${p.ingrediente}</td>
                 <td><input type="number" class="input-barra-mov" value="${mov.cantidad || ''}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
                 <td>${uc}</td>
+                ${cellOrigen(mov)}
               </tr>`;
             }).join('')}
           </tbody>
@@ -3873,7 +3893,9 @@ function guardarBarraMovimientos(tipo) {
     document.querySelectorAll('#accordion-barra-' + tipo + ' tr[data-ing]').forEach(tr => {
       const cant = parseFloat(tr.querySelector('.input-barra-mov').value) || 0;
       if (cant > 0) {
-        items.push({ ingrediente: tr.dataset.ing, cantidad: cant, unidad: tr.dataset.uniCompra || 'unidad' });
+        const item = { ingrediente: tr.dataset.ing, cantidad: cant, unidad: tr.dataset.uniCompra || 'unidad' };
+        if (tipo === 'ingresos') item.origen = tr.querySelector('.select-origen-ingreso')?.value || 'proveedor';
+        items.push(item);
       }
     });
     api('POST', '/api/barra/movimientos', { fecha, tipo, items }).then(() => {
@@ -3906,11 +3928,13 @@ function verDetallesBarra(tipo) {
     } else {
       if (!movs.length) { html += '<p>No hay movimientos registrados en esta fecha.</p>'; }
       else {
-        html += '<table><thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
+        const colOrigen = tipo === 'ingresos' ? '<th>Origen</th>' : '';
+        html += '<table><thead><tr><th>Ingrediente</th><th>Cantidad</th>' + colOrigen + '<th>Usuario</th><th>Hora</th></tr></thead><tbody>';
         movs.forEach(m => {
           const t = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
           const u = DISPLAY_NAMES[m.saved_by] || m.saved_by || '-';
-          html += '<tr><td>' + m.ingrediente + '</td><td>' + (m.cantidad || 0) + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
+          const origen = tipo === 'ingresos' ? '<td>' + ((m.origen || '').toUpperCase() || '—') + '</td>' : '';
+          html += '<tr><td>' + m.ingrediente + '</td><td>' + (m.cantidad || 0) + '</td>' + origen + '<td>' + u + '</td><td>' + t + '</td></tr>';
         });
         html += '</tbody></table>';
       }

@@ -1989,6 +1989,7 @@ app.post('/api/cocina/movimientos', authMiddleware, async (req, res) => {
       };
       if (item.es_receta !== undefined) doc.es_receta = item.es_receta;
       if (item.receta) doc.receta = item.receta;
+      if (item.origen) doc.origen = String(item.origen);
       batch.set(ref, doc);
     }
     await batch.commit();
@@ -2452,6 +2453,7 @@ app.post('/api/barra/movimientos', authMiddleware, async (req, res) => {
       };
       if (item.es_receta !== undefined) doc.es_receta = item.es_receta;
       if (item.receta) doc.receta = item.receta;
+      if (item.origen) doc.origen = String(item.origen);
       batch.set(ref, doc);
     }
     await batch.commit();
