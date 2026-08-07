@@ -350,13 +350,21 @@
             <input type="number" id="nuevo-cocina-stock-cant" placeholder="Cantidad" step="0.01" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:100px;">
             <select id="nuevo-cocina-stock-uni" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
               <option value="unidad">unidad</option>
-              <option value="onzas">onzas</option>
-              <option value="gramos">gramos</option>
               <option value="kg">kg</option>
+              <option value="gramos">gramos</option>
               <option value="lt">lt</option>
               <option value="ml">ml</option>
+              <option value="onzas">onzas</option>
             </select>
-            <button class="btn-guardar-dia" onclick="alert('Próximamente')">➕ AGREGAR</button>
+            <select id="nuevo-cocina-stock-familia" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;font-weight:700;color:#1a237e;">
+              <option value="FRUTAS">Frutas</option>
+              <option value="VERDURAS">Verduras</option>
+              <option value="CARNE">Carne</option>
+              <option value="PESCADO">Pescado</option>
+              <option value="POLLO">Pollo</option>
+            </select>
+            <button class="btn-guardar-dia" onclick="agregarStockCocina()">➕ AGREGAR</button>
+            <button class="btn-guardar-dia" id="btn-guardar-cocina-stock" onclick="guardarStockCocina()">💾 GUARDAR</button>
           </div>
         </div>
         <div id="cocina-stock-container"><p>Sin stock aún.</p></div>
@@ -470,6 +478,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=36"></script>
+  <script src="/app.js?v=37"></script>
 </body>
 </html>

@@ -1748,6 +1748,49 @@ app.delete('/api/barra/stock/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// --- COCINA: Stock con familias ---
+app.get('/api/cocina/stock', async (req, res) => {
+  try {
+    const snap = await col('cocina_stock').orderBy('id').get();
+    res.json(snap.docs.map(d => ({ id: Number(d.id), ...d.data() })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/cocina/stock', async (req, res) => {
+  try {
+    const { ingrediente, cantidad, unidad, familia } = req.body;
+    if (!ingrediente) return res.status(400).json({ error: 'Nombre requerido' });
+    const all = await col('cocina_stock').get();
+    const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
+    await col('cocina_stock').doc(String(nextId)).set({
+      id: nextId, ingrediente: String(ingrediente).trim(), cantidad: parseFloat(cantidad) || 0,
+      unidad: normalizeUnit(unidad), familia: String(familia || '').toUpperCase(),
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+    });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/cocina/stock/:id', async (req, res) => {
+  try {
+    const { cantidad, ingrediente, unidad, familia } = req.body;
+    const upd = { updated_at: new Date().toISOString() };
+    if (cantidad !== undefined) upd.cantidad = parseFloat(cantidad) || 0;
+    if (ingrediente) upd.ingrediente = String(ingrediente).trim();
+    if (unidad) upd.unidad = normalizeUnit(unidad);
+    if (familia !== undefined) upd.familia = String(familia || '').toUpperCase();
+    await col('cocina_stock').doc(req.params.id).update(upd);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/cocina/stock/:id', async (req, res) => {
+  try {
+    await col('cocina_stock').doc(req.params.id).delete();
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- BARRA PRECIOS ---
 app.get('/api/barra/precios', async (req, res) => {
   const snap = await col('barra_precios').orderBy('ingrediente').get();
