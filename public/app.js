@@ -2771,9 +2771,17 @@ function cargarBarraMovimientos(tipo) {
       html += '<div id="items-salientes-section"><h3 style="margin:1rem 0 0.5rem 0;">ITEMS SALIENTES</h3>';
       const ingSaved = movs.filter(m => m.es_receta === false);
       if (ingSaved.length) {
-        html += '<div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th>Cantidad Consumida</th><th>Unidad</th></tr></thead><tbody>';
+        const agg = {};
+        const units = {};
         ingSaved.forEach(m => {
-          html += `<tr><td>${m.ingrediente}</td><td>${m.cantidad || 0}</td><td>${m.unidad || 'unidad'}</td></tr>`;
+          const key = String(m.ingrediente || '').trim().toUpperCase().replace(/\s+/g, ' ');
+          agg[key] = (agg[key] || 0) + (parseFloat(m.cantidad) || 0);
+          if (!units[key] || units[key] === 'unidad') units[key] = m.unidad || 'unidad';
+        });
+        const keys = Object.keys(agg).sort();
+        html += '<div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th>Cantidad Consumida</th><th>Unidad</th></tr></thead><tbody>';
+        keys.forEach(key => {
+          html += `<tr><td>${key}</td><td>${(agg[key] || 0).toFixed(2)}</td><td>${units[key] || 'unidad'}</td></tr>`;
         });
         html += '</tbody></table></div>';
       } else {
@@ -2908,7 +2916,7 @@ function calcularItemsSalientes() {
     if (qty > 0) {
       const ingredientes = JSON.parse(tr.dataset.ingredientes || '[]');
       ingredientes.forEach(ing => {
-        const name = ing.ingrediente;
+        const name = String(ing.ingrediente || '').trim().toUpperCase().replace(/\s+/g, ' ');
         const cant = (ing.cantidad || 0) * qty;
         totals[name] = (totals[name] || 0) + cant;
         units[name] = ing.unidad || 'unidad';
