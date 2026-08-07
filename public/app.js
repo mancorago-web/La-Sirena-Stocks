@@ -2771,12 +2771,17 @@ function cargarBarraMovimientos(tipo) {
       html += '<div id="items-salientes-section"><h3 style="margin:1rem 0 0.5rem 0;">ITEMS SALIENTES</h3>';
       const ingSaved = movs.filter(m => m.es_receta === false);
       if (ingSaved.length) {
+        const unitMap = {};
+        recetas.forEach(r => (r.ingredientes || []).forEach(i => {
+          const k = String(i.ingrediente || '').trim().toUpperCase().replace(/\s+/g, ' ');
+          if (k && !unitMap[k]) unitMap[k] = i.unidad || 'unidad';
+        }));
         const agg = {};
         const units = {};
         ingSaved.forEach(m => {
           const key = String(m.ingrediente || '').trim().toUpperCase().replace(/\s+/g, ' ');
           agg[key] = (agg[key] || 0) + (parseFloat(m.cantidad) || 0);
-          if (!units[key] || units[key] === 'unidad') units[key] = m.unidad || 'unidad';
+          units[key] = unitMap[key] || m.unidad || 'unidad';
         });
         const keys = Object.keys(agg).sort();
         html += '<div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th>Cantidad Consumida</th><th>Unidad</th></tr></thead><tbody>';
