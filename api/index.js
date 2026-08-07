@@ -1770,6 +1770,7 @@ app.post('/api/cocina/stock', async (req, res) => {
       unidad: normalizeUnit(unidad), familia: String(familia || '').toUpperCase(),
       created_at: new Date().toISOString(), updated_at: new Date().toISOString()
     });
+    await ensureIngredienteCocinaPrecios(ingrediente, unidad);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -2156,14 +2157,77 @@ async function ensureIngredienteCocinaStock(ingrediente, unidad) {
   const snap = await col('cocina_stock').get();
   let found = null;
   snap.docs.forEach(d => { if (String(d.data().ingrediente || '').toUpperCase() === key) found = d; });
+  if (!found) {
+    const all = await col('cocina_stock').get();
+    const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
+    await col('cocina_stock').doc(String(nextId)).set({
+      id: nextId, ingrediente: nombre, cantidad: 0, unidad: normalizeUnit(unidad),
+      familia: 'SIN CLASIFICAR', created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+    });
+  }
+  await ensureIngredienteCocinaPrecios(ingrediente, unidad);
+}
+
+async function ensureIngredienteCocinaPrecios(ingrediente, unidad) {
+  const nombre = String(ingrediente || '').trim();
+  if (!nombre) return;
+  const key = nombre.toUpperCase();
+  const snap = await col('cocina_precios').get();
+  let found = null;
+  snap.docs.forEach(d => { if (String(d.data().ingrediente || '').toUpperCase() === key) found = d; });
   if (found) return;
-  const all = await col('cocina_stock').get();
+  const all = await col('cocina_precios').get();
   const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
-  await col('cocina_stock').doc(String(nextId)).set({
-    id: nextId, ingrediente: nombre, cantidad: 0, unidad: normalizeUnit(unidad),
-    familia: 'SIN CLASIFICAR', created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+  await col('cocina_precios').doc(String(nextId)).set({
+    id: nextId, ingrediente: nombre, precio: 0, unidad: normalizeUnit(unidad),
+    precio_compra: 0, unidad_compra: '', created_at: new Date().toISOString(), updated_at: new Date().toISOString()
   });
 }
+
+// --- COCINA: Base de Datos (precios) ---
+app.get('/api/cocina/precios', async (req, res) => {
+  try {
+    const snap = await col('cocina_precios').orderBy('ingrediente').get();
+    res.json(snap.docs.map(d => ({ id: Number(d.id), ...d.data() })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/cocina/precios', async (req, res) => {
+  try {
+    const { ingrediente, precio, unidad, precio_compra, unidad_compra } = req.body;
+    if (!ingrediente) return res.status(400).json({ error: 'Nombre requerido' });
+    const all = await col('cocina_precios').get();
+    const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
+    await col('cocina_precios').doc(String(nextId)).set({
+      id: nextId, ingrediente: String(ingrediente).trim(), precio: parseFloat(precio) || 0, unidad: normalizeUnit(unidad),
+      precio_compra: parseFloat(precio_compra) || 0, unidad_compra: String(unidad_compra || ''),
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+    });
+    await ensureIngredienteCocinaStock(ingrediente, unidad);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/cocina/precios/:id', async (req, res) => {
+  try {
+    const { precio, precio_compra, unidad_compra, ingrediente, unidad } = req.body;
+    const upd = { updated_at: new Date().toISOString() };
+    if (precio !== undefined) upd.precio = parseFloat(precio) || 0;
+    if (precio_compra !== undefined) upd.precio_compra = parseFloat(precio_compra) || 0;
+    if (unidad_compra !== undefined) upd.unidad_compra = String(unidad_compra || '');
+    if (ingrediente !== undefined) upd.ingrediente = String(ingrediente).trim();
+    if (unidad !== undefined) upd.unidad = normalizeUnit(unidad);
+    await col('cocina_precios').doc(req.params.id).update(upd);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/cocina/precios/:id', async (req, res) => {
+  try {
+    await col('cocina_precios').doc(req.params.id).delete();
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 
 // --- BARRA PRECIOS ---

@@ -196,7 +196,7 @@ function irACategoria(cat) {
     if (!_loaded[cat]) {
       _loaded[cat] = true;
       if (cat === 'barra') { cargarRecetas(); cargarStockBarra(); cargarPrecios(); cargarSugerenciasStock(); }
-      if (cat === 'cocina') { cargarStockCocina(); cargarRecetasCocina(); }
+      if (cat === 'cocina') { cargarStockCocina(); cargarRecetasCocina(); cargarPreciosCocina(); }
       if (cat === 'costos') {
         cargarPestanas().then(() => {
           const firstSub = document.querySelector('#tabs-costos .sub-tab[data-subtab]');
@@ -2966,6 +2966,229 @@ function exportarRecetasCocina() {
   });
 }
 
+// --- COCINA: Base de Datos (precios) ---
+function cargarPreciosCocina() {
+  api('GET', '/api/cocina/precios').then(data => {
+    const container = document.getElementById('cocina-precios-container');
+    if (!container) return;
+    if (!data.length) {
+      container.innerHTML = '<p>No hay ingredientes en la base de datos. Agrega uno nuevo o ingresa items en COCINA/STOCK.</p>';
+      return;
+    }
+    const conPrecio = data.filter(s => parseFloat(s.precio) > 0);
+    const sinPrecio = data.filter(s => !parseFloat(s.precio));
+    function tablaItems(items) {
+      return items.map(s => `
+        <tr data-precio-id="${s.id}">
+          <td>${esc(s.ingrediente)}</td>
+          <td><select class="input-cocina-uni-compra" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${['','KILOS','GRAMOS','LITRO','ML','ONZAS','UNIDAD','BOTELLA','GALON'].map(u => `<option value="${u}" ${(s.unidad_compra||'')===u?'selected':''}>${u || '—'}</option>`).join('')}</select></td>
+          <td><input type="number" class="input-cocina-precio-compra" value="${s.precio_compra || 0}" step="0.01" style="width:90px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
+          <td style="font-size:0.85rem;color:#666;">${esc(s.unidad)}</td>
+          <td><input type="number" class="input-cocina-precio-val" value="${s.precio || 0}" step="0.01" style="width:90px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
+          <td style="white-space:nowrap">
+            <button onclick="guardarFilaPrecioCocina(this)" style="background:#2e7d32;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">GUARDAR</button>
+            <button onclick="editarPrecioCocina(${s.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">EDITAR</button>
+            <button onclick="eliminarPrecioCocina(${s.id})" title="Eliminar" style="background:#c62828;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">✕</button>
+          </td>
+        </tr>`).join('');
+    }
+    let html = '';
+    if (conPrecio.length) {
+      html += `<div class="table-wrap" style="margin-bottom:1.5rem;">
+        <table>
+          <thead><tr><th>Ingrediente</th><th>Unidad Compra</th><th>Precio Compra</th><th>Unidad</th><th>Precio</th><th></th></tr></thead>
+          <tbody>${tablaItems(conPrecio)}</tbody>
+        </table>
+      </div>`;
+    }
+    if (sinPrecio.length) {
+      html += `<div class="table-wrap">
+        <table>
+          <thead><tr><th style="color:#999;">Ingrediente</th><th style="color:#999;">Unidad Compra</th><th style="color:#999;">Precio Compra</th><th style="color:#999;">Unidad</th><th style="color:#999;">Precio</th><th></th></tr></thead>
+          <tbody>${tablaItems(sinPrecio)}</tbody>
+        </table>
+        ${conPrecio.length ? '<p style="margin-top:0.5rem;color:#999;font-size:0.85rem;">— Items sin precio —</p>' : ''}
+      </div>`;
+    }
+    container.innerHTML = html;
+    const bp = document.getElementById('buscar-precios-cocina');
+    if (bp && bp.value) buscarTablaBarra(bp.value, 'cocina-precios-container', 'tr[data-precio-id]');
+  }).catch(e => console.error(e));
+}
+
+function mostrarModalAgregarItemCocina() {
+  const body = document.getElementById('modal-body');
+  body.innerHTML = `
+    <h3>Agregar Item</h3>
+    <label style="display:block;margin-top:1rem;">
+      Ingrediente:
+      <input type="text" id="nuevo-precio-cocina-input" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+    </label>
+    <label style="display:block;margin-top:1rem;">
+      Unidad Compra:
+      <select id="nuevo-cocina-uni-compra" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+        <option value="">—</option>
+        <option value="KILOS">KILOS</option>
+        <option value="GRAMOS">GRAMOS</option>
+        <option value="LITRO">LITRO</option>
+        <option value="ML">ML</option>
+        <option value="ONZAS">ONZAS</option>
+        <option value="UNIDAD">UNIDAD</option>
+        <option value="BOTELLA">BOTELLA</option>
+        <option value="GALON">GALON</option>
+      </select>
+    </label>
+    <label style="display:block;margin-top:1rem;">
+      Precio Compra:
+      <input type="number" id="nuevo-precio-cocina-compra" step="0.01" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+    </label>
+    <label style="display:block;margin-top:1rem;">
+      Unidad (receta):
+      <select id="nuevo-precio-cocina-uni" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+        <option value="unidad">unidad</option>
+        <option value="kg">kg</option>
+        <option value="gramos">gramos</option>
+        <option value="lt">lt</option>
+        <option value="ml">ml</option>
+        <option value="onzas">onzas</option>
+      </select>
+    </label>
+    <label style="display:block;margin-top:1rem;">
+      Precio (por unidad receta):
+      <input type="number" id="nuevo-precio-cocina-precio" step="0.01" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+    </label>
+    <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+      <button onclick="agregarPrecioCocina()" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+      <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
+    </div>`;
+  document.getElementById('modal').style.display = 'block';
+}
+
+function agregarPrecioCocina() {
+  const ingrediente = document.getElementById('nuevo-precio-cocina-input').value.trim();
+  const unidad = document.getElementById('nuevo-precio-cocina-uni').value;
+  const precio = parseFloat(document.getElementById('nuevo-precio-cocina-precio').value) || 0;
+  const precio_compra = parseFloat(document.getElementById('nuevo-precio-cocina-compra').value) || 0;
+  const unidad_compra = document.getElementById('nuevo-cocina-uni-compra').value;
+  if (!ingrediente) { alert('Ingresa el nombre del ingrediente'); return; }
+  api('POST', '/api/cocina/precios', { ingrediente, unidad, precio, precio_compra, unidad_compra }).then(() => {
+    cerrarModal();
+    cargarPreciosCocina();
+  }).catch(() => alert('Error al agregar'));
+}
+
+function guardarFilaPrecioCocina(btn) {
+  const tr = btn.closest('tr');
+  const id = parseInt(tr.dataset.precioId);
+  const precio = parseFloat(tr.querySelector('.input-cocina-precio-val').value) || 0;
+  const precio_compra = parseFloat(tr.querySelector('.input-cocina-precio-compra').value) || 0;
+  const unidad_compra = tr.querySelector('.input-cocina-uni-compra').value.trim();
+  api('PUT', '/api/cocina/precios/' + id, { precio, precio_compra, unidad_compra }).then(() => {
+    showToast('✓ Guardado');
+  }).catch(() => alert('Error al guardar'));
+}
+
+function guardarPreciosBaseCocina() {
+  const btn = document.querySelector('#sub-cocina-basedatos .btn-guardar-dia');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+  const promises = [];
+  document.querySelectorAll('#cocina-precios-container tr[data-precio-id]').forEach(tr => {
+    const id = parseInt(tr.dataset.precioId);
+    const precio = parseFloat(tr.querySelector('.input-cocina-precio-val').value) || 0;
+    const precio_compra = parseFloat(tr.querySelector('.input-cocina-precio-compra').value) || 0;
+    const unidad_compra = tr.querySelector('.input-cocina-uni-compra').value.trim();
+    promises.push(api('PUT', '/api/cocina/precios/' + id, { precio, precio_compra, unidad_compra }));
+  });
+  Promise.all(promises).then(() => {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR'; }
+    showToast('Precios Guardados');
+    cargarPreciosCocina();
+  }).catch(() => {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR'; }
+    alert('Error al guardar precios');
+  });
+}
+
+function editarPrecioCocina(id) {
+  api('GET', '/api/cocina/precios').then(data => {
+    const item = data.find(d => d.id === id);
+    if (!item) { alert('Item no encontrado'); return; }
+    const body = document.getElementById('modal-body');
+    body.innerHTML = `
+      <h3>Editar Item</h3>
+      <label style="display:block;margin-top:1rem;">
+        Nombre:
+        <input type="text" id="edit-cocina-precio-nombre" value="${esc(item.ingrediente)}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Unidad Compra:
+        <select id="edit-cocina-uni-compra" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+          ${['','KILOS','GRAMOS','LITRO','ML','ONZAS','UNIDAD','BOTELLA','GALON'].map(u => `<option value="${u}" ${(item.unidad_compra||'')===u?'selected':''}>${u || '—'}</option>`).join('')}
+        </select>
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Precio Compra:
+        <input type="number" id="edit-cocina-precio-compra" value="${item.precio_compra || 0}" step="0.01" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Unidad (receta):
+        <select id="edit-cocina-precio-unidad" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+          ${['unidad','kg','gramos','lt','ml','onzas'].map(u => `<option value="${u}" ${item.unidad === u ? 'selected' : ''}>${u}</option>`).join('')}
+        </select>
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Precio (por unidad receta):
+        <input type="number" id="edit-cocina-precio-valor" value="${item.precio || 0}" step="0.01" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+        <button onclick="guardarEdicionPrecioCocina(${id})" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+        <button onclick="eliminarPrecioCocina(${id})" style="flex:1;padding:0.5rem;background:#c62828;color:#fff;border:none;border-radius:4px;cursor:pointer;">Eliminar</button>
+      </div>
+    `;
+    document.getElementById('modal').style.display = 'block';
+  });
+}
+
+function guardarEdicionPrecioCocina(id) {
+  const ingrediente = document.getElementById('edit-cocina-precio-nombre').value.trim();
+  const unidad = document.getElementById('edit-cocina-precio-unidad').value;
+  const precio = parseFloat(document.getElementById('edit-cocina-precio-valor').value) || 0;
+  const precio_compra = parseFloat(document.getElementById('edit-cocina-precio-compra').value) || 0;
+  const unidad_compra = document.getElementById('edit-cocina-uni-compra').value.trim();
+  if (!ingrediente) { alert('El nombre es requerido'); return; }
+  api('PUT', '/api/cocina/precios/' + id, { ingrediente, unidad, precio, precio_compra, unidad_compra }).then(() => {
+    cerrarModal();
+    showToast('Item actualizado');
+    cargarPreciosCocina();
+  }).catch(() => alert('Error al actualizar'));
+}
+
+function eliminarPrecioCocina(id) {
+  if (!confirm('¿Eliminar este ingrediente de la base de datos?')) return;
+  api('DELETE', '/api/cocina/precios/' + id).then(() => cargarPreciosCocina()).catch(() => alert('Error al eliminar'));
+}
+
+function exportarBaseDatosCocina() {
+  api('GET', '/api/cocina/precios').then(data => {
+    const wsData = [['Ingrediente', 'Unidad Compra', 'Precio Compra', 'Unidad', 'Precio']];
+    data.forEach(s => wsData.push([s.ingrediente, s.unidad_compra || '', s.precio_compra || 0, s.unidad || '', s.precio || 0]));
+    const libro = XLSX.utils.book_new();
+    const hoja = XLSX.utils.aoa_to_sheet(wsData);
+    XLSX.utils.book_append_sheet(libro, hoja, 'Base de Datos');
+    XLSX.writeFile(libro, 'BaseDatos_Cocina.xlsx');
+  });
+}
+
+function exportarBaseDatosSinPrecioCocina() {
+  api('GET', '/api/cocina/precios').then(data => {
+    const wsData = [['Ingrediente', 'Unidad']];
+    data.filter(s => !parseFloat(s.precio)).forEach(s => wsData.push([s.ingrediente, s.unidad || '']));
+    const libro = XLSX.utils.book_new();
+    const hoja = XLSX.utils.aoa_to_sheet(wsData);
+    XLSX.utils.book_append_sheet(libro, hoja, 'Sin Precio');
+    XLSX.writeFile(libro, 'BaseDatosSinPrecio_Cocina.xlsx');
+  });
+}
 
 // --- BARRA: Base de Datos (precios) ---
 function cargarPrecios() {

@@ -416,19 +416,14 @@
       <div id="sub-cocina-basedatos" class="sub-tab-content">
         <div class="header-actions">
           <h2>Base de Datos</h2>
-          <div class="controles-dia">
-            <input type="text" id="nuevo-cocina-precio-input" placeholder="Nuevo ingrediente..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:200px;">
-            <select id="nuevo-cocina-precio-uni" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
-              <option value="unidad">unidad</option>
-              <option value="onzas">onzas</option>
-              <option value="gramos">gramos</option>
-              <option value="kg">kg</option>
-              <option value="lt">lt</option>
-              <option value="ml">ml</option>
-            </select>
-            <input type="number" id="nuevo-cocina-precio-precio" placeholder="Precio" step="0.01" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:100px;">
-            <button class="btn-guardar-dia" onclick="alert('Próximamente')">➕ AGREGAR</button>
+          <div class="controles-dia" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+            <button onclick="mostrarModalAgregarItemCocina()">AGREGAR ITEM</button>
+            <input type="text" id="buscar-precios-cocina" placeholder="Buscar..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:200px;" oninput="buscarTablaBarra(this.value, 'cocina-precios-container', 'tr[data-precio-id]')">
+            <button class="btn-guardar-dia" onclick="guardarPreciosBaseCocina()">💾 GUARDAR</button>
+            <button class="btn-detalles" onclick="exportarBaseDatosCocina()">EXPORTAR</button>
+            <button class="btn-detalles" onclick="exportarBaseDatosSinPrecioCocina()" style="background:#b71c1c;">EXPORTAR SIN PRECIO</button>
           </div>
+          <div style="font-size:0.75rem;color:#888;margin-top:0.3rem;">Los items que ingresan en COCINA/STOCK aparecen automáticamente aquí. Agrega unidad de compra, precio, unidad (de receta) y precio.</div>
         </div>
         <div id="cocina-precios-container"><p>Sin datos aún.</p></div>
       </div>
@@ -521,6 +516,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=42"></script>
+  <script src="/app.js?v=43"></script>
 </body>
 </html>
