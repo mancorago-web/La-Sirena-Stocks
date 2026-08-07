@@ -3261,6 +3261,7 @@ function agregarVenta() {
   let almacenes;
   if (destino === 'stocks') {
     const ids = ventasAlmacenesSeleccionados();
+    if (!ids.length) { alert('Selecciona al menos un almacén de donde sale esta venta'); return; }
     almacenes = ventasAlmacenes.filter(a => ids.includes(Number(a.id))).map(a => Number(a.id));
   }
   const btn = document.getElementById('btn-agregar-venta');
