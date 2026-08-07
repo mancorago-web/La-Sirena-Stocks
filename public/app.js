@@ -1870,6 +1870,11 @@ initPicker('fecha-stock-barra');
   const el = document.getElementById(id);
   if (el) el.value = todayStr();
 });
+// Cocina: just set today's date on movement pickers (load happens lazily in cambiarSubTab)
+['fecha-cocina-ingresos','fecha-cocina-salidas','fecha-cocina-ventas'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.value = todayStr();
+});
 // Costos: set today's date on pickers (load happens lazily in cambiarSubTab)
 ['fecha-costos-planillas','fecha-costos-servicios','fecha-costos-gastos'].forEach(id => {
   const el = document.getElementById(id);
@@ -2152,6 +2157,11 @@ function cambiarSubTab(nombre, prefix) {
   if (prefix === 'barra' && ['ingresos','ventas','bajas'].includes(nombre)) {
     const key = 'barra_' + nombre;
     if (!_loaded[key]) { _loaded[key] = true; cargarBarraMovimientos(nombre); }
+  }
+  // Lazy load cocina movement tabs
+  if (prefix === 'cocina' && ['ingresos','salidas','ventas'].includes(nombre)) {
+    const key = 'cocina_' + nombre;
+    if (!_loaded[key]) { _loaded[key] = true; cargarCocinaMovimientos(nombre); }
   }
   // Lazy load costos tabs
   if (prefix === 'costos') {
@@ -2579,6 +2589,76 @@ function guardarEdicionStockCocina(id) {
 function eliminarStockCocina(id) {
   if (!confirm('¿Eliminar este ingrediente del stock de cocina?')) return;
   api('DELETE', '/api/cocina/stock/' + id).then(() => cargarStockCocina()).catch(() => alert('Error al eliminar'));
+}
+
+// --- COCINA: movimientos (ingresos, salidas, ventas) ---
+function cargarCocinaMovimientos(tipo) {
+  const fecha = document.getElementById('fecha-cocina-' + tipo)?.value || todayStr();
+  const accId = 'accordion-cocina-' + tipo;
+  Promise.all([
+    api('GET', '/api/cocina/stock'),
+    api('GET', '/api/cocina/movimientos?fecha=' + fecha + '&tipo=' + tipo)
+  ]).then(([stock, movs]) => {
+    const container = document.getElementById(accId);
+    if (!container) return;
+    if (!stock.length) { container.innerHTML = '<p>No hay items en COCINA/STOCK.</p>'; return; }
+    const movByIng = {};
+    movs.forEach(m => { movByIng[m.ingrediente] = m; });
+    container.innerHTML = `
+      <div class="table-wrap"><table>
+        <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th></tr></thead>
+        <tbody>
+          ${stock.map(s => {
+            const mov = movByIng[s.ingrediente] || {};
+            return `<tr data-ing="${esc(s.ingrediente)}" data-uni="${esc(s.unidad || 'unidad')}">
+              <td>${esc(s.ingrediente)}</td>
+              <td><input type="number" class="input-cocina-mov" value="${mov.cantidad || ''}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
+              <td>${esc(s.unidad || 'unidad')}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table></div>`;
+    const bp = document.getElementById('buscar-cocina-' + tipo);
+    if (bp && bp.value) buscarEnTabla(bp.value, accId);
+  }).catch(e => console.error(e));
+}
+
+function guardarCocinaMovimientos(tipo) {
+  const fecha = document.getElementById('fecha-cocina-' + tipo)?.value || todayStr();
+  if (!fecha) { alert('Selecciona una fecha'); return; }
+  const items = [];
+  document.querySelectorAll('#accordion-cocina-' + tipo + ' tr[data-ing]').forEach(tr => {
+    const cant = parseFloat(tr.querySelector('.input-cocina-mov').value) || 0;
+    if (cant > 0) {
+      items.push({ ingrediente: tr.dataset.ing, cantidad: cant, unidad: tr.dataset.uni || 'unidad' });
+    }
+  });
+  if (!items.length) { alert('Ingresa cantidades para guardar'); return; }
+  api('POST', '/api/cocina/movimientos', { fecha, tipo, items }).then(() => {
+    showToast(tipo === 'ingresos' ? 'Ingresos Guardados' : tipo === 'salidas' ? 'Salidas Guardadas' : 'Ventas Guardadas');
+    cargarCocinaMovimientos(tipo);
+  }).catch(e => { console.error(e); alert('Error al guardar'); });
+}
+
+function verDetallesCocina(tipo) {
+  const fecha = document.getElementById('fecha-cocina-' + tipo)?.value;
+  if (!fecha) { alert('Selecciona una fecha'); return; }
+  const label = tipo === 'ingresos' ? 'Ingresos' : tipo === 'salidas' ? 'Salidas' : 'Ventas';
+  api('GET', '/api/cocina/movimientos?fecha=' + fecha + '&tipo=' + tipo).then(movs => {
+    let html = '<h3>Detalle de ' + label + ' Cocina — ' + fecha + '</h3>';
+    if (!movs.length) { html += '<p>No hay movimientos registrados en esta fecha.</p>'; }
+    else {
+      html += '<div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
+      movs.forEach(m => {
+        const t = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
+        const u = DISPLAY_NAMES[m.saved_by] || m.saved_by || '-';
+        html += '<tr><td>' + esc(m.ingrediente) + '</td><td>' + (m.cantidad || 0) + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+    document.getElementById('modal-body').innerHTML = html;
+    document.getElementById('modal').style.display = 'block';
+  }).catch(() => alert('Error al cargar detalle'));
 }
 
 // --- BARRA: Base de Datos (precios) ---
