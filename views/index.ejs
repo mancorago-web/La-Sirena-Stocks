@@ -76,7 +76,7 @@
       <button class="tab active" data-tab="almacenes">Almacenes</button>
       <button class="tab" data-tab="stocks">Stocks</button>
       <button class="tab" data-tab="reportes">Reportes</button>
-      <button class="tab" data-tab="precios">Precios</button>
+      <button class="tab" data-tab="precios">Base de Datos</button>
     </div>
   </div>
 
@@ -204,12 +204,15 @@
 
     <div id="tab-precios" class="tab-content">
       <div class="header-actions">
-        <h2>Precios</h2>
+        <h2>Base de Datos</h2>
         <div class="controles-dia">
-          <input type="text" id="buscar-precio-item" placeholder="Buscar item..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:250px;" oninput="buscarEnTabla(this.value, 'accordion-precios')">
-          <button class="btn-guardar-dia" onclick="guardarPreciosAlmacen()">💾 GUARDAR PRECIOS</button>
-          <button class="btn-detalles" onclick="exportarPrecios()">Exportar</button>
+          <button onclick="mostrarModalAgregarItemStocks()">AGREGAR ITEM</button>
+          <input type="text" id="buscar-precio-item" placeholder="Buscar..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:250px;" oninput="buscarTablaBarra(this.value, 'accordion-precios', 'tr[data-precio-id]')">
+          <button class="btn-guardar-dia" onclick="guardarPreciosStocks()">💾 GUARDAR</button>
+          <button class="btn-detalles" onclick="exportarBaseDatosStocks()">EXPORTAR</button>
+          <button class="btn-detalles" onclick="exportarBaseDatosSinPrecioStocks()" style="background:#b71c1c;">EXPORTAR SIN PRECIO</button>
         </div>
+        <div style="font-size:0.75rem;color:#888;margin-top:0.3rem;">Anota la unidad, el precio de compra (proveedor) y el precio de venta al consumidor de los items de STOCKS/ALMACEN.</div>
       </div>
       <div id="accordion-precios"></div>
     </div>
@@ -516,6 +519,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=44"></script>
+  <script src="/app.js?v=45"></script>
 </body>
 </html>

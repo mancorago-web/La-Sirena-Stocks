@@ -113,7 +113,7 @@ document.querySelectorAll('.tab').forEach(tab => {
       bajas: () => cargarBajas(document.getElementById('fecha-bajas')?.value),
       stocks: () => cargarStocks(),
       reportes: () => cargarReportes(),
-      precios: () => cargarPreciosAlmacen()
+      precios: () => cargarBaseDatosStocks()
     };
     if (loaders[name]) loaders[name]();
   });
@@ -3425,71 +3425,251 @@ function guardarEdicionPrecio(id) {
 }
 
 // --- PRECIOS POR ALMACEN ---
-function cargarPreciosAlmacen() {
-  const fecha = document.getElementById('fecha-almacenes')?.value || new Date().toISOString().split('T')[0];
-  api('GET', '/api/precios?fecha=' + fecha).then(data => {
+function cargarBaseDatosStocks() {
+  api('GET', '/api/stock/precios').then(data => {
     const container = document.getElementById('accordion-precios');
+    if (!container) return;
     if (!data.length) {
-      container.innerHTML = '<p>No hay items con precios.</p>';
+      container.innerHTML = '<p>No hay items en la base de datos. Agrega uno nuevo.</p>';
       return;
     }
-    const html = data.map(a => `
-      <div class="accordion-item">
-        <div class="accordion-header" onclick="toggleAcordeon(this)">
-          <span class="accordion-title">${a.almacen}</span>
-          <span class="accordion-arrow">▶</span>
-        </div>
-        <div class="accordion-body">
-          <div class="table-wrap">
-          <table>
-            <thead><tr><th>Item</th><th>Stock Actual</th><th>Precio Unidad</th><th>Total</th></tr></thead>
-            <tbody>
-              ${a.items.map(i => {
-                const total = (i.stock_cierre || 0) * (i.precio || 0);
-                return `<tr data-item-id="${i.item_id}" data-almacen-id="${a.almacen_id}">
-                  <td>${i.item}</td>
-                  <td>${i.stock_cierre || 0}</td>
-                  <td><input type="number" class="input-precio-almacen" value="${i.precio}" step="0.01" style="width:120px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" onchange="calcularTotalPrecio(this)"></td>
-                  <td class="total-precio">S/${total.toFixed(2)}</td>
-                </tr>`;
-              }).join('')}
-            </tbody>
-          </table>
-          </div>
-        </div>
-      </div>
-    `).join('');
+    const conPrecio = data.filter(s => parseFloat(s.precio_venta) > 0 || parseFloat(s.precio) > 0);
+    const sinPrecio = data.filter(s => !parseFloat(s.precio_venta) && !parseFloat(s.precio));
+    function tablaItems(items) {
+      return items.map(s => `
+        <tr data-precio-id="${s.id}">
+          <td>${esc(s.nombre)}</td>
+          <td><select class="input-stock-uni-compra" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${['','UNIDAD','CAJA','DOCENA','KILOS','GRAMOS','LITRO','ML','ONZAS','BOTELLA','GALON'].map(u => `<option value="${u}" ${(s.unidad||'')===u?'selected':''}>${u || '—'}</option>`).join('')}</select></td>
+          <td><input type="number" class="input-stock-precio-compra" value="${s.precio || 0}" step="0.01" style="width:90px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
+          <td><select class="input-stock-uni-venta" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${['','UNIDAD','VASO','BOTELLA','LATA','BOLSA','PLATO','RACION','ONZAS','ML','GRAMOS','KILOS'].map(u => `<option value="${u}" ${(s.unidad_venta||'')===u?'selected':''}>${u || '—'}</option>`).join('')}</select></td>
+          <td><input type="number" class="input-stock-precio-venta" value="${s.precio_venta || 0}" step="0.01" style="width:90px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
+          <td style="white-space:nowrap">
+            <button onclick="guardarFilaPrecioStocks(this)" style="background:#2e7d32;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">GUARDAR</button>
+            <button onclick="editarPrecioStocks(${s.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">EDITAR</button>
+            <button onclick="eliminarPrecioStocks(${s.id})" title="Eliminar" style="background:#c62828;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">✕</button>
+          </td>
+        </tr>`).join('');
+    }
+    let html = '';
+    if (conPrecio.length) {
+      html += `<div class="table-wrap" style="margin-bottom:1.5rem;">
+        <table>
+          <thead><tr><th>Item</th><th>Unidad Compra</th><th>Precio Compra</th><th>Unidad Venta</th><th>Precio Venta</th><th></th></tr></thead>
+          <tbody>${tablaItems(conPrecio)}</tbody>
+        </table>
+      </div>`;
+    }
+    if (sinPrecio.length) {
+      html += `<div class="table-wrap">
+        <table>
+          <thead><tr><th style="color:#999;">Item</th><th style="color:#999;">Unidad Compra</th><th style="color:#999;">Precio Compra</th><th style="color:#999;">Unidad Venta</th><th style="color:#999;">Precio Venta</th><th></th></tr></thead>
+          <tbody>${tablaItems(sinPrecio)}</tbody>
+        </table>
+        ${conPrecio.length ? '<p style="margin-top:0.5rem;color:#999;font-size:0.85rem;">— Items sin precio —</p>' : ''}
+      </div>`;
+    }
     container.innerHTML = html;
     const bp = document.getElementById('buscar-precio-item');
-    if (bp && bp.value) buscarEnTabla(bp.value, 'accordion-precios');
-  });
+    if (bp && bp.value) buscarTablaBarra(bp.value, 'accordion-precios', 'tr[data-precio-id]');
+  }).catch(e => console.error(e));
 }
 
-function calcularTotalPrecio(input) {
-  const tr = input.closest('tr');
-  const stock = parseFloat(tr.children[1].textContent) || 0;
-  const precio = parseFloat(input.value) || 0;
-  tr.querySelector('.total-precio').textContent = 'S/' + (stock * precio).toFixed(2);
-}
-
-function guardarPreciosAlmacen() {
-  const btn = document.querySelector('#tab-precios .btn-guardar-dia');
-  btn.disabled = true; btn.textContent = 'Guardando...';
-  const items = [];
-  document.querySelectorAll('#accordion-precios tr[data-item-id]').forEach(tr => {
-    const item_id = parseInt(tr.dataset.itemId);
-    const almacen_id = parseInt(tr.dataset.almacenId);
-    const precio = parseFloat(tr.querySelector('.input-precio-almacen').value) || 0;
-    items.push({ item_id, almacen_id, precio });
-  });
-  api('PUT', '/api/precios', { precios: items }).then(() => {
-    btn.textContent = '✓ Guardado';
-    setTimeout(() => { btn.disabled = false; btn.textContent = '💾 GUARDAR PRECIOS'; }, 2000);
+function mostrarModalAgregarItemStocks() {
+  const body = document.getElementById('modal-body');
+  getInventario(todayStr()).then(inv => {
+    const seen = new Set();
+    let opts = '';
+    (inv || []).forEach(a => (a.items || []).forEach(i => {
+      const n = (i.nombre || '').trim();
+      if (n && !seen.has(n.toUpperCase())) { seen.add(n.toUpperCase()); opts += '<option value="' + n.replace(/"/g, '&quot;') + '">'; }
+    }));
+    body.innerHTML = `
+      <h3>Agregar Item</h3>
+      <label style="display:block;margin-top:1rem;">
+        Item (de STOCKS/ALMACEN):
+        <input type="text" id="nuevo-precio-stock-input" list="sugerencias-stock-precios" autocomplete="off" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+        <datalist id="sugerencias-stock-precios">${opts}</datalist>
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Unidad Compra:
+        <select id="nuevo-stock-uni-compra" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+          <option value="UNIDAD">UNIDAD</option>
+          <option value="CAJA">CAJA</option>
+          <option value="DOCENA">DOCENA</option>
+          <option value="KILOS">KILOS</option>
+          <option value="GRAMOS">GRAMOS</option>
+          <option value="LITRO">LITRO</option>
+          <option value="ML">ML</option>
+          <option value="ONZAS">ONZAS</option>
+          <option value="BOTELLA">BOTELLA</option>
+          <option value="GALON">GALON</option>
+        </select>
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Precio de Compra (proveedor):
+        <input type="number" id="nuevo-stock-precio-compra" step="0.01" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Unidad de Venta:
+        <select id="nuevo-stock-uni-venta" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+          <option value="UNIDAD">UNIDAD</option>
+          <option value="VASO">VASO</option>
+          <option value="BOTELLA">BOTELLA</option>
+          <option value="LATA">LATA</option>
+          <option value="BOLSA">BOLSA</option>
+          <option value="PLATO">PLATO</option>
+          <option value="RACION">RACION</option>
+          <option value="ONZAS">ONZAS</option>
+          <option value="ML">ML</option>
+          <option value="GRAMOS">GRAMOS</option>
+          <option value="KILOS">KILOS</option>
+        </select>
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Precio de Venta (consumidor):
+        <input type="number" id="nuevo-stock-precio-venta" step="0.01" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+        <button onclick="agregarPrecioStocks()" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+        <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
+      </div>`;
+    document.getElementById('modal').style.display = 'block';
   }).catch(() => {
-    btn.disabled = false; btn.textContent = '💾 GUARDAR PRECIOS';
-    alert('Error al guardar');
+    body.innerHTML = '<p>Error cargando items.</p>';
+    document.getElementById('modal').style.display = 'block';
   });
 }
+
+function agregarPrecioStocks() {
+  const nombre = document.getElementById('nuevo-precio-stock-input').value.trim();
+  const unidad = document.getElementById('nuevo-stock-uni-compra').value;
+  const precio = parseFloat(document.getElementById('nuevo-stock-precio-compra').value) || 0;
+  const unidad_venta = document.getElementById('nuevo-stock-uni-venta').value;
+  const precio_venta = parseFloat(document.getElementById('nuevo-stock-precio-venta').value) || 0;
+  if (!nombre) { alert('Ingresa el nombre del item'); return; }
+  api('POST', '/api/stock/precios', { nombre, unidad, precio, unidad_venta, precio_venta }).then(() => {
+    cerrarModal();
+    showToast('Item agregado');
+    cargarBaseDatosStocks();
+  }).catch(() => alert('Error al agregar'));
+}
+
+function guardarFilaPrecioStocks(btn) {
+  const tr = btn.closest('tr');
+  const id = parseInt(tr.dataset.precioId);
+  const unidad = tr.querySelector('.input-stock-uni-compra').value.trim();
+  const precio = parseFloat(tr.querySelector('.input-stock-precio-compra').value) || 0;
+  const unidad_venta = tr.querySelector('.input-stock-uni-venta').value.trim();
+  const precio_venta = parseFloat(tr.querySelector('.input-stock-precio-venta').value) || 0;
+  api('PUT', '/api/stock/precios/' + id, { unidad, precio, unidad_venta, precio_venta }).then(() => {
+    showToast('✓ Guardado');
+  }).catch(() => alert('Error al guardar'));
+}
+
+function guardarPreciosStocks() {
+  const btn = document.querySelector('#tab-precios .btn-guardar-dia');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+  const promises = [];
+  document.querySelectorAll('#accordion-precios tr[data-precio-id]').forEach(tr => {
+    const id = parseInt(tr.dataset.precioId);
+    const unidad = tr.querySelector('.input-stock-uni-compra').value.trim();
+    const precio = parseFloat(tr.querySelector('.input-stock-precio-compra').value) || 0;
+    const unidad_venta = tr.querySelector('.input-stock-uni-venta').value.trim();
+    const precio_venta = parseFloat(tr.querySelector('.input-stock-precio-venta').value) || 0;
+    promises.push(api('PUT', '/api/stock/precios/' + id, { unidad, precio, unidad_venta, precio_venta }));
+  });
+  Promise.all(promises).then(() => {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR'; }
+    showToast('Precios Guardados');
+    cargarBaseDatosStocks();
+  }).catch(() => {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR'; }
+    alert('Error al guardar precios');
+  });
+}
+
+function editarPrecioStocks(id) {
+  api('GET', '/api/stock/precios').then(data => {
+    const item = data.find(d => d.id === id);
+    if (!item) { alert('Item no encontrado'); return; }
+    const body = document.getElementById('modal-body');
+    body.innerHTML = `
+      <h3>Editar Item</h3>
+      <label style="display:block;margin-top:1rem;">
+        Nombre:
+        <input type="text" id="edit-stock-precio-nombre" value="${esc(item.nombre)}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Unidad Compra:
+        <select id="edit-stock-uni-compra" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+          ${['','UNIDAD','CAJA','DOCENA','KILOS','GRAMOS','LITRO','ML','ONZAS','BOTELLA','GALON'].map(u => `<option value="${u}" ${(item.unidad||'')===u?'selected':''}>${u || '—'}</option>`).join('')}
+        </select>
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Precio de Compra:
+        <input type="number" id="edit-stock-precio-compra" value="${item.precio || 0}" step="0.01" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Unidad de Venta:
+        <select id="edit-stock-uni-venta" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+          ${['','UNIDAD','VASO','BOTELLA','LATA','BOLSA','PLATO','RACION','ONZAS','ML','GRAMOS','KILOS'].map(u => `<option value="${u}" ${(item.unidad_venta||'')===u?'selected':''}>${u || '—'}</option>`).join('')}
+        </select>
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        Precio de Venta:
+        <input type="number" id="edit-stock-precio-venta" value="${item.precio_venta || 0}" step="0.01" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+        <button onclick="guardarEdicionPrecioStocks(${id})" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+        <button onclick="eliminarPrecioStocks(${id})" style="flex:1;padding:0.5rem;background:#c62828;color:#fff;border:none;border-radius:4px;cursor:pointer;">Eliminar</button>
+      </div>
+    `;
+    document.getElementById('modal').style.display = 'block';
+  });
+}
+
+function guardarEdicionPrecioStocks(id) {
+  const nombre = document.getElementById('edit-stock-precio-nombre').value.trim();
+  const unidad = document.getElementById('edit-stock-uni-compra').value.trim();
+  const precio = parseFloat(document.getElementById('edit-stock-precio-compra').value) || 0;
+  const unidad_venta = document.getElementById('edit-stock-uni-venta').value.trim();
+  const precio_venta = parseFloat(document.getElementById('edit-stock-precio-venta').value) || 0;
+  if (!nombre) { alert('El nombre es requerido'); return; }
+  api('PUT', '/api/stock/precios/' + id, { nombre, unidad, precio, unidad_venta, precio_venta }).then(() => {
+    cerrarModal();
+    showToast('Item actualizado');
+    cargarBaseDatosStocks();
+  }).catch(() => alert('Error al actualizar'));
+}
+
+function eliminarPrecioStocks(id) {
+  if (!confirm('¿Eliminar este item de la base de datos?')) return;
+  api('DELETE', '/api/stock/precios/' + id).then(() => cargarBaseDatosStocks()).catch(() => alert('Error al eliminar'));
+}
+
+function exportarBaseDatosStocks() {
+  api('GET', '/api/stock/precios').then(data => {
+    const wsData = [['Item', 'Unidad Compra', 'Precio Compra', 'Unidad Venta', 'Precio Venta']];
+    data.forEach(s => wsData.push([s.nombre, s.unidad || '', s.precio || 0, s.unidad_venta || '', s.precio_venta || 0]));
+    const libro = XLSX.utils.book_new();
+    const hoja = XLSX.utils.aoa_to_sheet(wsData);
+    XLSX.utils.book_append_sheet(libro, hoja, 'Base de Datos');
+    XLSX.writeFile(libro, 'BaseDatos_Stocks.xlsx');
+  });
+}
+
+function exportarBaseDatosSinPrecioStocks() {
+  api('GET', '/api/stock/precios').then(data => {
+    const sin = data.filter(s => !parseFloat(s.precio_venta) && !parseFloat(s.precio));
+    const wsData = [['Item', 'Unidad Compra']];
+    sin.forEach(s => wsData.push([s.nombre, s.unidad || '']));
+    const libro = XLSX.utils.book_new();
+    const hoja = XLSX.utils.aoa_to_sheet(wsData);
+    XLSX.utils.book_append_sheet(libro, hoja, 'Sin Precio');
+    XLSX.writeFile(libro, 'ItemsSinPrecio_Stocks.xlsx');
+  });
+}
+
 
 function exportarBaseDatos() {
   api('GET', '/api/barra/precios').then(data => {
@@ -3512,26 +3692,6 @@ function exportarBaseDatosSinPrecio() {
     XLSX.utils.book_append_sheet(libro, hoja, 'Sin Precio');
     XLSX.writeFile(libro, 'Items_Sin_Precio.xlsx');
   }).catch(() => alert('Error al exportar'));
-}
-
-function exportarPrecios() {
-  const fecha = document.getElementById('fecha-almacenes')?.value || new Date().toISOString().split('T')[0];
-  const wsData = [['Almacén', 'Item', 'Stock Actual', 'Precio Unidad', 'Total']];
-  document.querySelectorAll('#accordion-precios .accordion-item').forEach(item => {
-    const almacen = item.querySelector('.accordion-title')?.textContent || '';
-    item.querySelectorAll('tbody tr[data-item-id]').forEach(tr => {
-      const celdas = tr.querySelectorAll('td');
-      const nombre = celdas[0]?.textContent || '';
-      const stock = celdas[1]?.textContent || '0';
-      const precio = tr.querySelector('.input-precio-almacen')?.value || '0';
-      const total = celdas[3]?.textContent?.replace('S/', '') || '0';
-      wsData.push([almacen, nombre, stock, precio, total]);
-    });
-  });
-  const libro = XLSX.utils.book_new();
-  const hoja = XLSX.utils.aoa_to_sheet(wsData);
-  XLSX.utils.book_append_sheet(libro, hoja, 'Precios');
-  XLSX.writeFile(libro, `Precios_${fecha}.xlsx`);
 }
 
 // --- BARRA: INGRESOS / VENTAS / BAJAS ---

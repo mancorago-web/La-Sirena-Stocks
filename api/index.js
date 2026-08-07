@@ -2229,6 +2229,51 @@ app.delete('/api/cocina/precios/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- STOCKS: Base de Datos (precios compra/venta) ---
+app.get('/api/stock/precios', async (req, res) => {
+  try {
+    const snap = await col('stock_precios').orderBy('nombre').get();
+    res.json(snap.docs.map(d => ({ id: Number(d.id), ...d.data() })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/stock/precios', async (req, res) => {
+  try {
+    const { nombre, unidad, precio, unidad_venta, precio_venta } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+    const all = await col('stock_precios').get();
+    const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
+    await col('stock_precios').doc(String(nextId)).set({
+      id: nextId, nombre: String(nombre).trim(), unidad: String(unidad || 'unidad'),
+      precio: parseFloat(precio) || 0, unidad_venta: String(unidad_venta || 'unidad'),
+      precio_venta: parseFloat(precio_venta) || 0,
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+    });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/stock/precios/:id', async (req, res) => {
+  try {
+    const { nombre, unidad, precio, unidad_venta, precio_venta } = req.body;
+    const upd = { updated_at: new Date().toISOString() };
+    if (nombre !== undefined) upd.nombre = String(nombre).trim();
+    if (unidad !== undefined) upd.unidad = String(unidad || 'unidad');
+    if (precio !== undefined) upd.precio = parseFloat(precio) || 0;
+    if (unidad_venta !== undefined) upd.unidad_venta = String(unidad_venta || 'unidad');
+    if (precio_venta !== undefined) upd.precio_venta = parseFloat(precio_venta) || 0;
+    await col('stock_precios').doc(req.params.id).update(upd);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/stock/precios/:id', async (req, res) => {
+  try {
+    await col('stock_precios').doc(req.params.id).delete();
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 
 // --- BARRA PRECIOS ---
 app.get('/api/barra/precios', async (req, res) => {
