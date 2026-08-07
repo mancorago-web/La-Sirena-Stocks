@@ -2968,9 +2968,23 @@ function exportarRecetasCocina() {
 
 // --- COCINA: Base de Datos (precios) ---
 function cargarPreciosCocina() {
-  api('GET', '/api/cocina/precios').then(data => {
+  Promise.all([
+    api('GET', '/api/cocina/precios'),
+    api('GET', '/api/cocina/stock')
+  ]).then(([data, stock]) => {
     const container = document.getElementById('cocina-precios-container');
     if (!container) return;
+    // Fusionar items del stock que aún no tienen entrada en precios (sincronización en vivo)
+    const precKeys = new Set(data.map(s => (s.ingrediente || '').toUpperCase()));
+    let maxId = data.length ? Math.max(...data.map(s => Number(s.id) || 0)) : 0;
+    (stock || []).forEach(s => {
+      const key = (s.ingrediente || '').toUpperCase();
+      if (!precKeys.has(key)) {
+        maxId++;
+        data.push({ id: maxId, ingrediente: s.ingrediente, unidad: s.unidad || 'unidad', precio: 0, precio_compra: 0, unidad_compra: '' });
+        precKeys.add(key);
+      }
+    });
     if (!data.length) {
       container.innerHTML = '<p>No hay ingredientes en la base de datos. Agrega uno nuevo o ingresa items en COCINA/STOCK.</p>';
       return;
