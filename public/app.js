@@ -3790,9 +3790,10 @@ function renderCostoGruposGlobal(prefix, container, cfg, grupos) {
   }).catch(e => { console.error(e); container.innerHTML = '<p>Error al cargar.</p>'; });
 }
 
-// Versión por grupo: cada grupo/campo guarda con su propia fecha (GASTOS FIJOS)
+// Versión por grupo: cada grupo/campo guarda con su propia fecha y acumula por mes (GASTOS FIJOS)
 function renderCostoGruposPorCampo(prefix, container, cfg, grupos) {
-  Promise.all(grupos.map(g => api('GET', '/api/costos?tipo=' + g.tipo))).then(lists => {
+  const mes = document.getElementById('mes-pestana-' + prefix)?.value || todayStr().slice(0, 7);
+  Promise.all(grupos.map(g => api('GET', '/api/costos?tipo=' + g.tipo + '&mes=' + mes))).then(lists => {
     let totalGeneral = 0;
     let html = '';
     grupos.forEach((g, gi) => {
@@ -3850,7 +3851,12 @@ function renderCostoGruposPorCampo(prefix, container, cfg, grupos) {
       <span class="autosuma-label">TOTAL</span>
       <span class="autosuma-monto">S/ ${totalGeneral.toFixed(2)}</span>
     </div>`;
-    container.innerHTML = box + html;
+    const top = `<div class="costos-fecha-row">
+      <label>MES</label>
+      <input type="month" id="mes-pestana-${prefix}" value="${mes}" onchange="cargarCostoCategoria('${prefix}')">
+    </div>
+    <div style="font-size:0.75rem;color:#888;margin:-0.25rem 0 0.75rem 0;">Los montos se acumulan durante el mes y se reinician a S/ 0 el 1ro del mes siguiente.</div>`;
+    container.innerHTML = top + box + html;
   }).catch(e => { console.error(e); container.innerHTML = '<p>Error al cargar.</p>'; });
 }
 

@@ -2816,10 +2816,17 @@ app.delete('/api/inventario/:item_id/:almacen_id', authMiddleware, async (req, r
 // --- COSTOS: planillas, servicios y gastos operativos ---
 app.get('/api/costos', authMiddleware, async (req, res) => {
   try {
-    const { fecha, tipo } = req.query;
+    const { fecha, tipo, mes } = req.query;
     // Single-field query avoids needing a composite index; filter/sort in memory
     let query = col('costos');
-    if (fecha) query = query.where('fecha', '==', fecha);
+    if (fecha) {
+      query = query.where('fecha', '==', fecha);
+    } else if (mes && /^\d{4}-\d{2}$/.test(mes)) {
+      const [y, m] = mes.split('-').map(Number);
+      const inicio = mes + '-01';
+      const fin = m === 12 ? (y + 1) + '-01-01' : y + '-' + String(m + 1).padStart(2, '0') + '-01';
+      query = query.where('fecha', '>=', inicio).where('fecha', '<', fin);
+    }
     const snap = await query.get();
     let docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (tipo) docs = docs.filter(c => c.tipo === String(tipo).toLowerCase());
