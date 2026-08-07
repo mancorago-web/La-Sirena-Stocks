@@ -3761,7 +3761,13 @@ function cargarBarraMovimientos(tipo) {
       const catsToRender = [...ordenCat, ...Object.keys(grupos).filter(c => !ordenCat.includes(c))];
       const container = document.getElementById(accId);
       if (!recetas.length) { container.innerHTML = '<p>No hay recetas registradas.</p>'; return; }
-      let html = '<h3 style="margin:0 0 0.5rem 0;">RECETAS VENDIDAS</h3>';
+      // RECETAS VENDIDAS (colapsable, con categorías dentro)
+      let html = `<div class="accordion-item" id="recetas-vendidas-acc">
+        <div class="accordion-header" onclick="toggleAcordeon(this)">
+          <span class="accordion-title">RECETAS VENDIDAS</span>
+          <span class="accordion-arrow">▶</span>
+        </div>
+        <div class="accordion-body">`;
       catsToRender.forEach(cat => {
         const recs = grupos[cat] || [];
         html += `<div class="accordion-item">
@@ -3787,6 +3793,7 @@ function cargarBarraMovimientos(tipo) {
           </div>
         </div>`;
       });
+      html += '</div></div>';
       // ITEMS SALIENTES (colapsable)
       html += `<div class="accordion-item" id="items-salientes-acc">
         <div class="accordion-header" onclick="toggleAcordeon(this)">
