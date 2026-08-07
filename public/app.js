@@ -3776,9 +3776,9 @@ function cargarBarraMovimientos(tipo) {
                 ${recs.map(r => {
                   const qty = recQty[r.nombre] || '';
                   const ings = r.ingredientes.map(i => i.ingrediente).join(', ');
-                  return `<tr data-receta="${r.nombre}" data-ingredientes='${JSON.stringify(r.ingredientes.map(i => ({ ingrediente: i.ingrediente, cantidad: i.cantidad, unidad: i.unidad })))}'>
+                  return `<tr data-receta="${r.nombre}" data-costo="${r.costoTotal || 0}" data-ingredientes='${JSON.stringify(r.ingredientes.map(i => ({ ingrediente: i.ingrediente, cantidad: i.cantidad, unidad: i.unidad })))}'>
                     <td>${r.nombre}</td>
-                    <td><input type="number" class="input-barra-mov input-receta-qty" value="${qty}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="calcularItemsSalientes()"></td>
+                    <td><input type="number" class="input-barra-mov input-receta-qty" value="${qty}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="calcularItemsSalientes(); calcularCostosVenta()"></td>
                     <td style="font-size:0.8rem;color:#666;">${ings}</td>
                   </tr>`;
                 }).join('') || '<tr><td colspan="3" style="color:#888;">Sin recetas aún.</td></tr>'}
@@ -3787,33 +3787,25 @@ function cargarBarraMovimientos(tipo) {
           </div>
         </div>`;
       });
-      // ITEMS SALIENTES section
-      html += '<div id="items-salientes-section"><h3 style="margin:1rem 0 0.5rem 0;">ITEMS SALIENTES</h3>';
-      const ingSaved = movs.filter(m => m.es_receta === false);
-      if (ingSaved.length) {
-        const unitMap = {};
-        recetas.forEach(r => (r.ingredientes || []).forEach(i => {
-          const k = String(i.ingrediente || '').trim().toUpperCase().replace(/\s+/g, ' ');
-          if (k && !unitMap[k]) unitMap[k] = i.unidad || 'unidad';
-        }));
-        const agg = {};
-        const units = {};
-        ingSaved.forEach(m => {
-          const key = String(m.ingrediente || '').trim().toUpperCase().replace(/\s+/g, ' ');
-          agg[key] = (agg[key] || 0) + (parseFloat(m.cantidad) || 0);
-          units[key] = unitMap[key] || m.unidad || 'unidad';
-        });
-        const keys = Object.keys(agg).sort();
-        html += '<div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th>Cantidad Consumida</th><th>Unidad</th></tr></thead><tbody>';
-        keys.forEach(key => {
-          html += `<tr><td>${key}</td><td>${(agg[key] || 0).toFixed(2)}</td><td>${units[key] || 'unidad'}</td></tr>`;
-        });
-        html += '</tbody></table></div>';
-      } else {
-        html += '<p style="color:#888;">Calculado automáticamente al ingresar cantidades de recetas.</p>';
-      }
-      html += '</div>';
+      // ITEMS SALIENTES (colapsable)
+      html += `<div class="accordion-item" id="items-salientes-acc">
+        <div class="accordion-header" onclick="toggleAcordeon(this)">
+          <span class="accordion-title">ITEMS SALIENTES</span>
+          <span class="accordion-arrow">▶</span>
+        </div>
+        <div class="accordion-body"><div id="items-salientes-section"></div></div>
+      </div>`;
+      // COSTOS DE VENTA (colapsable)
+      html += `<div class="accordion-item" id="costos-venta-acc">
+        <div class="accordion-header" onclick="toggleAcordeon(this)">
+          <span class="accordion-title">COSTOS DE VENTA <span id="costo-venta-total" style="font-weight:400;font-size:0.85rem;color:#0f3460;"></span></span>
+          <span class="accordion-arrow">▶</span>
+        </div>
+        <div class="accordion-body"><div id="costos-venta-section"></div></div>
+      </div>`;
       container.innerHTML = html;
+      calcularItemsSalientes();
+      calcularCostosVenta();
       const bp = document.getElementById('buscar-barra-ventas');
       if (bp && bp.value) buscarTablaBarra(bp.value, accId, 'tr[data-receta]');
     });
@@ -3963,11 +3955,37 @@ function calcularItemsSalientes() {
   });
   const names = Object.keys(totals);
   if (!names.length) {
-    seccion.innerHTML = '<h3 style="margin:1rem 0 0.5rem 0;">ITEMS SALIENTES</h3><p style="color:#888;">Calculado automáticamente al ingresar cantidades de recetas.</p>';
+    seccion.innerHTML = '<p style="color:#888;">Calculado automáticamente al ingresar cantidades de recetas.</p>';
     return;
   }
-  seccion.innerHTML = '<h3 style="margin:1rem 0 0.5rem 0;">ITEMS SALIENTES</h3><div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th>Cantidad Consumida</th><th>Unidad</th></tr></thead><tbody>' +
+  seccion.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th>Cantidad Consumida</th><th>Unidad</th></tr></thead><tbody>' +
     names.map(n => '<tr><td>' + n + '</td><td>' + (totals[n] || 0).toFixed(2) + '</td><td>' + (units[n] || 'unidad') + '</td></tr>').join('') +
+    '</tbody></table></div>';
+}
+
+function calcularCostosVenta() {
+  const seccion = document.getElementById('costos-venta-section');
+  const totalLabel = document.getElementById('costo-venta-total');
+  if (!seccion) return;
+  const filas = [];
+  let total = 0;
+  document.querySelectorAll('#accordion-barra-ventas tr[data-receta]').forEach(tr => {
+    const qty = parseFloat(tr.querySelector('.input-receta-qty').value) || 0;
+    const costo = parseFloat(tr.dataset.costo) || 0;
+    if (qty > 0 && costo > 0) {
+      const sub = costo * qty;
+      total += sub;
+      filas.push({ nombre: tr.dataset.receta, qty, costo, sub });
+    }
+  });
+  if (totalLabel) totalLabel.textContent = total > 0 ? '— TOTAL: S/ ' + total.toFixed(2) : '';
+  if (!filas.length) {
+    seccion.innerHTML = '<p style="color:#888;">Ingresa cantidades de recetas para calcular los costos de venta.</p>';
+    return;
+  }
+  seccion.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Receta</th><th>Cant.</th><th>Costo Unit.</th><th>Costo Total</th></tr></thead><tbody>' +
+    filas.map(f => '<tr><td>' + esc(f.nombre) + '</td><td>' + f.qty + '</td><td>S/ ' + f.costo.toFixed(2) + '</td><td>S/ ' + f.sub.toFixed(2) + '</td></tr>').join('') +
+    '<tr style="font-weight:700;background:#f0f0ff"><td colspan="3">TOTAL COSTO DE VENTA</td><td>S/ ' + total.toFixed(2) + '</td></tr>' +
     '</tbody></table></div>';
 }
 
