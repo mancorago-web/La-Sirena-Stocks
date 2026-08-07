@@ -333,6 +333,7 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
             falta_almacen: falta,
             stock_baja: baja,
             nota_baja: dia.nota_baja || '',
+            destino_salida: dia.destino_salida || '',
             stock_cierre: Math.round(cierre * 100) / 100,
             cantidad_minima: inv.cantidad_minima || 0,
             fecha_apertura: inv.fecha_apertura || '',
@@ -426,6 +427,7 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     if (r.falta_almacen !== undefined) data.falta_almacen = falta;
     if (r.stock_baja !== undefined) data.stock_baja = baja;
     if (r.nota_baja !== undefined) data.nota_baja = notaBaja;
+    if (r.destino_salida !== undefined) data.destino_salida = String(r.destino_salida || '');
     data.stock_cierre = Math.round(cierre * 100) / 100;
     data.updated_at = new Date().toISOString();
     data.saved_by = savedBy;

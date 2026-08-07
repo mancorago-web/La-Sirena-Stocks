@@ -587,14 +587,19 @@ function cargarSalidas(fecha) {
           ${a.items.length ? `
             <div class="table-wrap">
             <table>
-              <thead><tr><th>Item</th><th>Stock Actual</th><th>Salida</th></tr></thead>
+              <thead><tr><th>Item</th><th>Stock Actual</th><th>Salida</th><th>Destino</th></tr></thead>
               <tbody>
                 ${a.secciones.map(s => s.items.length ? `
-                  <tr class="section-header"><td colspan="3">— ${s.label} —</td></tr>
+                  <tr class="section-header"><td colspan="4">— ${s.label} —</td></tr>
                   ${s.items.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
                     <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01"></td>
+                    <td><select class="select-destino-salida" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">
+                      <option value="" ${(i.destino_salida||'')===''?'selected':''}>—</option>
+                      <option value="barra" ${i.destino_salida==='barra'?'selected':''}>BARRA</option>
+                      <option value="cocina" ${i.destino_salida==='cocina'?'selected':''}>COCINA</option>
+                    </select></td>
                     <input type="hidden" class="hidden-cierre" value="${i.stock_cierre || 0}">
                     <input type="hidden" class="hidden-ventas" value="${i.total_ventas || 0}">
                     <input type="hidden" class="hidden-ingreso" value="${i.stock_ingreso || 0}">
@@ -603,11 +608,16 @@ function cargarSalidas(fecha) {
                   </tr>`).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="3">— OTROS —</td></tr>
+                  <tr class="section-header"><td colspan="4">— OTROS —</td></tr>
                   ${a.otros.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
                     <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01"></td>
+                    <td><select class="select-destino-salida" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">
+                      <option value="" ${(i.destino_salida||'')===''?'selected':''}>—</option>
+                      <option value="barra" ${i.destino_salida==='barra'?'selected':''}>BARRA</option>
+                      <option value="cocina" ${i.destino_salida==='cocina'?'selected':''}>COCINA</option>
+                    </select></td>
                     <input type="hidden" class="hidden-cierre" value="${i.stock_cierre || 0}">
                     <input type="hidden" class="hidden-ventas" value="${i.total_ventas || 0}">
                     <input type="hidden" class="hidden-ingreso" value="${i.stock_ingreso || 0}">
@@ -636,7 +646,8 @@ function guardarSalidas() {
     item.querySelectorAll('tr[data-item-id]').forEach(tr => {
       const itemId = parseInt(tr.dataset.itemId);
       const salida = parseFloat(tr.querySelector('.input-salida').value) || 0;
-      registros.push({ item_id: itemId, almacen_id: almacenId, salida_almacen: salida });
+      const destino = tr.querySelector('.select-destino-salida')?.value || '';
+      registros.push({ item_id: itemId, almacen_id: almacenId, salida_almacen: salida, destino_salida: destino });
     });
   });
   const btn = document.querySelector('#tab-salidas .btn-guardar-dia');
@@ -665,11 +676,12 @@ function verDetallesSalidas() {
       html += '<div class="accordion-item">';
       html += '<div class="accordion-header" onclick="toggleAcordeon(this)"><span class="accordion-title">' + a.nombre + '</span><span class="accordion-arrow">▶</span></div>';
       html += '<div class="accordion-body open">';
-      html += '<table><thead><tr><th>Item</th><th>Salida</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
+      html += '<table><thead><tr><th>Item</th><th>Salida</th><th>Destino</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
       itemsConSalida.forEach(i => {
         const t = i.updated_at ? new Date(i.updated_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
         const u = DISPLAY_NAMES[i.saved_by] || i.saved_by || '-';
-        html += '<tr><td>' + i.nombre + '</td><td>' + (i.salida_almacen || 0) + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
+        const destino = (i.destino_salida || '').toUpperCase() || '—';
+        html += '<tr><td>' + i.nombre + '</td><td>' + (i.salida_almacen || 0) + '</td><td>' + destino + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
       });
       html += '</tbody></table></div></div>';
     });
