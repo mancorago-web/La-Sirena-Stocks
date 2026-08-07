@@ -349,6 +349,38 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
   }
 });
 
+// --- RESUMEN: contadores de items para el menú principal ---
+app.get('/api/resumen/items', async (req, res) => {
+  try {
+    const fecha = String(req.query.fecha || '').trim();
+    const [almSnap, allItemsSnap, diaSnap] = await Promise.all([
+      col('almacenes').get(),
+      col('inventario').get(),
+      fecha ? col('inventario_diario').where('fecha', '==', fecha).get() : Promise.resolve({ docs: [] }),
+    ]);
+    const diaByKey = {};
+    diaSnap.docs.forEach(d => { const dd = d.data(); diaByKey[dd.almacen_id + '_' + dd.item_id] = dd; });
+    let totalStocks = 0;
+    allItemsSnap.docs.forEach(d => {
+      const inv = d.data();
+      const dia = diaByKey[inv.almacen_id + '_' + inv.item_id] || {};
+      const apertura = (dia.stock_apertura ?? inv.stock_apertura ?? 0);
+      const ingreso = (dia.stock_ingreso ?? 0);
+      const salida = (dia.salida_almacen ?? 0);
+      const ventas = (dia.total_ventas ?? 0);
+      const falta = (dia.falta_almacen ?? 0);
+      const baja = (dia.stock_baja ?? 0);
+      totalStocks += apertura + ingreso - salida - ventas - falta - baja;
+    });
+    const barraSnap = await col('barra_stock').get();
+    let totalBarra = 0;
+    barraSnap.docs.forEach(d => { totalBarra += parseFloat(d.data().cantidad) || 0; });
+    res.json({ stocks: Math.round(totalStocks * 100) / 100, barra: Math.round(totalBarra * 100) / 100 });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- GUARDAR DÍA ---
 async function guardarDiaInterno(fecha, registros, savedBy) {
   if (!fecha || !registros) throw new Error('fecha y registros requeridos');

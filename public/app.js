@@ -159,7 +159,17 @@ function dibujarFlujoMenu() {
   });
   svg.innerHTML = paths;
 }
-window.addEventListener('load', dibujarFlujoMenu);
+window.addEventListener('load', () => { dibujarFlujoMenu(); actualizarContadoresMenu(); });
+
+function actualizarContadoresMenu() {
+  const s = document.getElementById('menu-items-stocks');
+  const b = document.getElementById('menu-items-barra');
+  if (!s && !b) return;
+  api('GET', '/api/resumen/items?fecha=' + todayStr()).then(r => {
+    if (s) s.textContent = 'Items: ' + (r.stocks === undefined ? '—' : r.stocks);
+    if (b) b.textContent = 'Items: ' + (r.barra === undefined ? '—' : r.barra);
+  }).catch(() => {});
+}
 window.addEventListener('resize', dibujarFlujoMenu);
 setTimeout(dibujarFlujoMenu, 300);
 
@@ -1121,6 +1131,7 @@ function guardarIngresos() {
     btn.disabled = false; btn.textContent = '💾 GUARDAR INGRESOS';
     showToast('Ingreso Guardado');
     recargarTodo(fecha);
+    actualizarContadoresMenu();
   }).catch(() => {
     btn.disabled = false; btn.textContent = '💾 GUARDAR INGRESOS';
     alert('Error al guardar');
@@ -2859,6 +2870,7 @@ function guardarBarraMovimientos(tipo) {
       showToast('Venta Guardada');
       cargarBarraMovimientos(tipo);
       cargarStockBarra();
+      actualizarContadoresMenu();
     }).catch(e => { console.error(e); alert('Error al guardar'); });
   } else {
     const items = [];
@@ -2871,6 +2883,7 @@ function guardarBarraMovimientos(tipo) {
     api('POST', '/api/barra/movimientos', { fecha, tipo, items }).then(() => {
       showToast(tipo === 'ingresos' ? 'Ingreso Guardado' : 'Baja Guardada');
       cargarBarraMovimientos(tipo);
+      actualizarContadoresMenu();
     }).catch(e => { console.error(e); alert('Error al guardar'); });
   }
 }
@@ -3139,6 +3152,7 @@ function eliminarCompra(id) {
     showToast('Compra/Ingreso eliminado');
     cargarComprasDetalle(fecha);
     _invCache = { fecha: null, data: null, pending: null };
+    actualizarContadoresMenu();
     if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fecha);
   }).catch(e => { console.error(e); alert('Error al eliminar'); });
 }
@@ -3276,6 +3290,7 @@ function agregarVenta() {
     document.getElementById('nueva-venta-cant').value = '';
     cargarVentasDetalle(fecha);
     _invCache = { fecha: null, data: null, pending: null };
+    actualizarContadoresMenu();
     if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fecha);
     if (typeof cargarVentas === 'function') cargarVentas(fecha);
     if (typeof cargarStockBarra === 'function') cargarStockBarra();
@@ -3359,6 +3374,7 @@ function eliminarVenta(id) {
     showToast('Venta eliminada');
     cargarVentasDetalle(fecha);
     _invCache = { fecha: null, data: null, pending: null };
+    actualizarContadoresMenu();
     if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fecha);
     if (typeof cargarVentas === 'function') cargarVentas(fecha);
     if (typeof cargarStockBarra === 'function') cargarStockBarra();
@@ -3392,6 +3408,7 @@ function agregarCompra() {
     document.getElementById('nueva-compra-cant').value = '';
     cargarComprasDetalle(fecha);
     _invCache = { fecha: null, data: null, pending: null };
+    actualizarContadoresMenu();
     if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fecha);
   }).catch(e => {
     console.error(e);
