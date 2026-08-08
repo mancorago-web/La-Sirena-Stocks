@@ -599,6 +599,7 @@ function cargarSalidas(fecha) {
                       <option value="" ${(i.destino_salida||'')===''?'selected':''}>—</option>
                       <option value="barra" ${i.destino_salida==='barra'?'selected':''}>BARRA</option>
                       <option value="cocina" ${i.destino_salida==='cocina'?'selected':''}>COCINA</option>
+                      <option value="juan" ${i.destino_salida==='juan'?'selected':''}>JUAN</option>
                     </select></td>
                     <input type="hidden" class="hidden-cierre" value="${i.stock_cierre || 0}">
                     <input type="hidden" class="hidden-ventas" value="${i.total_ventas || 0}">
@@ -617,6 +618,7 @@ function cargarSalidas(fecha) {
                       <option value="" ${(i.destino_salida||'')===''?'selected':''}>—</option>
                       <option value="barra" ${i.destino_salida==='barra'?'selected':''}>BARRA</option>
                       <option value="cocina" ${i.destino_salida==='cocina'?'selected':''}>COCINA</option>
+                      <option value="juan" ${i.destino_salida==='juan'?'selected':''}>JUAN</option>
                     </select></td>
                     <input type="hidden" class="hidden-cierre" value="${i.stock_cierre || 0}">
                     <input type="hidden" class="hidden-ventas" value="${i.total_ventas || 0}">
