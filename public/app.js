@@ -1959,7 +1959,7 @@ function cargarRecetas(openId) {
       if (!grupos[cat]) grupos[cat] = [];
       grupos[cat].push(r);
     });
-    const ordenCat = ['RECETAS BASE', 'Clásicos', 'Mojitos', 'Limonadas', 'LIMONADA MENU', 'SODAS', 'JUGO DE FRUTAS', 'DEL BARMAN', 'Chilcanos y Sours', 'SHOTS', 'VINO TINTOS'];
+    const ordenCat = ['RECETAS BASE', 'Clásicos', 'Mojitos', 'Limonadas', 'LIMONADAS MENU', 'SODAS', 'JUGO DE FRUTAS', 'DEL BARMAN', 'Chilcanos y Sours', 'SHOTS', 'VINO TINTOS'];
       let html = '';
     const catsToRender = [...ordenCat, ...Object.keys(grupos).filter(c => !ordenCat.includes(c))];
     catsToRender.forEach(cat => {
@@ -2057,7 +2057,7 @@ function editarReceta(id) {
       <input id="edit-receta-nombre" value="${r.nombre}" style="width:100%;margin-bottom:0.5rem;">
       <label style="font-weight:600;display:block;margin-bottom:0.2rem">Categoría</label>
       <select id="edit-receta-categoria" style="width:100%;margin-bottom:1rem;">
-        ${['RECETAS BASE','Clásicos','Mojitos','Limonadas','LIMONADA MENU','SODAS','JUGO DE FRUTAS','DEL BARMAN','Chilcanos y Sours','SHOTS','VINO TINTOS'].map(c =>
+        ${['RECETAS BASE','Clásicos','Mojitos','Limonadas','LIMONADAS MENU','SODAS','JUGO DE FRUTAS','DEL BARMAN','Chilcanos y Sours','SHOTS','VINO TINTOS'].map(c =>
           `<option value="${c}" ${r.categoria === c ? 'selected' : ''}>${c}</option>`
         ).join('')}
       </select>
@@ -3748,7 +3748,7 @@ function cargarBarraMovimientos(tipo) {
       api('GET', '/api/recetas'),
       api('GET', '/api/barra/movimientos?fecha=' + fecha + '&tipo=ventas')
     ]).then(([recetas, movs]) => {
-    const ordenCat = ['RECETAS BASE', 'Clásicos', 'Mojitos', 'Limonadas', 'LIMONADA MENU', 'SODAS', 'JUGO DE FRUTAS', 'DEL BARMAN', 'Chilcanos y Sours', 'SHOTS', 'VINO TINTOS'];
+    const ordenCat = ['RECETAS BASE', 'Clásicos', 'Mojitos', 'Limonadas', 'LIMONADAS MENU', 'SODAS', 'JUGO DE FRUTAS', 'DEL BARMAN', 'Chilcanos y Sours', 'SHOTS', 'VINO TINTOS'];
       const recetasGuardadas = movs.filter(m => m.es_receta !== false);
       const recQty = {};
       recetasGuardadas.forEach(m => { recQty[m.ingrediente] = m.cantidad; });
