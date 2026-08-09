@@ -502,16 +502,19 @@
         <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
           <input type="file" id="ventas-excel-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="onVentasExcelSeleccionado(this)">
           <button class="btn-guardar-dia" onclick="document.getElementById('ventas-excel-file').click()">SELECCIONAR EXCEL</button>
-          <select id="ventas-import-destino" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-weight:700;color:#1a237e;">
-            <option value="">Destino: AUTO (según archivo)</option>
-            <option value="stocks">Destino: STOCKS</option>
-            <option value="barra">Destino: BARRA</option>
-            <option value="cocina">Destino: COCINA</option>
-          </select>
           <button class="btn-guardar-dia" onclick="registrarVentasImportadas()">REGISTRAR TODO</button>
         </div>
-        <div style="font-size:0.8rem;color:#888;margin-top:0.4rem;">Columnas detectadas automáticamente: Fecha | Item | Cantidad | Destino (STOCKS/BARRA/COCINA, opcional).</div>
+        <div style="font-size:0.8rem;color:#888;margin-top:0.4rem;">Columnas detectadas automáticamente: Fecha | Item | Cantidad (opcional Destino). La zona (STOCKS/BARRA/COCINA) se asigna en el modal y se guarda para la próxima vez.</div>
         <div id="ventas-import-preview"></div>
+      </div>
+      <div style="margin-top:1.5rem;padding:1rem;background:#eef7ee;border-radius:8px;border:1px dashed #2e7d32;">
+        <h3 style="margin:0 0 0.5rem 0;">IMPORTAR VENTAS (EXCEL) PRUEBA</h3>
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+          <input type="file" id="ventas-excel-prueba-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="onVentasExcelPruebaSeleccionado(this)">
+          <button class="btn-guardar-dia" onclick="document.getElementById('ventas-excel-prueba-file').click()">SELECCIONAR EXCEL (PRUEBA)</button>
+        </div>
+        <div style="font-size:0.8rem;color:#2e7d32;margin-top:0.4rem;">Modo de prueba: analiza el archivo y muestra cómo quedaría, sin registrar ni guardar nada.</div>
+        <div id="ventas-import-prueba-preview"></div>
       </div>
     </div>
 
@@ -553,6 +556,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=57"></script>
+  <script src="/app.js?v=58"></script>
 </body>
 </html>

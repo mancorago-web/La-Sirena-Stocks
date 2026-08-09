@@ -369,10 +369,23 @@ function exportarBusquedaVentas() {
 
 // --- VENTAS: importar desde Excel ---
 let ventasImportRows = [];
+let ventasPruebaRows = [];
 
 function onVentasExcelSeleccionado(input) {
   const file = input.files[0];
   if (!file) return;
+  parseVentasExcel(file, false);
+  input.value = '';
+}
+
+function onVentasExcelPruebaSeleccionado(input) {
+  const file = input.files[0];
+  if (!file) return;
+  parseVentasExcel(file, true);
+  input.value = '';
+}
+
+function parseVentasExcel(file, esPrueba) {
   const reader = new FileReader();
   reader.onload = (e) => {
     try {
@@ -388,24 +401,25 @@ function onVentasExcelSeleccionado(input) {
       const colCant = findKey(['cantidad', 'cant', 'qty', 'und']);
       const colDest = findKey(['destino', 'tipo']);
       if (!colItem || !colCant) { alert('No encontré columnas de Item y Cantidad. Usa columnas como: Fecha | Item | Cantidad | Destino'); return; }
-      ventasImportRows = rows.map(r => ({
+      const filas = rows.map(r => ({
         item: String(r[colItem] || '').trim(),
         cantidad: parseFloat(String(r[colCant] || '').replace(',', '.')) || 0,
         fecha: normalizarFechaExcel(r[colFecha]),
         destino: colDest ? String(r[colDest] || '').trim().toLowerCase() : ''
       })).filter(x => x.item && x.cantidad > 0);
-      analizarVentasImportadas();
+      if (esPrueba) { ventasPruebaRows = filas; } else { ventasImportRows = filas; }
+      analizarVentas(esPrueba);
     } catch (err) {
       alert('Error al leer el Excel: ' + err.message);
     }
   };
   reader.readAsArrayBuffer(file);
-  input.value = '';
 }
 
 // Analiza los items importados: aplica destinos guardados, predice y pide asignar los nuevos
-function analizarVentasImportadas() {
-  if (!ventasImportRows.length) { renderVentasImportPreview(); return; }
+function analizarVentas(esPrueba) {
+  const filas = esPrueba ? ventasPruebaRows : ventasImportRows;
+  if (!filas.length) { renderVentasImportPreview(esPrueba); return; }
   Promise.all([
     api('GET', '/api/ventas/import-mapping'),
     api('GET', '/api/recetas'),
@@ -418,7 +432,7 @@ function analizarVentasImportadas() {
     const cocinaSet = new Set((cocinaRec || []).map(x => norm(x.nombre)));
     const stockSet = new Set((stockItems || []).map(n => norm(n)));
     const uniq = {};
-    ventasImportRows.forEach(r => {
+    filas.forEach(r => {
       const k = norm(r.item);
       if (!uniq[k]) uniq[k] = { nombre: r.item, destinoCol: r.destino || '' };
     });
@@ -437,21 +451,21 @@ function analizarVentasImportadas() {
     });
     const byKey = {};
     items.forEach(i => { byKey[norm(i.nombre)] = i; });
-    ventasImportRows.forEach(r => { const i = byKey[norm(r.item)]; if (i) r.destino = i.destino; });
+    filas.forEach(r => { const i = byKey[norm(r.item)]; if (i) r.destino = i.destino; });
     if (nuevos.length) {
-      mostrarModalAsignarVentas(nuevos);
+      mostrarModalAsignarVentas(nuevos, esPrueba);
     } else {
-      renderVentasImportPreview();
+      renderVentasImportPreview(esPrueba);
     }
-  }).catch(() => { renderVentasImportPreview(); });
+  }).catch(() => { renderVentasImportPreview(esPrueba); });
 }
 
-function mostrarModalAsignarVentas(nuevos) {
+function mostrarModalAsignarVentas(nuevos, esPrueba) {
   const body = document.getElementById('modal-body');
   const opciones = (val) => ['stocks', 'barra', 'cocina'].map(d => `<option value="${d}" ${(val || 'stocks') === d ? 'selected' : ''}>${d.toUpperCase()}</option>`).join('');
   body.innerHTML = `
     <h3>Asignar destino de ventas</h3>
-    <p style="color:#666;font-size:0.85rem;">Estos items son <b>nuevos</b> (no se habían registrado antes). Indica a qué zona van sus ventas. Se guardará automáticamente para la próxima vez.</p>
+    <p style="color:#666;font-size:0.85rem;">Estos items son <b>nuevos</b> (no se habían registrado antes). Indica a qué zona van sus ventas.${esPrueba ? ' <b>(PRUEBA: no se guarda ni se registra)</b>' : ' Se guardará automáticamente para la próxima vez.'}</p>
     <div class="table-wrap"><table>
       <thead><tr><th>Item</th><th>Destino</th></tr></thead>
       <tbody>
@@ -462,26 +476,32 @@ function mostrarModalAsignarVentas(nuevos) {
       </tbody>
     </table></div>
     <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
-      <button onclick="guardarAsignacionVentas()" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar destinos</button>
-      <button onclick="cerrarModal(); renderVentasImportPreview();" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
+      <button onclick="guardarAsignacionVentas(${esPrueba})" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar destinos</button>
+      <button onclick="cerrarModal(); renderVentasImportPreview(${esPrueba});" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
     </div>`;
   document.getElementById('modal').style.display = 'block';
 }
 
-function guardarAsignacionVentas() {
+function guardarAsignacionVentas(esPrueba) {
   const mapping = {};
   document.querySelectorAll('.select-import-destino').forEach(sel => {
     mapping[String(sel.dataset.item).toUpperCase().replace(/\s+/g, ' ')] = sel.value;
   });
-  api('POST', '/api/ventas/import-mapping', { mapping }).then(() => {
+  const aplicar = () => {
     cerrarModal();
     const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-    ventasImportRows.forEach(r => {
-      const k = norm(r.item);
-      if (mapping[k]) r.destino = mapping[k];
-    });
+    const filas = esPrueba ? ventasPruebaRows : ventasImportRows;
+    filas.forEach(r => { const k = norm(r.item); if (mapping[k]) r.destino = mapping[k]; });
+    renderVentasImportPreview(esPrueba);
+  };
+  if (esPrueba) {
+    aplicar();
+    showToast('Destinos aplicados (prueba)');
+    return;
+  }
+  api('POST', '/api/ventas/import-mapping', { mapping }).then(() => {
+    aplicar();
     showToast('Destinos guardados');
-    renderVentasImportPreview();
   }).catch(() => alert('Error al guardar destinos'));
 }
 
@@ -504,27 +524,27 @@ function normalizarFechaExcel(val) {
   return s;
 }
 
-function renderVentasImportPreview() {
-  const cont = document.getElementById('ventas-import-preview');
+function renderVentasImportPreview(esPrueba) {
+  const cont = document.getElementById(esPrueba ? 'ventas-import-prueba-preview' : 'ventas-import-preview');
+  const filas = esPrueba ? ventasPruebaRows : ventasImportRows;
   if (!cont) return;
-  if (!ventasImportRows.length) { cont.innerHTML = '<p style="color:#888;margin-top:0.5rem;">No se detectaron filas válidas (item con cantidad).</p>'; return; }
-  const total = ventasImportRows.reduce((s, r) => s + r.cantidad, 0);
-  const sinFecha = ventasImportRows.filter(r => !r.fecha).length;
-  cont.innerHTML = '<p style="margin:0.5rem 0;">Filas detectadas: <b>' + ventasImportRows.length + '</b> — Total unidades: <b>' + total + '</b>' +
+  if (!filas.length) { cont.innerHTML = '<p style="color:#888;margin-top:0.5rem;">No se detectaron filas válidas (item con cantidad).</p>'; return; }
+  const total = filas.reduce((s, r) => s + r.cantidad, 0);
+  const sinFecha = filas.filter(r => !r.fecha).length;
+  cont.innerHTML = '<p style="margin:0.5rem 0;">Filas detectadas: <b>' + filas.length + '</b> — Total unidades: <b>' + total + '</b>' +
     (sinFecha ? ' — <span style="color:#c62828;">' + sinFecha + ' sin fecha (usarán la fecha seleccionada)</span>' : '') + '</p>' +
     '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Item</th><th>Cantidad</th><th>Destino</th></tr></thead><tbody>' +
-    ventasImportRows.map(r => '<tr><td>' + (r.fecha || '—') + '</td><td>' + esc(r.item) + '</td><td>' + r.cantidad + '</td><td>' + (r.destino ? r.destino.toUpperCase() : '—') + '</td></tr>').join('') +
+    filas.map(r => '<tr><td>' + (r.fecha || '—') + '</td><td>' + esc(r.item) + '</td><td>' + r.cantidad + '</td><td>' + (r.destino ? r.destino.toUpperCase() : '—') + '</td></tr>').join('') +
     '</tbody></table></div>';
 }
 
 function registrarVentasImportadas() {
   if (!ventasImportRows.length) { alert('Primero selecciona un Excel con ventas'); return; }
-  const destinoDefault = document.getElementById('ventas-import-destino')?.value || '';
   const fechaDefault = document.getElementById('fecha-ventas-menu')?.value || todayStr();
   const grupos = {};
   ventasImportRows.forEach(r => {
     const fecha = r.fecha || fechaDefault;
-    const destino = r.destino || destinoDefault || 'stocks';
+    const destino = r.destino || 'stocks';
     const key = fecha + '|' + destino;
     if (!grupos[key]) grupos[key] = [];
     grupos[key].push({ nombre: r.item, cantidad: r.cantidad, destino });
@@ -534,12 +554,11 @@ function registrarVentasImportadas() {
   if (!confirm('¿Registrar ' + ventasImportRows.length + ' ventas (' + keys.length + ' grupos por fecha/destino)?')) return;
   let idx = 0;
   let noEncontrados = 0;
-  const btn = document.querySelector('#tab-ventas-central .btn-guardar-dia');
   function procesar() {
     if (idx >= keys.length) {
       showToast('Ventas importadas' + (noEncontrados ? ' (' + noEncontrados + ' no encontrados)' : ''));
       ventasImportRows = [];
-      renderVentasImportPreview();
+      renderVentasImportPreview(false);
       cargarVentasCentral();
       _invCache = { fecha: null, data: null, pending: null };
       actualizarContadoresMenu();
