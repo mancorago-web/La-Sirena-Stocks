@@ -447,13 +447,14 @@ function analizarVentas(esPrueba) {
     const stocksPorNombre = {};
     (invData || []).forEach(a => {
       (a.items || []).forEach(it => {
+        if (esBasura(it.nombre)) return;
         const k = norm(it.nombre);
         if (!stocksPorNombre[k]) stocksPorNombre[k] = [];
         stocksPorNombre[k].push({ almacen_id: a.id, almacen_nombre: a.nombre, cantidad: it.stock_cierre !== undefined && it.stock_cierre !== null ? it.stock_cierre : (it.stock_apertura || 0) });
       });
     });
     window._ventasImportStocks = stocksPorNombre;
-    const stockNombres = (stockItems || []);
+    const stockNombres = (stockItems || []).filter(n => !esBasura(n));
     const uniq = {};
     filas.forEach(r => {
       const k = norm(r.item);
@@ -480,7 +481,7 @@ function analizarVentas(esPrueba) {
         i.emparejado = true;
       } else if ((i.destino === 'cocina' && cocinaSet.has(k)) ||
                  (i.destino === 'barra' && barraSet.has(k)) ||
-                 (i.destino === 'stocks' && stockSet.has(k))) {
+                 (i.destino === 'stocks' && stockSet.has(k) && !esBasura(i.nombre))) {
         i.matched = i.nombre;
         i.emparejado = true;
       } else {
@@ -566,6 +567,16 @@ function onPruebaDestinoChange(radio) {
   actualizarAlmacenImport(tr);
 }
 
+// Nombres basura que vienen del EXCEL (artefactos) y no deben auto-emparejarse en STOCKS
+function esBasura(nombre) {
+  const n = String(nombre || '').trim();
+  if (!n) return true;
+  if (n.includes('*')) return true;
+  if (/[.\u2013]$/.test(n)) return true;
+  if (n.endsWith('-')) return true;
+  return false;
+}
+
 // Similitud por palabras (ignora símbolos y palabras vacías)
 const STOPWORDS = new Set(['DE', 'DEL', 'LA', 'EL', 'LOS', 'LAS', 'CON', 'POR', 'PARA', 'Y', 'A', 'AL', 'UN', 'UNA', 'X', 'ML', 'LT', 'L', 'KG', 'GR', 'S', 'C', 'G']);
 function tokensDe(nombre) {
@@ -590,7 +601,7 @@ function similitud(a, b) {
 function candidatosTodos(nombre) {
   const ctx = window._ventasImportCtx || { barraNombres: [], cocinaNombres: [], stockNombres: [] };
   const pool = [];
-  (ctx.stockNombres || []).forEach(n => pool.push({ n, zona: 'STOCKS' }));
+  (ctx.stockNombres || []).forEach(n => { if (!esBasura(n)) pool.push({ n, zona: 'STOCKS' }); });
   (ctx.barraNombres || []).forEach(n => pool.push({ n, zona: 'BARRA' }));
   (ctx.cocinaNombres || []).forEach(n => pool.push({ n, zona: 'COCINA' }));
   const scored = pool.map(p => ({ p, s: similitud(nombre, p.n) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 15).map(x => x.p);
