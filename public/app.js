@@ -114,7 +114,7 @@ document.querySelectorAll('.tab').forEach(tab => {
       stocks: () => cargarStocks(),
       reportes: () => cargarReportes(),
       precios: () => cargarBaseDatosStocks(),
-      busquedaventas: () => {}
+      busquedaventas: () => cargarSugerenciasBusquedaVentas()
     };
     if (loaders[name]) loaders[name]();
   });
@@ -160,7 +160,7 @@ function dibujarFlujoMenu() {
   });
   svg.innerHTML = paths;
 }
-window.addEventListener('load', () => { dibujarFlujoMenu(); actualizarContadoresMenu(); });
+window.addEventListener('load', () => { dibujarFlujoMenu(); actualizarContadoresMenu(); cargarSugerenciasBusquedaVentas(); });
 
 function actualizarContadoresMenu() {
   const s = document.getElementById('menu-items-stocks');
@@ -313,6 +313,14 @@ function recargarTodo(fecha) {
 }
 
 // --- Búsqueda de Ventas (STOCKS) ---
+function cargarSugerenciasBusquedaVentas() {
+  const dl = document.getElementById('busqueda-venta-sugerencias');
+  if (!dl) return;
+  api('GET', '/api/stock/precios/items').then(names => {
+    dl.innerHTML = (names || []).map(n => '<option value="' + n.replace(/"/g, '&quot;') + '">').join('');
+  }).catch(() => {});
+}
+
 function buscarVentas() {
   const item = document.getElementById('busqueda-venta-item')?.value.trim() || '';
   const desde = document.getElementById('busqueda-venta-desde')?.value;

@@ -503,7 +503,8 @@
       <div class="header-actions">
         <h2>Búsqueda de Ventas</h2>
         <div class="controles-dia">
-          <input type="text" id="busqueda-venta-item" placeholder="Buscar item..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:220px;">
+          <input type="text" id="busqueda-venta-item" placeholder="Buscar item..." list="busqueda-venta-sugerencias" autocomplete="off" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:220px;">
+          <datalist id="busqueda-venta-sugerencias"></datalist>
           <label>Desde: <input type="date" id="busqueda-venta-desde"></label>
           <label>Hasta: <input type="date" id="busqueda-venta-hasta"></label>
           <button class="btn-guardar-dia" onclick="buscarVentas()">🔍 BUSCAR</button>
@@ -536,6 +537,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=54"></script>
+  <script src="/app.js?v=55"></script>
 </body>
 </html>
