@@ -367,6 +367,118 @@ function exportarBusquedaVentas() {
   }).catch(() => alert('Error al exportar'));
 }
 
+// --- VENTAS: importar desde Excel ---
+let ventasImportRows = [];
+
+function onVentasExcelSeleccionado(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      if (!rows.length) { alert('El archivo está vacío'); return; }
+      const keys = Object.keys(rows[0]);
+      const norm = (k) => String(k || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '');
+      const findKey = (aliases) => keys.find(k => { const n = norm(k); return aliases.some(a => n === a || n.includes(a) || a.includes(n)); });
+      const colFecha = findKey(['fecha', 'date', 'dia']);
+      const colItem = findKey(['item', 'producto', 'nombre', 'articulo', 'descripcion']);
+      const colCant = findKey(['cantidad', 'cant', 'qty', 'und']);
+      const colDest = findKey(['destino', 'tipo']);
+      if (!colItem || !colCant) { alert('No encontré columnas de Item y Cantidad. Usa columnas como: Fecha | Item | Cantidad | Destino'); return; }
+      ventasImportRows = rows.map(r => ({
+        item: String(r[colItem] || '').trim(),
+        cantidad: parseFloat(String(r[colCant] || '').replace(',', '.')) || 0,
+        fecha: normalizarFechaExcel(r[colFecha]),
+        destino: colDest ? String(r[colDest] || '').trim().toLowerCase() : ''
+      })).filter(x => x.item && x.cantidad > 0);
+      renderVentasImportPreview();
+    } catch (err) {
+      alert('Error al leer el Excel: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  input.value = '';
+}
+
+function normalizarFechaExcel(val) {
+  if (val === null || val === undefined || val === '') return '';
+  if (typeof val === 'number') {
+    const d = XLSX.SSF.parse_date_code(val);
+    if (d) return d.y + '-' + String(d.m).padStart(2, '0') + '-' + String(d.d).padStart(2, '0');
+    return '';
+  }
+  let s = String(val).trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return m[1] + '-' + m[2] + '-' + m[3];
+  m = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})/);
+  if (m) {
+    let d = parseInt(m[1]), mo = parseInt(m[2]);
+    if (d > 12) { const t = d; d = mo; mo = t; }
+    return m[3] + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+  }
+  return s;
+}
+
+function renderVentasImportPreview() {
+  const cont = document.getElementById('ventas-import-preview');
+  if (!cont) return;
+  if (!ventasImportRows.length) { cont.innerHTML = '<p style="color:#888;margin-top:0.5rem;">No se detectaron filas válidas (item con cantidad).</p>'; return; }
+  const total = ventasImportRows.reduce((s, r) => s + r.cantidad, 0);
+  const sinFecha = ventasImportRows.filter(r => !r.fecha).length;
+  cont.innerHTML = '<p style="margin:0.5rem 0;">Filas detectadas: <b>' + ventasImportRows.length + '</b> — Total unidades: <b>' + total + '</b>' +
+    (sinFecha ? ' — <span style="color:#c62828;">' + sinFecha + ' sin fecha (usarán la fecha seleccionada)</span>' : '') + '</p>' +
+    '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Item</th><th>Cantidad</th><th>Destino</th></tr></thead><tbody>' +
+    ventasImportRows.map(r => '<tr><td>' + (r.fecha || '—') + '</td><td>' + esc(r.item) + '</td><td>' + r.cantidad + '</td><td>' + (r.destino ? r.destino.toUpperCase() : '—') + '</td></tr>').join('') +
+    '</tbody></table></div>';
+}
+
+function registrarVentasImportadas() {
+  if (!ventasImportRows.length) { alert('Primero selecciona un Excel con ventas'); return; }
+  const destinoDefault = document.getElementById('ventas-import-destino')?.value || '';
+  const fechaDefault = document.getElementById('fecha-ventas-menu')?.value || todayStr();
+  const grupos = {};
+  ventasImportRows.forEach(r => {
+    const fecha = r.fecha || fechaDefault;
+    const destino = r.destino || destinoDefault || 'stocks';
+    const key = fecha + '|' + destino;
+    if (!grupos[key]) grupos[key] = [];
+    grupos[key].push({ nombre: r.item, cantidad: r.cantidad, destino });
+  });
+  const keys = Object.keys(grupos);
+  if (!keys.length) { alert('No hay filas para registrar'); return; }
+  if (!confirm('¿Registrar ' + ventasImportRows.length + ' ventas (' + keys.length + ' grupos por fecha/destino)?')) return;
+  let idx = 0;
+  let noEncontrados = 0;
+  const btn = document.querySelector('#tab-ventas-central .btn-guardar-dia');
+  function procesar() {
+    if (idx >= keys.length) {
+      showToast('Ventas importadas' + (noEncontrados ? ' (' + noEncontrados + ' no encontrados)' : ''));
+      ventasImportRows = [];
+      renderVentasImportPreview();
+      cargarVentasCentral();
+      _invCache = { fecha: null, data: null, pending: null };
+      actualizarContadoresMenu();
+      return;
+    }
+    const key = keys[idx++];
+    const partes = key.split('|');
+    const fecha = partes[0];
+    const destino = partes[1];
+    const items = grupos[key];
+    api('POST', '/api/ventas/guardar', { fecha, items }).then(r => {
+      const no = (r.resumen && r.resumen.noEncontrados) ? r.resumen.noEncontrados.length : 0;
+      noEncontrados += no;
+      procesar();
+    }).catch(() => {
+      alert('Error registrando las ventas de ' + fecha);
+    });
+  }
+  procesar();
+}
+
 function guardarDia() {
   const fecha = document.getElementById('fecha-almacenes').value;
   if (!fecha) { alert('Selecciona una fecha'); return; }

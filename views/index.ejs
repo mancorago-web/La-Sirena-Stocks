@@ -497,6 +497,22 @@
         </div>
       </div>
       <div id="ventas-detalle-container" style="margin-top:1.5rem;"></div>
+      <div style="margin-top:1.5rem;padding:1rem;background:#f9f9f9;border-radius:8px;border:1px dashed #ccc;">
+        <h3 style="margin:0 0 0.5rem 0;">IMPORTAR VENTAS (EXCEL)</h3>
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+          <input type="file" id="ventas-excel-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="onVentasExcelSeleccionado(this)">
+          <button class="btn-guardar-dia" onclick="document.getElementById('ventas-excel-file').click()">SELECCIONAR EXCEL</button>
+          <select id="ventas-import-destino" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-weight:700;color:#1a237e;">
+            <option value="">Destino: AUTO (según archivo)</option>
+            <option value="stocks">Destino: STOCKS</option>
+            <option value="barra">Destino: BARRA</option>
+            <option value="cocina">Destino: COCINA</option>
+          </select>
+          <button class="btn-guardar-dia" onclick="registrarVentasImportadas()">REGISTRAR TODO</button>
+        </div>
+        <div style="font-size:0.8rem;color:#888;margin-top:0.4rem;">Columnas detectadas automáticamente: Fecha | Item | Cantidad | Destino (STOCKS/BARRA/COCINA, opcional).</div>
+        <div id="ventas-import-preview"></div>
+      </div>
     </div>
 
     <div id="tab-busquedaventas" class="tab-content">
@@ -537,6 +553,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=55"></script>
+  <script src="/app.js?v=56"></script>
 </body>
 </html>
