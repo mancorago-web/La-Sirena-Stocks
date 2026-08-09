@@ -482,23 +482,17 @@ function analizarVentas(esPrueba) {
     const byKey = {};
     items.forEach(i => { byKey[norm(i.nombre)] = i; });
     filas.forEach(r => { const i = byKey[norm(r.item)]; if (i) { r.destino = i.destino; r.matched = i.matched || i.nombre; } });
-    if (esPrueba) {
-      renderVentasPruebaAsignacion(items, { barraNombres, cocinaNombres, stockNombres });
-    } else if (nuevos.length) {
-      mostrarModalAsignarVentas(items, esPrueba);
-    } else {
-      renderVentasImportPreview(esPrueba);
-    }
+    window._ventasImportCtx = { barraNombres, cocinaNombres, stockNombres };
+    renderVentasAsignacion(items, esPrueba ? 'ventas-import-prueba-preview' : 'ventas-import-preview');
   }).catch(() => { renderVentasImportPreview(esPrueba); });
 }
 
-// Vista inline (sin modal) para la sección PRUEBA: items con destino tickeable y emparejamiento
-function renderVentasPruebaAsignacion(items, ctx) {
-  const cont = document.getElementById('ventas-import-prueba-preview');
+// Vista inline (sin modal) para asignar destino y emparejar items
+function renderVentasAsignacion(items, containerId) {
+  const cont = document.getElementById(containerId);
   if (!cont) return;
   if (!items.length) { cont.innerHTML = '<p style="color:#888;margin-top:0.5rem;">Sube un Excel para ver los items.</p>'; return; }
-  ctx = ctx || { barraNombres: [], cocinaNombres: [], stockNombres: [] };
-  window._ventasImportCtx = ctx;
+  const ctx = window._ventasImportCtx || { barraNombres: [], cocinaNombres: [], stockNombres: [] };
   const total = items.reduce((s, i) => s + i.cantidad, 0);
   const radios = (i) => ['stocks', 'barra', 'cocina'].map(d => {
     const checked = (i.destino || 'stocks') === d ? ' checked' : '';
@@ -566,6 +560,21 @@ function candidatosSimilares(nombre, pool) {
 
 function guardarVentasPrueba() {
   if (!ventasPruebaRows.length) { alert('Primero selecciona un Excel con ventas'); return; }
+  guardarVentasAsignadas('ventas-import-prueba-preview', ventasPruebaRows, () => {
+    ventasPruebaRows = [];
+    renderVentasAsignacion([], 'ventas-import-prueba-preview');
+  });
+}
+
+function guardarVentasReal() {
+  if (!ventasImportRows.length) { alert('Primero selecciona un Excel con ventas'); return; }
+  guardarVentasAsignadas('ventas-import-preview', ventasImportRows, () => {
+    ventasImportRows = [];
+    renderVentasAsignacion([], 'ventas-import-preview');
+  });
+}
+
+function guardarVentasAsignadas(containerId, filas, onDone) {
   const ctx = window._ventasImportCtx || { barraNombres: [], cocinaNombres: [], stockNombres: [] };
   const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
   const barraSet = new Set(ctx.barraNombres.map(n => norm(n)));
@@ -573,7 +582,7 @@ function guardarVentasPrueba() {
   const match = {};
   const mapping = {};
   const recetasNuevas = [];
-  document.querySelectorAll('#ventas-import-prueba-preview tbody tr').forEach(tr => {
+  document.querySelectorAll('#' + containerId + ' tbody tr').forEach(tr => {
     const itemNombre = tr.querySelector('td') ? tr.querySelector('td').textContent.replace(/ *\*?$/, '').trim() : '';
     if (!itemNombre) return;
     const destinoRadio = tr.querySelector('input[type="radio"]:checked');
@@ -594,7 +603,7 @@ function guardarVentasPrueba() {
     mapping[norm(itemNombre)] = destino;
   });
   if (!Object.keys(mapping).length) { alert('No hay items para guardar'); return; }
-  ventasPruebaRows.forEach(r => { const k = norm(r.item); if (mapping[k]) r.destino = mapping[k]; if (match[k]) r.matched = match[k]; });
+  filas.forEach(r => { const k = norm(r.item); if (mapping[k]) r.destino = mapping[k]; if (match[k]) r.matched = match[k]; });
   const crearRecetas = recetasNuevas.map(rec => {
     return rec.tipo === 'barra'
       ? api('POST', '/api/recetas', { nombre: rec.nombre, categoria: 'Clásicos' })
@@ -603,13 +612,18 @@ function guardarVentasPrueba() {
   Promise.all(crearRecetas)
     .then(() => api('POST', '/api/ventas/import-match', { match }))
     .then(() => api('POST', '/api/ventas/import-mapping', { mapping }))
-    .then(() => {
-      registrarVentasFilas(ventasPruebaRows, () => {
-        ventasPruebaRows = [];
-        renderVentasPruebaAsignacion([]);
-      });
-    })
+    .then(() => { registrarVentasFilas(filas, onDone); })
     .catch(() => alert('Error al guardar'));
+}
+
+function limpiarVentasImport() {
+  ventasImportRows = [];
+  renderVentasAsignacion([], 'ventas-import-preview');
+}
+
+function limpiarVentasPrueba() {
+  ventasPruebaRows = [];
+  renderVentasAsignacion([], 'ventas-import-prueba-preview');
 }
 
 function mostrarModalAsignarVentas(items, esPrueba) {
@@ -695,14 +709,6 @@ function renderVentasImportPreview(esPrueba) {
     '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Item</th><th>Cantidad</th><th>Destino</th></tr></thead><tbody>' +
     filas.map(r => '<tr><td>' + (r.fecha || '—') + '</td><td>' + esc(r.item) + '</td><td>' + r.cantidad + '</td><td>' + (r.destino ? r.destino.toUpperCase() : '—') + '</td></tr>').join('') +
     '</tbody></table></div>';
-}
-
-function registrarVentasImportadas() {
-  if (!ventasImportRows.length) { alert('Primero selecciona un Excel con ventas'); return; }
-  registrarVentasFilas(ventasImportRows, () => {
-    ventasImportRows = [];
-    renderVentasImportPreview(false);
-  });
 }
 
 // Registra un conjunto de filas de ventas agrupándolas por fecha + destino

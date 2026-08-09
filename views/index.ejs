@@ -502,7 +502,8 @@
         <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
           <input type="file" id="ventas-excel-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="onVentasExcelSeleccionado(this)">
           <button class="btn-guardar-dia" onclick="document.getElementById('ventas-excel-file').click()">SELECCIONAR EXCEL</button>
-          <button class="btn-guardar-dia" onclick="registrarVentasImportadas()">REGISTRAR TODO</button>
+          <button class="btn-guardar-dia" onclick="guardarVentasReal()">GUARDAR VENTAS</button>
+          <button class="btn-detalles" onclick="limpiarVentasImport()" title="Quitar Excel" style="background:#c62828;color:#fff;border:none;padding:0.4rem 0.8rem;border-radius:4px;cursor:pointer;font-weight:700;">✕</button>
         </div>
         <div style="font-size:0.8rem;color:#888;margin-top:0.4rem;">Columnas detectadas automáticamente: Fecha | Item | Cantidad. La zona (STOCKS/BARRA/COCINA) se ticlea manualmente la primera vez y se guarda para la próxima.</div>
         <div id="ventas-import-preview"></div>
@@ -513,6 +514,7 @@
           <input type="file" id="ventas-excel-prueba-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="onVentasExcelPruebaSeleccionado(this)">
           <button class="btn-guardar-dia" onclick="document.getElementById('ventas-excel-prueba-file').click()">SELECCIONAR EXCEL (PRUEBA)</button>
           <button class="btn-guardar-dia" onclick="guardarVentasPrueba()">GUARDAR VENTAS</button>
+          <button class="btn-detalles" onclick="limpiarVentasPrueba()" title="Quitar Excel" style="background:#c62828;color:#fff;border:none;padding:0.4rem 0.8rem;border-radius:4px;cursor:pointer;font-weight:700;">✕</button>
         </div>
         <div style="font-size:0.8rem;color:#2e7d32;margin-top:0.4rem;">Sube el Excel, ticlea el destino (STOCKS/BARRA/COCINA) de cada item y pulsa GUARDAR VENTAS para registrarlas.</div>
         <div id="ventas-import-prueba-preview"></div>
@@ -557,6 +559,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=63"></script>
+  <script src="/app.js?v=64"></script>
 </body>
 </html>
