@@ -1217,6 +1217,46 @@ app.get('/api/ventas/detalle', async (req, res) => {
   }
 });
 
+// --- VENTAS: búsqueda por rango de fechas e item (STOCKS) ---
+app.get('/api/ventas/busqueda', async (req, res) => {
+  try {
+    const { desde, hasta, item } = req.query;
+    if (!desde || !hasta) return res.status(400).json({ error: 'desde y hasta requeridos' });
+    const [almsSnap, invSnap] = await Promise.all([col('almacenes').get(), col('inventario').get()]);
+    const alName = {};
+    almsSnap.docs.forEach(d => { alName[Number(d.id)] = d.data().nombre; });
+    const invById = {};
+    invSnap.docs.forEach(d => {
+      const inv = d.data();
+      invById[Number(inv.item_id) + '_' + Number(inv.almacen_id)] = inv;
+    });
+    const dia = await col('inventario_diario').where('fecha', '>=', desde).where('fecha', '<=', hasta).get();
+    const q = String(item || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const groups = {};
+    dia.docs.forEach(dd => {
+      const f = dd.data();
+      const ventas = f.total_ventas || 0;
+      if (!(ventas > 0)) return;
+      const inv = invById[Number(f.item_id) + '_' + Number(f.almacen_id)] || {};
+      const nombre = inv.nombre || String(f.item_id);
+      if (q) {
+        const n = String(nombre).toLowerCase().replace(/\s+/g, ' ');
+        if (!n.includes(q)) return;
+      }
+      const key = Number(f.item_id) + '_' + Number(f.almacen_id);
+      if (!groups[key]) groups[key] = { item_id: Number(f.item_id), nombre, almacen_id: Number(f.almacen_id), almacen_nombre: alName[Number(f.almacen_id)] || ('Almacén ' + f.almacen_id), detalle: [], total: 0 };
+      groups[key].detalle.push({ fecha: f.fecha, cantidad: ventas, saved_by: f.saved_by || '-' });
+      groups[key].total += ventas;
+    });
+    const result = Object.values(groups);
+    result.forEach(g => { g.detalle.sort((a, b) => a.fecha.localeCompare(b.fecha)); g.total = Math.round(g.total * 100) / 100; });
+    result.sort((a, b) => a.nombre.localeCompare(b.nombre) || (a.almacen_id - b.almacen_id));
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- VENTAS: eliminar una venta (efecto en cadena) ---
 app.delete('/api/ventas/:id', authMiddleware, async (req, res) => {
   try {

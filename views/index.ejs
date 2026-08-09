@@ -77,6 +77,7 @@
       <button class="tab" data-tab="stocks">Stocks</button>
       <button class="tab" data-tab="reportes">Reportes</button>
       <button class="tab" data-tab="precios">Base de Datos</button>
+      <button class="tab" data-tab="busquedaventas">Búsqueda Ventas</button>
     </div>
   </div>
 
@@ -498,6 +499,20 @@
       <div id="ventas-detalle-container" style="margin-top:1.5rem;"></div>
     </div>
 
+    <div id="tab-busquedaventas" class="tab-content">
+      <div class="header-actions">
+        <h2>Búsqueda de Ventas</h2>
+        <div class="controles-dia">
+          <input type="text" id="busqueda-venta-item" placeholder="Buscar item..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:220px;">
+          <label>Desde: <input type="date" id="busqueda-venta-desde"></label>
+          <label>Hasta: <input type="date" id="busqueda-venta-hasta"></label>
+          <button class="btn-guardar-dia" onclick="buscarVentas()">🔍 BUSCAR</button>
+          <button class="btn-detalles" onclick="exportarBusquedaVentas()">Exportar</button>
+        </div>
+      </div>
+      <div id="busqueda-ventas-result"></div>
+    </div>
+
     <div id="modal" class="modal">
     <div class="modal-content">
       <span class="close" onclick="cerrarModal()">&times;</span>
@@ -521,6 +536,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=53"></script>
+  <script src="/app.js?v=54"></script>
 </body>
 </html>

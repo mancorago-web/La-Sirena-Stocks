@@ -113,7 +113,8 @@ document.querySelectorAll('.tab').forEach(tab => {
       bajas: () => cargarBajas(document.getElementById('fecha-bajas')?.value),
       stocks: () => cargarStocks(),
       reportes: () => cargarReportes(),
-      precios: () => cargarBaseDatosStocks()
+      precios: () => cargarBaseDatosStocks(),
+      busquedaventas: () => {}
     };
     if (loaders[name]) loaders[name]();
   });
@@ -309,6 +310,53 @@ function recargarTodo(fecha) {
   cargarVentas(fecha);
   cargarBajas(fecha);
   cargarStocks();
+}
+
+// --- Búsqueda de Ventas (STOCKS) ---
+function buscarVentas() {
+  const item = document.getElementById('busqueda-venta-item')?.value.trim() || '';
+  const desde = document.getElementById('busqueda-venta-desde')?.value;
+  const hasta = document.getElementById('busqueda-venta-hasta')?.value;
+  const cont = document.getElementById('busqueda-ventas-result');
+  if (!cont) return;
+  if (!desde || !hasta) { cont.innerHTML = '<p>Selecciona las fechas de inicio y fin.</p>'; return; }
+  cont.innerHTML = '<p>Cargando...</p>';
+  api('GET', '/api/ventas/busqueda?desde=' + encodeURIComponent(desde) + '&hasta=' + encodeURIComponent(hasta) + '&item=' + encodeURIComponent(item)).then(res => {
+    if (!res.length) {
+      cont.innerHTML = '<p>No se encontraron ventas en ese rango' + (item ? ' para "<b>' + esc(item) + '</b>"' : '') + '.</p>';
+      return;
+    }
+    cont.innerHTML = res.map(g => `
+      <div class="accordion-item">
+        <div class="accordion-header" onclick="toggleAcordeon(this)">
+          <span class="accordion-title">${esc(g.nombre)} <span style="font-weight:400;font-size:0.85rem;color:#777;">— ${esc(g.almacen_nombre)} — Total: ${g.total}</span></span>
+          <span class="accordion-arrow">▶</span>
+        </div>
+        <div class="accordion-body">
+          <div class="table-wrap"><table>
+            <thead><tr><th>Fecha</th><th>Cantidad Vendida</th><th>Usuario</th></tr></thead>
+            <tbody>
+              ${g.detalle.map(d => `<tr><td>${d.fecha}</td><td>${d.cantidad}</td><td>${esc(d.saved_by)}</td></tr>`).join('')}
+            </tbody>
+          </table></div>
+        </div>
+      </div>`).join('');
+  }).catch(() => { cont.innerHTML = '<p>Error al buscar.</p>'; });
+}
+
+function exportarBusquedaVentas() {
+  const item = document.getElementById('busqueda-venta-item')?.value.trim() || '';
+  const desde = document.getElementById('busqueda-venta-desde')?.value;
+  const hasta = document.getElementById('busqueda-venta-hasta')?.value;
+  if (!desde || !hasta) { alert('Selecciona las fechas'); return; }
+  api('GET', '/api/ventas/busqueda?desde=' + encodeURIComponent(desde) + '&hasta=' + encodeURIComponent(hasta) + '&item=' + encodeURIComponent(item)).then(res => {
+    const wsData = [['Item', 'Almacén', 'Fecha', 'Cantidad', 'Usuario']];
+    res.forEach(g => g.detalle.forEach(d => wsData.push([g.nombre, g.almacen_nombre, d.fecha, d.cantidad, d.saved_by])));
+    const libro = XLSX.utils.book_new();
+    const hoja = XLSX.utils.aoa_to_sheet(wsData);
+    XLSX.utils.book_append_sheet(libro, hoja, 'Ventas');
+    XLSX.writeFile(libro, 'BusquedaVentas_' + desde + '_' + hasta + '.xlsx');
+  }).catch(() => alert('Error al exportar'));
 }
 
 function guardarDia() {
@@ -1898,6 +1946,11 @@ initPicker('fecha-stocks', function() { cargarStocks(); });
 // reportes, precios, barra loaded lazily on first tab click
 initPicker('reporte-fecha-ini');
 initPicker('reporte-fecha-fin');
+// Búsqueda de Ventas: fechas por defecto = hoy
+['busqueda-venta-desde', 'busqueda-venta-hasta'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.value = todayStr();
+});
 window.addEventListener('click', e => { if (e.target === document.getElementById('modal')) cerrarModal(); });
 
 // --- BARRA: Recetas ---
