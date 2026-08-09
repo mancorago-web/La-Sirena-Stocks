@@ -412,7 +412,7 @@ function parseVentasExcel(file, esPrueba) {
       const filas = rows.map(r => ({
         item: String(r[colItem] || '').trim(),
         cantidad: parseFloat(String(r[colCant] || '').replace(',', '.')) || 0,
-        fecha: todayStr(),
+        fecha: normalizarFechaExcel(r[colFecha]) || todayStr(),
         destino: ''
       })).filter(x => x.item && x.cantidad > 0 && !esFilaNoProducto(x.item));
       if (esPrueba) { ventasPruebaRows = filas; } else { ventasImportRows = filas; }
@@ -483,6 +483,7 @@ function analizarVentas(esPrueba) {
     items.forEach(i => { byKey[norm(i.nombre)] = i; });
     filas.forEach(r => { const i = byKey[norm(r.item)]; if (i) { r.destino = i.destino; r.matched = i.matched || i.nombre; } });
     window._ventasImportCtx = { barraNombres, cocinaNombres, stockNombres };
+    window._ventasImportFecha = (filas[0] && filas[0].fecha) || todayStr();
     renderVentasAsignacion(items, esPrueba ? 'ventas-import-prueba-preview' : 'ventas-import-preview');
   }).catch(() => { renderVentasImportPreview(esPrueba); });
 }
@@ -494,6 +495,7 @@ function renderVentasAsignacion(items, containerId) {
   if (!items.length) { cont.innerHTML = '<p style="color:#888;margin-top:0.5rem;">Sube un Excel para ver los items.</p>'; return; }
   const ctx = window._ventasImportCtx || { barraNombres: [], cocinaNombres: [], stockNombres: [] };
   const total = items.reduce((s, i) => s + i.cantidad, 0);
+  const fecha = window._ventasImportFecha || todayStr();
   const radios = (i) => ['stocks', 'barra', 'cocina'].map(d => {
     const checked = (i.destino || 'stocks') === d ? ' checked' : '';
     return '<label style="display:inline-flex;align-items:center;gap:0.25rem;margin-right:0.75rem;font-size:0.85rem;cursor:pointer;"><input type="radio" name="dest-prueba-' + i.idx + '" value="' + d + '"' + checked + ' onchange="onPruebaDestinoChange(this)"> ' + d.toUpperCase() + '</label>';
@@ -509,7 +511,7 @@ function renderVentasAsignacion(items, containerId) {
       '<option value="">— Emparejar —</option>' + opts + '</select>' +
       '<input class="input-match-nuevo" data-item="' + esc(i.nombre) + '" placeholder="Nombre nuevo..." style="display:none;margin-top:0.3rem;padding:0.3rem;border:1px solid #ccc;border-radius:4px;width:90%;">';
   };
-  cont.innerHTML = '<p style="margin:0.5rem 0;">Fecha: <b>' + todayStr() + '</b> — Items: <b>' + items.length + '</b> — Total unidades: <b>' + total + '</b></p>' +
+  cont.innerHTML = '<p style="margin:0.5rem 0;">Fecha: <b>' + fecha + '</b> — Items: <b>' + items.length + '</b> — Total unidades: <b>' + total + '</b></p>' +
     '<div class="table-wrap"><table><thead><tr><th>Item (Excel)</th><th>Cantidad</th><th>Destino</th><th>Emparejar con</th></tr></thead><tbody>' +
     items.map(i => `<tr>
       <td>${esc(i.nombre)}${i.sinEmparejar ? ' <span style="color:#c62828;" title="Sin emparejar">*</span>' : ''}</td>
