@@ -469,17 +469,18 @@ function analizarVentas(esPrueba) {
       else if (barraSet.has(k)) i.destino = 'barra';
       else if (stockSet.has(k)) i.destino = 'stocks';
       else i.destino = 'stocks';
-      // Emparejamiento: ¿el nombre del Excel ya está mapeado a un item/receta de la app?
-      if (match[k]) {
-        i.matched = match[k];
+      // Emparejamiento: ¿el nombre del Excel ya está mapeado a un item/receta real de la app?
+      const m = match[k];
+      const esSelf = m && norm(m) === k;
+      const mValido = m && ((i.destino === 'cocina' && cocinaSet.has(norm(m))) ||
+                            (i.destino === 'barra' && barraSet.has(norm(m))) ||
+                            (i.destino === 'stocks' && stockSet.has(norm(m))));
+      if (m && !esSelf && mValido) {
+        i.matched = m;
         i.emparejado = true;
-      } else if (i.destino === 'cocina' && cocinaSet.has(k)) {
-        i.matched = i.nombre;
-        i.emparejado = true;
-      } else if (i.destino === 'barra' && barraSet.has(k)) {
-        i.matched = i.nombre;
-        i.emparejado = true;
-      } else if (i.destino === 'stocks' && stockSet.has(k)) {
+      } else if ((i.destino === 'cocina' && cocinaSet.has(k)) ||
+                 (i.destino === 'barra' && barraSet.has(k)) ||
+                 (i.destino === 'stocks' && stockSet.has(k))) {
         i.matched = i.nombre;
         i.emparejado = true;
       } else {
