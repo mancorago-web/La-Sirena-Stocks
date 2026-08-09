@@ -430,15 +430,20 @@ function analizarVentas(esPrueba) {
   if (!filas.length) { renderVentasImportPreview(esPrueba); return; }
   Promise.all([
     api('GET', '/api/ventas/import-mapping'),
+    api('GET', '/api/ventas/import-match'),
     api('GET', '/api/recetas'),
     api('GET', '/api/cocina/recetas'),
     api('GET', '/api/stock/precios/items')
-  ]).then(([mapRes, barraRec, cocinaRec, stockItems]) => {
+  ]).then(([mapRes, matchRes, barraRec, cocinaRec, stockItems]) => {
     const mapping = (mapRes && mapRes.mapping) || {};
+    const match = (matchRes && matchRes.match) || {};
     const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
     const barraSet = new Set((barraRec || []).map(x => norm(x.nombre)));
     const cocinaSet = new Set((cocinaRec || []).map(x => norm(x.nombre)));
     const stockSet = new Set((stockItems || []).map(n => norm(n)));
+    const barraNombres = (barraRec || []).map(x => x.nombre);
+    const cocinaNombres = (cocinaRec || []).map(x => x.nombre);
+    const stockNombres = (stockItems || []);
     const uniq = {};
     filas.forEach(r => {
       const k = norm(r.item);
@@ -449,19 +454,36 @@ function analizarVentas(esPrueba) {
     const nuevos = [];
     items.forEach(i => {
       const k = norm(i.nombre);
-      if (mapping[k]) { i.destino = mapping[k]; return; }
-      if (cocinaSet.has(k)) i.destino = 'cocina';
+      if (mapping[k]) { i.destino = mapping[k]; }
+      else if (cocinaSet.has(k)) i.destino = 'cocina';
       else if (barraSet.has(k)) i.destino = 'barra';
       else if (stockSet.has(k)) i.destino = 'stocks';
       else i.destino = 'stocks';
-      i.nuevo = true;
-      nuevos.push(i);
+      // Emparejamiento: ¿el nombre del Excel ya está mapeado a un item/receta de la app?
+      if (match[k]) {
+        i.matched = match[k];
+        i.emparejado = true;
+      } else if (i.destino === 'cocina' && cocinaSet.has(k)) {
+        i.matched = i.nombre;
+        i.emparejado = true;
+      } else if (i.destino === 'barra' && barraSet.has(k)) {
+        i.matched = i.nombre;
+        i.emparejado = true;
+      } else if (i.destino === 'stocks' && stockSet.has(k)) {
+        i.matched = i.nombre;
+        i.emparejado = true;
+      } else {
+        i.sinEmparejar = true;
+        i.nuevo = true;
+        nuevos.push(i);
+      }
+      if (!i.emparejado && !i.sinEmparejar) i.matched = i.nombre;
     });
     const byKey = {};
     items.forEach(i => { byKey[norm(i.nombre)] = i; });
-    filas.forEach(r => { const i = byKey[norm(r.item)]; if (i) r.destino = i.destino; });
+    filas.forEach(r => { const i = byKey[norm(r.item)]; if (i) { r.destino = i.destino; r.matched = i.matched || i.nombre; } });
     if (esPrueba) {
-      renderVentasPruebaAsignacion(items);
+      renderVentasPruebaAsignacion(items, { barraNombres, cocinaNombres, stockNombres });
     } else if (nuevos.length) {
       mostrarModalAsignarVentas(items, esPrueba);
     } else {
@@ -470,44 +492,124 @@ function analizarVentas(esPrueba) {
   }).catch(() => { renderVentasImportPreview(esPrueba); });
 }
 
-// Vista inline (sin modal) para la sección PRUEBA: items con destino tickeable
-function renderVentasPruebaAsignacion(items) {
+// Vista inline (sin modal) para la sección PRUEBA: items con destino tickeable y emparejamiento
+function renderVentasPruebaAsignacion(items, ctx) {
   const cont = document.getElementById('ventas-import-prueba-preview');
   if (!cont) return;
   if (!items.length) { cont.innerHTML = '<p style="color:#888;margin-top:0.5rem;">Sube un Excel para ver los items.</p>'; return; }
+  ctx = ctx || { barraNombres: [], cocinaNombres: [], stockNombres: [] };
+  window._ventasImportCtx = ctx;
   const total = items.reduce((s, i) => s + i.cantidad, 0);
   const radios = (i) => ['stocks', 'barra', 'cocina'].map(d => {
     const checked = (i.destino || 'stocks') === d ? ' checked' : '';
-    return '<label style="display:inline-flex;align-items:center;gap:0.25rem;margin-right:0.75rem;font-size:0.85rem;cursor:pointer;"><input type="radio" name="dest-prueba-' + i.idx + '" value="' + d + '"' + checked + '> ' + d.toUpperCase() + '</label>';
+    return '<label style="display:inline-flex;align-items:center;gap:0.25rem;margin-right:0.75rem;font-size:0.85rem;cursor:pointer;"><input type="radio" name="dest-prueba-' + i.idx + '" value="' + d + '"' + checked + ' onchange="onPruebaDestinoChange(this)"> ' + d.toUpperCase() + '</label>';
   }).join('');
+  const emparejar = (i) => {
+    if (i.emparejado) return '<span style="color:#2e7d32;">✓ ' + esc(i.matched) + '</span>';
+    const pool = i.destino === 'barra' ? ctx.barraNombres : i.destino === 'cocina' ? ctx.cocinaNombres : ctx.stockNombres;
+    const candidatos = candidatosSimilares(i.nombre, pool);
+    const opts = candidatos.map(c => '<option value="' + esc(c) + '">' + esc(c) + '</option>').join('') +
+      '<option value="__excel__">Usar nombre del Excel</option>' +
+      '<option value="__nuevo__">Crear nuevo' + (i.destino === 'barra' || i.destino === 'cocina' ? ' (receta)' : '') + '</option>';
+    return '<select class="select-match-import" data-item="' + esc(i.nombre) + '" onchange="onMatchSelectChange(this)">' +
+      '<option value="">— Emparejar —</option>' + opts + '</select>' +
+      '<input class="input-match-nuevo" data-item="' + esc(i.nombre) + '" placeholder="Nombre nuevo..." style="display:none;margin-top:0.3rem;padding:0.3rem;border:1px solid #ccc;border-radius:4px;width:90%;">';
+  };
   cont.innerHTML = '<p style="margin:0.5rem 0;">Fecha: <b>' + todayStr() + '</b> — Items: <b>' + items.length + '</b> — Total unidades: <b>' + total + '</b></p>' +
-    '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Destino</th></tr></thead><tbody>' +
+    '<div class="table-wrap"><table><thead><tr><th>Item (Excel)</th><th>Cantidad</th><th>Destino</th><th>Emparejar con</th></tr></thead><tbody>' +
     items.map(i => `<tr>
-      <td>${esc(i.nombre)}${i.nuevo ? ' <span style="color:#c62828;" title="Item nuevo">*</span>' : ''}</td>
+      <td>${esc(i.nombre)}${i.sinEmparejar ? ' <span style="color:#c62828;" title="Sin emparejar">*</span>' : ''}</td>
       <td>${i.cantidad}</td>
       <td>${radios(i)}</td>
+      <td>${emparejar(i)}</td>
     </tr>`).join('') +
     '</tbody></table></div>' +
-    '<p style="font-size:0.8rem;color:#999;margin:0.5rem 0 0;">* Item nuevo (nunca asignado). Los demás ya tienen destino guardado y aparecen marcados.</p>';
+    '<p style="font-size:0.8rem;color:#999;margin:0.5rem 0 0;">* Sin emparejar: elige a qué item/receta de la app corresponde. Se guardará y la próxima vez se aplicará solo.</p>';
+}
+
+function onMatchSelectChange(sel) {
+  const input = sel.parentElement.querySelector('.input-match-nuevo');
+  if (input) input.style.display = sel.value === '__nuevo__' ? '' : 'none';
+}
+
+function onPruebaDestinoChange(radio) {
+  const tr = radio.closest('tr');
+  const itemNombre = tr.querySelector('td') ? tr.querySelector('td').textContent.replace(/ *\*?$/, '').trim() : '';
+  const ctx = window._ventasImportCtx || { barraNombres: [], cocinaNombres: [], stockNombres: [] };
+  const pool = radio.value === 'barra' ? ctx.barraNombres : radio.value === 'cocina' ? ctx.cocinaNombres : ctx.stockNombres;
+  const candidatos = candidatosSimilares(itemNombre, pool);
+  const sel = tr.querySelector('.select-match-import');
+  if (!sel) return;
+  const opts = candidatos.map(c => '<option value="' + esc(c) + '">' + esc(c) + '</option>').join('') +
+    '<option value="__excel__">Usar nombre del Excel</option>' +
+    '<option value="__nuevo__">Crear nuevo' + (radio.value === 'barra' || radio.value === 'cocina' ? ' (receta)' : '') + '</option>';
+  sel.innerHTML = '<option value="">— Emparejar —</option>' + opts;
+  const input = tr.querySelector('.input-match-nuevo');
+  if (input) input.style.display = 'none';
+}
+
+// Similitud simple por palabras para sugerir candidatos
+function similitud(a, b) {
+  const ta = (a || '').split(' ').filter(Boolean);
+  const tb = (b || '').split(' ').filter(Boolean);
+  if (!ta.length || !tb.length) return 0;
+  let hits = 0;
+  ta.forEach(w => { if (tb.includes(w)) hits++; });
+  return hits / Math.max(1, tb.length);
+}
+
+function candidatosSimilares(nombre, pool) {
+  const target = String(nombre || '').toUpperCase().replace(/\s+/g, ' ');
+  const scored = (pool || []).map(n => ({ n, s: similitud(target, String(n).toUpperCase().replace(/\s+/g, ' ')) })).filter(x => x.s > 0.25).sort((a, b) => b.s - a.s).slice(0, 10).map(x => x.n);
+  return scored;
 }
 
 function guardarVentasPrueba() {
   if (!ventasPruebaRows.length) { alert('Primero selecciona un Excel con ventas'); return; }
-  const mapping = {};
-  document.querySelectorAll('#ventas-import-prueba-preview input[type="radio"]:checked').forEach(radio => {
-    const tr = radio.closest('tr');
-    const itemNombre = tr.querySelector('td') ? tr.querySelector('td').textContent.replace(/ *\*?$/, '').trim() : '';
-    if (itemNombre) mapping[itemNombre.toUpperCase().replace(/\s+/g, ' ')] = radio.value;
-  });
-  if (!Object.keys(mapping).length) { alert('Marca el destino (STOCKS/BARRA/COCINA) de los items'); return; }
+  const ctx = window._ventasImportCtx || { barraNombres: [], cocinaNombres: [], stockNombres: [] };
   const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-  ventasPruebaRows.forEach(r => { const k = norm(r.item); if (mapping[k]) r.destino = mapping[k]; });
-  api('POST', '/api/ventas/import-mapping', { mapping }).then(() => {
-    registrarVentasFilas(ventasPruebaRows, () => {
-      ventasPruebaRows = [];
-      renderVentasPruebaAsignacion([]);
-    });
-  }).catch(() => alert('Error al guardar destinos'));
+  const barraSet = new Set(ctx.barraNombres.map(n => norm(n)));
+  const cocinaSet = new Set(ctx.cocinaNombres.map(n => norm(n)));
+  const match = {};
+  const mapping = {};
+  const recetasNuevas = [];
+  document.querySelectorAll('#ventas-import-prueba-preview tbody tr').forEach(tr => {
+    const itemNombre = tr.querySelector('td') ? tr.querySelector('td').textContent.replace(/ *\*?$/, '').trim() : '';
+    if (!itemNombre) return;
+    const destinoRadio = tr.querySelector('input[type="radio"]:checked');
+    const destino = destinoRadio ? destinoRadio.value : 'stocks';
+    const sel = tr.querySelector('.select-match-import');
+    const inputNuevo = tr.querySelector('.input-match-nuevo');
+    let matched = itemNombre;
+    if (sel) {
+      if (sel.value === '__nuevo__') {
+        matched = (inputNuevo && inputNuevo.value.trim()) || itemNombre;
+        if (destino === 'barra' && !barraSet.has(norm(matched))) recetasNuevas.push({ nombre: matched, tipo: 'barra' });
+        if (destino === 'cocina' && !cocinaSet.has(norm(matched))) recetasNuevas.push({ nombre: matched, tipo: 'cocina' });
+      } else if (sel.value && sel.value !== '__excel__') {
+        matched = sel.value;
+      }
+    }
+    match[norm(itemNombre)] = matched;
+    mapping[norm(itemNombre)] = destino;
+  });
+  if (!Object.keys(mapping).length) { alert('No hay items para guardar'); return; }
+  ventasPruebaRows.forEach(r => { const k = norm(r.item); if (mapping[k]) r.destino = mapping[k]; if (match[k]) r.matched = match[k]; });
+  const crearRecetas = recetasNuevas.map(rec => {
+    return rec.tipo === 'barra'
+      ? api('POST', '/api/recetas', { nombre: rec.nombre, categoria: 'Clásicos' })
+      : api('POST', '/api/cocina/recetas', { nombre: rec.nombre, categoria: 'PLATOS' });
+  });
+  Promise.all(crearRecetas)
+    .then(() => api('POST', '/api/ventas/import-match', { match }))
+    .then(() => api('POST', '/api/ventas/import-mapping', { mapping }))
+    .then(() => {
+      registrarVentasFilas(ventasPruebaRows, () => {
+        ventasPruebaRows = [];
+        renderVentasPruebaAsignacion([]);
+      });
+    })
+    .catch(() => alert('Error al guardar'));
 }
 
 function mostrarModalAsignarVentas(items, esPrueba) {
@@ -612,7 +714,7 @@ function registrarVentasFilas(filas, onDone) {
     const destino = r.destino || 'stocks';
     const key = fecha + '|' + destino;
     if (!grupos[key]) grupos[key] = [];
-    grupos[key].push({ nombre: r.item, cantidad: r.cantidad, destino });
+    grupos[key].push({ nombre: r.matched || r.item, cantidad: r.cantidad, destino });
   });
   const keys = Object.keys(grupos);
   if (!keys.length) { if (onDone) onDone(); return; }

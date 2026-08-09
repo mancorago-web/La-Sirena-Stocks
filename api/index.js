@@ -1281,6 +1281,25 @@ app.post('/api/ventas/import-mapping', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- VENTAS: emparejamiento item del EXCEL -> item de la app ---
+app.get('/api/ventas/import-match', async (req, res) => {
+  try {
+    const doc = await col('config').doc('ventas_import_match').get();
+    res.json({ match: doc.exists ? (doc.data().match || {}) : {} });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/ventas/import-match', async (req, res) => {
+  try {
+    const { match } = req.body;
+    if (!match) return res.status(400).json({ error: 'match requerido' });
+    const doc = await col('config').doc('ventas_import_match').get();
+    const prev = doc.exists ? (doc.data().match || {}) : {};
+    await col('config').doc('ventas_import_match').set({ match: { ...prev, ...match }, updated_at: new Date().toISOString() });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- VENTAS: eliminar una venta (efecto en cadena) ---
 app.delete('/api/ventas/:id', authMiddleware, async (req, res) => {
   try {
