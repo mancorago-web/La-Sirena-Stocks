@@ -473,30 +473,12 @@
 
     <div id="tab-ventas-central" class="tab-content">
       <div class="header-actions">
-        <h2>VENTAS</h2>
+        <h2>DETALLE DE VENTAS</h2>
         <div class="controles-dia">
           <label>Fecha: <input type="date" id="fecha-ventas-menu" onchange="cargarVentasCentral()"></label>
-          <button class="btn-guardar-dia" onclick="guardarVentasCentral()">💾 GUARDAR</button>
         </div>
       </div>
-      <div style="margin-bottom:1rem;padding:1rem;background:#f9f9f9;border-radius:8px;">
-        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-          <select id="nueva-venta-destino" onchange="onCambiarDestinoVenta()" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-weight:700;color:#1a237e;">
-            <option value="stocks">STOCKS</option>
-            <option value="barra">BARRA</option>
-            <option value="cocina">COCINA</option>
-          </select>
-          <input type="text" id="nueva-venta-input" placeholder="Buscar item / receta..." list="sugerencia-ventas" autocomplete="off" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:180px;" oninput="onBuscarItemVenta(this.value)">
-          <datalist id="sugerencia-ventas"></datalist>
-          <input type="number" id="nueva-venta-cant" placeholder="Cantidad" step="0.01" min="0" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;width:110px;">
-          <button class="btn-detalles" id="btn-agregar-venta" onclick="agregarVenta()">➕ AGREGAR</button>
-        </div>
-        <div id="ventas-almacenes" style="display:none;margin-top:0.75rem;padding:0.75rem;background:#e8f0fe;border-radius:8px;">
-          <strong style="font-size:0.85rem;color:#1a237e;">Elige los almacenes de donde sale esta venta (STOCKS):</strong>
-          <div id="ventas-almacenes-lista" style="display:flex;flex-wrap:wrap;gap:0.6rem 1rem;margin-top:0.4rem;"></div>
-        </div>
-      </div>
-      <div id="ventas-detalle-container" style="margin-top:1.5rem;"></div>
+      <div id="ventas-detalle-container" style="margin-top:0.5rem;"></div>
       <div style="margin-top:1.5rem;padding:1rem;background:#f9f9f9;border-radius:8px;border:1px dashed #ccc;">
         <h3 style="margin:0 0 0.5rem 0;">IMPORTAR VENTAS (EXCEL)</h3>
         <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
@@ -507,17 +489,6 @@
         </div>
         <div style="font-size:0.8rem;color:#888;margin-top:0.4rem;">Columnas detectadas automáticamente: Fecha | Item | Cantidad. La zona (STOCKS/BARRA/COCINA) se ticlea manualmente la primera vez y se guarda para la próxima.</div>
         <div id="ventas-import-preview"></div>
-      </div>
-      <div style="margin-top:1.5rem;padding:1rem;background:#eef7ee;border-radius:8px;border:1px dashed #2e7d32;">
-        <h3 style="margin:0 0 0.5rem 0;">IMPORTAR VENTAS (EXCEL) PRUEBA</h3>
-        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-          <input type="file" id="ventas-excel-prueba-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="onVentasExcelPruebaSeleccionado(this)">
-          <button class="btn-guardar-dia" onclick="document.getElementById('ventas-excel-prueba-file').click()">SELECCIONAR EXCEL (PRUEBA)</button>
-          <button class="btn-guardar-dia" onclick="guardarVentasPrueba()">GUARDAR VENTAS</button>
-          <button class="btn-detalles" onclick="limpiarVentasPrueba()" title="Quitar Excel" style="background:#c62828;color:#fff;border:none;padding:0.4rem 0.8rem;border-radius:4px;cursor:pointer;font-weight:700;">✕</button>
-        </div>
-        <div style="font-size:0.8rem;color:#2e7d32;margin-top:0.4rem;">Sube el Excel, ticlea el destino (STOCKS/BARRA/COCINA) de cada item y pulsa GUARDAR VENTAS para registrarlas.</div>
-        <div id="ventas-import-prueba-preview"></div>
       </div>
     </div>
 
@@ -559,6 +530,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=65"></script>
+  <script src="/app.js?v=66"></script>
 </body>
 </html>

@@ -4745,11 +4745,6 @@ function actualizarAlmacenesVenta(nombre) {
 
 function cargarVentasCentral() {
   const fecha = document.getElementById('fecha-ventas-menu')?.value || todayStr();
-  api('GET', '/api/almacenes').then(alms => {
-    ventasAlmacenes = alms || [];
-    renderVentasAlmacenes(ventasAlmacenes.map(a => ({ id: Number(a.id), nombre: a.nombre, cantidad: null })));
-  }).catch(() => {});
-  onCambiarDestinoVenta();
   cargarVentasDetalle(fecha);
 }
 
