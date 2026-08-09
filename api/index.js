@@ -1037,8 +1037,11 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         let seleccionados;
         if (Array.isArray(it.almacenes) && it.almacenes.length) {
           seleccionados = Array.from(new Set(it.almacenes.map(a => Number(a))));
+        } else if (candidatos.length) {
+          // Sin almacenes elegidos: registrar en un solo almacén (evita duplicar la venta en todos)
+          seleccionados = [Number(candidatos[0].almacen_id)];
         } else {
-          seleccionados = Array.from(new Set(candidatos.map(c => Number(c.almacen_id))));
+          seleccionados = [];
         }
         const almacenes = [];
         for (const alId of seleccionados) {
