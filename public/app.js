@@ -412,7 +412,7 @@ function parseVentasExcel(file, esPrueba) {
       const filas = rows.map(r => ({
         item: String(r[colItem] || '').trim(),
         cantidad: parseFloat(String(r[colCant] || '').replace(',', '.')) || 0,
-        fecha: normalizarFechaExcel(r[colFecha]) || todayStr(),
+        fecha: document.getElementById('fecha-ventas-menu')?.value || todayStr(),
         destino: ''
       })).filter(x => x.item && x.cantidad > 0 && !esFilaNoProducto(x.item));
       if (esPrueba) { ventasPruebaRows = filas; } else { ventasImportRows = filas; }
