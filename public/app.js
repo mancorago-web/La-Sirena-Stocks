@@ -404,7 +404,7 @@ function parseVentasExcel(file, esPrueba) {
       const filas = rows.map(r => ({
         item: String(r[colItem] || '').trim(),
         cantidad: parseFloat(String(r[colCant] || '').replace(',', '.')) || 0,
-        fecha: normalizarFechaExcel(r[colFecha]),
+        fecha: todayStr(),
         destino: colDest ? String(r[colDest] || '').trim().toLowerCase() : ''
       })).filter(x => x.item && x.cantidad > 0);
       if (esPrueba) { ventasPruebaRows = filas; } else { ventasImportRows = filas; }
@@ -436,7 +436,7 @@ function analizarVentas(esPrueba) {
       const k = norm(r.item);
       if (!uniq[k]) uniq[k] = { nombre: r.item, destinoCol: r.destino || '' };
     });
-    const items = Object.values(uniq);
+    const items = Object.values(uniq).map((i, idx) => { i.idx = idx; return i; });
     const nuevos = [];
     items.forEach(i => {
       if (i.destinoCol) { i.destino = i.destinoCol; return; }
@@ -453,28 +453,33 @@ function analizarVentas(esPrueba) {
     items.forEach(i => { byKey[norm(i.nombre)] = i; });
     filas.forEach(r => { const i = byKey[norm(r.item)]; if (i) r.destino = i.destino; });
     if (nuevos.length) {
-      mostrarModalAsignarVentas(nuevos, esPrueba);
+      mostrarModalAsignarVentas(items, esPrueba);
     } else {
       renderVentasImportPreview(esPrueba);
     }
   }).catch(() => { renderVentasImportPreview(esPrueba); });
 }
 
-function mostrarModalAsignarVentas(nuevos, esPrueba) {
+function mostrarModalAsignarVentas(items, esPrueba) {
   const body = document.getElementById('modal-body');
-  const opciones = (val) => ['stocks', 'barra', 'cocina'].map(d => `<option value="${d}" ${(val || 'stocks') === d ? 'selected' : ''}>${d.toUpperCase()}</option>`).join('');
+  const radios = (i) => ['stocks', 'barra', 'cocina'].map(d => {
+    const checked = (i.destino || 'stocks') === d ? ' checked' : '';
+    const nombre = 'dest-import-' + i.idx;
+    return '<label style="display:inline-flex;align-items:center;gap:0.25rem;margin-right:0.75rem;font-size:0.85rem;cursor:pointer;"><input type="radio" name="' + nombre + '" value="' + d + '"' + checked + '> ' + d.toUpperCase() + '</label>';
+  }).join('');
   body.innerHTML = `
     <h3>Asignar destino de ventas</h3>
-    <p style="color:#666;font-size:0.85rem;">Estos items son <b>nuevos</b> (no se habían registrado antes). Indica a qué zona van sus ventas.${esPrueba ? ' <b>(PRUEBA: no se guarda ni se registra)</b>' : ' Se guardará automáticamente para la próxima vez.'}</p>
+    <p style="color:#666;font-size:0.85rem;">Fecha de registro: <b>${todayStr()}</b>. Marca a qué zona van las ventas de cada item.${esPrueba ? ' <b>(PRUEBA: no se guarda ni se registra)</b>' : ' Los destinos se guardan y la próxima vez aparecerán marcados automáticamente.'}</p>
     <div class="table-wrap"><table>
-      <thead><tr><th>Item</th><th>Destino</th></tr></thead>
+      <thead><tr><th>Item</th><th>STOCKS</th><th>BARRA</th><th>COCINA</th></tr></thead>
       <tbody>
-        ${nuevos.map(i => `<tr>
-          <td>${esc(i.nombre)}</td>
-          <td><select class="select-import-destino" data-item="${esc(i.nombre)}">${opciones(i.destino)}</select></td>
+        ${items.map(i => `<tr>
+          <td>${esc(i.nombre)}${i.nuevo ? ' <span style="color:#c62828;" title="Item nuevo">*</span>' : ''}</td>
+          <td colspan="3">${radios(i)}</td>
         </tr>`).join('')}
       </tbody>
     </table></div>
+    <p style="font-size:0.8rem;color:#999;margin:0.5rem 0 0;">* Item nuevo (nunca asignado antes). Los demás ya tienen destino guardado.</p>
     <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
       <button onclick="guardarAsignacionVentas(${esPrueba})" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar destinos</button>
       <button onclick="cerrarModal(); renderVentasImportPreview(${esPrueba});" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
@@ -484,8 +489,10 @@ function mostrarModalAsignarVentas(nuevos, esPrueba) {
 
 function guardarAsignacionVentas(esPrueba) {
   const mapping = {};
-  document.querySelectorAll('.select-import-destino').forEach(sel => {
-    mapping[String(sel.dataset.item).toUpperCase().replace(/\s+/g, ' ')] = sel.value;
+  document.querySelectorAll('#modal-body tbody input[type="radio"]:checked').forEach(radio => {
+    const tr = radio.closest('tr');
+    const itemNombre = tr.querySelector('td') ? tr.querySelector('td').textContent.replace(/ *\*?$/, '').trim() : '';
+    if (itemNombre) mapping[itemNombre.toUpperCase().replace(/\s+/g, ' ')] = radio.value;
   });
   const aplicar = () => {
     cerrarModal();
