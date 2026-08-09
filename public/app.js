@@ -433,8 +433,9 @@ function analizarVentas(esPrueba) {
     api('GET', '/api/ventas/import-match'),
     api('GET', '/api/recetas'),
     api('GET', '/api/cocina/recetas'),
-    api('GET', '/api/stock/precios/items')
-  ]).then(([mapRes, matchRes, barraRec, cocinaRec, stockItems]) => {
+    api('GET', '/api/stock/precios/items'),
+    getInventario((filas[0] && filas[0].fecha) || todayStr())
+  ]).then(([mapRes, matchRes, barraRec, cocinaRec, stockItems, invData]) => {
     const mapping = (mapRes && mapRes.mapping) || {};
     const match = (matchRes && matchRes.match) || {};
     const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
@@ -443,6 +444,15 @@ function analizarVentas(esPrueba) {
     const stockSet = new Set((stockItems || []).map(n => norm(n)));
     const barraNombres = (barraRec || []).map(x => x.nombre);
     const cocinaNombres = (cocinaRec || []).map(x => x.nombre);
+    const stocksPorNombre = {};
+    (invData || []).forEach(a => {
+      (a.items || []).forEach(it => {
+        const k = norm(it.nombre);
+        if (!stocksPorNombre[k]) stocksPorNombre[k] = [];
+        stocksPorNombre[k].push({ almacen_id: a.id, almacen_nombre: a.nombre, cantidad: it.stock_cierre !== undefined && it.stock_cierre !== null ? it.stock_cierre : (it.stock_apertura || 0) });
+      });
+    });
+    window._ventasImportStocks = stocksPorNombre;
     const stockNombres = (stockItems || []);
     const uniq = {};
     filas.forEach(r => {
@@ -511,13 +521,19 @@ function renderVentasAsignacion(items, containerId) {
       '<option value="">— Emparejar —</option>' + opts + '</select>' +
       '<input class="input-match-nuevo" data-item="' + esc(i.nombre) + '" placeholder="Nombre nuevo..." style="display:none;margin-top:0.3rem;padding:0.3rem;border:1px solid #ccc;border-radius:4px;width:90%;">';
   };
+  const almacen = (i) => {
+    if (i.destino !== 'stocks') return '<td style="color:#999;">—</td>';
+    const nombre = i.matched || i.nombre;
+    return '<td class="celda-almacen">' + buildAlmacenSelect(nombre) + '</td>';
+  };
   cont.innerHTML = '<p style="margin:0.5rem 0;">Fecha: <b>' + fecha + '</b> — Items: <b>' + items.length + '</b> — Total unidades: <b>' + total + '</b></p>' +
-    '<div class="table-wrap"><table><thead><tr><th>Item (Excel)</th><th>Cantidad</th><th>Destino</th><th>Emparejar con</th></tr></thead><tbody>' +
+    '<div class="table-wrap"><table><thead><tr><th>Item (Excel)</th><th>Cantidad</th><th>Destino</th><th>Emparejar con</th><th>Almacén (STOCKS)</th></tr></thead><tbody>' +
     items.map(i => `<tr>
       <td>${esc(i.nombre)}${i.sinEmparejar ? ' <span style="color:#c62828;" title="Sin emparejar">*</span>' : ''}</td>
       <td>${i.cantidad}</td>
       <td>${radios(i)}</td>
       <td>${emparejar(i)}</td>
+      ${almacen(i)}
     </tr>`).join('') +
     '</tbody></table></div>' +
     '<p style="font-size:0.8rem;color:#999;margin:0.5rem 0 0;">* Sin emparejar: elige a qué item/receta de la app corresponde. Se guardará y la próxima vez se aplicará solo.</p>';
@@ -526,6 +542,7 @@ function renderVentasAsignacion(items, containerId) {
 function onMatchSelectChange(sel) {
   const input = sel.parentElement.querySelector('.input-match-nuevo');
   if (input) input.style.display = sel.value === '__nuevo__' ? '' : 'none';
+  actualizarAlmacenImport(sel.closest('tr'));
 }
 
 function onPruebaDestinoChange(radio) {
@@ -542,6 +559,7 @@ function onPruebaDestinoChange(radio) {
   sel.innerHTML = '<option value="">— Emparejar —</option>' + opts;
   const input = tr.querySelector('.input-match-nuevo');
   if (input) input.style.display = 'none';
+  actualizarAlmacenImport(tr);
 }
 
 // Similitud simple por palabras para sugerir candidatos
@@ -558,6 +576,28 @@ function candidatosSimilares(nombre, pool) {
   const target = String(nombre || '').toUpperCase().replace(/\s+/g, ' ');
   const scored = (pool || []).map(n => ({ n, s: similitud(target, String(n).toUpperCase().replace(/\s+/g, ' ')) })).filter(x => x.s > 0.25).sort((a, b) => b.s - a.s).slice(0, 10).map(x => x.n);
   return scored;
+}
+
+// Selector de almacén para items de STOCKS (muestra cuántos hay en cada almacén)
+function buildAlmacenSelect(nombre) {
+  const stocks = window._ventasImportStocks || {};
+  const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  const list = stocks[norm(nombre)] || [];
+  if (!list.length) return '<span style="color:#c62828;">Sin stock</span>';
+  return '<select class="select-almacen-import" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">' +
+    list.map(al => '<option value="' + al.almacen_id + '">' + esc(al.almacen_nombre) + ' (' + al.cantidad + ')</option>').join('') + '</select>';
+}
+
+function actualizarAlmacenImport(tr) {
+  const cell = tr.querySelector('.celda-almacen');
+  if (!cell) return;
+  const radio = tr.querySelector('input[type="radio"]:checked');
+  const destino = radio ? radio.value : 'stocks';
+  if (destino !== 'stocks') { cell.innerHTML = '<span style="color:#999;">—</span>'; return; }
+  const sel = tr.querySelector('.select-match-import');
+  let nombre = tr.querySelector('td') ? tr.querySelector('td').textContent.replace(/ *\*?$/, '').trim() : '';
+  if (sel && sel.value && sel.value !== '__excel__' && sel.value !== '__nuevo__') nombre = sel.value;
+  cell.innerHTML = buildAlmacenSelect(nombre);
 }
 
 function guardarVentasPrueba() {
@@ -583,6 +623,7 @@ function guardarVentasAsignadas(containerId, filas, onDone) {
   const cocinaSet = new Set(ctx.cocinaNombres.map(n => norm(n)));
   const match = {};
   const mapping = {};
+  const almacenes = {};
   const recetasNuevas = [];
   document.querySelectorAll('#' + containerId + ' tbody tr').forEach(tr => {
     const itemNombre = tr.querySelector('td') ? tr.querySelector('td').textContent.replace(/ *\*?$/, '').trim() : '';
@@ -591,6 +632,7 @@ function guardarVentasAsignadas(containerId, filas, onDone) {
     const destino = destinoRadio ? destinoRadio.value : 'stocks';
     const sel = tr.querySelector('.select-match-import');
     const inputNuevo = tr.querySelector('.input-match-nuevo');
+    const alSel = tr.querySelector('.select-almacen-import');
     let matched = itemNombre;
     if (sel) {
       if (sel.value === '__nuevo__') {
@@ -603,9 +645,15 @@ function guardarVentasAsignadas(containerId, filas, onDone) {
     }
     match[norm(itemNombre)] = matched;
     mapping[norm(itemNombre)] = destino;
+    if (destino === 'stocks' && alSel && alSel.value) almacenes[norm(itemNombre)] = Number(alSel.value);
   });
   if (!Object.keys(mapping).length) { alert('No hay items para guardar'); return; }
-  filas.forEach(r => { const k = norm(r.item); if (mapping[k]) r.destino = mapping[k]; if (match[k]) r.matched = match[k]; });
+  filas.forEach(r => {
+    const k = norm(r.item);
+    if (mapping[k]) r.destino = mapping[k];
+    if (match[k]) r.matched = match[k];
+    if (almacenes[k]) r.almacenes = [almacenes[k]];
+  });
   const crearRecetas = recetasNuevas.map(rec => {
     return rec.tipo === 'barra'
       ? api('POST', '/api/recetas', { nombre: rec.nombre, categoria: 'Clásicos' })
@@ -722,7 +770,7 @@ function registrarVentasFilas(filas, onDone) {
     const destino = r.destino || 'stocks';
     const key = fecha + '|' + destino;
     if (!grupos[key]) grupos[key] = [];
-    grupos[key].push({ nombre: r.matched || r.item, cantidad: r.cantidad, destino });
+    grupos[key].push({ nombre: r.matched || r.item, cantidad: r.cantidad, destino, almacenes: r.almacenes });
   });
   const keys = Object.keys(grupos);
   if (!keys.length) { if (onDone) onDone(); return; }
