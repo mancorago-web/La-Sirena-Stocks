@@ -385,6 +385,15 @@ function onVentasExcelPruebaSeleccionado(input) {
   input.value = '';
 }
 
+// Etiquetas que aparecen en EXCEL pero NO son productos vendidos
+const NO_PRODUCTO_KEYS = ['subtotal', 'total', 'igv', 'descuento', 'propina', 'vuelto', 'importe', 'caja chica', 'efectivo'];
+
+function esFilaNoProducto(item) {
+  const k = String(item || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+  if (!k) return true;
+  return NO_PRODUCTO_KEYS.some(e => k === e || k.startsWith(e + ' ') || k.includes(' ' + e) || k.includes(e + ':') || k.endsWith(e));
+}
+
 function parseVentasExcel(file, esPrueba) {
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -405,7 +414,7 @@ function parseVentasExcel(file, esPrueba) {
         cantidad: parseFloat(String(r[colCant] || '').replace(',', '.')) || 0,
         fecha: todayStr(),
         destino: ''
-      })).filter(x => x.item && x.cantidad > 0);
+      })).filter(x => x.item && x.cantidad > 0 && !esFilaNoProducto(x.item));
       if (esPrueba) { ventasPruebaRows = filas; } else { ventasImportRows = filas; }
       analizarVentas(esPrueba);
     } catch (err) {
