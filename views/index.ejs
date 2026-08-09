@@ -512,8 +512,9 @@
         <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
           <input type="file" id="ventas-excel-prueba-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="onVentasExcelPruebaSeleccionado(this)">
           <button class="btn-guardar-dia" onclick="document.getElementById('ventas-excel-prueba-file').click()">SELECCIONAR EXCEL (PRUEBA)</button>
+          <button class="btn-guardar-dia" onclick="guardarVentasPrueba()">GUARDAR VENTAS</button>
         </div>
-        <div style="font-size:0.8rem;color:#2e7d32;margin-top:0.4rem;">Modo de prueba: analiza el archivo y muestra cómo quedaría, sin registrar ni guardar nada.</div>
+        <div style="font-size:0.8rem;color:#2e7d32;margin-top:0.4rem;">Sube el Excel, ticlea el destino (STOCKS/BARRA/COCINA) de cada item y pulsa GUARDAR VENTAS para registrarlas.</div>
         <div id="ventas-import-prueba-preview"></div>
       </div>
     </div>
@@ -556,6 +557,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=60"></script>
+  <script src="/app.js?v=61"></script>
 </body>
 </html>

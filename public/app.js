@@ -433,7 +433,8 @@ function analizarVentas(esPrueba) {
     const uniq = {};
     filas.forEach(r => {
       const k = norm(r.item);
-      if (!uniq[k]) uniq[k] = { nombre: r.item };
+      if (!uniq[k]) uniq[k] = { nombre: r.item, cantidad: 0 };
+      uniq[k].cantidad += r.cantidad;
     });
     const items = Object.values(uniq).map((i, idx) => { i.idx = idx; return i; });
     const nuevos = [];
@@ -450,12 +451,54 @@ function analizarVentas(esPrueba) {
     const byKey = {};
     items.forEach(i => { byKey[norm(i.nombre)] = i; });
     filas.forEach(r => { const i = byKey[norm(r.item)]; if (i) r.destino = i.destino; });
-    if (nuevos.length) {
+    if (esPrueba) {
+      renderVentasPruebaAsignacion(items);
+    } else if (nuevos.length) {
       mostrarModalAsignarVentas(items, esPrueba);
     } else {
       renderVentasImportPreview(esPrueba);
     }
   }).catch(() => { renderVentasImportPreview(esPrueba); });
+}
+
+// Vista inline (sin modal) para la sección PRUEBA: items con destino tickeable
+function renderVentasPruebaAsignacion(items) {
+  const cont = document.getElementById('ventas-import-prueba-preview');
+  if (!cont) return;
+  if (!items.length) { cont.innerHTML = '<p style="color:#888;margin-top:0.5rem;">Sube un Excel para ver los items.</p>'; return; }
+  const total = items.reduce((s, i) => s + i.cantidad, 0);
+  const radios = (i) => ['stocks', 'barra', 'cocina'].map(d => {
+    const checked = (i.destino || 'stocks') === d ? ' checked' : '';
+    return '<label style="display:inline-flex;align-items:center;gap:0.25rem;margin-right:0.75rem;font-size:0.85rem;cursor:pointer;"><input type="radio" name="dest-prueba-' + i.idx + '" value="' + d + '"' + checked + '> ' + d.toUpperCase() + '</label>';
+  }).join('');
+  cont.innerHTML = '<p style="margin:0.5rem 0;">Fecha: <b>' + todayStr() + '</b> — Items: <b>' + items.length + '</b> — Total unidades: <b>' + total + '</b></p>' +
+    '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Destino</th></tr></thead><tbody>' +
+    items.map(i => `<tr>
+      <td>${esc(i.nombre)}${i.nuevo ? ' <span style="color:#c62828;" title="Item nuevo">*</span>' : ''}</td>
+      <td>${i.cantidad}</td>
+      <td>${radios(i)}</td>
+    </tr>`).join('') +
+    '</tbody></table></div>' +
+    '<p style="font-size:0.8rem;color:#999;margin:0.5rem 0 0;">* Item nuevo (nunca asignado). Los demás ya tienen destino guardado y aparecen marcados.</p>';
+}
+
+function guardarVentasPrueba() {
+  if (!ventasPruebaRows.length) { alert('Primero selecciona un Excel con ventas'); return; }
+  const mapping = {};
+  document.querySelectorAll('#ventas-import-prueba-preview input[type="radio"]:checked').forEach(radio => {
+    const tr = radio.closest('tr');
+    const itemNombre = tr.querySelector('td') ? tr.querySelector('td').textContent.replace(/ *\*?$/, '').trim() : '';
+    if (itemNombre) mapping[itemNombre.toUpperCase().replace(/\s+/g, ' ')] = radio.value;
+  });
+  if (!Object.keys(mapping).length) { alert('Marca el destino (STOCKS/BARRA/COCINA) de los items'); return; }
+  const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  ventasPruebaRows.forEach(r => { const k = norm(r.item); if (mapping[k]) r.destino = mapping[k]; });
+  api('POST', '/api/ventas/import-mapping', { mapping }).then(() => {
+    registrarVentasFilas(ventasPruebaRows, () => {
+      ventasPruebaRows = [];
+      renderVentasPruebaAsignacion([]);
+    });
+  }).catch(() => alert('Error al guardar destinos'));
 }
 
 function mostrarModalAsignarVentas(items, esPrueba) {
@@ -545,9 +588,17 @@ function renderVentasImportPreview(esPrueba) {
 
 function registrarVentasImportadas() {
   if (!ventasImportRows.length) { alert('Primero selecciona un Excel con ventas'); return; }
+  registrarVentasFilas(ventasImportRows, () => {
+    ventasImportRows = [];
+    renderVentasImportPreview(false);
+  });
+}
+
+// Registra un conjunto de filas de ventas agrupándolas por fecha + destino
+function registrarVentasFilas(filas, onDone) {
   const fechaDefault = document.getElementById('fecha-ventas-menu')?.value || todayStr();
   const grupos = {};
-  ventasImportRows.forEach(r => {
+  filas.forEach(r => {
     const fecha = r.fecha || fechaDefault;
     const destino = r.destino || 'stocks';
     const key = fecha + '|' + destino;
@@ -555,15 +606,14 @@ function registrarVentasImportadas() {
     grupos[key].push({ nombre: r.item, cantidad: r.cantidad, destino });
   });
   const keys = Object.keys(grupos);
-  if (!keys.length) { alert('No hay filas para registrar'); return; }
-  if (!confirm('¿Registrar ' + ventasImportRows.length + ' ventas (' + keys.length + ' grupos por fecha/destino)?')) return;
+  if (!keys.length) { if (onDone) onDone(); return; }
+  if (!confirm('¿Registrar ' + filas.length + ' ventas (' + keys.length + ' grupos por fecha/destino)?')) return;
   let idx = 0;
   let noEncontrados = 0;
   function procesar() {
     if (idx >= keys.length) {
-      showToast('Ventas importadas' + (noEncontrados ? ' (' + noEncontrados + ' no encontrados)' : ''));
-      ventasImportRows = [];
-      renderVentasImportPreview(false);
+      showToast('Ventas registradas' + (noEncontrados ? ' (' + noEncontrados + ' no encontrados)' : ''));
+      if (onDone) onDone();
       cargarVentasCentral();
       _invCache = { fecha: null, data: null, pending: null };
       actualizarContadoresMenu();
@@ -575,8 +625,7 @@ function registrarVentasImportadas() {
     const destino = partes[1];
     const items = grupos[key];
     api('POST', '/api/ventas/guardar', { fecha, items }).then(r => {
-      const no = (r.resumen && r.resumen.noEncontrados) ? r.resumen.noEncontrados.length : 0;
-      noEncontrados += no;
+      noEncontrados += (r.resumen && r.resumen.noEncontrados) ? r.resumen.noEncontrados.length : 0;
       procesar();
     }).catch(() => {
       alert('Error registrando las ventas de ' + fecha);
