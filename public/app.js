@@ -399,13 +399,12 @@ function parseVentasExcel(file, esPrueba) {
       const colFecha = findKey(['fecha', 'date', 'dia']);
       const colItem = findKey(['item', 'producto', 'nombre', 'articulo', 'descripcion']);
       const colCant = findKey(['cantidad', 'cant', 'qty', 'und']);
-      const colDest = findKey(['destino', 'tipo']);
-      if (!colItem || !colCant) { alert('No encontré columnas de Item y Cantidad. Usa columnas como: Fecha | Item | Cantidad | Destino'); return; }
+      if (!colItem || !colCant) { alert('No encontré columnas de Item y Cantidad. Usa columnas como: Fecha | Item | Cantidad'); return; }
       const filas = rows.map(r => ({
         item: String(r[colItem] || '').trim(),
         cantidad: parseFloat(String(r[colCant] || '').replace(',', '.')) || 0,
         fecha: todayStr(),
-        destino: colDest ? String(r[colDest] || '').trim().toLowerCase() : ''
+        destino: ''
       })).filter(x => x.item && x.cantidad > 0);
       if (esPrueba) { ventasPruebaRows = filas; } else { ventasImportRows = filas; }
       analizarVentas(esPrueba);
@@ -434,12 +433,11 @@ function analizarVentas(esPrueba) {
     const uniq = {};
     filas.forEach(r => {
       const k = norm(r.item);
-      if (!uniq[k]) uniq[k] = { nombre: r.item, destinoCol: r.destino || '' };
+      if (!uniq[k]) uniq[k] = { nombre: r.item };
     });
     const items = Object.values(uniq).map((i, idx) => { i.idx = idx; return i; });
     const nuevos = [];
     items.forEach(i => {
-      if (i.destinoCol) { i.destino = i.destinoCol; return; }
       const k = norm(i.nombre);
       if (mapping[k]) { i.destino = mapping[k]; return; }
       if (cocinaSet.has(k)) i.destino = 'cocina';

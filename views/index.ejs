@@ -504,7 +504,7 @@
           <button class="btn-guardar-dia" onclick="document.getElementById('ventas-excel-file').click()">SELECCIONAR EXCEL</button>
           <button class="btn-guardar-dia" onclick="registrarVentasImportadas()">REGISTRAR TODO</button>
         </div>
-        <div style="font-size:0.8rem;color:#888;margin-top:0.4rem;">Columnas detectadas automáticamente: Fecha | Item | Cantidad (opcional Destino). La zona (STOCKS/BARRA/COCINA) se asigna en el modal y se guarda para la próxima vez.</div>
+        <div style="font-size:0.8rem;color:#888;margin-top:0.4rem;">Columnas detectadas automáticamente: Fecha | Item | Cantidad. La zona (STOCKS/BARRA/COCINA) se ticlea manualmente la primera vez y se guarda para la próxima.</div>
         <div id="ventas-import-preview"></div>
       </div>
       <div style="margin-top:1.5rem;padding:1rem;background:#eef7ee;border-radius:8px;border:1px dashed #2e7d32;">
@@ -556,6 +556,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=59"></script>
+  <script src="/app.js?v=60"></script>
 </body>
 </html>
