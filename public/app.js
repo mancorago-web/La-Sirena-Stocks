@@ -394,13 +394,95 @@ function onVentasExcelSeleccionado(input) {
         fecha: normalizarFechaExcel(r[colFecha]),
         destino: colDest ? String(r[colDest] || '').trim().toLowerCase() : ''
       })).filter(x => x.item && x.cantidad > 0);
-      renderVentasImportPreview();
+      analizarVentasImportadas();
     } catch (err) {
       alert('Error al leer el Excel: ' + err.message);
     }
   };
   reader.readAsArrayBuffer(file);
   input.value = '';
+}
+
+// Analiza los items importados: aplica destinos guardados, predice y pide asignar los nuevos
+function analizarVentasImportadas() {
+  if (!ventasImportRows.length) { renderVentasImportPreview(); return; }
+  Promise.all([
+    api('GET', '/api/ventas/import-mapping'),
+    api('GET', '/api/recetas'),
+    api('GET', '/api/cocina/recetas'),
+    api('GET', '/api/stock/precios/items')
+  ]).then(([mapRes, barraRec, cocinaRec, stockItems]) => {
+    const mapping = (mapRes && mapRes.mapping) || {};
+    const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    const barraSet = new Set((barraRec || []).map(x => norm(x.nombre)));
+    const cocinaSet = new Set((cocinaRec || []).map(x => norm(x.nombre)));
+    const stockSet = new Set((stockItems || []).map(n => norm(n)));
+    const uniq = {};
+    ventasImportRows.forEach(r => {
+      const k = norm(r.item);
+      if (!uniq[k]) uniq[k] = { nombre: r.item, destinoCol: r.destino || '' };
+    });
+    const items = Object.values(uniq);
+    const nuevos = [];
+    items.forEach(i => {
+      if (i.destinoCol) { i.destino = i.destinoCol; return; }
+      const k = norm(i.nombre);
+      if (mapping[k]) { i.destino = mapping[k]; return; }
+      if (cocinaSet.has(k)) i.destino = 'cocina';
+      else if (barraSet.has(k)) i.destino = 'barra';
+      else if (stockSet.has(k)) i.destino = 'stocks';
+      else i.destino = 'stocks';
+      i.nuevo = true;
+      nuevos.push(i);
+    });
+    const byKey = {};
+    items.forEach(i => { byKey[norm(i.nombre)] = i; });
+    ventasImportRows.forEach(r => { const i = byKey[norm(r.item)]; if (i) r.destino = i.destino; });
+    if (nuevos.length) {
+      mostrarModalAsignarVentas(nuevos);
+    } else {
+      renderVentasImportPreview();
+    }
+  }).catch(() => { renderVentasImportPreview(); });
+}
+
+function mostrarModalAsignarVentas(nuevos) {
+  const body = document.getElementById('modal-body');
+  const opciones = (val) => ['stocks', 'barra', 'cocina'].map(d => `<option value="${d}" ${(val || 'stocks') === d ? 'selected' : ''}>${d.toUpperCase()}</option>`).join('');
+  body.innerHTML = `
+    <h3>Asignar destino de ventas</h3>
+    <p style="color:#666;font-size:0.85rem;">Estos items son <b>nuevos</b> (no se habían registrado antes). Indica a qué zona van sus ventas. Se guardará automáticamente para la próxima vez.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Item</th><th>Destino</th></tr></thead>
+      <tbody>
+        ${nuevos.map(i => `<tr>
+          <td>${esc(i.nombre)}</td>
+          <td><select class="select-import-destino" data-item="${esc(i.nombre)}">${opciones(i.destino)}</select></td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+    <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+      <button onclick="guardarAsignacionVentas()" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar destinos</button>
+      <button onclick="cerrarModal(); renderVentasImportPreview();" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
+    </div>`;
+  document.getElementById('modal').style.display = 'block';
+}
+
+function guardarAsignacionVentas() {
+  const mapping = {};
+  document.querySelectorAll('.select-import-destino').forEach(sel => {
+    mapping[String(sel.dataset.item).toUpperCase().replace(/\s+/g, ' ')] = sel.value;
+  });
+  api('POST', '/api/ventas/import-mapping', { mapping }).then(() => {
+    cerrarModal();
+    const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    ventasImportRows.forEach(r => {
+      const k = norm(r.item);
+      if (mapping[k]) r.destino = mapping[k];
+    });
+    showToast('Destinos guardados');
+    renderVentasImportPreview();
+  }).catch(() => alert('Error al guardar destinos'));
 }
 
 function normalizarFechaExcel(val) {

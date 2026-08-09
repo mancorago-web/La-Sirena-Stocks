@@ -1257,6 +1257,30 @@ app.get('/api/ventas/busqueda', async (req, res) => {
   }
 });
 
+// --- VENTAS: mapeo item -> destino (persistente para importar Excel) ---
+app.get('/api/ventas/import-mapping', async (req, res) => {
+  try {
+    const doc = await col('config').doc('ventas_import_mapping').get();
+    res.json({ mapping: doc.exists ? (doc.data().mapping || {}) : {} });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/ventas/import-mapping', async (req, res) => {
+  try {
+    const { mapping } = req.body;
+    if (!mapping) return res.status(400).json({ error: 'mapping requerido' });
+    const doc = await col('config').doc('ventas_import_mapping').get();
+    const prev = doc.exists ? (doc.data().mapping || {}) : {};
+    const nuevo = { ...prev };
+    Object.keys(mapping).forEach(k => {
+      const v = String(mapping[k] || '').trim().toLowerCase();
+      if (v && ['stocks', 'barra', 'cocina'].includes(v)) nuevo[k] = v;
+    });
+    await col('config').doc('ventas_import_mapping').set({ mapping: nuevo, updated_at: new Date().toISOString() });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- VENTAS: eliminar una venta (efecto en cadena) ---
 app.delete('/api/ventas/:id', authMiddleware, async (req, res) => {
   try {
