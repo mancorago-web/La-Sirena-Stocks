@@ -513,9 +513,8 @@ function renderVentasAsignacion(items, containerId) {
   }).join('');
   const emparejar = (i) => {
     if (i.emparejado) return '<span style="color:#2e7d32;">✓ ' + esc(i.matched) + '</span>';
-    const pool = i.destino === 'barra' ? ctx.barraNombres : i.destino === 'cocina' ? ctx.cocinaNombres : ctx.stockNombres;
-    const candidatos = candidatosSimilares(i.nombre, pool);
-    const opts = candidatos.map(c => '<option value="' + esc(c) + '">' + esc(c) + '</option>').join('') +
+    const candidatos = candidatosTodos(i.nombre);
+    const opts = candidatos.map(c => '<option value="' + esc(c.n) + '" data-zona="' + c.zona + '">' + esc(c.n) + ' (' + c.zona + ')</option>').join('') +
       '<option value="__excel__">Usar nombre del Excel</option>' +
       '<option value="__nuevo__">Crear nuevo' + (i.destino === 'barra' || i.destino === 'cocina' ? ' (receta)' : '') + '</option>';
     return '<select class="select-match-import" data-item="' + esc(i.nombre) + '" onchange="onMatchSelectChange(this)">' +
@@ -543,18 +542,22 @@ function renderVentasAsignacion(items, containerId) {
 function onMatchSelectChange(sel) {
   const input = sel.parentElement.querySelector('.input-match-nuevo');
   if (input) input.style.display = sel.value === '__nuevo__' ? '' : 'none';
+  const option = sel.selectedOptions && sel.selectedOptions[0];
+  const zona = option ? option.dataset.zona : '';
+  if (zona) {
+    const radio = sel.closest('tr').querySelector('input[type="radio"][value="' + zona.toLowerCase() + '"]');
+    if (radio) radio.checked = true;
+  }
   actualizarAlmacenImport(sel.closest('tr'));
 }
 
 function onPruebaDestinoChange(radio) {
   const tr = radio.closest('tr');
   const itemNombre = tr.querySelector('td') ? tr.querySelector('td').textContent.replace(/ *\*?$/, '').trim() : '';
-  const ctx = window._ventasImportCtx || { barraNombres: [], cocinaNombres: [], stockNombres: [] };
-  const pool = radio.value === 'barra' ? ctx.barraNombres : radio.value === 'cocina' ? ctx.cocinaNombres : ctx.stockNombres;
-  const candidatos = candidatosSimilares(itemNombre, pool);
+  const candidatos = candidatosTodos(itemNombre);
   const sel = tr.querySelector('.select-match-import');
   if (!sel) return;
-  const opts = candidatos.map(c => '<option value="' + esc(c) + '">' + esc(c) + '</option>').join('') +
+  const opts = candidatos.map(c => '<option value="' + esc(c.n) + '" data-zona="' + c.zona + '">' + esc(c.n) + ' (' + c.zona + ')</option>').join('') +
     '<option value="__excel__">Usar nombre del Excel</option>' +
     '<option value="__nuevo__">Crear nuevo' + (radio.value === 'barra' || radio.value === 'cocina' ? ' (receta)' : '') + '</option>';
   sel.innerHTML = '<option value="">— Emparejar —</option>' + opts;
@@ -563,19 +566,34 @@ function onPruebaDestinoChange(radio) {
   actualizarAlmacenImport(tr);
 }
 
-// Similitud simple por palabras para sugerir candidatos
+// Similitud por palabras (ignora símbolos y palabras vacías)
+const STOPWORDS = new Set(['DE', 'DEL', 'LA', 'EL', 'LOS', 'LAS', 'CON', 'POR', 'PARA', 'Y', 'A', 'AL', 'UN', 'UNA', 'X', 'ML', 'LT', 'L', 'KG', 'GR', 'S', 'C', 'G']);
+function tokensDe(nombre) {
+  return String(nombre || '')
+    .toUpperCase()
+    .replace(/\*/g, ' ')
+    .split(/[^A-Z0-9ÁÉÍÓÚÑÜ]+/)
+    .map(t => t.trim())
+    .filter(t => t.length >= 2 && !STOPWORDS.has(t));
+}
+
 function similitud(a, b) {
-  const ta = (a || '').split(' ').filter(Boolean);
-  const tb = (b || '').split(' ').filter(Boolean);
+  const ta = tokensDe(a);
+  const tb = tokensDe(b);
   if (!ta.length || !tb.length) return 0;
   let hits = 0;
   ta.forEach(w => { if (tb.includes(w)) hits++; });
   return hits / Math.max(1, tb.length);
 }
 
-function candidatosSimilares(nombre, pool) {
-  const target = String(nombre || '').toUpperCase().replace(/\s+/g, ' ');
-  const scored = (pool || []).map(n => ({ n, s: similitud(target, String(n).toUpperCase().replace(/\s+/g, ' ')) })).filter(x => x.s > 0.25).sort((a, b) => b.s - a.s).slice(0, 10).map(x => x.n);
+// Candidatos de TODAS las zonas (STOCKS/BARRA/COCINA) con su zona
+function candidatosTodos(nombre) {
+  const ctx = window._ventasImportCtx || { barraNombres: [], cocinaNombres: [], stockNombres: [] };
+  const pool = [];
+  (ctx.stockNombres || []).forEach(n => pool.push({ n, zona: 'STOCKS' }));
+  (ctx.barraNombres || []).forEach(n => pool.push({ n, zona: 'BARRA' }));
+  (ctx.cocinaNombres || []).forEach(n => pool.push({ n, zona: 'COCINA' }));
+  const scored = pool.map(p => ({ p, s: similitud(nombre, p.n) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 15).map(x => x.p);
   return scored;
 }
 
