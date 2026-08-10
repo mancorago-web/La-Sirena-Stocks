@@ -513,7 +513,7 @@ function renderVentasAsignacion(items, containerId) {
     return '<label style="display:inline-flex;align-items:center;gap:0.25rem;margin-right:0.75rem;font-size:0.85rem;cursor:pointer;"><input type="radio" name="dest-prueba-' + i.idx + '" value="' + d + '"' + checked + ' onchange="onPruebaDestinoChange(this)"> ' + d.toUpperCase() + '</label>';
   }).join('');
   const emparejar = (i) => {
-    if (i.emparejado) return '<span style="color:#2e7d32;">✓ ' + esc(i.matched) + '</span>';
+    if (i.emparejado) return '<span style="color:#2e7d32;">✓ ' + esc(i.matched) + '</span><input type="hidden" class="match-ya" value="' + esc(i.matched) + '">';
     const candidatos = candidatosTodos(i.nombre);
     const opts = candidatos.map(c => '<option value="' + esc(c.n) + '" data-zona="' + c.zona + '">' + esc(c.n) + ' (' + c.zona + ')</option>').join('') +
       '<option value="__excel__">Usar nombre del Excel</option>' +
@@ -651,32 +651,46 @@ function guardarVentasAsignadas(containerId, filas, onDone) {
   const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
   const barraSet = new Set(ctx.barraNombres.map(n => norm(n)));
   const cocinaSet = new Set(ctx.cocinaNombres.map(n => norm(n)));
+  const stockSet = new Set((ctx.stockNombres || []).map(n => norm(n)));
   const match = {};
   const mapping = {};
   const almacenes = {};
   const recetasNuevas = [];
+  const sinEmparejar = [];
   document.querySelectorAll('#' + containerId + ' tbody tr').forEach(tr => {
     const itemNombre = tr.querySelector('td') ? tr.querySelector('td').textContent.replace(/ *\*?$/, '').trim() : '';
     if (!itemNombre) return;
     const destinoRadio = tr.querySelector('input[type="radio"]:checked');
     const destino = destinoRadio ? destinoRadio.value : 'stocks';
+    const ya = tr.querySelector('.match-ya');
     const sel = tr.querySelector('.select-match-import');
     const inputNuevo = tr.querySelector('.input-match-nuevo');
     const alSel = tr.querySelector('.select-almacen-import');
     let matched = itemNombre;
-    if (sel) {
+    if (ya) {
+      matched = ya.value;
+    } else if (sel) {
       if (sel.value === '__nuevo__') {
         matched = (inputNuevo && inputNuevo.value.trim()) || itemNombre;
         if (destino === 'barra' && !barraSet.has(norm(matched))) recetasNuevas.push({ nombre: matched, tipo: 'barra' });
         if (destino === 'cocina' && !cocinaSet.has(norm(matched))) recetasNuevas.push({ nombre: matched, tipo: 'cocina' });
       } else if (sel.value && sel.value !== '__excel__') {
         matched = sel.value;
+      } else {
+        // Sin emparejar o "usar nombre del Excel" en STOCKS sin item existente → bloquear
+        if (!sel.value || (sel.value === '__excel__' && destino === 'stocks' && !stockSet.has(norm(itemNombre)))) {
+          sinEmparejar.push(itemNombre);
+        }
       }
     }
     match[norm(itemNombre)] = matched;
     mapping[norm(itemNombre)] = destino;
     if (destino === 'stocks' && alSel && alSel.value) almacenes[norm(itemNombre)] = Number(alSel.value);
   });
+  if (sinEmparejar.length) {
+    alert('Debes emparejar estos items antes de guardar (elige el item de la app):\n\n- ' + sinEmparejar.join('\n- '));
+    return;
+  }
   if (!Object.keys(mapping).length) { alert('No hay items para guardar'); return; }
   filas.forEach(r => {
     const k = norm(r.item);
