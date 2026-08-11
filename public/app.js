@@ -581,9 +581,11 @@ function esBasura(nombre) {
 const STOPWORDS = new Set(['DE', 'DEL', 'LA', 'EL', 'LOS', 'LAS', 'CON', 'POR', 'PARA', 'Y', 'A', 'AL', 'UN', 'UNA', 'X', 'ML', 'LT', 'L', 'KG', 'GR', 'S', 'C', 'G']);
 function tokensDe(nombre) {
   return String(nombre || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .toUpperCase()
     .replace(/\*/g, ' ')
-    .split(/[^A-Z0-9ÁÉÍÓÚÑÜ]+/)
+    .split(/[^A-Z0-9]+/)
     .map(t => t.trim())
     .filter(t => t.length >= 2 && !STOPWORDS.has(t));
 }
@@ -593,7 +595,9 @@ function similitud(a, b) {
   const tb = tokensDe(b);
   if (!ta.length || !tb.length) return 0;
   let hits = 0;
-  ta.forEach(w => { if (tb.includes(w)) hits++; });
+  ta.forEach(w => {
+    if (tb.some(t => w === t || (w.length >= 3 && t.length >= 3 && (w.startsWith(t) || t.startsWith(w))))) hits++;
+  });
   return hits / Math.max(1, tb.length);
 }
 
