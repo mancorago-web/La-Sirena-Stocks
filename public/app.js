@@ -78,15 +78,10 @@ firebase.auth().onAuthStateChanged(user => {
     await fetch('/api/migrate/rename-mantgras', opts).catch(e => console.error('rename-mantgras error:', e));
     await fetch('/api/migrate/fix-montgrass-name', opts).catch(e => console.error('fix-montgrass-name error:', e));
   });
-  // Register service worker for PWA (auto-update on new deploy)
+  // Register service worker for PWA (sin recargar la página al actualizar para no molestar al usuario)
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').then(reg => {
-      // Check for updates every 5 minutes while app is open
       setInterval(() => reg.update(), 300000);
-      // Auto-reload when a new version activates
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        window.location.reload();
-      });
     }).catch(() => {});
   }
 });
@@ -3233,14 +3228,17 @@ function cargarCocinaMovimientos(tipo) {
   if (tipo === 'ventas') {
     Promise.all([
       api('GET', '/api/cocina/recetas'),
-      api('GET', '/api/cocina/movimientos?fecha=' + fecha + '&tipo=ventas')
-    ]).then(([recetas, movs]) => {
+      api('GET', '/api/cocina/movimientos?fecha=' + fecha + '&tipo=ventas'),
+      api('GET', '/api/cocina/ventas?fecha=' + fecha)
+    ]).then(([recetas, movs, ventasCentral]) => {
       const container = document.getElementById(accId);
       if (!container) return;
       if (!recetas.length) { container.innerHTML = '<p>No hay recetas. Crea recetas en COCINA/RECETAS para registrar ventas.</p>'; return; }
       const ordenCat = ['PLATOS', 'ENTRADAS', 'SOPAS', 'CARNES', 'MARISCOS', 'POLLO', 'GUARNICIONES', 'POSTRES', 'OTROS'];
       const recQty = {};
-      movs.filter(m => m.es_receta !== false).forEach(m => { recQty[m.ingrediente] = m.cantidad; });
+      movs.filter(m => m.es_receta !== false).forEach(m => { recQty[m.ingrediente] = (recQty[m.ingrediente] || 0) + (m.cantidad || 0); });
+      // Sumar las ventas de COCINA registradas desde el apartado principal de VENTAS
+      (ventasCentral || []).forEach(v => { recQty[v.nombre] = (recQty[v.nombre] || 0) + (v.cantidad || 0); });
       const grupos = {};
       recetas.forEach(r => { const cat = r.categoria || 'PLATOS'; if (!grupos[cat]) grupos[cat] = []; grupos[cat].push(r); });
       const catsToRender = [...ordenCat, ...Object.keys(grupos).filter(c => !ordenCat.includes(c))];

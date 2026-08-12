@@ -2085,6 +2085,16 @@ app.get('/api/cocina/movimientos', authMiddleware, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Ventas de COCINA registradas desde el apartado principal de VENTAS
+app.get('/api/cocina/ventas', async (req, res) => {
+  try {
+    const fecha = req.query.fecha;
+    if (!fecha) return res.json([]);
+    const snap = await col('cocina_ventas').where('fecha', '==', fecha).get();
+    res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/api/cocina/movimientos', authMiddleware, async (req, res) => {
   try {
     const { fecha, tipo, items } = req.body;
