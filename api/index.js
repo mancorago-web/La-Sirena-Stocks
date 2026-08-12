@@ -2202,6 +2202,27 @@ app.get('/api/cocina/salidas-stock', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Salidas de STOCKS con destino BARRA (son ingresos de barra con origen STOCKS)
+app.get('/api/barra/salidas-stock', async (req, res) => {
+  try {
+    const fecha = req.query.fecha;
+    if (!fecha) return res.json([]);
+    const invSnap = await col('inventario').get();
+    const byKey = {};
+    invSnap.docs.forEach(d => { const a = d.data(); byKey[Number(a.item_id) + '_' + Number(a.almacen_id)] = a.nombre; });
+    const dia = await col('inventario_diario').where('fecha', '==', fecha).get();
+    const out = [];
+    dia.docs.forEach(d => {
+      const a = d.data();
+      if (!((a.salida_almacen || 0) > 0)) return;
+      if (String(a.destino_salida || '') !== 'barra') return;
+      const nombre = byKey[Number(a.item_id) + '_' + Number(a.almacen_id)] || String(a.item_id);
+      out.push({ fecha, nombre, cantidad: a.salida_almacen, unidad: 'unidad', saved_by: a.saved_by || '-', created_at: a.updated_at || '' });
+    });
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Suma (o resta) cantidades al stock de cocina; crea el item si no existe
 async function ajustarCocinaStock(ajustes) {
   const cs = await col('cocina_stock').get();

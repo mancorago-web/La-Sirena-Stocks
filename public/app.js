@@ -4564,15 +4564,24 @@ function cargarBarraMovimientos(tipo) {
       if (bp && bp.value) buscarTablaBarra(bp.value, accId, 'tr[data-receta]');
     });
   } else {
-    // INGRESOS: solo los items que ingresaron en la fecha / BAJAS: items de BARRA/STOCK
+    // INGRESOS: solo los items que ingresaron en la fecha (COMPRAS + SALIDAS de STOCK) / BAJAS: items de BARRA/STOCK
     const esIngreso = tipo === 'ingresos';
     const fuente = esIngreso ? api('GET', '/api/barra/precios') : api('GET', '/api/barra/stock');
+    const fuenteSalidasStock = esIngreso ? api('GET', '/api/barra/salidas-stock?fecha=' + fecha) : Promise.resolve([]);
     Promise.all([
       fuente,
-      api('GET', '/api/barra/movimientos?fecha=' + fecha + '&tipo=' + tipo)
-    ]).then(([items, movs]) => {
+      api('GET', '/api/barra/movimientos?fecha=' + fecha + '&tipo=' + tipo),
+      fuenteSalidasStock
+    ]).then(([items, movs, salidasStock]) => {
       const movByIng = {};
       movs.forEach(m => { movByIng[m.ingrediente] = m; });
+      // Sumar las salidas de STOCK con destino BARRA (origen STOCKS)
+      if (esIngreso) {
+        (salidasStock || []).forEach(s => {
+          if (!movByIng[s.nombre]) movByIng[s.nombre] = { cantidad: 0, origen: 'stocks', unidad: s.unidad || 'unidad' };
+          movByIng[s.nombre].cantidad = (movByIng[s.nombre].cantidad || 0) + (s.cantidad || 0);
+        });
+      }
       const container = document.getElementById(accId);
       let lista;
       if (esIngreso) {
