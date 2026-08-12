@@ -1227,6 +1227,35 @@ app.get('/api/ventas/detalle', async (req, res) => {
       list.push({ id: 'grp_barra_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'barra', log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at });
     });
 
+    // COCINA: agrupar por receta
+    const cocinaLogKeys = new Set();
+    const cocinaGroups = {};
+    log.docs.forEach(d => {
+      const a = d.data();
+      if (a.destino !== 'cocina') return;
+      const key = String(a.nombre || '').trim().toUpperCase();
+      cocinaLogKeys.add(key + '|' + (a.cantidad || 0));
+      if (!cocinaGroups[key]) cocinaGroups[key] = { nombre: a.nombre, cantidad: 0, log_ids: [], created_at: '', saved_by: a.saved_by || '-' };
+      cocinaGroups[key].cantidad += a.cantidad || 0;
+      cocinaGroups[key].log_ids.push(d.id);
+      if (!cocinaGroups[key].created_at || (a.created_at && a.created_at < cocinaGroups[key].created_at)) cocinaGroups[key].created_at = a.created_at;
+      cocinaGroups[key].saved_by = a.saved_by || cocinaGroups[key].saved_by;
+    });
+    const cve = await col('cocina_ventas').where('fecha', '==', fecha).get();
+    cve.docs.forEach(d => {
+      const a = d.data();
+      const key = String(a.nombre || '').trim().toUpperCase();
+      if (cocinaLogKeys.has(key + '|' + (a.cantidad || 0))) return; // ya está en el log
+      if (!cocinaGroups[key]) cocinaGroups[key] = { nombre: a.nombre, cantidad: 0, log_ids: [], created_at: '', saved_by: a.saved_by || '-' };
+      cocinaGroups[key].cantidad += a.cantidad || 0;
+      if (!cocinaGroups[key].created_at || (a.created_at && a.created_at < cocinaGroups[key].created_at)) cocinaGroups[key].created_at = a.created_at;
+      cocinaGroups[key].saved_by = a.saved_by || cocinaGroups[key].saved_by;
+    });
+    Object.keys(cocinaGroups).forEach(key => {
+      const g = cocinaGroups[key];
+      list.push({ id: 'grp_cocina_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'cocina', log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at });
+    });
+
     list.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
     res.json(list);
   } catch (e) {
