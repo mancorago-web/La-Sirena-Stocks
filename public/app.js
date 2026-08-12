@@ -590,13 +590,31 @@ function tokensDe(nombre) {
     .filter(t => t.length >= 2 && !STOPWORDS.has(t));
 }
 
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  const dp = [];
+  for (let i = 0; i <= m; i++) dp[i] = [i];
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+    }
+  }
+  return dp[m][n];
+}
+
 function similitud(a, b) {
   const ta = tokensDe(a);
   const tb = tokensDe(b);
   if (!ta.length || !tb.length) return 0;
   let hits = 0;
   ta.forEach(w => {
-    if (tb.some(t => w === t || (w.length >= 3 && t.length >= 3 && (w.startsWith(t) || t.startsWith(w))))) hits++;
+    if (tb.some(t => w === t ||
+      (w.length >= 3 && t.length >= 3 && (w.startsWith(t) || t.startsWith(w))) ||
+      (w.length >= 4 && t.length >= 4 && levenshtein(w, t) <= 1))) hits++;
   });
   return hits / Math.max(1, tb.length);
 }
