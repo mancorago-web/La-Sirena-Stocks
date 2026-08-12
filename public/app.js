@@ -3396,22 +3396,36 @@ function cargarCocinaMovimientos(tipo) {
   }
   // INGRESOS / SALIDAS
   const fuenteIngresos = tipo === 'ingresos' ? api('GET', '/api/cocina/compras?fecha=' + fecha) : Promise.resolve([]);
+  const fuenteSalidasStock = tipo === 'ingresos' ? api('GET', '/api/cocina/salidas-stock?fecha=' + fecha) : Promise.resolve([]);
   Promise.all([
     api('GET', '/api/cocina/stock'),
     api('GET', '/api/cocina/movimientos?fecha=' + fecha + '&tipo=' + tipo),
-    fuenteIngresos
-  ]).then(([stock, movs, compras]) => {
+    fuenteIngresos,
+    fuenteSalidasStock
+  ]).then(([stock, movs, compras, salidasStock]) => {
     const container = document.getElementById(accId);
     if (!container) return;
-    if (!stock.length) { container.innerHTML = '<p>No hay items en COCINA/STOCK.</p>'; return; }
     const movByIng = {};
     movs.forEach(m => { movByIng[m.ingrediente] = m; });
-    // Sumar los ingresos registrados desde COMPRAS/INGRESOS (destino COCINA)
+    // Sumar los ingresos de COMPRAS (origen PROVEEDOR) y de SALIDAS de STOCK con destino COCINA (origen STOCKS)
     if (tipo === 'ingresos') {
       (compras || []).forEach(c => {
-        if (!movByIng[c.nombre]) movByIng[c.nombre] = { cantidad: 0, origen: 'proveedor' };
+        if (!movByIng[c.nombre]) movByIng[c.nombre] = { cantidad: 0, origen: 'proveedor', unidad: c.unidad || 'unidad' };
         movByIng[c.nombre].cantidad = (movByIng[c.nombre].cantidad || 0) + (c.cantidad || 0);
-        if (!movByIng[c.nombre].origen) movByIng[c.nombre].origen = 'proveedor';
+      });
+      (salidasStock || []).forEach(s => {
+        if (!movByIng[s.nombre]) movByIng[s.nombre] = { cantidad: 0, origen: 'stocks', unidad: s.unidad || 'unidad' };
+        movByIng[s.nombre].cantidad = (movByIng[s.nombre].cantidad || 0) + (s.cantidad || 0);
+      });
+    }
+    if (!stock.length && !Object.keys(movByIng).length) { container.innerHTML = '<p>No hay items en COCINA/STOCK.</p>'; return; }
+    // Lista combinada: cocina_stock + items de ingresos que no están en cocina_stock
+    const seen = new Set();
+    const lista = [];
+    stock.forEach(s => { seen.add(s.ingrediente.toUpperCase()); lista.push(s); });
+    if (tipo === 'ingresos') {
+      Object.keys(movByIng).forEach(n => {
+        if (!seen.has(n.toUpperCase())) lista.push({ ingrediente: n, unidad: movByIng[n].unidad || 'unidad' });
       });
     }
     const esIngreso = tipo === 'ingresos';
@@ -3424,7 +3438,7 @@ function cargarCocinaMovimientos(tipo) {
       <div class="table-wrap"><table>
         <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th>${colOrigen}</tr></thead>
         <tbody>
-          ${stock.map(s => {
+          ${lista.map(s => {
             const mov = movByIng[s.ingrediente] || {};
             return `<tr data-ing="${esc(s.ingrediente)}" data-uni="${esc(s.unidad || 'unidad')}">
               <td>${esc(s.ingrediente)}</td>
