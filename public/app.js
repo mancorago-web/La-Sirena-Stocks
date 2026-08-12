@@ -4564,7 +4564,7 @@ function cargarBarraMovimientos(tipo) {
       if (bp && bp.value) buscarTablaBarra(bp.value, accId, 'tr[data-receta]');
     });
   } else {
-    // INGRESOS: items de BASE DE DATOS / BAJAS: items de BARRA/STOCK
+    // INGRESOS: solo los items que ingresaron en la fecha / BAJAS: items de BARRA/STOCK
     const esIngreso = tipo === 'ingresos';
     const fuente = esIngreso ? api('GET', '/api/barra/precios') : api('GET', '/api/barra/stock');
     Promise.all([
@@ -4574,7 +4574,21 @@ function cargarBarraMovimientos(tipo) {
       const movByIng = {};
       movs.forEach(m => { movByIng[m.ingrediente] = m; });
       const container = document.getElementById(accId);
-      if (!items.length) { container.innerHTML = esIngreso ? '<p>No hay items en BASE DE DATOS.</p>' : '<p>No hay items en BARRA/STOCK.</p>'; return; }
+      let lista;
+      if (esIngreso) {
+        // Solo los items que tienen ingreso en esta fecha
+        const preciosBy = {};
+        items.forEach(p => preciosBy[String(p.ingrediente).toUpperCase()] = p);
+        lista = Object.keys(movByIng).map(nombre => {
+          const p = preciosBy[String(nombre).toUpperCase()];
+          const mov = movByIng[nombre];
+          return { ingrediente: nombre, unidad: (p ? (p.unidad_compra || p.unidad) : (mov.unidad || 'unidad')) };
+        });
+        if (!lista.length) { container.innerHTML = '<p>No hay ingresos en esta fecha.</p>'; return; }
+      } else {
+        lista = items;
+        if (!lista.length) { container.innerHTML = '<p>No hay items en BARRA/STOCK.</p>'; return; }
+      }
       const colOrigen = esIngreso ? '<th>Origen</th>' : '';
       const cellOrigen = (mov) => esIngreso ? `<td><select class="select-origen-ingreso" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">
         <option value="proveedor" ${mov.origen==='proveedor'?'selected':''}>PROVEEDOR</option>
@@ -4584,9 +4598,9 @@ function cargarBarraMovimientos(tipo) {
         <div class="table-wrap"><table>
           <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th>${colOrigen}</tr></thead>
           <tbody>
-            ${items.map(p => {
+            ${lista.map(p => {
               const mov = movByIng[p.ingrediente] || {};
-              const uc = esIngreso ? (p.unidad_compra || p.unidad || 'unidad') : (p.unidad || 'unidad');
+              const uc = p.unidad || 'unidad';
               return `<tr data-ing="${p.ingrediente}" data-uni-compra="${uc}">
                 <td>${p.ingrediente}</td>
                 <td><input type="number" class="input-barra-mov" value="${mov.cantidad || ''}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
