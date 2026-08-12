@@ -214,6 +214,7 @@ function actualizarContadoresMenu() {
     if (s) s.textContent = 'Items: ' + (r.stocks === undefined ? '—' : r.stocks);
     if (b) b.textContent = 'Items: ' + (r.barra === undefined ? '—' : r.barra);
     if (c) c.textContent = 'Items: ' + (r.cocina === undefined ? '—' : r.cocina);
+    requestAnimationFrame(dibujarFlujoMenu);
   }).catch(() => {});
 }
 window.addEventListener('resize', dibujarFlujoMenu);
