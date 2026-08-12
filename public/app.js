@@ -1223,6 +1223,7 @@ function eliminarItemAlmacen(itemId, almacenId) {
 function cargarSalidas(fecha) {
   if (!fecha) fecha = document.getElementById('fecha-salidas').value;
   if (!fecha) return;
+  _invCache = { fecha: null, data: null, pending: null };
   getInventario(fecha).then(data => {
     data = data.filter(a => a.id === 4 || a.id === 8);
     // Solo mostrar items con salida registrada en esta fecha
@@ -1448,6 +1449,7 @@ function verDetallesBajas() {
 
 function cargarVentas(fecha) {
   if (!fecha) fecha = document.getElementById('fecha-ventas').value;
+  _invCache = { fecha: null, data: null, pending: null };
   getInventario(fecha).then(data => {
     data = data.filter(a => a.id !== 3 && a.id !== 9 && a.id !== 16);
     // Solo mostrar items que se vendieron en esta fecha
