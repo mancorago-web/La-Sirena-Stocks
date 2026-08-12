@@ -14,6 +14,7 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .btn-back {
   background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.4); font-size: 1.2rem;
   padding: 0.3rem 0.7rem; border-radius: 6px; cursor: pointer; line-height: 1; flex-shrink: 0;
+  touch-action: manipulation; position: relative; z-index: 5;
 }
 .btn-back:hover { background: rgba(255,255,255,0.1); }
 
@@ -370,7 +371,7 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .nav-left { gap: 0.5rem; }
   .nav-logo { font-size: 1.1rem; }
   .nav-logo-sub { font-size: 0.8rem; }
-  .btn-back { font-size: 1rem; padding: 0.2rem 0.5rem; }
+  .btn-back { font-size: 1.3rem; padding: 0.55rem 0.8rem; min-width: 46px; min-height: 46px; display: inline-flex; align-items: center; justify-content: center; }
 
   /* Tabs bar */
   .tabs-bar { padding: 0.4rem 0.75rem; }
