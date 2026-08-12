@@ -563,7 +563,7 @@ function renderVentasAsignacion(items, containerId) {
   }).join('');
   const emparejar = (i) => {
     if (i.emparejado) return '<span style="color:#2e7d32;">✓ ' + esc(i.matched) + '</span><input type="hidden" class="match-ya" value="' + esc(i.matched) + '">';
-    const candidatos = candidatosTodos(i.nombre);
+    const candidatos = candidatosTodos(i.nombre, i.destino);
     const opts = candidatos.map(c => '<option value="' + esc(c.n) + '" data-zona="' + c.zona + '">' + esc(c.n) + ' (' + c.zona + ')</option>').join('') +
       '<option value="__excel__">Usar nombre del Excel</option>' +
       '<option value="__nuevo__">Crear nuevo' + (i.destino === 'barra' || i.destino === 'cocina' ? ' (receta)' : '') + '</option>';
@@ -604,7 +604,7 @@ function onMatchSelectChange(sel) {
 function onPruebaDestinoChange(radio) {
   const tr = radio.closest('tr');
   const itemNombre = tr.querySelector('td') ? tr.querySelector('td').textContent.replace(/ *\*?$/, '').trim() : '';
-  const candidatos = candidatosTodos(itemNombre);
+  const candidatos = candidatosTodos(itemNombre, radio.value);
   const sel = tr.querySelector('.select-match-import');
   if (!sel) return;
   const opts = candidatos.map(c => '<option value="' + esc(c.n) + '" data-zona="' + c.zona + '">' + esc(c.n) + ' (' + c.zona + ')</option>').join('') +
@@ -668,13 +668,17 @@ function similitud(a, b) {
   return hits / Math.max(1, tb.length);
 }
 
-// Candidatos de TODAS las zonas (STOCKS/BARRA/COCINA) con su zona
-function candidatosTodos(nombre) {
+// Candidatos del GRUPO elegido (STOCKS/BARRA/COCINA) según el destino seleccionado
+function candidatosTodos(nombre, destino) {
   const ctx = window._ventasImportCtx || { barraNombres: [], cocinaNombres: [], stockNombres: [] };
   const pool = [];
-  (ctx.stockNombres || []).forEach(n => { if (!esBasura(n)) pool.push({ n, zona: 'STOCKS' }); });
-  (ctx.barraNombres || []).forEach(n => pool.push({ n, zona: 'BARRA' }));
-  (ctx.cocinaNombres || []).forEach(n => pool.push({ n, zona: 'COCINA' }));
+  if (destino === 'barra') {
+    (ctx.barraNombres || []).forEach(n => pool.push({ n, zona: 'BARRA' }));
+  } else if (destino === 'cocina') {
+    (ctx.cocinaNombres || []).forEach(n => pool.push({ n, zona: 'COCINA' }));
+  } else {
+    (ctx.stockNombres || []).forEach(n => { if (!esBasura(n)) pool.push({ n, zona: 'STOCKS' }); });
+  }
   const scored = pool.map(p => ({ p, s: similitud(nombre, p.n) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 15).map(x => x.p);
   return scored;
 }
