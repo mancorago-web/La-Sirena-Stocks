@@ -1341,10 +1341,11 @@ app.get('/api/ventas/busqueda-total', async (req, res) => {
       push({ fecha: a.fecha, nombre: a.nombre, cantidad: a.cantidad, destino: a.destino, almacen_id: null, almacen_nombre: '', saved_by: a.saved_by || '-', created_at: a.created_at || '' });
     });
     // BARRA movimientos (recetas) si no está en el log
-    const bm = await col('barra_movimientos').where('fecha', '>=', desde).where('fecha', '<=', hasta).where('tipo', '==', 'ventas').get();
+    const bm = await col('barra_movimientos').where('tipo', '==', 'ventas').get();
     bm.docs.forEach(d => {
       const a = d.data();
       if (a.es_receta === false) return;
+      if (a.fecha < desde || a.fecha > hasta) return;
       push({ fecha: a.fecha, nombre: a.ingrediente, cantidad: a.cantidad, destino: 'barra', almacen_id: null, almacen_nombre: '', saved_by: a.saved_by || '-', created_at: a.created_at || '' });
     });
     // COCINA ventas si no está en el log
@@ -1361,17 +1362,23 @@ app.get('/api/ventas/busqueda-total', async (req, res) => {
 });
 
 // Nombres únicos de items/recetas vendidos (para autocompletar en búsqueda)
+function claveNombre(s) {
+  return String(s || '').toUpperCase().replace(/\s+/g, ' ').trim()
+    .replace(/(\d+)\s+(ML|LT|CC|GR|G|KG|OZ|CL|GL)\b/g, (m, d, u) => d + u)
+    .replace(/[*\u2013\-.]+$/g, '').trim();
+}
+
 app.get('/api/ventas/items-vendidos', async (req, res) => {
   try {
-    const names = new Set();
-    const add = (n) => { const k = String(n || '').trim(); if (k) names.add(k); };
+    const porClave = {};
+    const add = (n) => { const k = String(n || '').trim(); if (!k) return; const c = claveNombre(k); if (!(c in porClave)) porClave[c] = k; };
     const log = await col('ventas').get(); log.docs.forEach(d => add(d.data().nombre));
     const bm = await col('barra_movimientos').where('tipo', '==', 'ventas').get(); bm.docs.forEach(d => { if (d.data().es_receta !== false) add(d.data().ingrediente); });
     const cv = await col('cocina_ventas').get(); cv.docs.forEach(d => add(d.data().nombre));
     const inv = await col('inventario').get(); inv.docs.forEach(d => add(d.data().nombre));
     const rec = await col('recetas').get(); rec.docs.forEach(d => add(d.data().nombre));
     const crec = await col('cocina_recetas').get(); crec.docs.forEach(d => add(d.data().nombre));
-    res.json(Array.from(names).sort((a, b) => a.localeCompare(b)));
+    res.json(Object.values(porClave).sort((a, b) => a.localeCompare(b)));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

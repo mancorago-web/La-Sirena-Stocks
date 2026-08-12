@@ -438,10 +438,11 @@ function buscarVentasTotal() {
       cont.innerHTML = '<p>No se encontraron ventas en ese rango' + (item ? ' para "<b>' + esc(item) + '</b>"' : '') + '.</p>';
       return;
     }
-    // agrupar por item + destino (+ almacén)
+    const clave = (s) => String(s || '').toUpperCase().replace(/\s+/g, ' ').trim().replace(/(\d+)\s+(ML|LT|CC|GR|G|KG|OZ|CL|GL)\b/g, (m, d, u) => d + u).replace(/[*\u2013\-.]+$/g, '').trim();
+    // agrupar por item normalizado + destino (+ almacén)
     const grupos = {};
     res.forEach(r => {
-      const key = String(r.nombre || '') + '|' + r.destino + '|' + (r.almacen_id || '');
+      const key = clave(r.nombre) + '|' + r.destino + '|' + (r.almacen_id || '');
       if (!grupos[key]) grupos[key] = { nombre: r.nombre, destino: r.destino, almacen_nombre: r.almacen_nombre || '', detalle: [], total: 0 };
       grupos[key].detalle.push(r);
       grupos[key].total += r.cantidad || 0;
