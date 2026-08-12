@@ -395,7 +395,7 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .menu-barra { grid-column: 2; grid-row: 2; }
   .menu-cocina { grid-column: 3; grid-row: 2; }
   .menu-ventas { grid-column: 2; grid-row: 3; }
-  .menu-costos { grid-column: 1 / -1; grid-row: 4; }
+  .menu-costos { grid-column: 2; grid-row: 4; }
   .category-btn { min-height: 110px; padding: 0.7rem 0.3rem; }
   .category-icon { font-size: 1.6rem; }
   .category-label { font-size: 0.72rem; letter-spacing: 0.5px; }
