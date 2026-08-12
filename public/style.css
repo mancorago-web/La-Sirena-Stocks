@@ -389,13 +389,14 @@ td button.danger { border-color: #c62828; color: #c62828; }
 
   /* Main menu (Android: distinto a PC) */
   .main-menu { padding: 1rem; min-height: calc(100vh - 3.5rem); }
-  .main-menu-grid { grid-template-columns: repeat(3, 1fr); gap: 0.6rem; max-width: 100%; }
+  .main-menu-grid { grid-template-columns: repeat(3, 1fr); column-gap: 0.6rem; row-gap: 1.3rem; max-width: 100%; }
   .menu-compras { grid-column: 2; grid-row: 1; }
   .menu-stocks { grid-column: 1; grid-row: 2; }
   .menu-barra { grid-column: 2; grid-row: 2; }
   .menu-cocina { grid-column: 3; grid-row: 2; }
   .menu-ventas { grid-column: 2; grid-row: 3; }
   .menu-costos { grid-column: 2; grid-row: 4; }
+  .flow-path { stroke-width: 2.5; opacity: 0.85; }
   .category-btn { min-height: 110px; padding: 0.7rem 0.3rem; }
   .category-icon { font-size: 1.6rem; }
   .category-label { font-size: 0.72rem; letter-spacing: 0.5px; }
