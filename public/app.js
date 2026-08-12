@@ -97,6 +97,7 @@ document.addEventListener('click', e => {
 });
 
 const _loaded = {};
+window.__vista = { cat: null, tab: null, sub: null, pestana: null };
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -104,6 +105,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     tab.classList.add('active');
     const name = tab.dataset.tab;
     document.getElementById('tab-' + name).classList.add('active');
+    window.__vista = { cat: 'stocks', tab: name };
     // Recargar siempre para mantener todo actualizado en cadena
     const loaders = {
       almacenes: () => cargarAlmacenes(document.getElementById('fecha-almacenes')?.value),
@@ -162,6 +164,51 @@ function dibujarFlujoMenu() {
 }
 window.addEventListener('load', () => { dibujarFlujoMenu(); actualizarContadoresMenu(); cargarSugerenciasBusquedaVentas(); });
 
+// Refresco automático: recarga la vista actual al volver a la pestaña o cada 30s,
+// para que todos los dispositivos/navegadores vean la misma información actualizada.
+function refrescarVista() {
+  const v = window.__vista;
+  if (!v || !v.cat) return;
+  _invCache = { fecha: null, data: null, pending: null };
+  if (v.cat === 'stocks') {
+    const loaders = {
+      almacenes: () => cargarAlmacenes(document.getElementById('fecha-almacenes')?.value),
+      ingresos: () => cargarIngresos(document.getElementById('fecha-ingresos')?.value),
+      salidas: () => cargarSalidas(document.getElementById('fecha-salidas')?.value),
+      ventas: () => cargarVentas(document.getElementById('fecha-ventas')?.value),
+      bajas: () => cargarBajas(document.getElementById('fecha-bajas')?.value),
+      stocks: () => cargarStocks(),
+      reportes: () => cargarReportes(),
+      precios: () => cargarBaseDatosStocks()
+    };
+    if (loaders[v.tab]) loaders[v.tab]();
+  } else if (v.cat === 'barra') {
+    if (['ingresos', 'ventas', 'bajas'].includes(v.sub)) cargarBarraMovimientos(v.sub);
+    else if (v.sub === 'stock') cargarStockBarra();
+    else if (v.sub === 'recetas') cargarRecetas();
+    else if (v.sub === 'basedatos') cargarPrecios();
+  } else if (v.cat === 'cocina') {
+    if (['ingresos', 'salidas', 'ventas'].includes(v.sub)) cargarCocinaMovimientos(v.sub);
+    else if (v.sub === 'stock') cargarStockCocina();
+    else if (v.sub === 'recetas') cargarRecetasCocina();
+    else if (v.sub === 'basedatos') cargarPreciosCocina();
+  } else if (v.cat === 'ventas') {
+    cargarVentasCentral();
+  } else if (v.cat === 'compras') {
+    cargarCompras();
+  } else if (v.cat === 'costos' && v.pestana) {
+    cargarCostoCategoria(v.pestana);
+  }
+}
+window.addEventListener('focus', refrescarVista);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refrescarVista(); });
+setInterval(() => {
+  // No refrescar mientras el usuario está escribiendo en un campo (evita perder lo que tipea)
+  const el = document.activeElement;
+  if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+  refrescarVista();
+}, 60000);
+
 function actualizarContadoresMenu() {
   const s = document.getElementById('menu-items-stocks');
   const b = document.getElementById('menu-items-barra');
@@ -180,6 +227,7 @@ function irACategoria(cat) {
   document.getElementById('main-menu').style.display = 'none';
   document.getElementById('container').style.display = 'block';
   document.getElementById('btn-back').style.display = '';
+  window.__vista = { cat, tab: null, sub: null, pestana: null };
   // Hide all tabs-bars
   document.querySelectorAll('.tabs-bar').forEach(tb => tb.style.display = 'none');
   document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
@@ -188,6 +236,7 @@ function irACategoria(cat) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelector('.tab[data-tab="almacenes"]').classList.add('active');
     document.getElementById('tab-almacenes').classList.add('active');
+    window.__vista = { cat: 'stocks', tab: 'almacenes' };
   } else {
     const tabsEl = document.getElementById('tabs-' + cat);
     if (tabsEl) tabsEl.style.display = '';
@@ -2728,6 +2777,7 @@ function eliminarIngrediente(recetaId, id) {
 // --- BARRA: Sub-tabs ---
 function cambiarSubTab(nombre, prefix) {
   if (!prefix) prefix = 'barra';
+  window.__vista = { cat: prefix, tab: null, sub: nombre, pestana: prefix === 'costos' ? nombre : null };
   const tabsBar = document.getElementById('tabs-' + prefix);
   tabsBar.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
   tabsBar.querySelector(`.sub-tab[data-subtab="${nombre}"]`).classList.add('active');

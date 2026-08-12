@@ -1,6 +1,20 @@
 const admin = require('firebase-admin');
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+
+// Versión de caché automática: cambia cada vez que app.js o style.css cambien.
+// Así todos los navegadores/dispositivos cargan siempre el código actual (sin caché vieja).
+function computeCacheVersion() {
+  try {
+    const a = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'));
+    const c = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'));
+    return crypto.createHash('sha1').update(a).update(c).digest('hex').slice(0, 8);
+  } catch (e) {
+    return '1';
+  }
+}
 
 console.log('=== Sirena API starting ===');
 console.log('CWD:', process.cwd());
@@ -224,7 +238,7 @@ app.set('views', path.join(__dirname, '..', 'views'));
 
 app.get('/', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.render('index');
+  res.render('index', { cacheVersion: computeCacheVersion() });
 });
 
 // --- Helper functions ---

@@ -9,7 +9,7 @@
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <title>Sirena - Control de Inventario</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v=<%= cacheVersion || '1' %>">
 </head>
 <body>
   <div id="toast" class="toast"></div>
@@ -530,6 +530,6 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="/app.js?v=77"></script>
+  <script src="/app.js?v=<%= cacheVersion || '1' %>"></script>
 </body>
 </html>
