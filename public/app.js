@@ -1225,6 +1225,11 @@ function cargarSalidas(fecha) {
   if (!fecha) return;
   getInventario(fecha).then(data => {
     data = data.filter(a => a.id === 4 || a.id === 8);
+    // Solo mostrar items con salida registrada en esta fecha
+    data = data.filter(a => {
+      a.items = (a.items || []).filter(i => (i.salida_almacen || 0) > 0);
+      return a.items.length > 0;
+    });
     const categoriasPorAlmacen = {};
     const defaultCategorias = [
       { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
