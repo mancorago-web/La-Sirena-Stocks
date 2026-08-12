@@ -2856,8 +2856,9 @@ function cambiarSubTab(nombre, prefix) {
   const tabsBar = document.getElementById('tabs-' + prefix);
   tabsBar.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
   tabsBar.querySelector(`.sub-tab[data-subtab="${nombre}"]`).classList.add('active');
-  // Switch content
-  document.querySelectorAll('#tab-' + prefix + ' .sub-tab-content').forEach(tc => tc.classList.remove('active'));
+  // Switch content (VENTAS usa tab-ventas-central)
+  const tabId = prefix === 'ventas' ? 'tab-ventas-central' : 'tab-' + prefix;
+  document.querySelectorAll('#' + tabId + ' .sub-tab-content').forEach(tc => tc.classList.remove('active'));
   document.getElementById('sub-' + prefix + '-' + nombre).classList.add('active');
   // Lazy load barra movement tabs
   if (prefix === 'barra' && ['ingresos','ventas','bajas'].includes(nombre)) {
