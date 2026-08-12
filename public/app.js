@@ -1445,6 +1445,11 @@ function cargarVentas(fecha) {
   if (!fecha) fecha = document.getElementById('fecha-ventas').value;
   getInventario(fecha).then(data => {
     data = data.filter(a => a.id !== 3 && a.id !== 9 && a.id !== 16);
+    // Solo mostrar items que se vendieron en esta fecha
+    data = data.filter(a => {
+      a.items = (a.items || []).filter(i => (i.total_ventas || 0) > 0);
+      return a.items.length > 0;
+    });
     const categoriasPorAlmacen = {};
     const defaultCategorias = [
       { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
