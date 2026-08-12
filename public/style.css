@@ -276,6 +276,16 @@ td button.danger { border-color: #c62828; color: #c62828; }
   outline: none;
   box-shadow: 0 0 0 2px rgba(26,35,126,0.15);
 }
+.transfer-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-bottom: 0.25rem;
+}
+.transfer-row .select-transfer-almacen {
+  flex: 1;
+  min-width: 90px;
+}
 .cierre-verde { background-color: #c8e6c9 !important; }
 .cierre-amarillo { background-color: #fff9c4 !important; }
 .input-cierre[readonly] { cursor: default; font-weight: 600; }

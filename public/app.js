@@ -1270,6 +1270,8 @@ function cargarSalidas(fecha) {
     const container = document.getElementById('accordion-salidas');
     container.innerHTML = data.map(a => {
       const alOpts = todosAlmacenes.filter(x => x.id !== a.id).map(x => `<option value="${x.id}">${x.nombre}</option>`).join('');
+      if (!window._transferAlOpts) window._transferAlOpts = {};
+      window._transferAlOpts[a.id] = alOpts;
       return `
       <div class="accordion-item" data-almacen-id="${a.id}">
         <div class="accordion-header" onclick="toggleAcordeon(this)">
@@ -1290,7 +1292,7 @@ function cargarSalidas(fecha) {
                   ${s.items.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
-                    <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01"></td>
+                    <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01" oninput="updateTransferTotal(this.closest('tr'))"></td>
                     <td><select class="select-destino-salida" onchange="onCambioDestinoSalida(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">
                       <option value="" ${(i.destino_salida||'')===''?'selected':''}>—</option>
                       <option value="barra" ${i.destino_salida==='barra'?'selected':''}>BARRA</option>
@@ -1298,9 +1300,13 @@ function cargarSalidas(fecha) {
                       <option value="juan" ${i.destino_salida==='juan'?'selected':''}>JUAN</option>
                       <option value="stocks" ${i.destino_salida==='stocks'?'selected':''}>STOCKS</option>
                     </select>
-                    <select class="select-destino-almacen" style="display:${i.destino_salida==='stocks'?'':'none'};margin-top:0.3rem;padding:0.3rem;border:1px solid #ccc;border-radius:4px;width:100%;">
-                      ${alOpts}
-                    </select></td>
+                    <div class="transfer-wrap" style="display:${i.destino_salida==='stocks'?'':'none'};margin-top:0.3rem;">
+                      <div class="transfer-list">${buildTransferRows(i, alOpts)}</div>
+                      <div style="margin-top:0.3rem;">
+                        <button type="button" class="btn-add-transfer" onclick="addTransferencia(this)" style="padding:0.2rem 0.4rem;font-size:0.75rem;cursor:pointer;">+ Almacén</button>
+                        <span class="transfer-total" style="font-size:0.8rem;margin-left:0.4rem;">Suma: ${i.salida_almacen || 0} / ${i.salida_almacen || 0}</span>
+                      </div>
+                    </div></td>
                     <input type="hidden" class="hidden-cierre" value="${i.stock_cierre || 0}">
                     <input type="hidden" class="hidden-ventas" value="${i.total_ventas || 0}">
                     <input type="hidden" class="hidden-ingreso" value="${i.stock_ingreso || 0}">
@@ -1313,7 +1319,7 @@ function cargarSalidas(fecha) {
                   ${a.otros.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
-                    <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01"></td>
+                    <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01" oninput="updateTransferTotal(this.closest('tr'))"></td>
                     <td><select class="select-destino-salida" onchange="onCambioDestinoSalida(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">
                       <option value="" ${(i.destino_salida||'')===''?'selected':''}>—</option>
                       <option value="barra" ${i.destino_salida==='barra'?'selected':''}>BARRA</option>
@@ -1321,9 +1327,13 @@ function cargarSalidas(fecha) {
                       <option value="juan" ${i.destino_salida==='juan'?'selected':''}>JUAN</option>
                       <option value="stocks" ${i.destino_salida==='stocks'?'selected':''}>STOCKS</option>
                     </select>
-                    <select class="select-destino-almacen" style="display:${i.destino_salida==='stocks'?'':'none'};margin-top:0.3rem;padding:0.3rem;border:1px solid #ccc;border-radius:4px;width:100%;">
-                      ${alOpts}
-                    </select></td>
+                    <div class="transfer-wrap" style="display:${i.destino_salida==='stocks'?'':'none'};margin-top:0.3rem;">
+                      <div class="transfer-list">${buildTransferRows(i, alOpts)}</div>
+                      <div style="margin-top:0.3rem;">
+                        <button type="button" class="btn-add-transfer" onclick="addTransferencia(this)" style="padding:0.2rem 0.4rem;font-size:0.75rem;cursor:pointer;">+ Almacén</button>
+                        <span class="transfer-total" style="font-size:0.8rem;margin-left:0.4rem;">Suma: ${i.salida_almacen || 0} / ${i.salida_almacen || 0}</span>
+                      </div>
+                    </div></td>
                     <input type="hidden" class="hidden-cierre" value="${i.stock_cierre || 0}">
                     <input type="hidden" class="hidden-ventas" value="${i.total_ventas || 0}">
                     <input type="hidden" class="hidden-ingreso" value="${i.stock_ingreso || 0}">
@@ -1353,8 +1363,14 @@ function guardarSalidas() {
       const itemId = parseInt(tr.dataset.itemId);
       const salida = parseFloat(tr.querySelector('.input-salida').value) || 0;
       const destino = tr.querySelector('.select-destino-salida')?.value || '';
-      const destinoAlmacenId = destino === 'stocks' ? (parseInt(tr.querySelector('.select-destino-almacen')?.value) || 0) : undefined;
-      registros.push({ item_id: itemId, almacen_id: almacenId, salida_almacen: salida, destino_salida: destino, destino_almacen_id: destinoAlmacenId });
+      let transferencias;
+      if (destino === 'stocks') {
+        transferencias = Array.from(tr.querySelectorAll('.transfer-row')).map(r => ({
+          almacen_id: parseInt(r.querySelector('.select-transfer-almacen')?.value) || 0,
+          cantidad: parseFloat(r.querySelector('.input-transfer-cant')?.value) || 0
+        })).filter(t => t.almacen_id > 0 && t.cantidad > 0);
+      }
+      registros.push({ item_id: itemId, almacen_id: almacenId, salida_almacen: salida, destino_salida: destino, transferencias });
     });
   });
   const btn = document.querySelector('#tab-salidas .btn-guardar-dia');
@@ -1370,9 +1386,56 @@ function guardarSalidas() {
 }
 
 function onCambioDestinoSalida(sel) {
-  const td = sel.closest('td');
-  const alSel = td.querySelector('.select-destino-almacen');
-  if (alSel) alSel.style.display = sel.value === 'stocks' ? '' : 'none';
+  const tr = sel.closest('tr');
+  const wrap = tr.querySelector('.transfer-wrap');
+  if (wrap) wrap.style.display = sel.value === 'stocks' ? '' : 'none';
+  if (sel.value === 'stocks') updateTransferTotal(tr);
+}
+
+function buildTransferRows(i, alOpts) {
+  let transfers = (Array.isArray(i.transferencias) && i.transferencias.length)
+    ? i.transferencias.filter(t => t.almacen_id)
+    : (i.destino_almacen_id ? [{ almacen_id: i.destino_almacen_id, cantidad: i.salida_almacen || 0 }] : [{ almacen_id: '', cantidad: 0 }]);
+  return transfers.map(t => {
+    const opts = alOpts.replace(new RegExp('<option value="' + t.almacen_id + '">', 'g'), '<option value="' + t.almacen_id + '" selected>');
+    return '<div class="transfer-row">'
+      + '<select class="select-transfer-almacen" onchange="updateTransferTotal(this.closest(\'tr\'))" style="padding:0.25rem;border:1px solid #ccc;border-radius:4px;">'
+      + '<option value="">—</option>' + opts
+      + '</select>'
+      + '<input type="number" class="input-num input-transfer-cant" value="' + (t.cantidad || 0) + '" step="0.01" min="0" oninput="updateTransferTotal(this.closest(\'tr\'))" style="width:70px;">'
+      + '<button type="button" class="btn-remove-transfer" onclick="removeTransferencia(this)" title="Quitar" style="margin-left:0.2rem;cursor:pointer;">✕</button>'
+      + '</div>';
+  }).join('');
+}
+
+function addTransferencia(btn) {
+  const tr = btn.closest('tr');
+  const opts = window._transferAlOpts && window._transferAlOpts[tr.dataset.almacenId] ? window._transferAlOpts[tr.dataset.almacenId] : '';
+  const list = tr.querySelector('.transfer-list');
+  const div = document.createElement('div');
+  div.className = 'transfer-row';
+  div.innerHTML = '<select class="select-transfer-almacen" onchange="updateTransferTotal(this.closest(\'tr\'))" style="padding:0.25rem;border:1px solid #ccc;border-radius:4px;">'
+    + '<option value="">—</option>' + opts + '</select>'
+    + '<input type="number" class="input-num input-transfer-cant" value="0" step="0.01" min="0" oninput="updateTransferTotal(this.closest(\'tr\'))" style="width:70px;">'
+    + '<button type="button" class="btn-remove-transfer" onclick="removeTransferencia(this)" title="Quitar" style="margin-left:0.2rem;cursor:pointer;">✕</button>';
+  list.appendChild(div);
+  updateTransferTotal(tr);
+}
+
+function removeTransferencia(btn) {
+  btn.closest('.transfer-row').remove();
+  updateTransferTotal(btn.closest('tr'));
+}
+
+function updateTransferTotal(tr) {
+  if (!tr) return;
+  const salida = parseFloat(tr.querySelector('.input-salida')?.value) || 0;
+  const sum = Array.from(tr.querySelectorAll('.input-transfer-cant')).reduce((acc, el) => acc + (parseFloat(el.value) || 0), 0);
+  const total = tr.querySelector('.transfer-total');
+  if (total) {
+    total.textContent = 'Suma: ' + Math.round(sum * 100) / 100 + ' / ' + Math.round(salida * 100) / 100;
+    total.style.color = Math.abs(sum - salida) < 0.005 ? '#28a745' : '#dc3545';
+  }
 }
 
 function verDetallesSalidas() {
@@ -1396,7 +1459,11 @@ function verDetallesSalidas() {
         const t = i.updated_at ? new Date(i.updated_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
         const u = DISPLAY_NAMES[i.saved_by] || i.saved_by || '-';
         const destino = (i.destino_salida || '').toUpperCase() || '—';
-        const destinoMostrar = (i.destino_salida || '').toLowerCase() === 'stocks' && i.destino_almacen_id ? 'STOCKS → ' + (alNombres[i.destino_almacen_id] || 'Almacén ' + i.destino_almacen_id) : destino;
+        let destinoMostrar = destino;
+        if ((i.destino_salida || '').toLowerCase() === 'stocks') {
+          const ts = (Array.isArray(i.transferencias) && i.transferencias.length) ? i.transferencias : (i.destino_almacen_id ? [{ almacen_id: i.destino_almacen_id, cantidad: i.salida_almacen || 0 }] : []);
+          destinoMostrar = ts.length ? 'STOCKS: ' + ts.map(t => (alNombres[t.almacen_id] || 'Almacén ' + t.almacen_id) + ' (' + (t.cantidad || 0) + ')').join(' + ') : 'STOCKS';
+        }
         html += '<tr><td>' + i.nombre + '</td><td>' + (i.salida_almacen || 0) + '</td><td>' + destinoMostrar + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
       });
       html += '</tbody></table></div></div>';
