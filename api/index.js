@@ -417,7 +417,53 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
   const changedKeys = new Set();
   const invSnap = await col('inventario').get();
   let maxItemId = invSnap.docs.length > 0 ? Math.max(...invSnap.docs.map(d => Number(d.data().item_id) || 0)) : 0;
-  const transCache = {}; // destAl + '_' + NOMBRE -> { destItemId, apertura, ingreso, salida, ventas, falta, baja }
+  const invDocMap = {};
+  invSnap.docs.forEach(d => { invDocMap[Number(d.data().almacen_id) + '_' + Number(d.data().item_id)] = d.data(); });
+
+  // --- Transferencias STOCKS del día ---
+  // La fuente de verdad es el destino_salida='stocks' + transferencias guardados en inventario_diario.
+  // Se recalcula en cada guardado (idempotente) para no duplicar ingresos al volver a guardar.
+  const allDaySnap = await col('inventario_diario').where('fecha', '==', fecha).get();
+  const dayDocs = {};
+  allDaySnap.docs.forEach(d => { dayDocs[d.id] = d.data(); });
+  const transferMap = {}; // destAl_nombreUpper -> total
+  const destKeys = new Set(); // destAl_nombreUpper que tienen transferencias hoy (para resetear si se eliminan)
+  allDaySnap.docs.forEach(d => {
+    const x = d.data();
+    if (String(x.destino_salida || '') === 'stocks' && Array.isArray(x.transferencias)) {
+      const srcInv = invDocMap[Number(x.almacen_id) + '_' + Number(x.item_id)];
+      const nombre = srcInv ? srcInv.nombre : null;
+      if (!nombre) return;
+      x.transferencias.forEach(t => {
+        if (!t.almacen_id) return;
+        const k = Number(t.almacen_id) + '_' + String(nombre).toUpperCase();
+        destKeys.add(k);
+        transferMap[k] = (transferMap[k] || 0) + (Number(t.cantidad) || 0);
+      });
+    }
+  });
+  // Los registros de ESTE guardado reemplazan su contribución previa (re-save o cambio de destino)
+  registros.forEach(r => {
+    const srcId = docId('invdiario', fecha, r.almacen_id, r.item_id);
+    const old = dayDocs[srcId];
+    const srcInv = invDocMap[Number(r.almacen_id) + '_' + Number(r.item_id)];
+    const nombre = srcInv ? srcInv.nombre : null;
+    if (old && Array.isArray(old.transferencias) && nombre) {
+      old.transferencias.forEach(t => {
+        if (!t.almacen_id) return;
+        const k = Number(t.almacen_id) + '_' + String(nombre).toUpperCase();
+        transferMap[k] = (transferMap[k] || 0) - (Number(t.cantidad) || 0);
+      });
+    }
+    if (String(r.destino_salida || '') === 'stocks' && Array.isArray(r.transferencias) && nombre) {
+      r.transferencias.forEach(t => {
+        if (!t.almacen_id) return;
+        const k = Number(t.almacen_id) + '_' + String(nombre).toUpperCase();
+        destKeys.add(k);
+        transferMap[k] = (transferMap[k] || 0) + (Number(t.cantidad) || 0);
+      });
+    }
+  });
   for (const r of registros) {
     const id = docId('invdiario', fecha, r.almacen_id, r.item_id);
     const prev = existentes[id] || {};
@@ -458,47 +504,44 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
       const invId = docId('inventario', r.item_id, r.almacen_id);
       batch.set(col('inventario').doc(invId), { stock_apertura: apertura }, { merge: true });
     }
-
-    // Transferencia interna de STOCKS: destino STOCKS -> ingresa a uno o varios almacenes
-    const transfers = String(r.destino_salida || '').toLowerCase() === 'stocks'
-      ? (Array.isArray(r.transferencias) ? r.transferencias.filter(t => t.almacen_id && (Number(t.cantidad) || 0) > 0) : [])
-      : [];
-    for (const t of transfers) {
-      const destAl = Number(t.almacen_id);
-      const cantidad = Number(t.cantidad) || 0;
-      if (destAl === Number(r.almacen_id) || cantidad <= 0) continue;
-      const invDoc = invSnap.docs.find(d => Number(d.data().item_id) === Number(r.item_id) && Number(d.data().almacen_id) === Number(r.almacen_id));
-      const nombre = invDoc ? invDoc.data().nombre : null;
-      if (!nombre) continue;
-      const key = destAl + '_' + String(nombre).toUpperCase();
-      let tc = transCache[key];
-      if (!tc) {
-        let destInv = invSnap.docs.find(d => Number(d.data().almacen_id) === destAl && String(d.data().nombre || '').trim().toLowerCase() === String(nombre).trim().toLowerCase());
-        let destItemId;
-        if (destInv) destItemId = Number(destInv.data().item_id);
-        else {
-          maxItemId++;
-          destItemId = maxItemId;
-          const invId = docId('inventario', destItemId, destAl);
-          batch.set(col('inventario').doc(invId), { item_id: destItemId, almacen_id: destAl, nombre, categoria: invDoc.data().categoria || '', stock_apertura: 0, cantidad_minima: 0, updated_at: new Date().toISOString() });
-        }
-        const destId = docId('invdiario', fecha, destAl, destItemId);
-        const destSnap = await col('inventario_diario').doc(destId).get();
-        const dp = destSnap.exists ? destSnap.data() : {};
-        tc = { destItemId, apertura: dp.stock_apertura || 0, ingreso: dp.stock_ingreso || 0, salida: dp.salida_almacen || 0, ventas: dp.total_ventas || 0, falta: dp.falta_almacen || 0, baja: dp.stock_baja || 0 };
-        transCache[key] = tc;
-      }
-      tc.ingreso += cantidad;
-      const destCierre = Math.round((tc.apertura + tc.ingreso - tc.salida - tc.ventas - tc.falta - tc.baja) * 100) / 100;
-      const destId = docId('invdiario', fecha, destAl, tc.destItemId);
-      batch.set(col('inventario_diario').doc(destId), {
-        fecha, item_id: tc.destItemId, almacen_id: destAl, stock_apertura: tc.apertura, stock_ingreso: tc.ingreso,
-        salida_almacen: tc.salida, total_ventas: tc.ventas, falta_almacen: tc.falta, stock_baja: tc.baja,
-        stock_cierre: destCierre, saved_by: savedBy, updated_at: new Date().toISOString()
-      }, { merge: true });
-      changedKeys.add(destAl + '_' + tc.destItemId);
-    }
   }
+
+  // --- Procesar las transferencias del día hacia los almacenes destino (idempotente) ---
+  const transferCache = {};
+  for (const key of destKeys) {
+    const newTransfer = Math.max(0, transferMap[key] || 0);
+    const usIdx = key.lastIndexOf('_');
+    const destAl = Number(key.slice(0, usIdx));
+    const nombre = key.slice(usIdx + 1);
+    let destItemId;
+    if (transferCache[key]) {
+      destItemId = transferCache[key].item_id;
+    } else {
+      const destInv = invSnap.docs.find(d => Number(d.data().almacen_id) === destAl && String(d.data().nombre || '').trim().toLowerCase() === String(nombre).trim().toLowerCase());
+      if (destInv) {
+        destItemId = Number(destInv.data().item_id);
+      } else {
+        maxItemId++;
+        destItemId = maxItemId;
+        const anyInv = invSnap.docs.find(d => String(d.data().nombre || '').trim().toLowerCase() === String(nombre).trim().toLowerCase());
+        batch.set(col('inventario').doc(docId('inventario', destItemId, destAl)), { item_id: destItemId, almacen_id: destAl, nombre, categoria: anyInv ? anyInv.data().categoria || '' : '', stock_apertura: 0, cantidad_minima: 0, updated_at: new Date().toISOString() });
+      }
+      transferCache[key] = { item_id: destItemId };
+    }
+    const destId = docId('invdiario', fecha, destAl, destItemId);
+    const dp = dayDocs[destId] || {};
+    const manual = Math.max(0, (dp.stock_ingreso || 0) - (dp.ingreso_transferencia || 0));
+    const ingreso = Math.round((manual + newTransfer) * 100) / 100;
+    const cierre = Math.round((((dp.stock_apertura || 0) + ingreso - (dp.salida_almacen || 0) - (dp.total_ventas || 0) - (dp.falta_almacen || 0) - (dp.stock_baja || 0)) * 100)) / 100;
+    batch.set(col('inventario_diario').doc(destId), {
+      fecha, item_id: destItemId, almacen_id: destAl, stock_apertura: dp.stock_apertura || 0, stock_ingreso: ingreso,
+      salida_almacen: dp.salida_almacen || 0, total_ventas: dp.total_ventas || 0, falta_almacen: dp.falta_almacen || 0,
+      stock_baja: dp.stock_baja || 0, stock_cierre: cierre, ingreso_transferencia: newTransfer,
+      saved_by: savedBy, updated_at: new Date().toISOString()
+    }, { merge: true });
+    changedKeys.add(destAl + '_' + destItemId);
+  }
+
   await batch.commit();
   delete _cache['inv_diario_' + fecha];
   delete _cache['con_inv_' + fecha];
