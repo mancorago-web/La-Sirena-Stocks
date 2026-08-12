@@ -1826,6 +1826,8 @@ function cargarIngresos(fecha) {
   if (!fecha) fecha = document.getElementById('fecha-ingresos').value;
   _invCache = { fecha: null, data: null, pending: null };
   getInventario(fecha).then(data => {
+    const alNombres = {};
+    data.forEach(al => { alNombres[al.id] = al.nombre; });
     data = data.filter(a => a.id !== 3 && a.id !== 9 && a.id !== 16);
     // Solo mostrar items con ingreso registrado en esta fecha
     data = data.filter(a => {
@@ -1883,14 +1885,15 @@ function cargarIngresos(fecha) {
           ${a.items.length ? `
             <div class="table-wrap">
             <table>
-              <thead><tr><th>Item</th><th>Stock Actual</th><th>Ingreso</th></tr></thead>
+              <thead><tr><th>Item</th><th>Stock Actual</th><th>Ingreso</th><th>Origen</th></tr></thead>
               <tbody>
                 ${a.secciones.map(s => s.items.length ? `
-                  <tr class="section-header"><td colspan="3">— ${s.label} —</td></tr>
+                  <tr class="section-header"><td colspan="4">— ${s.label} —</td></tr>
                   ${s.items.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
                     <td><input type="number" class="input-num input-ingreso" value="${i.stock_ingreso || 0}" step="0.01"></td>
+                    <td class="celda-origen">${formatOrigenIngreso(i, alNombres)}</td>
                     <input type="hidden" class="hidden-cierre" value="${i.stock_cierre || 0}">
                     <input type="hidden" class="hidden-salida" value="${i.salida_almacen || 0}">
                     <input type="hidden" class="hidden-ventas" value="${i.total_ventas || 0}">
@@ -1899,11 +1902,12 @@ function cargarIngresos(fecha) {
                   </tr>`).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="3">— OTROS —</td></tr>
+                  <tr class="section-header"><td colspan="4">— OTROS —</td></tr>
                   ${a.otros.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
                     <td><input type="number" class="input-num input-ingreso" value="${i.stock_ingreso || 0}" step="0.01"></td>
+                    <td class="celda-origen">${formatOrigenIngreso(i, alNombres)}</td>
                     <input type="hidden" class="hidden-cierre" value="${i.stock_cierre || 0}">
                     <input type="hidden" class="hidden-salida" value="${i.salida_almacen || 0}">
                     <input type="hidden" class="hidden-ventas" value="${i.total_ventas || 0}">
@@ -1948,10 +1952,25 @@ function guardarIngresos() {
   });
 }
 
+function formatOrigenIngreso(i, alNombres) {
+  const ors = Array.isArray(i.ingreso_origen) && i.ingreso_origen.length ? i.ingreso_origen : [];
+  if (!ors.length) return '—';
+  return ors.map(o => {
+    const cant = o.cantidad != null ? ' (' + o.cantidad + ')' : '';
+    if (o.tipo === 'stocks') {
+      const nm = o.almacen_id ? (alNombres[o.almacen_id] || 'Almacén ' + o.almacen_id) : 'STOCKS';
+      return 'STOCK → ' + nm + cant;
+    }
+    return 'PROVEEDOR' + cant;
+  }).join(' + ');
+}
+
 function verDetallesIngresos() {
   const fecha = document.getElementById('fecha-ingresos').value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
   getInventario(fecha).then(data => {
+    const alNombres = {};
+    data.forEach(al => { alNombres[al.id] = al.nombre; });
     data = data.filter(a => a.id !== 3 && a.id !== 9 && a.id !== 16);
     let html = '<h3>Detalle de Ingresos — ' + fecha + '</h3>';
     let totalItems = 0;
@@ -1962,11 +1981,11 @@ function verDetallesIngresos() {
       html += '<div class="accordion-item">';
       html += '<div class="accordion-header" onclick="toggleAcordeon(this)"><span class="accordion-title">' + a.nombre + '</span><span class="accordion-arrow">▶</span></div>';
       html += '<div class="accordion-body open">';
-      html += '<table><thead><tr><th>Item</th><th>Ingreso</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
+      html += '<table><thead><tr><th>Item</th><th>Ingreso</th><th>Origen</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
       itemsConIngreso.forEach(i => {
         const t = i.updated_at ? new Date(i.updated_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
         const u = DISPLAY_NAMES[i.saved_by] || i.saved_by || '-';
-        html += '<tr><td>' + i.nombre + '</td><td>' + (i.stock_ingreso || 0) + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
+        html += '<tr><td>' + i.nombre + '</td><td>' + (i.stock_ingreso || 0) + '</td><td>' + formatOrigenIngreso(i, alNombres) + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
       });
       html += '</tbody></table></div></div>';
     });

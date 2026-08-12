@@ -350,6 +350,11 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
             destino_salida: dia.destino_salida || '',
             destino_almacen_id: dia.destino_almacen_id || null,
             transferencias: Array.isArray(dia.transferencias) ? dia.transferencias.map(t => ({ almacen_id: Number(t.almacen_id), cantidad: Number(t.cantidad) || 0 })) : [],
+            ingreso_origen: (Array.isArray(dia.ingreso_origen) && dia.ingreso_origen.length)
+              ? dia.ingreso_origen.map(o => ({ tipo: o.tipo || 'proveedor', almacen_id: o.almacen_id ? Number(o.almacen_id) : null, cantidad: Number(o.cantidad) || 0 }))
+              : ((dia.ingreso_transferencia || 0) > 0
+                  ? [{ tipo: 'stocks', almacen_id: null, cantidad: Number(dia.ingreso_transferencia) || 0 }]
+                  : (dia.stock_ingreso > 0 ? [{ tipo: 'proveedor', cantidad: dia.stock_ingreso }] : [])),
             stock_cierre: Math.round(cierre * 100) / 100,
             cantidad_minima: inv.cantidad_minima || 0,
             fecha_apertura: inv.fecha_apertura || '',
@@ -426,8 +431,12 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
   const allDaySnap = await col('inventario_diario').where('fecha', '==', fecha).get();
   const dayDocs = {};
   allDaySnap.docs.forEach(d => { dayDocs[d.id] = d.data(); });
-  const transferMap = {}; // destAl_nombreUpper -> total
+  const transferMap = {}; // destAl_nombreUpper -> { [almacen_origen]: cantidad }
   const destKeys = new Set(); // destAl_nombreUpper que tienen transferencias hoy (para resetear si se eliminan)
+  const addTransf = (k, srcAl, cant) => {
+    if (!transferMap[k]) transferMap[k] = {};
+    transferMap[k][srcAl] = (transferMap[k][srcAl] || 0) + cant;
+  };
   allDaySnap.docs.forEach(d => {
     const x = d.data();
     if (String(x.destino_salida || '') === 'stocks' && Array.isArray(x.transferencias)) {
@@ -438,7 +447,7 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
         if (!t.almacen_id) return;
         const k = Number(t.almacen_id) + '_' + String(nombre).toUpperCase();
         destKeys.add(k);
-        transferMap[k] = (transferMap[k] || 0) + (Number(t.cantidad) || 0);
+        addTransf(k, Number(x.almacen_id), Number(t.cantidad) || 0);
       });
     }
   });
@@ -452,7 +461,7 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
       old.transferencias.forEach(t => {
         if (!t.almacen_id) return;
         const k = Number(t.almacen_id) + '_' + String(nombre).toUpperCase();
-        transferMap[k] = (transferMap[k] || 0) - (Number(t.cantidad) || 0);
+        addTransf(k, Number(r.almacen_id), -(Number(t.cantidad) || 0));
       });
     }
     if (String(r.destino_salida || '') === 'stocks' && Array.isArray(r.transferencias) && nombre) {
@@ -460,7 +469,7 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
         if (!t.almacen_id) return;
         const k = Number(t.almacen_id) + '_' + String(nombre).toUpperCase();
         destKeys.add(k);
-        transferMap[k] = (transferMap[k] || 0) + (Number(t.cantidad) || 0);
+        addTransf(k, Number(r.almacen_id), Number(t.cantidad) || 0);
       });
     }
   });
@@ -509,7 +518,9 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
   // --- Procesar las transferencias del día hacia los almacenes destino (idempotente) ---
   const transferCache = {};
   for (const key of destKeys) {
-    const newTransfer = Math.max(0, transferMap[key] || 0);
+    const origObj = transferMap[key] || {};
+    const totalTransfer = Object.keys(origObj).reduce((acc, a) => acc + Math.max(0, origObj[a] || 0), 0);
+    const newTransfer = Math.round(totalTransfer * 100) / 100;
     const usIdx = key.lastIndexOf('_');
     const destAl = Number(key.slice(0, usIdx));
     const nombre = key.slice(usIdx + 1);
@@ -533,10 +544,17 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     const manual = Math.max(0, (dp.stock_ingreso || 0) - (dp.ingreso_transferencia || 0));
     const ingreso = Math.round((manual + newTransfer) * 100) / 100;
     const cierre = Math.round((((dp.stock_apertura || 0) + ingreso - (dp.salida_almacen || 0) - (dp.total_ventas || 0) - (dp.falta_almacen || 0) - (dp.stock_baja || 0)) * 100)) / 100;
+    const ingreso_origen = [];
+    Object.keys(origObj).forEach(a => {
+      const c = Math.round(Math.max(0, origObj[a]) * 100) / 100;
+      if (c > 0) ingreso_origen.push({ tipo: 'stocks', almacen_id: Number(a), cantidad: c });
+    });
+    if (manual > 0) ingreso_origen.push({ tipo: 'proveedor', cantidad: manual });
     batch.set(col('inventario_diario').doc(destId), {
       fecha, item_id: destItemId, almacen_id: destAl, stock_apertura: dp.stock_apertura || 0, stock_ingreso: ingreso,
       salida_almacen: dp.salida_almacen || 0, total_ventas: dp.total_ventas || 0, falta_almacen: dp.falta_almacen || 0,
       stock_baja: dp.stock_baja || 0, stock_cierre: cierre, ingreso_transferencia: newTransfer,
+      ingreso_origen,
       saved_by: savedBy, updated_at: new Date().toISOString()
     }, { merge: true });
     changedKeys.add(destAl + '_' + destItemId);
