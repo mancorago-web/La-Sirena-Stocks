@@ -1303,6 +1303,78 @@ app.get('/api/ventas/busqueda', async (req, res) => {
   }
 });
 
+// --- VENTAS: búsqueda total (STOCKS + BARRA + COCINA) por rango de fechas e item ---
+app.get('/api/ventas/busqueda-total', async (req, res) => {
+  try {
+    const { desde, hasta, item } = req.query;
+    if (!desde || !hasta) return res.status(400).json({ error: 'desde y hasta requeridos' });
+    const q = String(item || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const registros = [];
+
+    const [invSnap, alSnap] = await Promise.all([col('inventario').get(), col('almacenes').get()]);
+    const invByKey = {};
+    invSnap.docs.forEach(d => { const a = d.data(); invByKey[Number(a.item_id) + '_' + Number(a.almacen_id)] = a.nombre; });
+    const alName = {};
+    alSnap.docs.forEach(d => { alName[Number(d.id)] = d.data().nombre; });
+
+    // STOCKS (inventario diario)
+    const dia = await col('inventario_diario').where('fecha', '>=', desde).where('fecha', '<=', hasta).get();
+    dia.docs.forEach(d => {
+      const a = d.data();
+      if (!((a.total_ventas || 0) > 0)) return;
+      const nombre = invByKey[Number(a.item_id) + '_' + Number(a.almacen_id)] || String(a.item_id);
+      registros.push({ fecha: a.fecha, nombre, cantidad: a.total_ventas, destino: 'stocks', almacen_id: Number(a.almacen_id), almacen_nombre: alName[Number(a.almacen_id)] || '', saved_by: a.saved_by || '-', created_at: a.updated_at || '' });
+    });
+
+    // Log de ventas (BARRA / COCINA) + dedupe
+    const seen = new Set();
+    const log = await col('ventas').where('fecha', '>=', desde).where('fecha', '<=', hasta).get();
+    const push = (r) => {
+      const key = r.fecha + '|' + r.destino + '|' + String(r.nombre || '') + '|' + (r.cantidad || 0);
+      if (seen.has(key)) return;
+      seen.add(key);
+      registros.push(r);
+    };
+    log.docs.forEach(d => {
+      const a = d.data();
+      if (a.destino !== 'barra' && a.destino !== 'cocina') return;
+      push({ fecha: a.fecha, nombre: a.nombre, cantidad: a.cantidad, destino: a.destino, almacen_id: null, almacen_nombre: '', saved_by: a.saved_by || '-', created_at: a.created_at || '' });
+    });
+    // BARRA movimientos (recetas) si no está en el log
+    const bm = await col('barra_movimientos').where('fecha', '>=', desde).where('fecha', '<=', hasta).where('tipo', '==', 'ventas').get();
+    bm.docs.forEach(d => {
+      const a = d.data();
+      if (a.es_receta === false) return;
+      push({ fecha: a.fecha, nombre: a.ingrediente, cantidad: a.cantidad, destino: 'barra', almacen_id: null, almacen_nombre: '', saved_by: a.saved_by || '-', created_at: a.created_at || '' });
+    });
+    // COCINA ventas si no está en el log
+    const cv = await col('cocina_ventas').where('fecha', '>=', desde).where('fecha', '<=', hasta).get();
+    cv.docs.forEach(d => {
+      const a = d.data();
+      push({ fecha: a.fecha, nombre: a.nombre, cantidad: a.cantidad, destino: 'cocina', almacen_id: null, almacen_nombre: '', saved_by: a.saved_by || '-', created_at: a.created_at || '' });
+    });
+
+    const filtrados = q ? registros.filter(r => String(r.nombre || '').toLowerCase().replace(/\s+/g, ' ').includes(q)) : registros;
+    filtrados.sort((a, b) => String(a.fecha || '').localeCompare(b.fecha || '') || String(a.nombre || '').localeCompare(b.nombre || ''));
+    res.json(filtrados);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Nombres únicos de items/recetas vendidos (para autocompletar en búsqueda)
+app.get('/api/ventas/items-vendidos', async (req, res) => {
+  try {
+    const names = new Set();
+    const add = (n) => { const k = String(n || '').trim(); if (k) names.add(k); };
+    const log = await col('ventas').get(); log.docs.forEach(d => add(d.data().nombre));
+    const bm = await col('barra_movimientos').where('tipo', '==', 'ventas').get(); bm.docs.forEach(d => { if (d.data().es_receta !== false) add(d.data().ingrediente); });
+    const cv = await col('cocina_ventas').get(); cv.docs.forEach(d => add(d.data().nombre));
+    const inv = await col('inventario').get(); inv.docs.forEach(d => add(d.data().nombre));
+    const rec = await col('recetas').get(); rec.docs.forEach(d => add(d.data().nombre));
+    const crec = await col('cocina_recetas').get(); crec.docs.forEach(d => add(d.data().nombre));
+    res.json(Array.from(names).sort((a, b) => a.localeCompare(b)));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- VENTAS: mapeo item -> destino (persistente para importar Excel) ---
 app.get('/api/ventas/import-mapping', async (req, res) => {
   try {

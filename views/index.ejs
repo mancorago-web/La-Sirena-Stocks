@@ -110,6 +110,14 @@
     <div class="tabs"></div>
   </div>
 
+  <!-- Tabs bar (VENTAS) -->
+  <div id="tabs-ventas" class="tabs-bar" style="display:none">
+    <div class="tabs">
+      <button class="sub-tab active" data-subtab="registro" onclick="cambiarSubTab('registro','ventas')">Registro de Ventas</button>
+      <button class="sub-tab" data-subtab="busqueda" onclick="cambiarSubTab('busqueda','ventas')">Búsqueda de Ventas</button>
+    </div>
+  </div>
+
   <div class="container" id="container">
     <div id="tab-almacenes" class="tab-content active">
       <div class="header-actions">
@@ -472,23 +480,41 @@
     </div>
 
     <div id="tab-ventas-central" class="tab-content">
-      <div class="header-actions">
-        <h2>DETALLE DE VENTAS</h2>
-        <div class="controles-dia">
-          <label>Fecha: <input type="date" id="fecha-ventas-menu" onchange="cargarVentasCentral()"></label>
+      <div id="sub-ventas-registro" class="sub-tab-content active">
+        <div class="header-actions">
+          <h2>DETALLE DE VENTAS</h2>
+          <div class="controles-dia">
+            <label>Fecha: <input type="date" id="fecha-ventas-menu" onchange="cargarVentasCentral()"></label>
+          </div>
+        </div>
+        <div id="ventas-detalle-container" style="margin-top:0.5rem;"></div>
+        <div style="margin-top:1.5rem;padding:1rem;background:#f9f9f9;border-radius:8px;border:1px dashed #ccc;">
+          <h3 style="margin:0 0 0.5rem 0;">IMPORTAR VENTAS (EXCEL)</h3>
+          <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+            <input type="file" id="ventas-excel-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="onVentasExcelSeleccionado(this)">
+            <button class="btn-guardar-dia" onclick="document.getElementById('ventas-excel-file').click()">SELECCIONAR EXCEL</button>
+            <button class="btn-guardar-dia" onclick="guardarVentasReal()">GUARDAR VENTAS</button>
+            <button class="btn-detalles" onclick="limpiarVentasImport()" title="Quitar Excel" style="background:#c62828;color:#fff;border:none;padding:0.4rem 0.8rem;border-radius:4px;cursor:pointer;font-weight:700;">✕</button>
+          </div>
+          <div style="font-size:0.8rem;color:#888;margin-top:0.4rem;">Columnas detectadas automáticamente: Fecha | Item | Cantidad. La zona (STOCKS/BARRA/COCINA) se ticlea manualmente la primera vez y se guarda para la próxima.</div>
+          <div id="ventas-import-preview"></div>
         </div>
       </div>
-      <div id="ventas-detalle-container" style="margin-top:0.5rem;"></div>
-      <div style="margin-top:1.5rem;padding:1rem;background:#f9f9f9;border-radius:8px;border:1px dashed #ccc;">
-        <h3 style="margin:0 0 0.5rem 0;">IMPORTAR VENTAS (EXCEL)</h3>
-        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-          <input type="file" id="ventas-excel-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="onVentasExcelSeleccionado(this)">
-          <button class="btn-guardar-dia" onclick="document.getElementById('ventas-excel-file').click()">SELECCIONAR EXCEL</button>
-          <button class="btn-guardar-dia" onclick="guardarVentasReal()">GUARDAR VENTAS</button>
-          <button class="btn-detalles" onclick="limpiarVentasImport()" title="Quitar Excel" style="background:#c62828;color:#fff;border:none;padding:0.4rem 0.8rem;border-radius:4px;cursor:pointer;font-weight:700;">✕</button>
+
+      <div id="sub-ventas-busqueda" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>Búsqueda de Ventas</h2>
+          <div class="controles-dia">
+            <input type="text" id="busqueda-ventas-item" placeholder="Buscar item o receta vendida..." list="sugerencias-ventas-total" autocomplete="off" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:240px;">
+            <datalist id="sugerencias-ventas-total"></datalist>
+            <label>Desde: <input type="date" id="busqueda-ventas-desde"></label>
+            <label>Hasta: <input type="date" id="busqueda-ventas-hasta"></label>
+            <button class="btn-guardar-dia" onclick="buscarVentasTotal()">🔍 BUSCAR</button>
+            <button class="btn-detalles" onclick="exportarBusquedaVentasTotal()">Exportar</button>
+          </div>
+          <div style="font-size:0.8rem;color:#888;margin-top:0.3rem;">Busca ventas de STOCKS, BARRA y COCINA en un rango de fechas por item/receta.</div>
         </div>
-        <div style="font-size:0.8rem;color:#888;margin-top:0.4rem;">Columnas detectadas automáticamente: Fecha | Item | Cantidad. La zona (STOCKS/BARRA/COCINA) se ticlea manualmente la primera vez y se guarda para la próxima.</div>
-        <div id="ventas-import-preview"></div>
+        <div id="busqueda-ventas-total-result"></div>
       </div>
     </div>
 
