@@ -1277,7 +1277,7 @@ app.get('/api/ventas/busqueda', async (req, res) => {
       invById[Number(inv.item_id) + '_' + Number(inv.almacen_id)] = inv;
     });
     const dia = await col('inventario_diario').where('fecha', '>=', desde).where('fecha', '<=', hasta).get();
-    const q = String(item || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const qNorm = claveNombre(item);
     const groups = {};
     dia.docs.forEach(dd => {
       const f = dd.data();
@@ -1285,10 +1285,7 @@ app.get('/api/ventas/busqueda', async (req, res) => {
       if (!(ventas > 0)) return;
       const inv = invById[Number(f.item_id) + '_' + Number(f.almacen_id)] || {};
       const nombre = inv.nombre || String(f.item_id);
-      if (q) {
-        const n = String(nombre).toLowerCase().replace(/\s+/g, ' ');
-        if (!n.includes(q)) return;
-      }
+      if (qNorm && !claveNombre(nombre).includes(qNorm)) return;
       const key = Number(f.item_id) + '_' + Number(f.almacen_id);
       if (!groups[key]) groups[key] = { item_id: Number(f.item_id), nombre, almacen_id: Number(f.almacen_id), almacen_nombre: alName[Number(f.almacen_id)] || ('Almacén ' + f.almacen_id), detalle: [], total: 0 };
       groups[key].detalle.push({ fecha: f.fecha, cantidad: ventas, saved_by: f.saved_by || '-' });
@@ -1308,7 +1305,7 @@ app.get('/api/ventas/busqueda-total', async (req, res) => {
   try {
     const { desde, hasta, item } = req.query;
     if (!desde || !hasta) return res.status(400).json({ error: 'desde y hasta requeridos' });
-    const q = String(item || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const qNorm = claveNombre(item);
     const registros = [];
 
     const [invSnap, alSnap] = await Promise.all([col('inventario').get(), col('almacenes').get()]);
@@ -1355,7 +1352,7 @@ app.get('/api/ventas/busqueda-total', async (req, res) => {
       push({ fecha: a.fecha, nombre: a.nombre, cantidad: a.cantidad, destino: 'cocina', almacen_id: null, almacen_nombre: '', saved_by: a.saved_by || '-', created_at: a.created_at || '' });
     });
 
-    const filtrados = q ? registros.filter(r => String(r.nombre || '').toLowerCase().replace(/\s+/g, ' ').includes(q)) : registros;
+    const filtrados = qNorm ? registros.filter(r => claveNombre(r.nombre).includes(qNorm)) : registros;
     filtrados.sort((a, b) => String(a.fecha || '').localeCompare(b.fecha || '') || String(a.nombre || '').localeCompare(b.nombre || ''));
     res.json(filtrados);
   } catch (e) { res.status(500).json({ error: e.message }); }
