@@ -1043,7 +1043,13 @@ async function guardarItemAlmacen() {
   const cantidad = parseFloat(document.getElementById('f-cantidad').value) || 0;
   const nota = document.getElementById('f-nota').value || 'Agregado desde almacén';
   if (!nombre) { alert('Ingresa el nombre del item'); return; }
-  await api('POST', '/api/inventario/agregar-item', { nombre, almacen_id, categoria, cantidad, nota });
+  try {
+    await api('POST', '/api/inventario/agregar-item', { nombre, almacen_id, categoria, cantidad, nota });
+  } catch (err) {
+    console.error(err);
+    alert('Error al guardar el item: ' + (err.message || err));
+    return;
+  }
   cerrarModal();
   _invCache = { fecha: null, data: null, pending: null };
   cargarAlmacenes();
