@@ -4540,16 +4540,17 @@ function cargarBarraMovimientos(tipo) {
       if (bp && bp.value) buscarTablaBarra(bp.value, accId, 'tr[data-receta]');
     });
   } else {
-    // INGRESOS / BAJAS: show barra_precios items
+    // INGRESOS: items de BASE DE DATOS / BAJAS: items de BARRA/STOCK
+    const esIngreso = tipo === 'ingresos';
+    const fuente = esIngreso ? api('GET', '/api/barra/precios') : api('GET', '/api/barra/stock');
     Promise.all([
-      api('GET', '/api/barra/precios'),
+      fuente,
       api('GET', '/api/barra/movimientos?fecha=' + fecha + '&tipo=' + tipo)
-    ]).then(([precios, movs]) => {
+    ]).then(([items, movs]) => {
       const movByIng = {};
       movs.forEach(m => { movByIng[m.ingrediente] = m; });
       const container = document.getElementById(accId);
-      if (!precios.length) { container.innerHTML = '<p>No hay items en BASE DE DATOS.</p>'; return; }
-      const esIngreso = tipo === 'ingresos';
+      if (!items.length) { container.innerHTML = esIngreso ? '<p>No hay items en BASE DE DATOS.</p>' : '<p>No hay items en BARRA/STOCK.</p>'; return; }
       const colOrigen = esIngreso ? '<th>Origen</th>' : '';
       const cellOrigen = (mov) => esIngreso ? `<td><select class="select-origen-ingreso" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">
         <option value="proveedor" ${mov.origen==='proveedor'?'selected':''}>PROVEEDOR</option>
@@ -4559,9 +4560,9 @@ function cargarBarraMovimientos(tipo) {
         <div class="table-wrap"><table>
           <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th>${colOrigen}</tr></thead>
           <tbody>
-            ${precios.map(p => {
+            ${items.map(p => {
               const mov = movByIng[p.ingrediente] || {};
-              const uc = p.unidad_compra || p.unidad || 'unidad';
+              const uc = esIngreso ? (p.unidad_compra || p.unidad || 'unidad') : (p.unidad || 'unidad');
               return `<tr data-ing="${p.ingrediente}" data-uni-compra="${uc}">
                 <td>${p.ingrediente}</td>
                 <td><input type="number" class="input-barra-mov" value="${mov.cantidad || ''}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
