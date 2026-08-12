@@ -1225,6 +1225,7 @@ function cargarSalidas(fecha) {
   if (!fecha) return;
   _invCache = { fecha: null, data: null, pending: null };
   getInventario(fecha).then(data => {
+    const todosAlmacenes = data.map(al => ({ id: al.id, nombre: al.nombre }));
     data = data.filter(a => a.id === 4 || a.id === 8);
     // Solo mostrar items con salida registrada en esta fecha
     data = data.filter(a => {
@@ -1267,7 +1268,9 @@ function cargarSalidas(fecha) {
       return { ...a, secciones, otros };
     });
     const container = document.getElementById('accordion-salidas');
-    container.innerHTML = data.map(a => `
+    container.innerHTML = data.map(a => {
+      const alOpts = todosAlmacenes.filter(x => x.id !== a.id).map(x => `<option value="${x.id}">${x.nombre}</option>`).join('');
+      return `
       <div class="accordion-item" data-almacen-id="${a.id}">
         <div class="accordion-header" onclick="toggleAcordeon(this)">
           <span class="accordion-title">${a.nombre}</span>
@@ -1288,11 +1291,15 @@ function cargarSalidas(fecha) {
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
                     <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01"></td>
-                    <td><select class="select-destino-salida" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">
+                    <td><select class="select-destino-salida" onchange="onCambioDestinoSalida(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">
                       <option value="" ${(i.destino_salida||'')===''?'selected':''}>—</option>
                       <option value="barra" ${i.destino_salida==='barra'?'selected':''}>BARRA</option>
                       <option value="cocina" ${i.destino_salida==='cocina'?'selected':''}>COCINA</option>
                       <option value="juan" ${i.destino_salida==='juan'?'selected':''}>JUAN</option>
+                      <option value="stocks" ${i.destino_salida==='stocks'?'selected':''}>STOCKS</option>
+                    </select>
+                    <select class="select-destino-almacen" style="display:${i.destino_salida==='stocks'?'':'none'};margin-top:0.3rem;padding:0.3rem;border:1px solid #ccc;border-radius:4px;width:100%;">
+                      ${alOpts}
                     </select></td>
                     <input type="hidden" class="hidden-cierre" value="${i.stock_cierre || 0}">
                     <input type="hidden" class="hidden-ventas" value="${i.total_ventas || 0}">
@@ -1307,11 +1314,15 @@ function cargarSalidas(fecha) {
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
                     <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01"></td>
-                    <td><select class="select-destino-salida" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">
+                    <td><select class="select-destino-salida" onchange="onCambioDestinoSalida(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">
                       <option value="" ${(i.destino_salida||'')===''?'selected':''}>—</option>
                       <option value="barra" ${i.destino_salida==='barra'?'selected':''}>BARRA</option>
                       <option value="cocina" ${i.destino_salida==='cocina'?'selected':''}>COCINA</option>
                       <option value="juan" ${i.destino_salida==='juan'?'selected':''}>JUAN</option>
+                      <option value="stocks" ${i.destino_salida==='stocks'?'selected':''}>STOCKS</option>
+                    </select>
+                    <select class="select-destino-almacen" style="display:${i.destino_salida==='stocks'?'':'none'};margin-top:0.3rem;padding:0.3rem;border:1px solid #ccc;border-radius:4px;width:100%;">
+                      ${alOpts}
                     </select></td>
                     <input type="hidden" class="hidden-cierre" value="${i.stock_cierre || 0}">
                     <input type="hidden" class="hidden-ventas" value="${i.total_ventas || 0}">
@@ -1326,7 +1337,7 @@ function cargarSalidas(fecha) {
           ` : '<p class="sin-items">Este almacén no tiene items.</p>'}
         </div>
       </div>
-    `).join('');
+    `; }).join('');
     const bs = document.getElementById('buscar-salida');
     if (bs && bs.value) buscarEnTabla(bs.value, 'accordion-salidas');
   });
@@ -1342,7 +1353,8 @@ function guardarSalidas() {
       const itemId = parseInt(tr.dataset.itemId);
       const salida = parseFloat(tr.querySelector('.input-salida').value) || 0;
       const destino = tr.querySelector('.select-destino-salida')?.value || '';
-      registros.push({ item_id: itemId, almacen_id: almacenId, salida_almacen: salida, destino_salida: destino });
+      const destinoAlmacenId = destino === 'stocks' ? (parseInt(tr.querySelector('.select-destino-almacen')?.value) || 0) : undefined;
+      registros.push({ item_id: itemId, almacen_id: almacenId, salida_almacen: salida, destino_salida: destino, destino_almacen_id: destinoAlmacenId });
     });
   });
   const btn = document.querySelector('#tab-salidas .btn-guardar-dia');
@@ -1357,10 +1369,18 @@ function guardarSalidas() {
   });
 }
 
+function onCambioDestinoSalida(sel) {
+  const td = sel.closest('td');
+  const alSel = td.querySelector('.select-destino-almacen');
+  if (alSel) alSel.style.display = sel.value === 'stocks' ? '' : 'none';
+}
+
 function verDetallesSalidas() {
   const fecha = document.getElementById('fecha-salidas').value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
   getInventario(fecha).then(data => {
+    const alNombres = {};
+    data.forEach(al => { alNombres[al.id] = al.nombre; });
     data = data.filter(a => a.id === 4 || a.id === 8);
     let html = '<h3>Detalle de Salidas — ' + fecha + '</h3>';
     let totalItems = 0;
@@ -1376,7 +1396,8 @@ function verDetallesSalidas() {
         const t = i.updated_at ? new Date(i.updated_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
         const u = DISPLAY_NAMES[i.saved_by] || i.saved_by || '-';
         const destino = (i.destino_salida || '').toUpperCase() || '—';
-        html += '<tr><td>' + i.nombre + '</td><td>' + (i.salida_almacen || 0) + '</td><td>' + destino + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
+        const destinoMostrar = (i.destino_salida || '').toLowerCase() === 'stocks' && i.destino_almacen_id ? 'STOCKS → ' + (alNombres[i.destino_almacen_id] || 'Almacén ' + i.destino_almacen_id) : destino;
+        html += '<tr><td>' + i.nombre + '</td><td>' + (i.salida_almacen || 0) + '</td><td>' + destinoMostrar + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
       });
       html += '</tbody></table></div></div>';
     });

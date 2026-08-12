@@ -413,6 +413,9 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
 
   const batch = db.batch();
   const changedKeys = new Set();
+  const invSnap = await col('inventario').get();
+  let maxItemId = invSnap.docs.length > 0 ? Math.max(...invSnap.docs.map(d => Number(d.data().item_id) || 0)) : 0;
+  const transCache = {}; // destAl + '_' + NOMBRE -> { destItemId, apertura, ingreso, salida, ventas, falta, baja }
   for (const r of registros) {
     const id = docId('invdiario', fecha, r.almacen_id, r.item_id);
     const prev = existentes[id] || {};
@@ -451,6 +454,42 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     if (r.stock_apertura !== undefined) {
       const invId = docId('inventario', r.item_id, r.almacen_id);
       batch.set(col('inventario').doc(invId), { stock_apertura: apertura }, { merge: true });
+    }
+
+    // Transferencia interna de STOCKS: destino STOCKS -> ingresa a otro almacén
+    if (String(r.destino_salida || '').toLowerCase() === 'stocks' && r.destino_almacen_id && Number(r.destino_almacen_id) !== Number(r.almacen_id) && salida > 0) {
+      const invDoc = invSnap.docs.find(d => Number(d.data().item_id) === Number(r.item_id) && Number(d.data().almacen_id) === Number(r.almacen_id));
+      const nombre = invDoc ? invDoc.data().nombre : null;
+      if (nombre) {
+        const destAl = Number(r.destino_almacen_id);
+        const key = destAl + '_' + String(nombre).toUpperCase();
+        let tc = transCache[key];
+        if (!tc) {
+          let destInv = invSnap.docs.find(d => Number(d.data().almacen_id) === destAl && String(d.data().nombre || '').trim().toLowerCase() === String(nombre).trim().toLowerCase());
+          let destItemId;
+          if (destInv) destItemId = Number(destInv.data().item_id);
+          else {
+            maxItemId++;
+            destItemId = maxItemId;
+            const invId = docId('inventario', destItemId, destAl);
+            batch.set(col('inventario').doc(invId), { item_id: destItemId, almacen_id: destAl, nombre, categoria: invDoc.data().categoria || '', stock_apertura: 0, cantidad_minima: 0, updated_at: new Date().toISOString() });
+          }
+          const destId = docId('invdiario', fecha, destAl, destItemId);
+          const destSnap = await col('inventario_diario').doc(destId).get();
+          const dp = destSnap.exists ? destSnap.data() : {};
+          tc = { destItemId, apertura: dp.stock_apertura || 0, ingreso: dp.stock_ingreso || 0, salida: dp.salida_almacen || 0, ventas: dp.total_ventas || 0, falta: dp.falta_almacen || 0, baja: dp.stock_baja || 0 };
+          transCache[key] = tc;
+        }
+        tc.ingreso += salida;
+        const destCierre = Math.round((tc.apertura + tc.ingreso - tc.salida - tc.ventas - tc.falta - tc.baja) * 100) / 100;
+        const destId = docId('invdiario', fecha, destAl, tc.destItemId);
+        batch.set(col('inventario_diario').doc(destId), {
+          fecha, item_id: tc.destItemId, almacen_id: destAl, stock_apertura: tc.apertura, stock_ingreso: tc.ingreso,
+          salida_almacen: tc.salida, total_ventas: tc.ventas, falta_almacen: tc.falta, stock_baja: tc.baja,
+          stock_cierre: destCierre, saved_by: savedBy, updated_at: new Date().toISOString()
+        }, { merge: true });
+        changedKeys.add(destAl + '_' + tc.destItemId);
+      }
     }
   }
   await batch.commit();
