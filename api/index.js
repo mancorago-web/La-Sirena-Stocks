@@ -2202,6 +2202,31 @@ app.get('/api/cocina/salidas-stock', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Suma (o resta) cantidades al stock de cocina; crea el item si no existe
+async function ajustarCocinaStock(ajustes) {
+  const cs = await col('cocina_stock').get();
+  let maxId = cs.docs.length > 0 ? Math.max(...cs.docs.map(d => Number(d.id) || 0)) : 0;
+  const byName = {};
+  cs.docs.forEach(d => { byName[String(d.data().ingrediente || '').toUpperCase()] = d; });
+  const batch = db.batch();
+  const now = new Date().toISOString();
+  for (const aj of ajustes) {
+    const key = String(aj.nombre || '').toUpperCase();
+    if (!key || !aj.delta) continue;
+    const existente = byName[key];
+    if (existente) {
+      const nueva = Math.max(0, (parseFloat(existente.data().cantidad) || 0) + aj.delta);
+      batch.update(existente.ref, { cantidad: nueva, updated_at: now });
+    } else if (aj.delta > 0) {
+      maxId++;
+      const ref = col('cocina_stock').doc(String(maxId));
+      batch.set(ref, { id: maxId, ingrediente: aj.nombre, cantidad: aj.delta, unidad: aj.unidad || 'unidad', familia: 'SIN CLASIFICAR', created_at: now, updated_at: now });
+      byName[key] = { ref, data: { cantidad: aj.delta } };
+    }
+  }
+  await batch.commit();
+}
+
 app.post('/api/cocina/movimientos', authMiddleware, async (req, res) => {
   try {
     const { fecha, tipo, items } = req.body;
@@ -2239,6 +2264,32 @@ app.post('/api/cocina/movimientos', authMiddleware, async (req, res) => {
       batch.set(ref, doc);
     }
     await batch.commit();
+
+    // Ajustar COCINA/STOCK según el ingreso (suma si existe, agrega si no), revirtiendo lo anterior
+    if (tipo === 'ingresos') {
+      try {
+        const deltas = {};
+        existing.docs.forEach(d => {
+          const dd = d.data();
+          const k = String(dd.ingrediente || '').trim().toUpperCase();
+          if (!k) return;
+          deltas[k] = (deltas[k] || 0) - (parseFloat(dd.cantidad) || 0);
+        });
+        items.forEach(it => {
+          if (!it.cantidad || it.cantidad <= 0) return;
+          const k = String(it.ingrediente || '').trim().toUpperCase();
+          if (!k) return;
+          deltas[k] = (deltas[k] || 0) + (parseFloat(it.cantidad) || 0);
+        });
+        // necesitamos el nombre y unidad originales por clave
+        const nombres = {};
+        const unidades = {};
+        existing.docs.forEach(d => { const dd = d.data(); const k = String(dd.ingrediente || '').trim().toUpperCase(); nombres[k] = dd.ingrediente; unidades[k] = dd.unidad || 'unidad'; });
+        items.forEach(it => { const k = String(it.ingrediente || '').trim().toUpperCase(); nombres[k] = it.ingrediente; unidades[k] = it.unidad || 'unidad'; });
+        const ajustesFiltrados = Object.keys(deltas).map(k => ({ nombre: nombres[k] || k, unidad: unidades[k] || 'unidad', delta: deltas[k] })).filter(a => a.delta !== 0);
+        await ajustarCocinaStock(ajustesFiltrados);
+      } catch (e) { console.error('Error ajustando cocina stock por ingreso:', e.message); }
+    }
 
     // Descontar el consumo de ventas del stock de cocina (best-effort)
     if (tipo === 'ventas') {
