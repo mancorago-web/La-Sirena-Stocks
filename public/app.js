@@ -1736,8 +1736,14 @@ function mostrarBotonNota(inputEl) {
 
 function cargarIngresos(fecha) {
   if (!fecha) fecha = document.getElementById('fecha-ingresos').value;
+  _invCache = { fecha: null, data: null, pending: null };
   getInventario(fecha).then(data => {
     data = data.filter(a => a.id !== 3 && a.id !== 9 && a.id !== 16);
+    // Solo mostrar items con ingreso registrado en esta fecha
+    data = data.filter(a => {
+      a.items = (a.items || []).filter(i => (i.stock_ingreso || 0) > 0);
+      return a.items.length > 0;
+    });
     const defaultCategorias = [
       { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
       { label: 'GASEOSAS', test: i => /COCA|INKA/i.test(i.nombre) },
