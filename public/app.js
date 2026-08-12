@@ -1044,7 +1044,7 @@ async function guardarItemAlmacen() {
   const nota = document.getElementById('f-nota').value || 'Agregado desde almacén';
   if (!nombre) { alert('Ingresa el nombre del item'); return; }
   try {
-    await api('POST', '/api/inventario/agregar-item', { nombre, almacen_id, categoria, cantidad, nota });
+    await api('POST', '/api/inventario/agregar-item', { nombre, almacen_id, categoria, cantidad, nota, fecha: todayStr() });
   } catch (err) {
     console.error(err);
     alert('Error al guardar el item: ' + (err.message || err));

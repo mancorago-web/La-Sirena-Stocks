@@ -3376,7 +3376,8 @@ app.post('/api/inventario/agregar-item', authMiddleware, async (req, res) => {
       });
     }
 
-    const fecha = new Date().toISOString().split('T')[0];
+    const d = new Date();
+    const fecha = String(req.body.fecha || '').trim() || (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
     const diaDocId = docId('invdiario', fecha, almacen_id, item_id);
     const diaSnap = await col('inventario_diario').doc(diaDocId).get();
     if (diaSnap.exists) {
