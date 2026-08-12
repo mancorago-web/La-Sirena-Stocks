@@ -4473,25 +4473,26 @@ function cargarBarraMovimientos(tipo) {
         </div>
         <div class="accordion-body">`;
       catsToRender.forEach(cat => {
-        const recs = grupos[cat] || [];
+        const recs = (grupos[cat] || []).filter(r => (recQty[r.nombre] || 0) > 0);
+        if (!recs.length) return;
         html += `<div class="accordion-item">
           <div class="accordion-header" onclick="toggleAcordeon(this)">
-            <span class="accordion-title">${cat}${recs.length ? ` <span style="font-weight:400;font-size:0.85rem;color:#777;">— ${recs.length} receta(s)</span>` : ''}</span>
+            <span class="accordion-title">${cat} <span style="font-weight:400;font-size:0.85rem;color:#777;">— ${recs.length} receta(s) vendida(s)</span></span>
             <span class="accordion-arrow">▶</span>
           </div>
           <div class="accordion-body">
             <div class="table-wrap"><table>
-              <thead><tr><th>Receta</th><th>Cant. Vendida</th><th>Ingredientes</th></tr></thead>
+              <thead><tr><th>Receta</th><th style="text-align:center;">Cant. Vendida</th><th>Ingredientes</th></tr></thead>
               <tbody>
                 ${recs.map(r => {
-                  const qty = recQty[r.nombre] || '';
+                  const qty = recQty[r.nombre] || 0;
                   const ings = r.ingredientes.map(i => i.ingrediente).join(', ');
                   return `<tr data-receta="${r.nombre}" data-costo="${r.costoTotal || 0}" data-ingredientes='${JSON.stringify(r.ingredientes.map(i => ({ ingrediente: i.ingrediente, cantidad: i.cantidad, unidad: i.unidad })))}'>
                     <td>${r.nombre}</td>
-                    <td><input type="number" class="input-barra-mov input-receta-qty" value="${qty}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="calcularItemsSalientes(); calcularCostosVenta()"></td>
+                    <td style="text-align:center;"><input type="number" class="input-barra-mov input-receta-qty" value="${qty}" step="0.01" style="width:90px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;text-align:center;" oninput="calcularItemsSalientes(); calcularCostosVenta()"></td>
                     <td style="font-size:0.8rem;color:#666;">${ings}</td>
                   </tr>`;
-                }).join('') || '<tr><td colspan="3" style="color:#888;">Sin recetas aún.</td></tr>'}
+                }).join('')}
               </tbody>
             </table></div>
           </div>
@@ -4669,8 +4670,8 @@ function calcularItemsSalientes() {
     seccion.innerHTML = '<p style="color:#888;">Calculado automáticamente al ingresar cantidades de recetas.</p>';
     return;
   }
-  seccion.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th>Cantidad Consumida</th><th>Unidad</th></tr></thead><tbody>' +
-    names.map(n => '<tr><td>' + n + '</td><td>' + (totals[n] || 0).toFixed(2) + '</td><td>' + (units[n] || 'unidad') + '</td></tr>').join('') +
+  seccion.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th style="text-align:center;">Cantidad Consumida</th><th>Unidad</th></tr></thead><tbody>' +
+    names.map(n => '<tr><td>' + n + '</td><td style="text-align:center;">' + (totals[n] || 0).toFixed(2) + '</td><td>' + (units[n] || 'unidad') + '</td></tr>').join('') +
     '</tbody></table></div>';
 }
 
@@ -4694,9 +4695,9 @@ function calcularCostosVenta() {
     seccion.innerHTML = '<p style="color:#888;">Ingresa cantidades de recetas para calcular los costos de venta.</p>';
     return;
   }
-  seccion.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Receta</th><th>Cant.</th><th>Costo Unit.</th><th>Costo Total</th></tr></thead><tbody>' +
-    filas.map(f => '<tr><td>' + esc(f.nombre) + '</td><td>' + f.qty + '</td><td>S/ ' + f.costo.toFixed(2) + '</td><td>S/ ' + f.sub.toFixed(2) + '</td></tr>').join('') +
-    '<tr style="font-weight:700;background:#f0f0ff"><td colspan="3">TOTAL COSTO DE VENTA</td><td>S/ ' + total.toFixed(2) + '</td></tr>' +
+  seccion.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Receta</th><th style="text-align:center;">Cant.</th><th style="text-align:center;">Costo Unit.</th><th style="text-align:center;">Costo Total</th></tr></thead><tbody>' +
+    filas.map(f => '<tr><td>' + esc(f.nombre) + '</td><td style="text-align:center;">' + f.qty + '</td><td style="text-align:center;">S/ ' + f.costo.toFixed(2) + '</td><td style="text-align:center;">S/ ' + f.sub.toFixed(2) + '</td></tr>').join('') +
+    '<tr style="font-weight:700;background:#f0f0ff"><td>TOTAL COSTO DE VENTA</td><td colspan="3" style="text-align:center;">S/ ' + total.toFixed(2) + '</td></tr>' +
     '</tbody></table></div>';
 }
 
