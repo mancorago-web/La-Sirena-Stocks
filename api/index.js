@@ -2171,6 +2171,16 @@ app.get('/api/cocina/ventas', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Ingresos de COCINA registrados desde COMPRAS/INGRESOS (destino COCINA)
+app.get('/api/cocina/compras', async (req, res) => {
+  try {
+    const fecha = req.query.fecha;
+    if (!fecha) return res.json([]);
+    const snap = await col('cocina_compras').where('fecha', '==', fecha).get();
+    res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/api/cocina/movimientos', authMiddleware, async (req, res) => {
   try {
     const { fecha, tipo, items } = req.body;

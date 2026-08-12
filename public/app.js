@@ -3395,15 +3395,25 @@ function cargarCocinaMovimientos(tipo) {
     return;
   }
   // INGRESOS / SALIDAS
+  const fuenteIngresos = tipo === 'ingresos' ? api('GET', '/api/cocina/compras?fecha=' + fecha) : Promise.resolve([]);
   Promise.all([
     api('GET', '/api/cocina/stock'),
-    api('GET', '/api/cocina/movimientos?fecha=' + fecha + '&tipo=' + tipo)
-  ]).then(([stock, movs]) => {
+    api('GET', '/api/cocina/movimientos?fecha=' + fecha + '&tipo=' + tipo),
+    fuenteIngresos
+  ]).then(([stock, movs, compras]) => {
     const container = document.getElementById(accId);
     if (!container) return;
     if (!stock.length) { container.innerHTML = '<p>No hay items en COCINA/STOCK.</p>'; return; }
     const movByIng = {};
     movs.forEach(m => { movByIng[m.ingrediente] = m; });
+    // Sumar los ingresos registrados desde COMPRAS/INGRESOS (destino COCINA)
+    if (tipo === 'ingresos') {
+      (compras || []).forEach(c => {
+        if (!movByIng[c.nombre]) movByIng[c.nombre] = { cantidad: 0, origen: 'proveedor' };
+        movByIng[c.nombre].cantidad = (movByIng[c.nombre].cantidad || 0) + (c.cantidad || 0);
+        if (!movByIng[c.nombre].origen) movByIng[c.nombre].origen = 'proveedor';
+      });
+    }
     const esIngreso = tipo === 'ingresos';
     const colOrigen = esIngreso ? '<th>Origen</th>' : '';
     const cellOrigen = (mov) => esIngreso ? `<td><select class="select-origen-cocina" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">
