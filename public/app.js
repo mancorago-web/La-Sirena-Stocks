@@ -296,17 +296,12 @@ function renderBaseDatosUnificada() {
   wrap.innerHTML = html;
 }
 
-function esPantallaMovil() {
-  return window.innerWidth <= 768;
-}
-
 function irACategoria(cat) {
   // Cerrar cualquier modal abierto para que nunca salte sobre otra vista
   const modalEl = document.getElementById('modal');
   if (modalEl) modalEl.style.display = 'none';
-  // La marca BLAKBOX se oculta al navegar SOLO en móvil/Android (en PC queda siempre visible)
-  const brandEl = document.querySelector('.nav-brand');
-  if (brandEl && esPantallaMovil()) brandEl.style.display = 'none';
+  // La marca BLAKBOX se oculta al navegar SOLO en móvil/Android (CSS por breakpoint)
+  document.body.classList.add('en-categoria');
   document.getElementById('main-menu').style.display = 'none';
   document.getElementById('container').style.display = 'block';
   document.getElementById('btn-back').style.display = '';
@@ -347,8 +342,7 @@ function irACategoria(cat) {
   }
 }
 function volverMenu() {
-  const brandEl = document.querySelector('.nav-brand');
-  if (brandEl) brandEl.style.display = '';
+  document.body.classList.remove('en-categoria');
   document.getElementById('main-menu').style.display = '';
   document.getElementById('container').style.display = 'none';
   document.querySelectorAll('.tabs-bar').forEach(tb => tb.style.display = 'none');

@@ -16,6 +16,10 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .nav-brand-name { font-size: 0.85rem; font-weight: 800; letter-spacing: 1.5px; }
 .nav-brand-url { font-size: 0.58rem; opacity: 0.85; }
 .nav-brand:hover { background: rgba(26,35,126,1); }
+/* En móvil/Android la marca se oculta al navegar; en PC queda siempre visible */
+@media (max-width: 768px) {
+  body.en-categoria .nav-brand { display: none; }
+}
 .tabs { display: flex; gap: 0.5rem; }
 .tab { background: transparent; color: #ccc; border: none; padding: 0.5rem 1rem; cursor: pointer; font-size: 0.9rem; border-radius: 4px; }
 .tab:hover { background: rgba(255,255,255,0.1); color: #fff; }
