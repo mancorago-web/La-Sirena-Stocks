@@ -494,6 +494,10 @@ td button.danger { border-color: #c62828; color: #c62828; }
     max-width: none;
     width: auto;
   }
+  .modal-content.modal-wide {
+    max-width: 96vw;
+    max-height: 92vh;
+  }
   .modal-content h3 { font-size: 1rem; }
   .modal-content input, .modal-content select {
     font-size: 0.85rem;
