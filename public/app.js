@@ -226,8 +226,9 @@ function irBaseDatos() {
 
 const BD_STOPWORDS = ['DE','DEL','LA','EL','LOS','LAS','Y','X','CON','SIN','EN','A','AL','E','O','PEDRO','MANUEL','BOTELLA','BOT','LATA','FRASCO','POTE','PAQUETE','CAJA','SOBRE','ROLLO','BOLSA','BOL'];
 function bdNormKey(n) {
-  return String(n || '').toUpperCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  let s = String(n || '').toUpperCase();
+  if (s.normalize) s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return s
     .replace(/[^A-Z0-9 ]/g, ' ')
     .replace(/\b\d+(?:[.,]\d+)?\s*(LT|L|ML|CC|G|GR|KG|OZ|ONZAS|UNID|U)?\b/g, ' ')
     .split(/\s+/)
@@ -237,18 +238,22 @@ function bdNormKey(n) {
 
 let _bdUnificada = [];
 function abrirBaseDatosUnificada() {
+  const body = document.getElementById('modal-body');
+  const mc = document.querySelector('.modal-content');
+  if (mc) mc.classList.add('modal-wide');
+  body.innerHTML = '<h3>BASE DE DATOS UNIFICADA</h3><p>Cargando...</p>';
+  document.getElementById('modal').style.display = 'block';
   api('GET', '/api/basedatos/unificada').then(data => {
     _bdUnificada = data || [];
-    const body = document.getElementById('modal-body');
-    const mc = document.querySelector('.modal-content');
-    if (mc) mc.classList.add('modal-wide');
     body.innerHTML = '<h3>BASE DE DATOS UNIFICADA</h3>'
       + '<p style="font-size:0.8rem;color:#888;margin-bottom:0.5rem;">Items de STOCKS, BARRA y COCINA en una sola lista, en orden alfabético. Los posibles duplicados se marcan en amarillo.</p>'
       + '<div style="margin-bottom:0.6rem;"><input type="text" id="buscar-bd-unificada" placeholder="Buscar item..." style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;" oninput="renderBaseDatosUnificada()"></div>'
       + '<div id="bd-unificada-wrap"></div>';
     renderBaseDatosUnificada();
-    document.getElementById('modal').style.display = 'block';
-  }).catch(() => alert('Error al cargar la base de datos unificada'));
+  }).catch(err => {
+    console.error('Base de datos unificada:', err);
+    body.innerHTML = '<h3>BASE DE DATOS UNIFICADA</h3><p style="color:#c62828;">No se pudo cargar la base de datos: ' + esc(err && err.message ? err.message : 'error desconocido') + '</p>';
+  });
 }
 
 function renderBaseDatosUnificada() {
