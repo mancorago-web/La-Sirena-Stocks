@@ -2317,20 +2317,36 @@ app.get('/api/cocina/salidas-stock', async (req, res) => {
 // Salidas de STOCKS con destino BARRA (son ingresos de barra con origen STOCKS)
 app.get('/api/barra/salidas-stock', async (req, res) => {
   try {
-    const fecha = req.query.fecha;
-    if (!fecha) return res.json([]);
+    const { fecha, fecha_inicio, fecha_fin } = req.query;
+    if (!fecha && !(fecha_inicio && fecha_fin)) return res.json([]);
     const invSnap = await col('inventario').get();
     const byKey = {};
     invSnap.docs.forEach(d => { const a = d.data(); byKey[Number(a.item_id) + '_' + Number(a.almacen_id)] = a.nombre; });
-    const dia = await col('inventario_diario').where('fecha', '==', fecha).get();
-    const out = [];
-    dia.docs.forEach(d => {
+    let diasSnap;
+    if (fecha) {
+      diasSnap = await col('inventario_diario').where('fecha', '==', fecha).get();
+    } else {
+      if (fecha_inicio > fecha_fin) [fecha_inicio, fecha_fin] = [fecha_fin, fecha_inicio];
+      diasSnap = await col('inventario_diario').where('fecha', '>=', fecha_inicio).where('fecha', '<=', fecha_fin).get();
+    }
+    const agg = {};
+    const meta = {};
+    diasSnap.docs.forEach(d => {
       const a = d.data();
       if (!((a.salida_almacen || 0) > 0)) return;
       if (String(a.destino_salida || '') !== 'barra') return;
       const nombre = byKey[Number(a.item_id) + '_' + Number(a.almacen_id)] || String(a.item_id);
-      out.push({ fecha, nombre, cantidad: a.salida_almacen, unidad: 'unidad', saved_by: a.saved_by || '-', created_at: a.updated_at || '' });
+      agg[nombre] = (agg[nombre] || 0) + (a.salida_almacen || 0);
+      if (!meta[nombre]) meta[nombre] = { unidad: 'unidad', saved_by: a.saved_by || '-', created_at: a.updated_at || '' };
     });
+    const out = Object.keys(agg).map(nombre => ({
+      fecha: fecha || (fecha_inicio + ' a ' + fecha_fin),
+      nombre,
+      cantidad: agg[nombre],
+      unidad: meta[nombre].unidad,
+      saved_by: meta[nombre].saved_by,
+      created_at: meta[nombre].created_at,
+    }));
     res.json(out);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -2777,9 +2793,17 @@ app.delete('/api/barra/precios/:id', async (req, res) => {
 // --- BARRA MOVIMIENTOS (INGRESOS / VENTAS / BAJAS) ---
 app.get('/api/barra/movimientos', authMiddleware, async (req, res) => {
   try {
-    const { fecha, tipo } = req.query;
-    if (!fecha || !tipo) return res.json([]);
-    const snap = await col('barra_movimientos').where('fecha', '==', fecha).where('tipo', '==', tipo).get();
+    const { fecha, fecha_inicio, fecha_fin, tipo } = req.query;
+    if (!tipo) return res.json([]);
+    let snap;
+    if (fecha_inicio && fecha_fin) {
+      if (fecha_inicio > fecha_fin) [fecha_inicio, fecha_fin] = [fecha_fin, fecha_inicio];
+      snap = await col('barra_movimientos').where('fecha', '>=', fecha_inicio).where('fecha', '<=', fecha_fin).where('tipo', '==', tipo).get();
+    } else if (fecha) {
+      snap = await col('barra_movimientos').where('fecha', '==', fecha).where('tipo', '==', tipo).get();
+    } else {
+      return res.json([]);
+    }
     res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

@@ -4848,20 +4848,34 @@ function cargarBarraMovimientos(tipo) {
   } else {
     // INGRESOS: solo los items que ingresaron en la fecha (COMPRAS + SALIDAS de STOCK) / BAJAS: items de BARRA/STOCK
     const esIngreso = tipo === 'ingresos';
+    const fechaIni = document.getElementById('fecha-barra-' + tipo)?.value || todayStr();
+    const fechaFin = esIngreso ? (document.getElementById('fecha-barra-' + tipo + '-fin')?.value || '') : '';
+    const esRango = esIngreso && !!fechaFin;
+    const qFecha = esRango ? 'fecha_inicio=' + fechaIni + '&fecha_fin=' + fechaFin : 'fecha=' + fechaIni;
     const fuente = esIngreso ? api('GET', '/api/barra/precios') : api('GET', '/api/barra/stock');
-    const fuenteSalidasStock = esIngreso ? api('GET', '/api/barra/salidas-stock?fecha=' + fecha) : Promise.resolve([]);
+    const fuenteSalidasStock = esIngreso ? api('GET', '/api/barra/salidas-stock?' + qFecha) : Promise.resolve([]);
     Promise.all([
       fuente,
-      api('GET', '/api/barra/movimientos?fecha=' + fecha + '&tipo=' + tipo),
+      api('GET', '/api/barra/movimientos?' + qFecha + '&tipo=' + tipo),
       fuenteSalidasStock
     ]).then(([items, movs, salidasStock]) => {
       const movByIng = {};
-      movs.forEach(m => { movByIng[m.ingrediente] = m; });
+      if (esRango) {
+        movs.forEach(m => {
+          const k = String(m.ingrediente);
+          if (!movByIng[k]) movByIng[k] = { cantidad: 0, origen: 'proveedor', unidad: m.unidad || 'unidad' };
+          movByIng[k].cantidad = (movByIng[k].cantidad || 0) + (m.cantidad || 0);
+          if (m.origen === 'stocks') movByIng[k].origen = 'stocks';
+        });
+      } else {
+        movs.forEach(m => { movByIng[m.ingrediente] = m; });
+      }
       // Sumar las salidas de STOCK con destino BARRA (origen STOCKS)
       if (esIngreso) {
         (salidasStock || []).forEach(s => {
           if (!movByIng[s.nombre]) movByIng[s.nombre] = { cantidad: 0, origen: 'stocks', unidad: s.unidad || 'unidad' };
           movByIng[s.nombre].cantidad = (movByIng[s.nombre].cantidad || 0) + (s.cantidad || 0);
+          movByIng[s.nombre].origen = 'stocks';
         });
       }
       const container = document.getElementById(accId);
@@ -4875,7 +4889,7 @@ function cargarBarraMovimientos(tipo) {
           const mov = movByIng[nombre];
           return { ingrediente: nombre, unidad: (p ? (p.unidad_compra || p.unidad) : (mov.unidad || 'unidad')) };
         });
-        if (!lista.length) { container.innerHTML = '<p>No hay ingresos en esta fecha.</p>'; return; }
+        if (!lista.length) { container.innerHTML = esRango ? '<p>No hay ingresos en el rango seleccionado.</p>' : '<p>No hay ingresos en esta fecha.</p>'; return; }
       } else {
         lista = items;
         if (!lista.length) { container.innerHTML = '<p>No hay items en BARRA/STOCK.</p>'; return; }
@@ -4885,22 +4899,25 @@ function cargarBarraMovimientos(tipo) {
         <option value="proveedor" ${mov.origen==='proveedor'?'selected':''}>PROVEEDOR</option>
         <option value="stocks" ${mov.origen==='stocks'?'selected':''}>STOCKS</option>
       </select></td>` : '';
-      container.innerHTML = `
+      const avisoRango = esRango ? '<p style="font-size:0.8rem;color:#0f3460;font-weight:700;margin-bottom:0.5rem;">📊 RANGO: ' + fechaIni + ' → ' + fechaFin + ' (totales acumulados · solo lectura). Para guardar deja vacío "Hasta".</p>' : '';
+      container.innerHTML = avisoRango + `
         <div class="table-wrap"><table>
           <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th>${colOrigen}</tr></thead>
           <tbody>
             ${lista.map(p => {
               const mov = movByIng[p.ingrediente] || {};
               const uc = p.unidad || 'unidad';
+              const ro = esRango ? ' readonly' : '';
               return `<tr data-ing="${p.ingrediente}" data-uni-compra="${uc}">
                 <td>${p.ingrediente}</td>
-                <td><input type="number" class="input-barra-mov" value="${mov.cantidad || ''}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
+                <td><input type="number" class="input-barra-mov" value="${mov.cantidad || ''}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"${ro}></td>
                 <td>${uc}</td>
                 ${cellOrigen(mov)}
               </tr>`;
             }).join('')}
           </tbody>
         </table></div>`;
+      if (esRango) container.querySelectorAll('.select-origen-ingreso').forEach(sl => sl.setAttribute('disabled', ''));
       const bp = document.getElementById('buscar-barra-' + tipo);
       if (bp && bp.value) buscarEnTabla(bp.value, accId);
     });
@@ -4908,6 +4925,10 @@ function cargarBarraMovimientos(tipo) {
 }
 
 function guardarBarraMovimientos(tipo) {
+  if (tipo === 'ingresos') {
+    const fFin = document.getElementById('fecha-barra-ingresos-fin')?.value;
+    if (fFin) { alert('Estás viendo un RANGO de fechas (solo lectura). Para guardar, deja vacío el campo "Hasta".'); return; }
+  }
   const fecha = document.getElementById('fecha-barra-' + tipo)?.value || todayStr();
   if (tipo === 'ventas') {
     const items = [];
@@ -4961,9 +4982,12 @@ function guardarBarraMovimientos(tipo) {
 function verDetallesBarra(tipo) {
   const fecha = document.getElementById('fecha-barra-' + tipo)?.value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
+  const fechaFin = tipo === 'ingresos' ? (document.getElementById('fecha-barra-ingresos-fin')?.value || '') : '';
+  const esRango = tipo === 'ingresos' && !!fechaFin;
+  const qFecha = esRango ? 'fecha_inicio=' + fecha + '&fecha_fin=' + fechaFin : 'fecha=' + fecha;
   const label = tipo === 'ingresos' ? 'Ingresos' : tipo === 'ventas' ? 'Ventas' : 'Bajas';
-  api('GET', '/api/barra/movimientos?fecha=' + fecha + '&tipo=' + tipo).then(movs => {
-    let html = '<h3>Detalle de ' + label + ' Barra — ' + fecha + '</h3>';
+  api('GET', '/api/barra/movimientos?' + qFecha + '&tipo=' + tipo).then(movs => {
+    let html = '<h3>Detalle de ' + label + ' Barra — ' + (esRango ? fecha + ' a ' + fechaFin : fecha) + '</h3>';
     if (tipo === 'ventas') {
       // Show only recipe-level entries
       const recetas = movs.filter(m => m.es_receta !== false);
