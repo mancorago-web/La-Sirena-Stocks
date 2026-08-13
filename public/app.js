@@ -221,9 +221,67 @@ window.addEventListener('resize', dibujarFlujoMenu);
 setTimeout(dibujarFlujoMenu, 300);
 
 function irBaseDatos() {
-  irACategoria('stocks');
-  const tab = document.querySelector('.tab[data-tab="precios"]');
-  if (tab) tab.click();
+  abrirBaseDatosUnificada();
+}
+
+const BD_STOPWORDS = ['DE','DEL','LA','EL','LOS','LAS','Y','X','CON','SIN','EN','A','AL','E','O','PEDRO','MANUEL','BOTELLA','BOT','LATA','FRASCO','POTE','PAQUETE','CAJA','SOBRE','ROLLO','BOLSA','BOL'];
+function bdNormKey(n) {
+  return String(n || '').toUpperCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Z0-9 ]/g, ' ')
+    .replace(/\b\d+(?:[.,]\d+)?\s*(LT|L|ML|CC|G|GR|KG|OZ|ONZAS|UNID|U)?\b/g, ' ')
+    .split(/\s+/)
+    .filter(w => w && w.length > 1 && !BD_STOPWORDS.includes(w))
+    .join(' ');
+}
+
+let _bdUnificada = [];
+function abrirBaseDatosUnificada() {
+  api('GET', '/api/basedatos/unificada').then(data => {
+    _bdUnificada = data || [];
+    const body = document.getElementById('modal-body');
+    const mc = document.querySelector('.modal-content');
+    if (mc) mc.classList.add('modal-wide');
+    body.innerHTML = '<h3>BASE DE DATOS UNIFICADA</h3>'
+      + '<p style="font-size:0.8rem;color:#888;margin-bottom:0.5rem;">Items de STOCKS, BARRA y COCINA en una sola lista, en orden alfabético. Los posibles duplicados se marcan en amarillo.</p>'
+      + '<div style="margin-bottom:0.6rem;"><input type="text" id="buscar-bd-unificada" placeholder="Buscar item..." style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;" oninput="renderBaseDatosUnificada()"></div>'
+      + '<div id="bd-unificada-wrap"></div>';
+    renderBaseDatosUnificada();
+    document.getElementById('modal').style.display = 'block';
+  }).catch(() => alert('Error al cargar la base de datos unificada'));
+}
+
+function renderBaseDatosUnificada() {
+  const q = (document.getElementById('buscar-bd-unificada')?.value || '').trim().toLowerCase();
+  const wrap = document.getElementById('bd-unificada-wrap');
+  if (!wrap) return;
+  const filtrados = q ? _bdUnificada.filter(x => x.nombre.toLowerCase().includes(q)) : _bdUnificada;
+  // Detectar posibles duplicados por nombre normalizado
+  const grupos = {};
+  filtrados.forEach(x => {
+    const k = bdNormKey(x.nombre);
+    if (!k) return;
+    if (!grupos[k]) grupos[k] = [];
+    grupos[k].push(x);
+  });
+  const duplicados = new Set();
+  Object.keys(grupos).forEach(k => { if (grupos[k].length > 1) grupos[k].forEach(x => duplicados.add(x)); });
+  if (!filtrados.length) { wrap.innerHTML = '<p>Sin resultados.</p>'; return; }
+  let html = '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Zona</th><th>Unidad Compra</th><th>Precio Compra</th><th>Unidad Venta</th><th>Precio Venta</th></tr></thead><tbody>';
+  filtrados.forEach(x => {
+    const dup = duplicados.has(x);
+    html += `<tr style="${dup ? 'background:#fff9c4;' : ''}">
+      <td>${esc(x.nombre)}${dup ? ' <span class="badge-observacion" style="background:#f57f17;">DUP</span>' : ''}</td>
+      <td>${x.zona}</td>
+      <td>${esc(x.unidad_compra || '—')}</td>
+      <td>${x.precio_compra || 0}</td>
+      <td>${esc(x.unidad_venta || '—')}</td>
+      <td>${x.precio_venta || 0}</td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+  html += '<p style="font-size:0.8rem;color:#666;margin-top:0.5rem;">Total: <strong>' + filtrados.length + '</strong> items · posibles duplicados: <strong style="color:#f57f17;">' + duplicados.size + '</strong></p>';
+  wrap.innerHTML = html;
 }
 
 function irACategoria(cat) {

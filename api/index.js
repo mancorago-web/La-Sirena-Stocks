@@ -2739,6 +2739,47 @@ app.delete('/api/stock/precios/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- BASE DE DATOS UNIFICADA (STOCKS + BARRA + COCINA) ---
+app.get('/api/basedatos/unificada', async (req, res) => {
+  try {
+    const [stocks, barra, cocina] = await Promise.all([
+      col('stock_precios').get(),
+      col('barra_precios').get(),
+      col('cocina_precios').get(),
+    ]);
+    const out = [];
+    stocks.docs.forEach(d => {
+      const x = d.data();
+      out.push({
+        id: Number(d.id), origen: 'stock', zona: 'STOCKS',
+        nombre: String(x.nombre || '').trim().toUpperCase(),
+        unidad_compra: x.unidad || '', precio_compra: x.precio || 0,
+        unidad_venta: x.unidad_venta || '', precio_venta: x.precio_venta || 0,
+      });
+    });
+    barra.docs.forEach(d => {
+      const x = d.data();
+      out.push({
+        id: Number(d.id), origen: 'barra', zona: 'BARRA',
+        nombre: String(x.ingrediente || '').trim().toUpperCase(),
+        unidad_compra: x.unidad_compra || '', precio_compra: x.precio_compra || 0,
+        unidad_venta: x.unidad || '', precio_venta: x.precio || 0,
+      });
+    });
+    cocina.docs.forEach(d => {
+      const x = d.data();
+      out.push({
+        id: Number(d.id), origen: 'cocina', zona: 'COCINA',
+        nombre: String(x.ingrediente || '').trim().toUpperCase(),
+        unidad_compra: x.unidad_compra || '', precio_compra: x.precio_compra || 0,
+        unidad_venta: x.unidad || '', precio_venta: x.precio || 0,
+      });
+    });
+    out.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 
 // --- BARRA PRECIOS ---
 app.get('/api/barra/precios', async (req, res) => {
