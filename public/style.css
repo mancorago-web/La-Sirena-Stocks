@@ -74,17 +74,23 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .category-btn.menu-compras .category-label,
 .category-btn.menu-ventas .category-label,
 .category-btn.menu-bd .category-label,
-.category-btn.menu-costos .category-label { font-size: 1rem; }
+.category-btn.menu-costos .category-label { font-size: 1rem; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .category-btn.menu-compras .category-desc,
 .category-btn.menu-ventas .category-desc,
 .category-btn.menu-bd .category-desc,
-.category-btn.menu-costos .category-desc { font-size: 0.68rem; }
-/* COMPRAS, VENTAS, BASE DE DATOS y CONSOLIDADO: mismo tamaño pequeño */
+.category-btn.menu-costos .category-desc { font-size: 0.68rem; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+/* COMPRAS, VENTAS, BASE DE DATOS y CONSOLIDADO: mismo tamaño pequeño (altura fija) */
 .category-btn.menu-compras,
 .category-btn.menu-ventas,
 .category-btn.menu-bd,
 .category-btn.menu-costos {
-  padding: 1.1rem 1rem; min-height: 120px;
+  padding: 1.1rem 1rem;
+  height: 135px;
+  min-height: 135px;
+  max-height: 135px;
+  gap: 0.55rem;
+  justify-content: center;
+  overflow: hidden;
 }
 .menu-ventas { grid-column: 2; grid-row: 3; }
 .category-btn {
@@ -443,7 +449,7 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .category-icon { font-size: 1.6rem; }
   .category-label { font-size: 0.72rem; letter-spacing: 0.5px; }
   .category-desc { display: none; }
-  .category-btn.menu-compras, .category-btn.menu-ventas, .category-btn.menu-bd, .category-btn.menu-costos { min-height: 70px; padding: 0.5rem 0.3rem; }
+  .category-btn.menu-compras, .category-btn.menu-ventas, .category-btn.menu-bd, .category-btn.menu-costos { height: 70px; min-height: 70px; max-height: 70px; padding: 0.5rem 0.3rem; }
   .category-btn.menu-compras .category-icon, .category-btn.menu-ventas .category-icon, .category-btn.menu-bd .category-icon, .category-btn.menu-costos .category-icon { font-size: 1.2rem; }
   .category-btn.menu-compras .category-label, .category-btn.menu-ventas .category-label, .category-btn.menu-bd .category-label, .category-btn.menu-costos .category-label { font-size: 0.65rem; }
   .category-btn.menu-compras .category-desc, .category-btn.menu-ventas .category-desc, .category-btn.menu-bd .category-desc, .category-btn.menu-costos .category-desc { display: none; }
@@ -599,7 +605,7 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .category-icon { font-size: 1.4rem; }
   .category-label { font-size: 0.66rem; }
   .category-desc { display: none; }
-  .category-btn.menu-compras, .category-btn.menu-ventas, .category-btn.menu-bd, .category-btn.menu-costos { min-height: 60px; padding: 0.4rem 0.25rem; }
+  .category-btn.menu-compras, .category-btn.menu-ventas, .category-btn.menu-bd, .category-btn.menu-costos { height: 60px; min-height: 60px; max-height: 60px; padding: 0.4rem 0.25rem; }
   .category-btn.menu-compras .category-icon, .category-btn.menu-ventas .category-icon, .category-btn.menu-bd .category-icon, .category-btn.menu-costos .category-icon { font-size: 1.05rem; }
   .category-btn.menu-compras .category-label, .category-btn.menu-ventas .category-label, .category-btn.menu-bd .category-label, .category-btn.menu-costos .category-label { font-size: 0.6rem; }
 }
