@@ -3453,7 +3453,7 @@ function cargarCocinaMovimientos(tipo) {
       const catsToRender = [...ordenCat, ...Object.keys(grupos).filter(c => !ordenCat.includes(c))];
       let html = '<h3 style="margin:0 0 0.5rem 0;">RECETAS VENDIDAS</h3>';
       catsToRender.forEach(cat => {
-        const recs = grupos[cat] || [];
+        const recs = (grupos[cat] || []).filter(r => (recQty[r.nombre] || 0) > 0);
         if (!recs.length) return;
         html += `<div class="accordion-item">
           <div class="accordion-header" onclick="toggleAcordeon(this)">
