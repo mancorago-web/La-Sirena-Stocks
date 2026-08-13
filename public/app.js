@@ -294,6 +294,9 @@ function renderBaseDatosUnificada() {
 }
 
 function irACategoria(cat) {
+  // Cerrar cualquier modal abierto para que nunca salte sobre otra vista
+  const modalEl = document.getElementById('modal');
+  if (modalEl) modalEl.style.display = 'none';
   document.getElementById('main-menu').style.display = 'none';
   document.getElementById('container').style.display = 'block';
   document.getElementById('btn-back').style.display = '';
