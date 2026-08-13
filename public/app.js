@@ -1100,7 +1100,7 @@ function cargarAlmacenes(fecha) {
         <div class="accordion-body">
           ${a.items.length ? `
             <div class="table-wrap">
-            <table class="table-sticky">
+            <table>
               <thead><tr><th>Item</th><th>Stock Total Apertura</th><th>Ingreso</th><th>Salida Almacén</th><th>Total Ventas</th><th>Falta</th><th>Stock Total Cierre</th><th></th></tr></thead>
               <tbody>
                 ${a.secciones.map(s => s.items.length ? `

@@ -290,31 +290,6 @@ td button.danger { border-color: #c62828; color: #c62828; }
   flex: 1;
   min-width: 90px;
 }
-
-/* Columnas ancladas: Item + Stock Total Apertura siempre visibles, el resto se desplaza horizontalmente.
-   Nota: requiere border-collapse: separate (con collapse el sticky en celdas falla en Android/Chrome). */
-.table-sticky {
-  border-collapse: separate;
-  border-spacing: 0;
-  overflow: visible;
-}
-.table-sticky th, .table-sticky td { white-space: nowrap; }
-.table-sticky th:nth-child(1),
-.table-sticky td:nth-child(1) {
-  position: sticky; left: 0; z-index: 3;
-  width: 140px; min-width: 140px; max-width: 140px;
-  background: #fff; box-shadow: 2px 0 4px rgba(0,0,0,0.08);
-  overflow: hidden; text-overflow: ellipsis;
-}
-.table-sticky th:nth-child(2),
-.table-sticky td:nth-child(2) {
-  position: sticky; left: 140px; z-index: 3;
-  width: 96px; min-width: 96px; max-width: 96px;
-  background: #fff;
-}
-.table-sticky th:nth-child(1),
-.table-sticky th:nth-child(2) { background: #fafafa; }
-.table-sticky tr.section-header td { position: static; }
 .cierre-verde { background-color: #c8e6c9 !important; }
 .cierre-amarillo { background-color: #fff9c4 !important; }
 .input-cierre[readonly] { cursor: default; font-weight: 600; }
