@@ -6,12 +6,12 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .nav-logo { font-size: 1.5rem; font-weight: 700; letter-spacing: 1px; display: flex; flex-direction: column; align-items: center; line-height: 1.1; flex-shrink: 0; }
 .nav-logo-sub { font-family: 'Segoe Script','Brush Script MT',cursive; font-weight: 400; font-size: 1rem; text-transform: none; }
 .nav-brand {
-  position: fixed; bottom: 0.75rem; right: 0.75rem; z-index: 999;
+  position: fixed; bottom: 0.75rem; right: 0.75rem; z-index: 9999;
   display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
   text-decoration: none; color: #fff; flex-shrink: 0;
-  background: rgba(26,35,126,0.9); border: 1px solid rgba(255,255,255,0.3);
-  border-radius: 8px; padding: 0.2rem 0.6rem; line-height: 1.05; cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  background: rgba(26,35,126,0.92); border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 8px; padding: 0.25rem 0.7rem; line-height: 1.05; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
 }
 .nav-brand-name { font-size: 0.85rem; font-weight: 800; letter-spacing: 1.5px; }
 .nav-brand-url { font-size: 0.58rem; opacity: 0.85; }
@@ -425,8 +425,9 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .nav-left { gap: 0.5rem; }
   .nav-logo { font-size: 1.1rem; }
   .nav-logo-sub { font-size: 0.8rem; }
-  .nav-brand-name { font-size: 0.7rem; }
-  .nav-brand-url { font-size: 0.5rem; }
+  .nav-brand { bottom: 0.6rem; right: 0.6rem; padding: 0.2rem 0.6rem; }
+  .nav-brand-name { font-size: 0.72rem; }
+  .nav-brand-url { font-size: 0.52rem; }
   .btn-back { font-size: 1.3rem; padding: 0.55rem 0.8rem; min-width: 46px; min-height: 46px; display: inline-flex; align-items: center; justify-content: center; }
 
   /* Tabs bar */
@@ -467,12 +468,14 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .category-btn.menu-compras .category-label, .category-btn.menu-ventas .category-label, .category-btn.menu-bd .category-label, .category-btn.menu-costos .category-label { font-size: 0.65rem; }
   .category-btn.menu-compras .category-desc, .category-btn.menu-ventas .category-desc, .category-btn.menu-bd .category-desc, .category-btn.menu-costos .category-desc { display: none; }
   .user-info {
-    width: 100%;
+    width: auto;
     display: flex !important;
     flex-direction: row;
-    justify-content: center;
+    justify-content: flex-end;
     align-items: center;
     gap: 0.5rem;
+    margin-left: auto;
+    flex-shrink: 0;
   }
   .user-email { font-size: 0.7rem; }
   .btn-salir { margin-top: 0; }
