@@ -441,8 +441,8 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .menu-stocks { grid-column: 1; grid-row: 2; }
   .menu-barra { grid-column: 2; grid-row: 2; }
   .menu-cocina { grid-column: 3; grid-row: 2; }
-  .menu-ventas { grid-column: 3; grid-row: 3; }
-  .menu-bd { grid-column: 2; grid-row: 3; }
+  .menu-ventas { grid-column: 2; grid-row: 3; }
+  .menu-bd { grid-column: 1; grid-row: 4; }
   .menu-costos { grid-column: 2; grid-row: 4; }
   .flow-path { stroke-width: 2.5; opacity: 0.85; }
   .category-btn { min-height: 110px; padding: 0.7rem 0.3rem; }
