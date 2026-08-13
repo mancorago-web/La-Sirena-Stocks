@@ -42,7 +42,7 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .menu-stocks { grid-column: 1; grid-row: 2; }
 .menu-barra { grid-column: 2; grid-row: 2; }
 .menu-cocina { grid-column: 3; grid-row: 2; }
-.menu-costos { grid-column: 4; grid-row: 3; }
+.menu-costos { grid-column: 4; grid-row: 2; align-self: start; }
 .category-btn.menu-costos {
   background: #e8f5e9;
   border-color: #81c784;
