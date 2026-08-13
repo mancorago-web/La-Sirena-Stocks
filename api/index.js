@@ -347,6 +347,7 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
             falta_almacen: falta,
             stock_baja: baja,
             nota_baja: dia.nota_baja || '',
+            stock_observado: dia.stock_observado || 0,
             destino_salida: dia.destino_salida || '',
             destino_almacen_id: dia.destino_almacen_id || null,
             transferencias: Array.isArray(dia.transferencias) ? dia.transferencias.map(t => ({ almacen_id: Number(t.almacen_id), cantidad: Number(t.cantidad) || 0 })) : [],
@@ -503,6 +504,12 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     if (r.nota_baja !== undefined) data.nota_baja = notaBaja;
     if (r.destino_salida !== undefined) data.destino_salida = String(r.destino_salida || '');
     if (r.transferencias !== undefined) data.transferencias = Array.isArray(r.transferencias) ? r.transferencias.map(t => ({ almacen_id: Number(t.almacen_id), cantidad: Number(t.cantidad) || 0 })) : [];
+    // Stock en observación: se fija explícitamente, o bien una venta se cubre con lo observado
+    if (r.stock_observado !== undefined) {
+      data.stock_observado = Math.max(0, Number(r.stock_observado) || 0);
+    } else if (r.total_ventas !== undefined || (prev.stock_observado || 0) > 0) {
+      data.stock_observado = Math.max(0, (prev.stock_observado || 0) - ventas);
+    }
     data.stock_cierre = Math.round(cierre * 100) / 100;
     data.updated_at = new Date().toISOString();
     data.saved_by = savedBy;
@@ -3167,6 +3174,66 @@ app.post('/api/reportes/accion/salida-cocina', async (req, res) => {
     }], savedBy);
 
     res.json({ ok: true, movido: aMover, nueva_falta: redondear(curFalta - aMover) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- ACCION en REPORTES: convertir FALTA en DAR DE BAJA (se registra en STOCK/BAJAS) ---
+app.post('/api/reportes/accion/baja', async (req, res) => {
+  try {
+    const { fecha, item_id, almacen_id, cantidad, saved_by } = req.body;
+    if (!fecha || !item_id || !almacen_id || !(Number(cantidad) > 0)) {
+      return res.status(400).json({ error: 'fecha, item_id, almacen_id y cantidad son requeridos' });
+    }
+    const savedBy = saved_by || (req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown');
+    const al = Number(almacen_id);
+    const item = Number(item_id);
+    const redondear = n => Math.round(n * 100) / 100;
+    const diaId = docId('invdiario', fecha, al, item);
+    const diaSnap = await col('inventario_diario').doc(diaId).get();
+    const x = diaSnap.exists ? diaSnap.data() : {};
+    const curFalta = x.falta_almacen || 0;
+    const aMover = redondear(Math.min(Number(cantidad), curFalta));
+    if (aMover <= 0) return res.status(400).json({ error: 'El item no tiene falta en la fecha indicada' });
+    const reg = {
+      item_id: item, almacen_id: al,
+      stock_baja: redondear((x.stock_baja || 0) + aMover),
+      nota_baja: x.nota_baja ? (x.nota_baja + '; BAJA POR FALTA') : 'BAJA POR FALTA',
+      falta_almacen: redondear(curFalta - aMover),
+    };
+    await guardarDiaInterno(fecha, [reg], savedBy);
+    res.json({ ok: true, movido: aMover, nueva_falta: redondear(curFalta - aMover) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- ACCION en REPORTES: convertir FALTA en OBSERVACION (cuarentena).
+// --- La proxima venta del item se cubre con la cantidad en observacion. ---
+app.post('/api/reportes/accion/observacion', async (req, res) => {
+  try {
+    const { fecha, item_id, almacen_id, cantidad, saved_by } = req.body;
+    if (!fecha || !item_id || !almacen_id || !(Number(cantidad) > 0)) {
+      return res.status(400).json({ error: 'fecha, item_id, almacen_id y cantidad son requeridos' });
+    }
+    const savedBy = saved_by || (req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown');
+    const al = Number(almacen_id);
+    const item = Number(item_id);
+    const redondear = n => Math.round(n * 100) / 100;
+    const diaId = docId('invdiario', fecha, al, item);
+    const diaSnap = await col('inventario_diario').doc(diaId).get();
+    const x = diaSnap.exists ? diaSnap.data() : {};
+    const curFalta = x.falta_almacen || 0;
+    const aMover = redondear(Math.min(Number(cantidad), curFalta));
+    if (aMover <= 0) return res.status(400).json({ error: 'El item no tiene falta en la fecha indicada' });
+    const nuevoObservado = redondear((x.stock_observado || 0) + aMover);
+    await guardarDiaInterno(fecha, [{
+      item_id: item, almacen_id: al,
+      falta_almacen: redondear(curFalta - aMover),
+      stock_observado: nuevoObservado,
+    }], savedBy);
+    res.json({ ok: true, movido: aMover, stock_observado: nuevoObservado });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

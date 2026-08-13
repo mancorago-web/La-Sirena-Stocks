@@ -293,6 +293,10 @@ td button.danger { border-color: #c62828; color: #c62828; }
 .cierre-verde { background-color: #c8e6c9 !important; }
 .cierre-amarillo { background-color: #fff9c4 !important; }
 .input-cierre[readonly] { cursor: default; font-weight: 600; }
+.badge-observacion {
+  display: inline-block; background: #e65100; color: #fff; font-size: 0.6rem; font-weight: 700;
+  padding: 0.1rem 0.4rem; border-radius: 999px; margin-left: 0.3rem; letter-spacing: 0.5px; vertical-align: middle;
+}
 .diff-neg { color: #c62828; font-weight: bold; }
 .diff-pos { color: #2e7d32; font-weight: bold; }
 .diff-almacen { margin-bottom: 0.5rem; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; }

@@ -303,8 +303,9 @@ function api(method, url, data) {
 }
 
 function itemRow(i, a) {
+  const obs = (i.stock_observado || 0) > 0 ? ' <span class="badge-observacion" title="En observación (cuarentena): ' + (i.stock_observado || 0) + '">EN OBSERVACIÓN</span>' : '';
   return `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
-    <td>${i.nombre}</td>
+    <td>${i.nombre}${obs}</td>
     <td><input type="number" class="input-num input-apertura" value="${i.stock_apertura || 0}" step="0.01" readonly title="Apertura fija del día (no editable)" style="background:#f0f0f0;color:#555;cursor:not-allowed;"></td>
     <td><input type="number" class="input-num input-ingreso" value="${i.stock_ingreso || 0}" step="0.01" oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01" oninput="calcCierre(this)"></td>
@@ -2415,8 +2416,8 @@ function abrirAccionesReportes() {
       return;
     }
     let html = '<h3>ACCIONES — Items con FALTA</h3>';
-    html += '<p style="font-size:0.8rem;color:#888;margin-bottom:0.6rem;">Convierte una falta en <strong>SALIDA A COCINA</strong>. La fecha real de salida se pre-llena con el día hábil anterior a la falta; ajústala si fue otra.</p>';
-    html += '<div class="table-wrap"><table><thead><tr><th>Fecha Falta</th><th>Item</th><th>Almacén</th><th>Falta</th><th>Fecha Real Salida</th><th></th></tr></thead><tbody>';
+    html += '<p style="font-size:0.8rem;color:#888;margin-bottom:0.6rem;">Elige la acción para cada faltante: <strong>→ COCINA</strong> (salida a cocina el día real), <strong>BAJA</strong> (registra en STOCK/BAJAS) u <strong>OBSERVAR</strong> (cuarentena: la próxima venta del item se cubre con esta cantidad).</p>';
+    html += '<div class="table-wrap"><table><thead><tr><th>Fecha Falta</th><th>Item</th><th>Almacén</th><th>Falta</th><th>Fecha Real Salida</th><th>→ COCINA</th><th>BAJA</th><th>OBSERVAR</th></tr></thead><tbody>';
     faltantes.forEach(f => {
       html += `<tr data-accion-item="${f.item_id}" data-accion-al="${f.almacen_id}" data-accion-falta="${f.falta}" data-accion-fecha="${f.fecha}">
         <td>${f.fecha}</td>
@@ -2425,12 +2426,48 @@ function abrirAccionesReportes() {
         <td style="color:red;font-weight:700;">${f.falta}</td>
         <td><input type="date" class="input-fecha-salida" value="${prevWorkingDayStr(f.fecha)}"></td>
         <td><button class="btn-detalles" onclick="convertirFaltaACocina(this)" style="background:#2e7d32;color:#fff;">→ COCINA</button></td>
+        <td><button class="btn-detalles" onclick="darDeBajaFalta(this)" style="background:#b71c1c;color:#fff;">BAJA</button></td>
+        <td><button class="btn-detalles" onclick="observarFalta(this)" style="background:#e65100;color:#fff;">OBSERVAR</button></td>
       </tr>`;
     });
     html += '</tbody></table></div>';
     body.innerHTML = html;
     document.getElementById('modal').style.display = 'block';
   }).catch(() => alert('Error al cargar los faltantes'));
+}
+
+function darDeBajaFalta(btn) {
+  const tr = btn.closest('tr');
+  const item_id = parseInt(tr.dataset.accionItem);
+  const almacen_id = parseInt(tr.dataset.accionAl);
+  const cantidad = parseFloat(tr.dataset.accionFalta);
+  const fecha = tr.dataset.accionFecha;
+  if (!confirm('¿Dar de BAJA ' + cantidad + ' de este item por FALTA? Se registrará en STOCK/BAJAS el ' + fecha + '.')) return;
+  btn.disabled = true; btn.textContent = '...';
+  api('POST', '/api/reportes/accion/baja', {
+    fecha, item_id, almacen_id, cantidad, saved_by: currentUserName
+  }).then(() => {
+    showToast('Registrado en STOCK/BAJAS');
+    cerrarModal();
+    cargarReporteDiferencias();
+  }).catch(() => { btn.disabled = false; btn.textContent = 'BAJA'; alert('Error al dar de baja'); });
+}
+
+function observarFalta(btn) {
+  const tr = btn.closest('tr');
+  const item_id = parseInt(tr.dataset.accionItem);
+  const almacen_id = parseInt(tr.dataset.accionAl);
+  const cantidad = parseFloat(tr.dataset.accionFalta);
+  const fecha = tr.dataset.accionFecha;
+  if (!confirm('¿Poner ' + cantidad + ' de este item en OBSERVACIÓN (cuarentena)? La próxima venta de este item se cubrirá con esta cantidad.')) return;
+  btn.disabled = true; btn.textContent = '...';
+  api('POST', '/api/reportes/accion/observacion', {
+    fecha, item_id, almacen_id, cantidad, saved_by: currentUserName
+  }).then(() => {
+    showToast('Item en OBSERVACIÓN');
+    cerrarModal();
+    cargarReporteDiferencias();
+  }).catch(() => { btn.disabled = false; btn.textContent = 'OBSERVAR'; alert('Error al marcar en observación'); });
 }
 
 function convertirFaltaACocina(btn) {
