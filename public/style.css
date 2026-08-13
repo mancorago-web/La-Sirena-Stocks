@@ -17,6 +17,9 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .nav-brand-url { font-size: 0.58rem; opacity: 0.85; }
 .nav-brand:hover { background: rgba(26,35,126,1); }
 /* En móvil/Android la marca se oculta al navegar; en PC queda siempre visible */
+@media (min-width: 769px) {
+  .nav-brand { display: inline-flex !important; }
+}
 @media (max-width: 768px) {
   body.en-categoria .nav-brand { display: none; }
 }
