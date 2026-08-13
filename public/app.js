@@ -2204,11 +2204,14 @@ function guardarMinimosStocks() {
   });
 }
 
+let _stocksBajosData = null;
+
 function verReporteStocksBajos() {
   const fecha = document.getElementById('fecha-stocks').value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
   getInventario(fecha).then(data => {
     data = data.filter(a => a.id === 4 || a.id === 8);
+    const lista = [];
     let html = '<h3>Productos con Stock Bajo — ' + fecha + '</h3>';
     let totalItems = 0;
     data.forEach(a => {
@@ -2218,6 +2221,7 @@ function verReporteStocksBajos() {
       });
       if (!itemsBajos.length) return;
       totalItems += itemsBajos.length;
+      lista.push({ almacen: a.nombre, items: itemsBajos.map(i => ({ nombre: i.nombre, cantidad: i.stock_cierre || 0 })) });
       html += '<div class="diff-almacen">';
       html += '<div class="diff-header" onclick="toggleAcordeon(this)"><span>' + a.nombre + '</span><span class="accordion-arrow">▶</span></div>';
       html += '<div class="accordion-body">';
@@ -2227,12 +2231,34 @@ function verReporteStocksBajos() {
       });
       html += '</tbody></table></div></div>';
     });
+    _stocksBajosData = { fecha, lista };
     if (!totalItems) {
       html += '<p>No hay productos con stock bajo.</p>';
+    } else {
+      html = '<div style="margin-bottom:0.75rem;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">'
+        + '<button class="btn-detalles" onclick="enviarAvisoStockWhatsApp()" style="width:auto;margin-top:0;background:#25d366;color:#fff;font-weight:700;">📲 AVISO DE STOCK</button>'
+        + '<span style="font-size:0.8rem;color:#888;">Envía el detalle por WhatsApp</span></div>' + html;
     }
     document.getElementById('modal-body').innerHTML = html;
     document.getElementById('modal').style.display = 'block';
   });
+}
+
+function enviarAvisoStockWhatsApp() {
+  if (!_stocksBajosData || !_stocksBajosData.lista.length) return;
+  const lines = ['AVISO DE STOCK BAJO - ' + _stocksBajosData.fecha, ''];
+  _stocksBajosData.lista.forEach(gr => {
+    if (!gr.items.length) return;
+    lines.push(gr.almacen.toUpperCase());
+    lines.push('');
+    gr.items.forEach((i, idx) => {
+      lines.push((idx + 1) + '. ' + i.nombre + ' - ' + i.cantidad);
+    });
+    lines.push('');
+  });
+  const msg = lines.join('\n');
+  const url = 'https://wa.me/?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
 }
 
 function cargarStocks() {
