@@ -296,13 +296,17 @@ function renderBaseDatosUnificada() {
   wrap.innerHTML = html;
 }
 
+function esPantallaMovil() {
+  return window.innerWidth <= 768;
+}
+
 function irACategoria(cat) {
   // Cerrar cualquier modal abierto para que nunca salte sobre otra vista
   const modalEl = document.getElementById('modal');
   if (modalEl) modalEl.style.display = 'none';
-  // La marca BLAKBOX solo se muestra en el menú principal
+  // La marca BLAKBOX se oculta al navegar SOLO en móvil/Android (en PC queda siempre visible)
   const brandEl = document.querySelector('.nav-brand');
-  if (brandEl) brandEl.style.display = 'none';
+  if (brandEl && esPantallaMovil()) brandEl.style.display = 'none';
   document.getElementById('main-menu').style.display = 'none';
   document.getElementById('container').style.display = 'block';
   document.getElementById('btn-back').style.display = '';
