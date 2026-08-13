@@ -2463,7 +2463,7 @@ function observarFalta(btn) {
   const almacen_id = parseInt(tr.dataset.accionAl);
   const cantidad = parseFloat(tr.dataset.accionFalta);
   const fecha = tr.dataset.accionFecha;
-  if (!confirm('¿Poner ' + cantidad + ' de este item en OBSERVACIÓN (cuarentena)? La próxima venta de este item se cubrirá con esta cantidad.')) return;
+  if (!confirm('¿Poner ' + cantidad + ' de este item en OBSERVACIÓN (cuarentena)? El item quedará listado en el botón CUARENTENA y podrás usarlo como venta manualmente.')) return;
   btn.disabled = true; btn.textContent = '...';
   api('POST', '/api/reportes/accion/observacion', {
     fecha, item_id, almacen_id, cantidad, saved_by: currentUserName
@@ -2494,6 +2494,54 @@ function convertirFaltaACocina(btn) {
     btn.disabled = false; btn.textContent = '→ COCINA';
     alert('Error al convertir');
   });
+}
+
+function abrirCuarentena() {
+  api('GET', '/api/reportes/cuarentena').then(lista => {
+    const body = document.getElementById('modal-body');
+    if (!lista.length) {
+      body.innerHTML = '<h3>CUARENTENA</h3><p>No hay items en observación.</p>';
+      document.getElementById('modal').style.display = 'block';
+      return;
+    }
+    let html = '<h3>CUARENTENA — Items en observación</h3>';
+    html += '<p style="font-size:0.8rem;color:#888;margin-bottom:0.6rem;">El item está apartado (cuarentena). Para usarlo como venta, hazlo <strong>manualmente</strong>: indica la fecha de la venta y pulsa "USAR COMO VENTA".</p>';
+    html += '<div class="table-wrap"><table><thead><tr><th>Fecha Observación</th><th>Item</th><th>Almacén</th><th>Cantidad</th><th>Fecha Venta</th><th></th></tr></thead><tbody>';
+    lista.forEach(f => {
+      html += `<tr data-cua-item="${f.item_id}" data-cua-al="${f.almacen_id}" data-cua-cant="${f.cantidad}" data-cua-fecha="${f.fecha}">
+        <td>${f.fecha}</td>
+        <td>${esc(f.nombre)}</td>
+        <td>${esc(f.almacen_nombre)}</td>
+        <td style="font-weight:700;color:#e65100;">${f.cantidad}</td>
+        <td><input type="date" class="input-fecha-venta" value="${f.fecha}"></td>
+        <td><button class="btn-detalles" onclick="usarObservacionComoVenta(this)" style="background:#0f3460;color:#fff;">USAR COMO VENTA</button></td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+    body.innerHTML = html;
+    const mc = document.querySelector('.modal-content');
+    if (mc) mc.classList.add('modal-wide');
+    document.getElementById('modal').style.display = 'block';
+  }).catch(() => alert('Error al cargar la cuarentena'));
+}
+
+function usarObservacionComoVenta(btn) {
+  const tr = btn.closest('tr');
+  const item_id = parseInt(tr.dataset.cuaItem);
+  const almacen_id = parseInt(tr.dataset.cuaAl);
+  const cantidad = parseFloat(tr.dataset.cuaCant);
+  const fecha_observacion = tr.dataset.cuaFecha;
+  const fecha_venta = tr.querySelector('.input-fecha-venta').value;
+  if (!fecha_venta) { alert('Indica la fecha de la venta'); return; }
+  if (!confirm('¿Usar ' + cantidad + ' de este item como VENTA el ' + fecha_venta + '? Se registrará la venta y se liberará la observación.')) return;
+  btn.disabled = true; btn.textContent = 'Procesando...';
+  api('POST', '/api/reportes/accion/usar-venta', {
+    fecha_observacion, fecha_venta, item_id, almacen_id, cantidad, saved_by: currentUserName
+  }).then(() => {
+    showToast('Registrado como VENTA');
+    cerrarModal();
+    cargarReporteDiferencias();
+  }).catch(() => { btn.disabled = false; btn.textContent = 'USAR COMO VENTA'; alert('Error al usar como venta'); });
 }
 
 function cargarReporteDiferencias() {

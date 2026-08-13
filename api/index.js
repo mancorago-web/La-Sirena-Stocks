@@ -504,11 +504,9 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     if (r.nota_baja !== undefined) data.nota_baja = notaBaja;
     if (r.destino_salida !== undefined) data.destino_salida = String(r.destino_salida || '');
     if (r.transferencias !== undefined) data.transferencias = Array.isArray(r.transferencias) ? r.transferencias.map(t => ({ almacen_id: Number(t.almacen_id), cantidad: Number(t.cantidad) || 0 })) : [];
-    // Stock en observación: se fija explícitamente, o bien una venta se cubre con lo observado
+    // Stock en observación: solo se fija explícitamente (se libera manualmente con la accion "usar como venta")
     if (r.stock_observado !== undefined) {
       data.stock_observado = Math.max(0, Number(r.stock_observado) || 0);
-    } else if (r.total_ventas !== undefined || (prev.stock_observado || 0) > 0) {
-      data.stock_observado = Math.max(0, (prev.stock_observado || 0) - ventas);
     }
     data.stock_cierre = Math.round(cierre * 100) / 100;
     data.updated_at = new Date().toISOString();
@@ -3210,7 +3208,7 @@ app.post('/api/reportes/accion/baja', async (req, res) => {
 });
 
 // --- ACCION en REPORTES: convertir FALTA en OBSERVACION (cuarentena).
-// --- La proxima venta del item se cubre con la cantidad en observacion. ---
+// --- El item queda en observación; usarlo como venta es MANUAL (accion "usar-venta"). ---
 app.post('/api/reportes/accion/observacion', async (req, res) => {
   try {
     const { fecha, item_id, almacen_id, cantidad, saved_by } = req.body;
@@ -3234,6 +3232,93 @@ app.post('/api/reportes/accion/observacion', async (req, res) => {
       stock_observado: nuevoObservado,
     }], savedBy);
     res.json({ ok: true, movido: aMover, stock_observado: nuevoObservado });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- CUARENTENA: lista de items en observación (almacén + fecha + cantidad) ---
+app.get('/api/reportes/cuarentena', async (req, res) => {
+  try {
+    const [almsSnap, invSnap, diasSnap] = await Promise.all([
+      col('almacenes').get(),
+      col('inventario').get(),
+      col('inventario_diario').where('stock_observado', '>', 0).get(),
+    ]);
+    const alNombre = {};
+    almsSnap.docs.forEach(d => { alNombre[Number(d.id)] = d.data().nombre; });
+    const invByKey = {};
+    invSnap.docs.forEach(d => { const a = d.data(); invByKey[Number(a.almacen_id) + '_' + Number(a.item_id)] = a; });
+    const out = [];
+    diasSnap.docs.forEach(d => {
+      const a = d.data();
+      const obs = a.stock_observado || 0;
+      if (obs > 0) {
+        const inv = invByKey[Number(a.almacen_id) + '_' + Number(a.item_id)];
+        out.push({
+          fecha: a.fecha,
+          almacen_id: Number(a.almacen_id),
+          almacen_nombre: alNombre[Number(a.almacen_id)] || 'Almacén ' + a.almacen_id,
+          item_id: Number(a.item_id),
+          nombre: inv ? inv.nombre : String(a.item_id),
+          cantidad: obs,
+        });
+      }
+    });
+    out.sort((x, y) => String(y.fecha).localeCompare(String(x.fecha)));
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- ACCION en REPORTES: USAR COMO VENTA (manual) un item en observación ---
+app.post('/api/reportes/accion/usar-venta', async (req, res) => {
+  try {
+    const { fecha_observacion, fecha_venta, item_id, almacen_id, cantidad, saved_by } = req.body;
+    if (!fecha_observacion || !fecha_venta || !item_id || !almacen_id || !(Number(cantidad) > 0)) {
+      return res.status(400).json({ error: 'fecha_observacion, fecha_venta, item_id, almacen_id y cantidad son requeridos' });
+    }
+    const savedBy = saved_by || (req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown');
+    const al = Number(almacen_id);
+    const item = Number(item_id);
+    const redondear = n => Math.round(n * 100) / 100;
+
+    const diaObsId = docId('invdiario', fecha_observacion, al, item);
+    const obsSnap = await col('inventario_diario').doc(diaObsId).get();
+    const curObs = obsSnap.exists ? (obsSnap.data().stock_observado || 0) : 0;
+    const aMover = redondear(Math.min(Number(cantidad), curObs));
+    if (aMover <= 0) return res.status(400).json({ error: 'El item no tiene stock en observación en la fecha indicada' });
+
+    // 1) Liberar la observación
+    await guardarDiaInterno(fecha_observacion, [{
+      item_id: item, almacen_id: al,
+      stock_observado: redondear(curObs - aMover),
+    }], savedBy);
+
+    // 2) Registrar la venta en la fecha indicada
+    const diaVentaId = docId('invdiario', fecha_venta, al, item);
+    const ventaSnap = await col('inventario_diario').doc(diaVentaId).get();
+    const curVentas = ventaSnap.exists ? (ventaSnap.data().total_ventas || 0) : 0;
+    let stockApertura = null;
+    if (!ventaSnap.exists) {
+      let prevF = prevWorkingDay(fecha_venta);
+      for (let i = 0; i < 8; i++) {
+        const p = await col('inventario_diario').doc(docId('invdiario', prevF, al, item)).get();
+        if (p.exists) { stockApertura = p.data().stock_cierre ?? 0; break; }
+        prevF = prevWorkingDay(prevF);
+      }
+      if (stockApertura === null) {
+        const invSnap = await col('inventario').get();
+        const inv = invSnap.docs.find(dd => Number(dd.data().item_id) === item && Number(dd.data().almacen_id) === al);
+        stockApertura = inv ? (inv.data().stock_apertura || 0) : 0;
+      }
+    }
+    const regVenta = { item_id: item, almacen_id: al, total_ventas: redondear(curVentas + aMover) };
+    if (stockApertura !== null) regVenta.stock_apertura = stockApertura;
+    await guardarDiaInterno(fecha_venta, [regVenta], savedBy);
+
+    res.json({ ok: true, movido: aMover });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
