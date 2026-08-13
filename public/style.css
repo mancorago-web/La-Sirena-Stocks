@@ -44,6 +44,14 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .menu-cocina { grid-column: 3; grid-row: 2; }
 .menu-costos { grid-column: 4; grid-row: 2; }
 .menu-bd { grid-column: 4; grid-row: 1; }
+.category-btn.menu-bd {
+  background: #fff3e0;
+  border-color: #ffb74d;
+}
+.category-btn.menu-bd:hover { border-color: #fb8c00; box-shadow: 0 4px 16px rgba(251,140,0,0.2); }
+.category-btn.menu-bd .category-icon { color: #e65100; }
+.category-btn.menu-bd .category-label { color: #e65100; }
+.category-btn.menu-bd .category-desc { color: #a05a00; }
 .category-btn.menu-compras,
 .category-btn.menu-ventas {
   background: #e8f0fe; border-color: #90b4f0;
