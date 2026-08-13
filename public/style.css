@@ -43,6 +43,7 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .menu-barra { grid-column: 2; grid-row: 2; }
 .menu-cocina { grid-column: 3; grid-row: 2; }
 .menu-costos { grid-column: 4; grid-row: 2; }
+.menu-bd { grid-column: 4; grid-row: 1; }
 .category-btn.menu-compras,
 .category-btn.menu-ventas {
   background: #e8f0fe; border-color: #90b4f0;
@@ -405,7 +406,8 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .menu-stocks { grid-column: 1; grid-row: 2; }
   .menu-barra { grid-column: 2; grid-row: 2; }
   .menu-cocina { grid-column: 3; grid-row: 2; }
-  .menu-ventas { grid-column: 2; grid-row: 3; }
+  .menu-ventas { grid-column: 3; grid-row: 3; }
+  .menu-bd { grid-column: 2; grid-row: 3; }
   .menu-costos { grid-column: 2; grid-row: 4; }
   .flow-path { stroke-width: 2.5; opacity: 0.85; }
   .category-btn { min-height: 110px; padding: 0.7rem 0.3rem; }

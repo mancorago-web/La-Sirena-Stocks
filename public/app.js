@@ -220,6 +220,12 @@ function actualizarContadoresMenu() {
 window.addEventListener('resize', dibujarFlujoMenu);
 setTimeout(dibujarFlujoMenu, 300);
 
+function irBaseDatos() {
+  irACategoria('stocks');
+  const tab = document.querySelector('.tab[data-tab="precios"]');
+  if (tab) tab.click();
+}
+
 function irACategoria(cat) {
   document.getElementById('main-menu').style.display = 'none';
   document.getElementById('container').style.display = 'block';
