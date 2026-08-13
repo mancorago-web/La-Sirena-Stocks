@@ -2159,6 +2159,8 @@ function showModal(tipo, data) {
 }
 
 function cerrarModal() {
+  const mc = document.querySelector('.modal-content');
+  if (mc) mc.classList.remove('modal-wide');
   document.getElementById('modal').style.display = 'none';
 }
 
@@ -2432,6 +2434,8 @@ function abrirAccionesReportes() {
     });
     html += '</tbody></table></div>';
     body.innerHTML = html;
+    const mc = document.querySelector('.modal-content');
+    if (mc) mc.classList.add('modal-wide');
     document.getElementById('modal').style.display = 'block';
   }).catch(() => alert('Error al cargar los faltantes'));
 }
