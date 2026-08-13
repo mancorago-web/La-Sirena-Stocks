@@ -241,9 +241,12 @@ function abrirBaseDatosUnificada() {
   const body = document.getElementById('modal-body');
   const mc = document.querySelector('.modal-content');
   if (mc) mc.classList.add('modal-wide');
+  // El modal se abre AL INSTANTE (no espera a la carga), para que nunca "salte" sobre otra vista
   body.innerHTML = '<h3>BASE DE DATOS UNIFICADA</h3><p>Cargando...</p>';
   document.getElementById('modal').style.display = 'block';
+  const modalSigueAbierto = () => document.getElementById('modal').style.display === 'block';
   api('GET', '/api/basedatos/unificada').then(data => {
+    if (!modalSigueAbierto()) return;
     _bdUnificada = data || [];
     body.innerHTML = '<h3>BASE DE DATOS UNIFICADA</h3>'
       + '<p style="font-size:0.8rem;color:#888;margin-bottom:0.5rem;">Items de STOCKS, BARRA y COCINA en una sola lista, en orden alfabético. Los posibles duplicados se marcan en amarillo.</p>'
@@ -251,6 +254,7 @@ function abrirBaseDatosUnificada() {
       + '<div id="bd-unificada-wrap"></div>';
     renderBaseDatosUnificada();
   }).catch(err => {
+    if (!modalSigueAbierto()) return;
     console.error('Base de datos unificada:', err);
     body.innerHTML = '<h3>BASE DE DATOS UNIFICADA</h3><p style="color:#c62828;">No se pudo cargar la base de datos: ' + esc(err && err.message ? err.message : 'error desconocido') + '</p>';
   });
