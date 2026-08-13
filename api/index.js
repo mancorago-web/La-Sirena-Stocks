@@ -3073,6 +3073,105 @@ app.get('/api/reportes/diferencias', async (req, res) => {
   res.json(result);
 });
 
+// --- ACCIONES en REPORTES: items con FALTA por día (para poder convertirlos) ---
+app.get('/api/reportes/faltantes', async (req, res) => {
+  try {
+    let fechaInicio = req.query.fecha_inicio;
+    let fechaFin = req.query.fecha_fin;
+    if (!fechaInicio || !fechaFin) return res.json([]);
+    if (fechaInicio > fechaFin) [fechaInicio, fechaFin] = [fechaFin, fechaInicio];
+    const [almsSnap, invSnap, diasSnap] = await Promise.all([
+      col('almacenes').get(),
+      col('inventario').get(),
+      col('inventario_diario').where('fecha', '>=', fechaInicio).where('fecha', '<=', fechaFin).get(),
+    ]);
+    const alNombre = {};
+    almsSnap.docs.forEach(d => { alNombre[Number(d.id)] = d.data().nombre; });
+    const invByKey = {};
+    invSnap.docs.forEach(d => { const a = d.data(); invByKey[Number(a.almacen_id) + '_' + Number(a.item_id)] = a; });
+    const out = [];
+    diasSnap.docs.forEach(d => {
+      const a = d.data();
+      const f = a.falta_almacen || 0;
+      if (f > 0) {
+        const inv = invByKey[Number(a.almacen_id) + '_' + Number(a.item_id)];
+        out.push({
+          fecha: a.fecha,
+          almacen_id: Number(a.almacen_id),
+          almacen_nombre: alNombre[Number(a.almacen_id)] || 'Almacén ' + a.almacen_id,
+          item_id: Number(a.item_id),
+          nombre: inv ? inv.nombre : String(a.item_id),
+          falta: f,
+        });
+      }
+    });
+    out.sort((x, y) => String(y.fecha).localeCompare(String(x.fecha)));
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- ACCION en REPORTES: convertir FALTA en SALIDA A COCINA (registrada el dia real) ---
+app.post('/api/reportes/accion/salida-cocina', async (req, res) => {
+  try {
+    const { fecha_falta, fecha_salida, item_id, almacen_id, cantidad, saved_by } = req.body;
+    if (!fecha_falta || !fecha_salida || !item_id || !almacen_id || !(Number(cantidad) > 0)) {
+      return res.status(400).json({ error: 'fecha_falta, fecha_salida, item_id, almacen_id y cantidad son requeridos' });
+    }
+    const savedBy = saved_by || (req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown');
+    const al = Number(almacen_id);
+    const item = Number(item_id);
+    const redondear = n => Math.round(n * 100) / 100;
+
+    const diaSalidaId = docId('invdiario', fecha_salida, al, item);
+    const diaFaltaId = docId('invdiario', fecha_falta, al, item);
+    const [diaSalidaSnap, diaFaltaSnap] = await Promise.all([
+      col('inventario_diario').doc(diaSalidaId).get(),
+      col('inventario_diario').doc(diaFaltaId).get(),
+    ]);
+    const curSalida = diaSalidaSnap.exists ? (diaSalidaSnap.data().salida_almacen || 0) : 0;
+    const curFalta = diaFaltaSnap.exists ? (diaFaltaSnap.data().falta_almacen || 0) : 0;
+    const aMover = redondear(Math.min(Number(cantidad), curFalta));
+    if (aMover <= 0) return res.status(400).json({ error: 'El item no tiene falta en la fecha indicada' });
+
+    // Apertura para el día real de salida si aún no tiene registro diario
+    let stockApertura = null;
+    if (!diaSalidaSnap.exists) {
+      let prevF = prevWorkingDay(fecha_salida);
+      for (let i = 0; i < 8; i++) {
+        const p = await col('inventario_diario').doc(docId('invdiario', prevF, al, item)).get();
+        if (p.exists) { stockApertura = p.data().stock_cierre ?? 0; break; }
+        prevF = prevWorkingDay(prevF);
+      }
+      if (stockApertura === null) {
+        const invSnap = await col('inventario').get();
+        const inv = invSnap.docs.find(d => Number(d.data().item_id) === item && Number(d.data().almacen_id) === al);
+        stockApertura = inv ? (inv.data().stock_apertura || 0) : 0;
+      }
+    }
+
+    // 1) Registrar la salida a COCINA en el día real
+    const regSalida = {
+      item_id: item, almacen_id: al,
+      salida_almacen: redondear(curSalida + aMover),
+      destino_salida: 'cocina',
+    };
+    if (stockApertura !== null) regSalida.stock_apertura = stockApertura;
+    await guardarDiaInterno(fecha_salida, [regSalida], savedBy);
+
+    // 2) Quitar la falta del día donde se detectó
+    await guardarDiaInterno(fecha_falta, [{
+      item_id: item, almacen_id: al,
+      falta_almacen: redondear(curFalta - aMover),
+    }], savedBy);
+
+    res.json({ ok: true, movido: aMover, nueva_falta: redondear(curFalta - aMover) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- AUTH CHECK ---
 app.get('/api/check-auth', authMiddleware, (req, res) => {
   res.json({ ok: true, name: req.user.name || null, email: req.user.email });

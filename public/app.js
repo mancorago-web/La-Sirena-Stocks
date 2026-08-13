@@ -2396,6 +2396,65 @@ function renderReporteTabla(items, titulo) {
   </div>`;
 }
 
+function prevWorkingDayStr(fecha) {
+  const d = new Date(fecha + 'T12:00:00');
+  d.setDate(d.getDate() - 1);
+  while (d.getDay() === 2) d.setDate(d.getDate() - 1);
+  return d.toISOString().split('T')[0];
+}
+
+function abrirAccionesReportes() {
+  const ini = document.getElementById('reporte-fecha-ini')?.value;
+  const fin = document.getElementById('reporte-fecha-fin')?.value;
+  if (!ini || !fin) { alert('Selecciona el rango de fechas del reporte (Desde/Hasta)'); return; }
+  api('GET', '/api/reportes/faltantes?fecha_inicio=' + ini + '&fecha_fin=' + fin).then(faltantes => {
+    const body = document.getElementById('modal-body');
+    if (!faltantes.length) {
+      body.innerHTML = '<h3>ACCIONES</h3><p>No hay items con FALTA en el rango seleccionado.</p>';
+      document.getElementById('modal').style.display = 'block';
+      return;
+    }
+    let html = '<h3>ACCIONES — Items con FALTA</h3>';
+    html += '<p style="font-size:0.8rem;color:#888;margin-bottom:0.6rem;">Convierte una falta en <strong>SALIDA A COCINA</strong>. La fecha real de salida se pre-llena con el día hábil anterior a la falta; ajústala si fue otra.</p>';
+    html += '<div class="table-wrap"><table><thead><tr><th>Fecha Falta</th><th>Item</th><th>Almacén</th><th>Falta</th><th>Fecha Real Salida</th><th></th></tr></thead><tbody>';
+    faltantes.forEach(f => {
+      html += `<tr data-accion-item="${f.item_id}" data-accion-al="${f.almacen_id}" data-accion-falta="${f.falta}" data-accion-fecha="${f.fecha}">
+        <td>${f.fecha}</td>
+        <td>${esc(f.nombre)}</td>
+        <td>${esc(f.almacen_nombre)}</td>
+        <td style="color:red;font-weight:700;">${f.falta}</td>
+        <td><input type="date" class="input-fecha-salida" value="${prevWorkingDayStr(f.fecha)}"></td>
+        <td><button class="btn-detalles" onclick="convertirFaltaACocina(this)" style="background:#2e7d32;color:#fff;">→ COCINA</button></td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+    body.innerHTML = html;
+    document.getElementById('modal').style.display = 'block';
+  }).catch(() => alert('Error al cargar los faltantes'));
+}
+
+function convertirFaltaACocina(btn) {
+  const tr = btn.closest('tr');
+  const item_id = parseInt(tr.dataset.accionItem);
+  const almacen_id = parseInt(tr.dataset.accionAl);
+  const cantidad = parseFloat(tr.dataset.accionFalta);
+  const fecha_falta = tr.dataset.accionFecha;
+  const fecha_salida = tr.querySelector('.input-fecha-salida').value;
+  if (!fecha_salida) { alert('Indica la fecha real en que salió el item'); return; }
+  if (!confirm('¿Convertir la falta de ' + cantidad + ' en SALIDA A COCINA el ' + fecha_salida + '?')) return;
+  btn.disabled = true; btn.textContent = 'Procesando...';
+  api('POST', '/api/reportes/accion/salida-cocina', {
+    fecha_falta, fecha_salida, item_id, almacen_id, cantidad, saved_by: currentUserName
+  }).then(() => {
+    showToast('Convertido a SALIDA A COCINA');
+    cerrarModal();
+    cargarReporteDiferencias();
+  }).catch(() => {
+    btn.disabled = false; btn.textContent = '→ COCINA';
+    alert('Error al convertir');
+  });
+}
+
 function cargarReporteDiferencias() {
   const ini = document.getElementById('reporte-fecha-ini')?.value;
   const fin = document.getElementById('reporte-fecha-fin')?.value;
