@@ -6,14 +6,16 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .nav-logo { font-size: 1.5rem; font-weight: 700; letter-spacing: 1px; display: flex; flex-direction: column; align-items: center; line-height: 1.1; flex-shrink: 0; }
 .nav-logo-sub { font-family: 'Segoe Script','Brush Script MT',cursive; font-weight: 400; font-size: 1rem; text-transform: none; }
 .nav-brand {
+  position: fixed; bottom: 0.75rem; right: 0.75rem; z-index: 999;
   display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
   text-decoration: none; color: #fff; flex-shrink: 0;
-  background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3);
-  border-radius: 8px; padding: 0.15rem 0.55rem; line-height: 1.05; cursor: pointer;
+  background: rgba(26,35,126,0.9); border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 8px; padding: 0.2rem 0.6rem; line-height: 1.05; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 .nav-brand-name { font-size: 0.85rem; font-weight: 800; letter-spacing: 1.5px; }
 .nav-brand-url { font-size: 0.58rem; opacity: 0.85; }
-.nav-brand:hover { background: rgba(255,255,255,0.2); }
+.nav-brand:hover { background: rgba(26,35,126,1); }
 .tabs { display: flex; gap: 0.5rem; }
 .tab { background: transparent; color: #ccc; border: none; padding: 0.5rem 1rem; cursor: pointer; font-size: 0.9rem; border-radius: 4px; }
 .tab:hover { background: rgba(255,255,255,0.1); color: #fff; }
