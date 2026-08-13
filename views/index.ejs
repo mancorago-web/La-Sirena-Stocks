@@ -549,6 +549,17 @@
       <div id="busqueda-ventas-result"></div>
     </div>
 
+    <div id="tab-basedatos-unificada" class="tab-content">
+      <div class="header-actions">
+        <h2>Base de Datos Unificada</h2>
+        <div class="controles-dia">
+          <input type="text" id="buscar-bd-unificada" placeholder="Buscar item..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:250px;" oninput="renderBaseDatosUnificada()">
+        </div>
+      </div>
+      <div style="font-size:0.8rem;color:#888;margin-bottom:0.5rem;">Items de STOCKS, BARRA y COCINA en una sola lista, en orden alfabético. Los posibles duplicados se marcan en amarillo.</div>
+      <div id="bd-unificada-wrap"></div>
+    </div>
+
     <div id="modal" class="modal">
     <div class="modal-content">
       <span class="close" onclick="cerrarModal()">&times;</span>

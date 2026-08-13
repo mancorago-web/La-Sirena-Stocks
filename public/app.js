@@ -192,6 +192,8 @@ function refrescarVista() {
     else cargarVentasCentral();
   } else if (v.cat === 'compras') {
     cargarCompras();
+  } else if (v.cat === 'basedatos') {
+    cargarBaseDatosUnificada();
   } else if (v.cat === 'costos' && v.pestana) {
     cargarCostoCategoria(v.pestana);
   }
@@ -221,7 +223,18 @@ window.addEventListener('resize', dibujarFlujoMenu);
 setTimeout(dibujarFlujoMenu, 300);
 
 function irBaseDatos() {
-  abrirBaseDatosUnificada();
+  // Cerrar cualquier modal abierto
+  const modalEl = document.getElementById('modal');
+  if (modalEl) modalEl.style.display = 'none';
+  document.getElementById('main-menu').style.display = 'none';
+  document.getElementById('container').style.display = 'block';
+  document.getElementById('btn-back').style.display = '';
+  window.__vista = { cat: 'basedatos' };
+  document.querySelectorAll('.tabs-bar').forEach(tb => tb.style.display = 'none');
+  document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+  const tab = document.getElementById('tab-basedatos-unificada');
+  if (tab) tab.classList.add('active');
+  cargarBaseDatosUnificada();
 }
 
 const BD_STOPWORDS = ['DE','DEL','LA','EL','LOS','LAS','Y','X','CON','SIN','EN','A','AL','E','O','PEDRO','MANUEL','BOTELLA','BOT','LATA','FRASCO','POTE','PAQUETE','CAJA','SOBRE','ROLLO','BOLSA','BOL'];
@@ -237,26 +250,16 @@ function bdNormKey(n) {
 }
 
 let _bdUnificada = [];
-function abrirBaseDatosUnificada() {
-  const body = document.getElementById('modal-body');
-  const mc = document.querySelector('.modal-content');
-  if (mc) mc.classList.add('modal-wide');
-  // El modal se abre AL INSTANTE (no espera a la carga), para que nunca "salte" sobre otra vista
-  body.innerHTML = '<h3>BASE DE DATOS UNIFICADA</h3><p>Cargando...</p>';
-  document.getElementById('modal').style.display = 'block';
-  const modalSigueAbierto = () => document.getElementById('modal').style.display === 'block';
+function cargarBaseDatosUnificada() {
+  const wrap = document.getElementById('bd-unificada-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<p>Cargando...</p>';
   api('GET', '/api/basedatos/unificada').then(data => {
-    if (!modalSigueAbierto()) return;
     _bdUnificada = data || [];
-    body.innerHTML = '<h3>BASE DE DATOS UNIFICADA</h3>'
-      + '<p style="font-size:0.8rem;color:#888;margin-bottom:0.5rem;">Items de STOCKS, BARRA y COCINA en una sola lista, en orden alfabético. Los posibles duplicados se marcan en amarillo.</p>'
-      + '<div style="margin-bottom:0.6rem;"><input type="text" id="buscar-bd-unificada" placeholder="Buscar item..." style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;" oninput="renderBaseDatosUnificada()"></div>'
-      + '<div id="bd-unificada-wrap"></div>';
     renderBaseDatosUnificada();
   }).catch(err => {
-    if (!modalSigueAbierto()) return;
     console.error('Base de datos unificada:', err);
-    body.innerHTML = '<h3>BASE DE DATOS UNIFICADA</h3><p style="color:#c62828;">No se pudo cargar la base de datos: ' + esc(err && err.message ? err.message : 'error desconocido') + '</p>';
+    wrap.innerHTML = '<p style="color:#c62828;">No se pudo cargar la base de datos: ' + esc(err && err.message ? err.message : 'error desconocido') + '</p>';
   });
 }
 
