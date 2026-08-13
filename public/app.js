@@ -302,27 +302,6 @@ function api(method, url, data) {
   });
 }
 
-let _modoConteo = false;
-function toggleModoConteo() {
-  _modoConteo = !_modoConteo;
-  const btn = document.getElementById('btn-modo-conteo');
-  if (btn) {
-    btn.textContent = _modoConteo ? '📋 TABLA' : '🔢 CONTEO';
-    btn.style.background = _modoConteo ? '#1a237e' : '';
-    btn.style.color = '#fff';
-  }
-  cargarAlmacenes(document.getElementById('fecha-almacenes')?.value);
-}
-
-function itemRowConteo(i, a) {
-  return `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
-    <td class="celda-item-conteo">${i.nombre}</td>
-    <td class="num-conteo">${i.stock_apertura || 0}</td>
-    <td class="num-conteo num-falta-conteo">${i.falta_almacen || 0}</td>
-    <td class="num-conteo cierre-conteo">${i.stock_cierre || 0}</td>
-  </tr>`;
-}
-
 function itemRow(i, a) {
   return `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
     <td>${i.nombre}</td>
@@ -1015,11 +994,6 @@ function registrarVentasFilas(filas, onDone) {
 }
 
 function guardarDia() {
-  if (_modoConteo) {
-    alert('Para guardar cambios, cambia al modo TABLA.');
-    toggleModoConteo();
-    return;
-  }
   const fecha = document.getElementById('fecha-almacenes').value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
   const registros = [];
@@ -1126,18 +1100,16 @@ function cargarAlmacenes(fecha) {
         <div class="accordion-body">
           ${a.items.length ? `
             <div class="table-wrap">
-            <table class="${_modoConteo ? 'table-conteo' : ''}">
-              <thead><tr>${_modoConteo
-                ? '<th>Item</th><th>Apertura</th><th>Falta</th><th>Cierre</th>'
-                : '<th>Item</th><th>Stock Total Apertura</th><th>Ingreso</th><th>Salida Almacén</th><th>Total Ventas</th><th>Falta</th><th>Stock Total Cierre</th><th></th>'}</tr></thead>
+            <table class="table-sticky">
+              <thead><tr><th>Item</th><th>Stock Total Apertura</th><th>Ingreso</th><th>Salida Almacén</th><th>Total Ventas</th><th>Falta</th><th>Stock Total Cierre</th><th></th></tr></thead>
               <tbody>
                 ${a.secciones.map(s => s.items.length ? `
-                  <tr class="section-header"><td colspan="${_modoConteo ? 4 : 8}">— ${s.label} —</td></tr>
-                  ${s.items.map(i => _modoConteo ? itemRowConteo(i, a) : itemRow(i, a)).join('')}
+                  <tr class="section-header"><td colspan="8">— ${s.label} —</td></tr>
+                  ${s.items.map(i => itemRow(i, a)).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="${_modoConteo ? 4 : 8}">— OTROS —</td></tr>
-                  ${a.otros.map(i => _modoConteo ? itemRowConteo(i, a) : itemRow(i, a)).join('')}
+                  <tr class="section-header"><td colspan="8">— OTROS —</td></tr>
+                  ${a.otros.map(i => itemRow(i, a)).join('')}
                 ` : ''}
               </tbody>
             </table>
@@ -1150,8 +1122,7 @@ function cargarAlmacenes(fecha) {
     const ba = document.getElementById('buscar-item');
     if (ba && ba.value) buscarEnTabla(ba.value, 'accordion-almacenes');
     container.querySelectorAll('tr[data-item-id]').forEach(tr => {
-      const ap = tr.querySelector('.input-apertura');
-      if (ap) calcCierre(ap);
+      calcCierre(tr.querySelector('.input-apertura'));
     });
     openIds.forEach(id => {
       const item = container.querySelector(`.accordion-item[data-almacen-id="${id}"]`);

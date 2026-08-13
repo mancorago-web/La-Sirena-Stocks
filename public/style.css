@@ -291,13 +291,21 @@ td button.danger { border-color: #c62828; color: #c62828; }
   min-width: 90px;
 }
 
-/* Modo conteo: Item | Apertura | Falta | Cierre en una sola pantalla */
-.table-conteo { width: 100%; }
-.table-conteo th, .table-conteo td { text-align: center; }
-.table-conteo td.celda-item-conteo { text-align: left; font-size: 0.78rem; min-width: 0; word-break: break-word; }
-.table-conteo td.num-conteo { font-weight: 700; font-size: 1.05rem; white-space: nowrap; color: #0f3460; }
-.table-conteo td.num-falta-conteo { color: #e65100; }
-.table-conteo td.cierre-conteo { color: #1a237e; background: #e8eaf6; border-radius: 6px; }
+/* Columnas ancladas: Item + Stock Total Apertura siempre visibles, el resto se desplaza horizontalmente */
+.table-sticky th, .table-sticky td { white-space: nowrap; }
+.table-sticky th:nth-child(1),
+.table-sticky td:nth-child(1) {
+  position: sticky; left: 0; z-index: 2;
+  min-width: 150px; max-width: 160px;
+  background: #fff; box-shadow: 2px 0 4px rgba(0,0,0,0.08);
+}
+.table-sticky th:nth-child(2),
+.table-sticky td:nth-child(2) {
+  position: sticky; left: 150px; z-index: 2;
+  min-width: 78px; max-width: 90px;
+  background: #fff;
+}
+.table-sticky tr.section-header td { position: static; }
 .cierre-verde { background-color: #c8e6c9 !important; }
 .cierre-amarillo { background-color: #fff9c4 !important; }
 .input-cierre[readonly] { cursor: default; font-weight: 600; }
