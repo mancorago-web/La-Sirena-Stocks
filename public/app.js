@@ -300,6 +300,9 @@ function irACategoria(cat) {
   // Cerrar cualquier modal abierto para que nunca salte sobre otra vista
   const modalEl = document.getElementById('modal');
   if (modalEl) modalEl.style.display = 'none';
+  // La marca BLAKBOX solo se muestra en el menú principal
+  const brandEl = document.querySelector('.nav-brand');
+  if (brandEl) brandEl.style.display = 'none';
   document.getElementById('main-menu').style.display = 'none';
   document.getElementById('container').style.display = 'block';
   document.getElementById('btn-back').style.display = '';
@@ -340,6 +343,8 @@ function irACategoria(cat) {
   }
 }
 function volverMenu() {
+  const brandEl = document.querySelector('.nav-brand');
+  if (brandEl) brandEl.style.display = '';
   document.getElementById('main-menu').style.display = '';
   document.getElementById('container').style.display = 'none';
   document.querySelectorAll('.tabs-bar').forEach(tb => tb.style.display = 'none');
