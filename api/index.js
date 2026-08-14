@@ -474,18 +474,58 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
       });
     }
   });
+
+  // --- Auto-apertura de botellas para cubrir ventas de COPAS ---
+  // Si se venden copas de un item "X - COPA" y el stock de copas no alcanza, se abre
+  // automáticamente una botella del item "X - BOTELLA" del mismo almacén (1 botella = 5 copas).
+  const COPAS_POR_BOTELLA = 5;
+  const ajusteCopa = {};    // al_item -> copas extra (ingreso de la copa)
+  const ajusteBotella = {}; // al_item -> botellas abiertas (salida de la botella)
+  for (const r of registros) {
+    if (r.total_ventas === undefined) continue;
+    const ventasReg = parseFloat(r.total_ventas) || 0;
+    if (ventasReg <= 0) continue;
+    const invCopa = invDocMap[Number(r.almacen_id) + '_' + Number(r.item_id)];
+    if (!invCopa || !/ - COPA$/i.test(String(invCopa.nombre || ''))) continue;
+    const copaKey = Number(r.almacen_id) + '_' + Number(r.item_id);
+    const copaId = docId('invdiario', fecha, Number(r.almacen_id), Number(r.item_id));
+    const dc = dayDocs[copaId] || {};
+    // Copas disponibles para VENDER hoy (sin restar las ventas ya registradas): apertura + ingreso - salida - falta - baja
+    const dispCopa = (dc.stock_apertura || 0) + (dc.stock_ingreso || 0) + (ajusteCopa[copaKey] || 0) - (dc.salida_almacen || 0) - (dc.falta_almacen || 0) - (dc.stock_baja || 0);
+    const faltante = Math.max(0, ventasReg - dispCopa);
+    if (faltante <= 0) continue;
+    const base = String(invCopa.nombre).replace(/ - COPA$/i, '');
+    const botNombre = base + ' - BOTELLA';
+    const botInv = invSnap.docs.find(d => Number(d.data().almacen_id) === Number(r.almacen_id) && String(d.data().nombre || '').trim().toUpperCase() === botNombre.trim().toUpperCase());
+    if (!botInv) continue;
+    const botKey = Number(r.almacen_id) + '_' + Number(botInv.data().item_id);
+    const botId = docId('invdiario', fecha, Number(r.almacen_id), Number(botInv.data().item_id));
+    const dbot = dayDocs[botId] || {};
+    const dispBot = (dbot.stock_apertura || 0) + (dbot.stock_ingreso || 0) - (dbot.salida_almacen || 0) - (dbot.total_ventas || 0) - (dbot.falta_almacen || 0) - (dbot.stock_baja || 0) - (ajusteBotella[botKey] || 0);
+    const necesarias = Math.ceil(faltante / COPAS_POR_BOTELLA);
+    const aAbrir = Math.min(necesarias, Math.max(0, dispBot));
+    if (aAbrir > 0) {
+      ajusteCopa[copaKey] = (ajusteCopa[copaKey] || 0) + aAbrir * COPAS_POR_BOTELLA;
+      ajusteBotella[botKey] = (ajusteBotella[botKey] || 0) + aAbrir;
+    }
+  }
+
   for (const r of registros) {
     const id = docId('invdiario', fecha, r.almacen_id, r.item_id);
     const prev = existentes[id] || {};
 
     // Merge incoming with existing — only override fields that were actually sent
     const apertura = r.stock_apertura !== undefined ? (parseFloat(r.stock_apertura) || 0) : (prev.stock_apertura || 0);
-    const ingreso = r.stock_ingreso !== undefined ? (parseFloat(r.stock_ingreso) || 0) : (prev.stock_ingreso || 0);
-    const salida = r.salida_almacen !== undefined ? (parseFloat(r.salida_almacen) || 0) : (prev.salida_almacen || 0);
+    let ingreso = r.stock_ingreso !== undefined ? (parseFloat(r.stock_ingreso) || 0) : (prev.stock_ingreso || 0);
+    let salida = r.salida_almacen !== undefined ? (parseFloat(r.salida_almacen) || 0) : (prev.salida_almacen || 0);
     const ventas = r.total_ventas !== undefined ? (parseFloat(r.total_ventas) || 0) : (prev.total_ventas || 0);
     const falta = r.falta_almacen !== undefined ? (parseFloat(r.falta_almacen) || 0) : (prev.falta_almacen || 0);
     const baja = r.stock_baja !== undefined ? (parseFloat(r.stock_baja) || 0) : (prev.stock_baja || 0);
     const notaBaja = r.nota_baja !== undefined ? (r.nota_baja || '') : (prev.nota_baja || '');
+    const clave = Number(r.almacen_id) + '_' + Number(r.item_id);
+    // Ajustes por auto-apertura de botella (copa recibe ingreso, botella registra salida)
+    if (ajusteCopa[clave]) ingreso += ajusteCopa[clave];
+    if (ajusteBotella[clave]) salida += ajusteBotella[clave];
     const cierre = apertura + ingreso - salida - ventas - falta - baja;
     const cierreR = Math.round(cierre * 100) / 100;
 
@@ -509,6 +549,9 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     if (r.nota_baja !== undefined) data.nota_baja = notaBaja;
     if (r.destino_salida !== undefined) data.destino_salida = String(r.destino_salida || '');
     if (r.transferencias !== undefined) data.transferencias = Array.isArray(r.transferencias) ? r.transferencias.map(t => ({ almacen_id: Number(t.almacen_id), cantidad: Number(t.cantidad) || 0 })) : [];
+    // Si hubo auto-apertura de botella, forzar la escritura del ingreso (copa) o salida (botella)
+    if (ajusteCopa[clave]) data.stock_ingreso = Math.round(ingreso * 100) / 100;
+    if (ajusteBotella[clave]) data.salida_almacen = Math.round(salida * 100) / 100;
     // Stock en observación: solo se fija explícitamente (se libera manualmente con la accion "usar como venta")
     if (r.stock_observado !== undefined) {
       data.stock_observado = Math.max(0, Number(r.stock_observado) || 0);
@@ -568,6 +611,27 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
       saved_by: savedBy, updated_at: new Date().toISOString()
     }, { merge: true });
     changedKeys.add(destAl + '_' + destItemId);
+  }
+
+  // Botellas abiertas que NO vienen en los registros del guardado: escribirlas directamente
+  for (const [botKey, abertura] of Object.entries(ajusteBotella)) {
+    if (!abertura || abertura <= 0) continue;
+    const us = botKey.indexOf('_');
+    const alBot = Number(botKey.slice(0, us));
+    const botItem = Number(botKey.slice(us + 1));
+    const botId = docId('invdiario', fecha, alBot, botItem);
+    if (existentes[botId]) continue; // ya lo procesó el loop
+    const dbot = dayDocs[botId] || {};
+    const nuevaSalida = Math.round(((dbot.salida_almacen || 0) + abertura) * 100) / 100;
+    const cierreBot = Math.round(((dbot.stock_apertura || 0) + (dbot.stock_ingreso || 0) - nuevaSalida - (dbot.total_ventas || 0) - (dbot.falta_almacen || 0) - (dbot.stock_baja || 0)) * 100) / 100;
+    batch.set(col('inventario_diario').doc(botId), {
+      fecha, item_id: botItem, almacen_id: alBot,
+      stock_apertura: dbot.stock_apertura || 0, stock_ingreso: dbot.stock_ingreso || 0,
+      salida_almacen: nuevaSalida, total_ventas: dbot.total_ventas || 0,
+      falta_almacen: dbot.falta_almacen || 0, stock_baja: dbot.stock_baja || 0,
+      stock_cierre: cierreBot, updated_at: new Date().toISOString()
+    }, { merge: true });
+    changedKeys.add(alBot + '_' + botItem);
   }
 
   await batch.commit();
