@@ -265,6 +265,22 @@ function cargarBaseDatosUnificada() {
   });
 }
 
+const _BD_CATEGORIAS = [
+  { label: 'AGUAS', test: n => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS/i.test(n) },
+  { label: 'GASEOSAS', test: n => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS/i.test(n) },
+  { label: 'KOMBUCHAS', test: n => /^KOMBUCHA/i.test(n) },
+  { label: 'CERVEZAS', test: n => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(n) },
+  { label: 'VINOS', test: n => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS|VERMOUTH CINZANO/i.test(n) },
+  { label: 'BARRA', test: n => /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF|PISCO PORTON ACHOLADO/i.test(n) },
+  { label: 'LACTEOS', test: n => /NESTLE LECHE CONDENSADA|NESTLE - CREMA DE LECHE|LA TABERNA CREMA DE COCO|GLORIA LECHE EVAPORDA|GLORIA LECHE CAJA|LECHE DE COCO|LECHE EVAPORADA DE COCO|LECHE PURA VIDA|BOLSA MANTEQUILLA|CREMA DE COCO|QUESO PARMESANO|GRAN PADANO/i.test(n) },
+  { label: 'SERVICIO', test: n => /SERVILLETAS|SCOTCH BRITE|MICROFIBER CLOTHS|NUBE - PAPEL HIGIENICO/i.test(n) },
+  { label: 'DELIVERY', test: n => /TUPPER TRANSPARENTE RECTANGULAR|TUPPER REDONDO GRANDES|TUPPER REDONDO CHICO/i.test(n) },
+];
+function bdCategoria(nombre) {
+  for (const c of _BD_CATEGORIAS) { if (c.test(nombre)) return c.label; }
+  return 'COCINA';
+}
+
 function renderBaseDatosUnificada() {
   const q = (document.getElementById('buscar-bd-unificada')?.value || '').trim().toLowerCase();
   const wrap = document.getElementById('bd-unificada-wrap');
@@ -289,29 +305,40 @@ function renderBaseDatosUnificada() {
   gruposDup.forEach(keys => { if (keys.length > 1) keys.forEach(k => esDup.add(k)); });
   const claves = [...grupos.keys()].sort((a, b) => a.localeCompare(b));
   if (!claves.length) { wrap.innerHTML = '<p>Sin resultados.</p>'; return; }
+  // Agrupar los items por título (AGUAS, GASEOSAS, ..., COCINA)
+  const porCategoria = new Map();
+  claves.forEach(k => {
+    const label = bdCategoria(grupos.get(k).nombre);
+    if (!porCategoria.has(label)) porCategoria.set(label, []);
+    porCategoria.get(label).push(k);
+  });
   let html = '<div style="margin-bottom:0.6rem;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">'
     + '<button class="btn-guardar-dia" onclick="unificarItemsBaseDatos()" style="width:auto;">🔗 UNIFICAR</button>'
     + '<span style="font-size:0.8rem;color:#888;">Marca los items que son el mismo producto y presiona UNIFICAR (se usará 1 solo nombre en toda la app).</span></div>';
-  html += '<div class="table-wrap"><table><thead><tr><th></th><th>Item</th><th>Zonas</th><th>Unidad Compra</th><th>Precio Compra</th><th>Unidad Venta</th><th>Precio Venta</th><th></th></tr></thead><tbody>';
-  claves.forEach(k => {
-    const g = grupos.get(k);
-    const zonas = [...new Set(g.items.map(x => x.zona))].join(' · ');
-    const dup = esDup.has(k);
-    const primero = g.items[0];
-    html += `<tr style="${dup ? 'background:#fff9c4;' : ''}">
-      <td><input type="checkbox" class="chk-bd-unificar" data-nombre="${esc(g.nombre)}" title="Marcar para unificar"></td>
-      <td>${esc(g.nombre)}${dup ? ' <span class="badge-observacion" style="background:#f57f17;">DUP</span>' : ''}</td>
-      <td><span class="badge-zona">${zonas}</span></td>
-      <td>${esc(primero.unidad_compra || '—')}</td>
-      <td>${primero.precio_compra || 0}</td>
-      <td>${esc(primero.unidad_venta || '—')}</td>
-      <td>${primero.precio_venta || 0}</td>
-      <td style="white-space:nowrap;">
-        <button onclick="editarItemBaseDatos('${primero.origen}', ${primero.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.75rem;">EDITAR</button>
-      </td>
-    </tr>`;
+  porCategoria.forEach((ks, label) => {
+    html += '<div class="diff-almacen">';
+    html += '<div class="diff-header" onclick="toggleAcordeon(this)"><span class="accordion-title">' + label + ' <span style="font-weight:400;font-size:0.85rem;color:#777;">(' + ks.length + ')</span></span><span class="accordion-arrow">▶</span></div>';
+    html += '<div class="accordion-body open"><div class="table-wrap"><table><thead><tr><th></th><th>Item</th><th>Zonas</th><th>Unidad Compra</th><th>Precio Compra</th><th>Unidad Venta</th><th>Precio Venta</th><th></th></tr></thead><tbody>';
+    ks.forEach(k => {
+      const g = grupos.get(k);
+      const zonas = [...new Set(g.items.map(x => x.zona))].join(' · ');
+      const dup = esDup.has(k);
+      const primero = g.items[0];
+      html += `<tr style="${dup ? 'background:#fff9c4;' : ''}">
+        <td><input type="checkbox" class="chk-bd-unificar" data-nombre="${esc(g.nombre)}" title="Marcar para unificar"></td>
+        <td>${esc(g.nombre)}${dup ? ' <span class="badge-observacion" style="background:#f57f17;">DUP</span>' : ''}</td>
+        <td><span class="badge-zona">${zonas}</span></td>
+        <td>${esc(primero.unidad_compra || '—')}</td>
+        <td>${primero.precio_compra || 0}</td>
+        <td>${esc(primero.unidad_venta || '—')}</td>
+        <td>${primero.precio_venta || 0}</td>
+        <td style="white-space:nowrap;">
+          <button onclick="editarItemBaseDatos('${primero.origen}', ${primero.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.75rem;">EDITAR</button>
+        </td>
+      </tr>`;
+    });
+    html += '</tbody></table></div></div></div>';
   });
-  html += '</tbody></table></div>';
   html += '<p style="font-size:0.8rem;color:#666;margin-top:0.5rem;">Total: <strong>' + claves.length + '</strong> items · candidatos a unificar: <strong style="color:#f57f17;">' + esDup.size + '</strong></p>';
   wrap.innerHTML = html;
 }
