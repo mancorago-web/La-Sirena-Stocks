@@ -250,6 +250,8 @@ function bdNormKey(n) {
 }
 
 let _bdUnificada = [];
+let _bdNoDup = [];
+try { _bdNoDup = JSON.parse(localStorage.getItem('bd_no_dup') || '[]'); } catch (e) { _bdNoDup = []; }
 function cargarBaseDatosUnificada() {
   const wrap = document.getElementById('bd-unificada-wrap');
   if (!wrap) return;
@@ -295,7 +297,9 @@ function renderBaseDatosUnificada() {
   // Posibles duplicados: dos NOMBRES distintos que normalizados coinciden (candidatos a unificar)
   const gruposDup = new Map();
   [...grupos.keys()].forEach(k => {
-    const nk = bdNormKey(grupos.get(k).nombre);
+    const gNombre = grupos.get(k).nombre;
+    if (_bdNoDup.includes(String(gNombre || '').trim().toUpperCase())) return; // usuario descartó el duplicado
+    const nk = bdNormKey(gNombre);
     if (!nk) return;
     if (!gruposDup.has(nk)) gruposDup.set(nk, []);
     gruposDup.get(nk).push(k);
@@ -2790,11 +2794,24 @@ function editarItemBaseDatos(origen, id) {
     + '<label>Precio Compra: <input id="bd-edit-pc" type="number" step="0.01" min="0" value="' + (x.precio_compra || 0) + '"></label>'
     + '<label>Unidad Venta: <input id="bd-edit-uv" value="' + esc(x.unidad_venta || '') + '"></label>'
     + '<label>Precio Venta: <input id="bd-edit-pv" type="number" step="0.01" min="0" value="' + (x.precio_venta || 0) + '"></label>'
-    + '<div style="display:flex;gap:0.5rem;margin-top:1rem;">'
-    + '<button onclick="guardarItemBaseDatos()" style="flex:1;">Guardar</button>'
-    + '<button onclick="cerrarModal()" style="flex:1;background:#888;">Cancelar</button>'
+    + '<div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap;">'
+    + '<button onclick="guardarItemBaseDatos()" style="flex:1;min-width:120px;">Guardar</button>'
+    + '<button onclick="eliminarDupBaseDatos()" style="flex:1;min-width:120px;background:#f57f17;">ELIMINAR DUP</button>'
+    + '<button onclick="cerrarModal()" style="flex:1;min-width:120px;background:#888;">Cancelar</button>'
     + '</div>';
   document.getElementById('modal').style.display = 'block';
+}
+
+function eliminarDupBaseDatos() {
+  if (!_bdEditando) return;
+  const nombre = String(_bdEditando.nombre || '').trim().toUpperCase();
+  if (nombre && !_bdNoDup.includes(nombre)) {
+    _bdNoDup.push(nombre);
+    try { localStorage.setItem('bd_no_dup', JSON.stringify(_bdNoDup)); } catch (e) {}
+  }
+  showToast('Advertencia de duplicado eliminada');
+  cerrarModal();
+  renderBaseDatosUnificada();
 }
 
 function guardarItemBaseDatos() {
