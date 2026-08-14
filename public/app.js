@@ -709,15 +709,28 @@ function analizarVentas(esPrueba) {
       uniq[k].cantidad += r.cantidad;
     });
     const items = Object.values(uniq).map((i, idx) => { i.idx = idx; return i; });
+    // Busca el mejor candidato existente (COCINA/BARRA/STOCKS) por similitud de nombre
+    const mejorCandidato = (nombre) => {
+      const pool = [
+        ...(cocinaNombres || []).map(n => ({ n, zona: 'cocina' })),
+        ...(barraNombres || []).map(n => ({ n, zona: 'barra' })),
+        ...(stockNombres || []).filter(n => !esBasura(n)).map(n => ({ n, zona: 'stocks' })),
+      ];
+      let best = null, bestS = 0;
+      pool.forEach(p => { const s = similitud(nombre, p.n); if (s > bestS) { bestS = s; best = p; } });
+      return best && bestS >= 0.6 ? { ...best, score: bestS } : null;
+    };
     const nuevos = [];
     items.forEach(i => {
       const k = norm(i.nombre);
+      const fuzzy = mejorCandidato(i.nombre);
+      // Destino: mapeo guardado > coincidencia exacta > coincidencia difusa
       if (mapping[k]) { i.destino = mapping[k]; }
       else if (cocinaSet.has(k)) i.destino = 'cocina';
       else if (barraSet.has(k)) i.destino = 'barra';
       else if (stockSet.has(k)) i.destino = 'stocks';
-      else i.destino = 'stocks';
-      // Emparejamiento: ¿el nombre del Excel ya está mapeado a un item/receta real de la app?
+      else i.destino = (fuzzy ? fuzzy.zona : 'stocks');
+      // Emparejamiento: nombre del Excel ya mapeado a un item/receta real de la app
       const m = match[k];
       const esSelf = m && norm(m) === k;
       const mValido = m && ((i.destino === 'cocina' && cocinaSet.has(norm(m))) ||
@@ -730,6 +743,9 @@ function analizarVentas(esPrueba) {
                  (i.destino === 'barra' && barraSet.has(k)) ||
                  (i.destino === 'stocks' && stockSet.has(k) && !esBasura(i.nombre))) {
         i.matched = i.nombre;
+        i.emparejado = true;
+      } else if (fuzzy && fuzzy.zona === i.destino && fuzzy.score >= 0.6) {
+        i.matched = fuzzy.n;
         i.emparejado = true;
       } else {
         i.sinEmparejar = true;
