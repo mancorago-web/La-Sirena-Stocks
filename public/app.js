@@ -2166,6 +2166,9 @@ function formatOrigenIngreso(i, alNombres) {
       const nm = o.almacen_id ? (alNombres[o.almacen_id] || 'Almacén ' + o.almacen_id) : 'STOCKS';
       return 'STOCK → ' + nm + cant;
     }
+    if (o.tipo === 'conversion') {
+      return 'CONVERSIÓN' + cant;
+    }
     return 'PROVEEDOR' + cant;
   }).join(' + ');
 }

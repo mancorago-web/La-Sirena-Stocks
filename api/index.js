@@ -550,7 +550,13 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     if (r.destino_salida !== undefined) data.destino_salida = String(r.destino_salida || '');
     if (r.transferencias !== undefined) data.transferencias = Array.isArray(r.transferencias) ? r.transferencias.map(t => ({ almacen_id: Number(t.almacen_id), cantidad: Number(t.cantidad) || 0 })) : [];
     // Si hubo auto-apertura de botella, forzar la escritura del ingreso (copa) o salida (botella)
-    if (ajusteCopa[clave]) data.stock_ingreso = Math.round(ingreso * 100) / 100;
+    if (ajusteCopa[clave]) {
+      data.stock_ingreso = Math.round(ingreso * 100) / 100;
+      // Marcar el ingreso de copas como CONVERSION (apertura de botella)
+      const origPrev = Array.isArray(prev.ingreso_origen) ? prev.ingreso_origen.filter(o => o.tipo !== 'conversion').map(o => ({ tipo: o.tipo, almacen_id: o.almacen_id, cantidad: o.cantidad })) : [];
+      origPrev.push({ tipo: 'conversion', cantidad: ajusteCopa[clave] });
+      data.ingreso_origen = origPrev;
+    }
     if (ajusteBotella[clave]) data.salida_almacen = Math.round(salida * 100) / 100;
     // Stock en observación: solo se fija explícitamente (se libera manualmente con la accion "usar como venta")
     if (r.stock_observado !== undefined) {
