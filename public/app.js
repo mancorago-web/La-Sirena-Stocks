@@ -279,7 +279,7 @@ function renderBaseDatosUnificada() {
   const duplicados = new Set();
   Object.keys(grupos).forEach(k => { if (grupos[k].length > 1) grupos[k].forEach(x => duplicados.add(x)); });
   if (!filtrados.length) { wrap.innerHTML = '<p>Sin resultados.</p>'; return; }
-  let html = '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Zona</th><th>Unidad Compra</th><th>Precio Compra</th><th>Unidad Venta</th><th>Precio Venta</th></tr></thead><tbody>';
+  let html = '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Zona</th><th>Unidad Compra</th><th>Precio Compra</th><th>Unidad Venta</th><th>Precio Venta</th><th></th></tr></thead><tbody>';
   filtrados.forEach(x => {
     const dup = duplicados.has(x);
     html += `<tr style="${dup ? 'background:#fff9c4;' : ''}">
@@ -289,6 +289,10 @@ function renderBaseDatosUnificada() {
       <td>${x.precio_compra || 0}</td>
       <td>${esc(x.unidad_venta || '—')}</td>
       <td>${x.precio_venta || 0}</td>
+      <td style="white-space:nowrap;">
+        <button onclick="editarItemBaseDatos('${x.origen}', ${x.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.75rem;">EDITAR</button>
+        <button onclick="eliminarItemBaseDatos('${x.origen}', ${x.id})" style="background:#c62828;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.75rem;" title="Eliminar">✕</button>
+      </td>
     </tr>`;
   });
   html += '</tbody></table></div>';
@@ -2666,6 +2670,57 @@ function usarObservacionComoVenta(btn) {
     cerrarModal();
     cargarReporteDiferencias();
   }).catch(() => { btn.disabled = false; btn.textContent = 'USAR COMO VENTA'; alert('Error al usar como venta'); });
+}
+
+let _bdEditando = null;
+function editarItemBaseDatos(origen, id) {
+  const x = _bdUnificada.find(i => i.origen === origen && i.id === id);
+  if (!x) return;
+  _bdEditando = x;
+  const body = document.getElementById('modal-body');
+  body.innerHTML = '<h3>EDITAR ITEM (' + x.zona + ')</h3>'
+    + '<label>Nombre: <input id="bd-edit-nombre" value="' + esc(x.nombre) + '"></label>'
+    + '<label>Unidad Compra: <input id="bd-edit-uc" value="' + esc(x.unidad_compra || '') + '"></label>'
+    + '<label>Precio Compra: <input id="bd-edit-pc" type="number" step="0.01" min="0" value="' + (x.precio_compra || 0) + '"></label>'
+    + '<label>Unidad Venta: <input id="bd-edit-uv" value="' + esc(x.unidad_venta || '') + '"></label>'
+    + '<label>Precio Venta: <input id="bd-edit-pv" type="number" step="0.01" min="0" value="' + (x.precio_venta || 0) + '"></label>'
+    + '<div style="display:flex;gap:0.5rem;margin-top:1rem;">'
+    + '<button onclick="guardarItemBaseDatos()" style="flex:1;">Guardar</button>'
+    + '<button onclick="cerrarModal()" style="flex:1;background:#888;">Cancelar</button>'
+    + '</div>';
+  document.getElementById('modal').style.display = 'block';
+}
+
+function guardarItemBaseDatos() {
+  if (!_bdEditando) return;
+  const nombre = document.getElementById('bd-edit-nombre').value.trim();
+  if (!nombre) { alert('El nombre es requerido'); return; }
+  const uc = document.getElementById('bd-edit-uc').value.trim();
+  const pc = parseFloat(document.getElementById('bd-edit-pc').value) || 0;
+  const uv = document.getElementById('bd-edit-uv').value.trim();
+  const pv = parseFloat(document.getElementById('bd-edit-pv').value) || 0;
+  const o = _bdEditando.origen;
+  const id = _bdEditando.id;
+  let url, data;
+  if (o === 'stock') { url = '/api/stock/precios/' + id; data = { nombre, unidad: uc, precio: pc, unidad_venta: uv, precio_venta: pv }; }
+  else if (o === 'barra') { url = '/api/barra/precios/' + id; data = { ingrediente: nombre, unidad_compra: uc, precio_compra: pc, unidad: uv, precio: pv }; }
+  else { url = '/api/cocina/precios/' + id; data = { ingrediente: nombre, unidad_compra: uc, precio_compra: pc, unidad: uv, precio: pv }; }
+  api('PUT', url, data).then(() => {
+    showToast('Item actualizado');
+    cerrarModal();
+    cargarBaseDatosUnificada();
+  }).catch(() => alert('Error al guardar'));
+}
+
+function eliminarItemBaseDatos(origen, id) {
+  const x = _bdUnificada.find(i => i.origen === origen && i.id === id);
+  if (!x) return;
+  if (!confirm('¿Eliminar "' + x.nombre + '" de la Base de Datos (' + x.zona + ')?')) return;
+  const url = origen === 'stock' ? '/api/stock/precios/' + id : (origen === 'barra' ? '/api/barra/precios/' + id : '/api/cocina/precios/' + id);
+  api('DELETE', url).then(() => {
+    showToast('Item eliminado');
+    cargarBaseDatosUnificada();
+  }).catch(() => alert('Error al eliminar'));
 }
 
 function cargarReporteDiferencias() {
