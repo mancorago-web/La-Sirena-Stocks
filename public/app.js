@@ -192,8 +192,6 @@ function refrescarVista() {
     else cargarVentasCentral();
   } else if (v.cat === 'compras') {
     cargarCompras();
-  } else if (v.cat === 'basedatos') {
-    cargarBaseDatosUnificada();
   } else if (v.cat === 'costos' && v.pestana) {
     cargarCostoCategoria(v.pestana);
   }
@@ -255,13 +253,14 @@ let _bdUnificada = [];
 function cargarBaseDatosUnificada() {
   const wrap = document.getElementById('bd-unificada-wrap');
   if (!wrap) return;
-  wrap.innerHTML = '<p>Cargando...</p>';
+  // Solo mostrar "Cargando..." la primera vez; si ya hay datos, se actualizan sin borrar la lista
+  if (!_bdUnificada.length) wrap.innerHTML = '<p>Cargando...</p>';
   api('GET', '/api/basedatos/unificada').then(data => {
     _bdUnificada = data || [];
     renderBaseDatosUnificada();
   }).catch(err => {
     console.error('Base de datos unificada:', err);
-    wrap.innerHTML = '<p style="color:#c62828;">No se pudo cargar la base de datos: ' + esc(err && err.message ? err.message : 'error desconocido') + '</p>';
+    if (!_bdUnificada.length) wrap.innerHTML = '<p style="color:#c62828;">No se pudo cargar la base de datos: ' + esc(err && err.message ? err.message : 'error desconocido') + '</p>';
   });
 }
 
