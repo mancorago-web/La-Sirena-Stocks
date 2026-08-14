@@ -2788,6 +2788,95 @@ app.get('/api/basedatos/unificada', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- BASE DE DATOS UNIFICADA: RENOMBRAR un item y propagarlo por toda la app ---
+const COLS_RENOMBRAR = [
+  { col: 'inventario', campo: 'nombre' },
+  { col: 'items', campo: 'nombre' },
+  { col: 'stock_precios', campo: 'nombre' },
+  { col: 'barra_precios', campo: 'ingrediente' },
+  { col: 'barra_stock', campo: 'ingrediente' },
+  { col: 'barra_stock_diario', campo: 'ingrediente' },
+  { col: 'barra_movimientos', campo: 'ingrediente' },
+  { col: 'cocina_precios', campo: 'ingrediente' },
+  { col: 'cocina_stock', campo: 'ingrediente' },
+  { col: 'cocina_ventas', campo: 'nombre' },
+  { col: 'receta_ingredientes', campo: 'ingrediente' },
+  { col: 'ventas', campo: 'nombre' },
+];
+const normNombre = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+
+async function renombrarEnTodaLaApp(anterior, nuevo) {
+  const oldN = normNombre(anterior);
+  let docs = 0;
+  for (const cfg of COLS_RENOMBRAR) {
+    const snap = await col(cfg.col).get();
+    let batch = db.batch();
+    let ops = 0;
+    for (const d of snap.docs) {
+      const v = String(d.data()[cfg.campo] || '');
+      if (normNombre(v) === oldN && v !== nuevo) {
+        batch.update(d.ref, { [cfg.campo]: nuevo, updated_at: new Date().toISOString() });
+        ops++; docs++;
+        if (ops >= 400) { await batch.commit(); batch = db.batch(); ops = 0; }
+      }
+    }
+    if (ops) await batch.commit();
+  }
+  return docs;
+}
+
+app.post('/api/basedatos/renombrar', async (req, res) => {
+  try {
+    const { origen, id, nombre_anterior, nombre_nuevo, unidad_compra, precio_compra, unidad_venta, precio_venta } = req.body;
+    if (!origen || !id || !nombre_anterior || !nombre_nuevo) {
+      return res.status(400).json({ error: 'origen, id, nombre_anterior y nombre_nuevo son requeridos' });
+    }
+    const nuevo = String(nombre_nuevo).trim();
+    const anterior = String(nombre_anterior).trim();
+    const now = new Date().toISOString();
+
+    // 1) Actualizar el item origen (la base de datos de su zona)
+    if (origen === 'stock') {
+      const upd = { nombre: nuevo, updated_at: now };
+      if (unidad_compra !== undefined) upd.unidad = unidad_compra;
+      if (precio_compra !== undefined) upd.precio = precio_compra || 0;
+      if (unidad_venta !== undefined) upd.unidad_venta = unidad_venta;
+      if (precio_venta !== undefined) upd.precio_venta = precio_venta || 0;
+      await col('stock_precios').doc(String(id)).update(upd);
+    } else if (origen === 'barra') {
+      const upd = { ingrediente: nuevo, updated_at: now };
+      if (unidad_compra !== undefined) upd.unidad_compra = unidad_compra;
+      if (precio_compra !== undefined) upd.precio_compra = precio_compra || 0;
+      if (unidad_venta !== undefined) upd.unidad = unidad_venta;
+      if (precio_venta !== undefined) upd.precio = precio_venta || 0;
+      await col('barra_precios').doc(String(id)).update(upd);
+    } else {
+      const upd = { ingrediente: nuevo, updated_at: now };
+      if (unidad_compra !== undefined) upd.unidad_compra = unidad_compra;
+      if (precio_compra !== undefined) upd.precio_compra = precio_compra || 0;
+      if (unidad_venta !== undefined) upd.unidad = unidad_venta;
+      if (precio_venta !== undefined) upd.precio = precio_venta || 0;
+      await col('cocina_precios').doc(String(id)).update(upd);
+    }
+
+    // 2) Propagar el nuevo nombre por toda la app (STOCKS, BARRA, COCINA, recetas, ventas)
+    const renombrados = await renombrarEnTodaLaApp(anterior, nuevo);
+
+    // 3) Actualizar el emparejamiento del EXCEL de ventas (valores que apuntaban al nombre anterior)
+    const mDoc = await col('config').doc('ventas_import_match').get();
+    if (mDoc.exists) {
+      const match = mDoc.data().match || {};
+      let cambio = false;
+      Object.keys(match).forEach(k => {
+        if (normNombre(match[k]) === normNombre(anterior) && match[k] !== nuevo) { match[k] = nuevo; cambio = true; }
+      });
+      if (cambio) await col('config').doc('ventas_import_match').set({ match, updated_at: now });
+    }
+
+    res.json({ ok: true, renombrados });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 
 // --- BARRA PRECIOS ---
 app.get('/api/barra/precios', async (req, res) => {

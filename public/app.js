@@ -2701,6 +2701,20 @@ function guardarItemBaseDatos() {
   const pv = parseFloat(document.getElementById('bd-edit-pv').value) || 0;
   const o = _bdEditando.origen;
   const id = _bdEditando.id;
+  // Si cambió el nombre, renombrar y propagar por toda la app (STOCKS/BARRA/COCINA + emparejamiento EXCEL)
+  if (nombre.trim().toUpperCase() !== String(_bdEditando.nombre || '').trim().toUpperCase()) {
+    api('POST', '/api/basedatos/renombrar', {
+      origen: o, id,
+      nombre_anterior: _bdEditando.nombre,
+      nombre_nuevo: nombre,
+      unidad_compra: uc, precio_compra: pc, unidad_venta: uv, precio_venta: pv
+    }).then(() => {
+      showToast('Item renombrado en toda la app');
+      cerrarModal();
+      cargarBaseDatosUnificada();
+    }).catch(() => alert('Error al renombrar'));
+    return;
+  }
   let url, data;
   if (o === 'stock') { url = '/api/stock/precios/' + id; data = { nombre, unidad: uc, precio: pc, unidad_venta: uv, precio_venta: pv }; }
   else if (o === 'barra') { url = '/api/barra/precios/' + id; data = { ingrediente: nombre, unidad_compra: uc, precio_compra: pc, unidad: uv, precio: pv }; }
