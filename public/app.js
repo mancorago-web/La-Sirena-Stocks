@@ -887,6 +887,7 @@ function guardarVentasAsignadas(containerId, filas, onDone) {
   const mapping = {};
   const almacenes = {};
   const recetasNuevas = [];
+  const recetasCreadas = new Set();
   const sinEmparejar = [];
   document.querySelectorAll('#' + containerId + ' tbody tr').forEach(tr => {
     const itemNombre = tr.querySelector('td') ? tr.querySelector('td').textContent.replace(/ *\*?$/, '').trim() : '';
@@ -903,8 +904,23 @@ function guardarVentasAsignadas(containerId, filas, onDone) {
     } else if (sel) {
       if (sel.value === '__nuevo__') {
         matched = (inputNuevo && inputNuevo.value.trim()) || itemNombre;
-        if (destino === 'barra' && !barraSet.has(norm(matched))) recetasNuevas.push({ nombre: matched, tipo: 'barra' });
-        if (destino === 'cocina' && !cocinaSet.has(norm(matched))) recetasNuevas.push({ nombre: matched, tipo: 'cocina' });
+        const nk = norm(matched);
+        const pool = destino === 'barra' ? (ctx.barraNombres || []) : (destino === 'cocina' ? (ctx.cocinaNombres || []) : []);
+        const exacto = pool.find(n2 => norm(n2) === nk);
+        const similar = exacto ? null : (candidatosTodos(matched, destino).find(c => similitud(matched, c.n) >= 0.6) || null);
+        if (exacto) {
+          // Ya existe la receta: emparejar, NO crear duplicado
+          matched = exacto;
+        } else if (similar) {
+          // Existe una receta muy parecida: emparejar con ella en vez de crear
+          matched = similar.n;
+        } else if (destino === 'barra') {
+          const key = 'B:' + nk;
+          if (!barraSet.has(nk) && !recetasCreadas.has(key)) { recetasNuevas.push({ nombre: matched, tipo: 'barra' }); recetasCreadas.add(key); }
+        } else if (destino === 'cocina') {
+          const key = 'C:' + nk;
+          if (!cocinaSet.has(nk) && !recetasCreadas.has(key)) { recetasNuevas.push({ nombre: matched, tipo: 'cocina' }); recetasCreadas.add(key); }
+        }
       } else if (sel.value && sel.value !== '__excel__') {
         matched = sel.value;
       } else {
