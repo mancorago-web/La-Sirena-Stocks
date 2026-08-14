@@ -1269,7 +1269,7 @@ function cargarAlmacenes(fecha) {
                   ${s.items.map(i => itemRow(i, a)).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="8">— COCINA —</td></tr>
+                  <tr class="section-header"><td colspan="8">— ${a.id === 3 ? 'CAFE' : 'COCINA'} —</td></tr>
                   ${a.otros.map(i => itemRow(i, a)).join('')}
                 ` : ''}
               </tbody>
@@ -1481,7 +1481,7 @@ function cargarSalidas(fecha) {
                   </tr>`).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="4">— COCINA —</td></tr>
+                  <tr class="section-header"><td colspan="4">— ${a.id === 3 ? 'CAFE' : 'COCINA'} —</td></tr>
                   ${a.otros.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
@@ -1783,7 +1783,7 @@ function cargarVentas(fecha) {
                   </tr>`).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="3">— COCINA —</td></tr>
+                  <tr class="section-header"><td colspan="3">— ${a.id === 3 ? 'CAFE' : 'COCINA'} —</td></tr>
                   ${a.otros.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
@@ -1908,7 +1908,7 @@ function cargarBajas(fecha) {
                   </tr>`).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="4">— COCINA —</td></tr>
+                  <tr class="section-header"><td colspan="4">— ${a.id === 3 ? 'CAFE' : 'COCINA'} —</td></tr>
                   ${a.otros.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
@@ -2080,7 +2080,7 @@ function cargarIngresos(fecha) {
                   </tr>`).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="4">— COCINA —</td></tr>
+                  <tr class="section-header"><td colspan="4">— ${a.id === 3 ? 'CAFE' : 'COCINA'} —</td></tr>
                   ${a.otros.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
@@ -2523,7 +2523,7 @@ function cargarStocks() {
                 ${renderItems(s.items)}
               ` : '').join('')}
               ${a.otros.length ? `
-                <tr class="section-header"><td colspan="3">— COCINA —</td></tr>
+                <tr class="section-header"><td colspan="3">— ${a.id === 3 ? 'CAFE' : 'COCINA'} —</td></tr>
                 ${renderItems(a.otros)}
               ` : ''}
             </tbody>
