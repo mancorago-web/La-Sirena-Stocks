@@ -226,6 +226,8 @@ function irBaseDatos() {
   // Cerrar cualquier modal abierto
   const modalEl = document.getElementById('modal');
   if (modalEl) modalEl.style.display = 'none';
+  // Vista de categoría: muestra BLAKBOX fijo en PC (en Android solo se ve en el menú principal)
+  document.body.classList.add('en-categoria');
   document.getElementById('main-menu').style.display = 'none';
   document.getElementById('container').style.display = 'block';
   document.getElementById('btn-back').style.display = '';
