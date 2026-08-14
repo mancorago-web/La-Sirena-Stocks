@@ -437,6 +437,10 @@ td button.danger { border-color: #c62828; color: #c62828; }
 .stock-bajo { background-color: #fff3e0 !important; }
 .stock-bajo td:first-child { font-weight: 600; color: #e65100; }
 .stock-bajo td:last-child { font-weight: 600; color: #e65100; }
+.badge-stock-bajo {
+  display: inline-block; background: #e65100; color: #fff; font-size: 0.6rem; font-weight: 700;
+  padding: 0.1rem 0.4rem; border-radius: 999px; margin-left: 0.3rem; letter-spacing: 0.5px; vertical-align: middle;
+}
 
 /* ===== Responsive / Mobile ===== */
 @media (max-width: 768px) {

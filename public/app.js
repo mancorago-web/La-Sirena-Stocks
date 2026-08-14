@@ -3392,9 +3392,12 @@ function cargarStockBarra() {
     });
     function fila(s) {
       const onz = formatoOnzas(calcularOnzas(s));
+      const bajo = (parseFloat(s.cantidad) || 0) <= 0.2;
+      const badge = bajo ? ' <span class="badge-stock-bajo" title="Stock bajo">STOCK BAJO</span>' : '';
+      const cls = bajo ? ' class="stock-bajo"' : '';
       if (!esHoy) {
-        return `<tr data-stock-id="${s.id}">
-          <td class="stock-nombre">${esc(s.ingrediente)}</td>
+        return `<tr data-stock-id="${s.id}"${cls}>
+          <td class="stock-nombre">${esc(s.ingrediente)}${badge}</td>
           <td>${s.cantidad}</td>
           <td>${s.unidad}</td>
           <td class="onzas-stock">${onz}</td>
@@ -3405,9 +3408,9 @@ function cargarStockBarra() {
       const opts = GRUPOS_BARRA.map(g => `<option value="${g}" ${((s.grupo || '').toUpperCase() === g) ? 'selected' : ''}>${g}</option>`).join('');
       const uniList = UNIDADES_STOCK.includes(s.unidad) ? UNIDADES_STOCK : [...UNIDADES_STOCK, s.unidad];
       const uniOpts = uniList.map(u => `<option value="${u}" ${s.unidad === u ? 'selected' : ''}>${u}</option>`).join('');
-      return `<tr data-stock-id="${s.id}" data-orig-cantidad="${s.cantidad}" data-orig-unidad="${s.unidad}" data-orig-grupo="${(s.grupo || '').toUpperCase()}">
-        <td class="stock-nombre">${esc(s.ingrediente)}</td>
-        <td><input type="number" class="input-stock-cant" value="${s.cantidad}" step="0.01" min="0" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarOnzasFila(this); marcarStockDirty()"></td>
+      return `<tr data-stock-id="${s.id}" data-orig-cantidad="${s.cantidad}" data-orig-unidad="${s.unidad}" data-orig-grupo="${(s.grupo || '').toUpperCase()}"${cls}>
+        <td class="stock-nombre">${esc(s.ingrediente)}${badge}</td>
+        <td><input type="number" class="input-stock-cant" value="${s.cantidad}" step="0.01" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarOnzasFila(this); marcarStockDirty()"></td>
         <td><select class="select-stock-uni" onchange="onUnidadStockChange(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${uniOpts}</select></td>
         <td class="onzas-stock">${onz}</td>
         <td><select class="select-stock-grupo" onchange="marcarStockDirty()" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${opts}</select></td>

@@ -2988,17 +2988,10 @@ app.post('/api/barra/movimientos', authMiddleware, async (req, res) => {
           let matches = stockByName[key] || [];
           if (!matches.length) matches = matchStockFuzzy(nombre, allStock);
           if (!matches.length) continue;
-          let restante = deltaOz;
-          for (const m of matches) {
-            if (restante === 0) break;
-            const si = m.item;
-            const ozItem = aOnzas(si.data.cantidad, si.data.unidad, si.data.ingrediente);
-            if (ozItem === null || isNaN(ozItem)) continue;
-            const aDescontar = restante > 0 ? Math.min(ozItem, restante) : Math.max(-ozItem, restante);
-            if (!ajustes[si.key]) ajustes[si.key] = { ref: si.ref, deltaOz: 0 };
-            ajustes[si.key].deltaOz += aDescontar;
-            restante -= aDescontar;
-          }
+          // Aplicar TODO el delta al primer item de stock que coincida (permite stock negativo)
+          const si = matches[0].item;
+          if (!ajustes[si.key]) ajustes[si.key] = { ref: matches[0].ref, deltaOz: 0 };
+          ajustes[si.key].deltaOz += deltaOz;
         }
         // Aplicar los ajustes (una sola escritura por documento)
         const sBatch = db.batch();
@@ -3009,7 +3002,7 @@ app.post('/api/barra/movimientos', authMiddleware, async (req, res) => {
           if (!stockDoc) continue;
           const ozItem = aOnzas(stockDoc.data.cantidad, stockDoc.data.unidad, stockDoc.data.ingrediente);
           if (ozItem === null || isNaN(ozItem)) continue;
-          const nuevoOz = Math.max(0, ozItem - aj.deltaOz);
+          const nuevoOz = ozItem - aj.deltaOz;
           const nuevaCant = Math.round(desdeOnzas(nuevoOz, stockDoc.data.unidad, stockDoc.data.ingrediente) * 100) / 100;
           sBatch.update(aj.ref, { cantidad: nuevaCant, updated_at: new Date().toISOString() });
           ajustados++;
