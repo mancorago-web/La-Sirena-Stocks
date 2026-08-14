@@ -2413,35 +2413,38 @@ function verReporteStocksBajos() {
   const fecha = document.getElementById('fecha-stocks').value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
   getInventario(fecha).then(data => {
-    data = data.filter(a => a.id === 4 || a.id === 8);
-    const lista = [];
-    let html = '<h3>Productos con Stock Bajo — ' + fecha + '</h3>';
-    let totalItems = 0;
-    data.forEach(a => {
-      const itemsBajos = a.items.filter(i => {
-        const min = i.cantidad_minima || 0;
-        return min > 0 && (i.stock_cierre || 0) < min;
+    // Agregar por NOMBRE de item en TODOS los almacenes (stock total del restaurante)
+    const porNombre = new Map();
+    (data || []).forEach(a => {
+      (a.items || []).forEach(i => {
+        const k = String(i.nombre || '').trim().toUpperCase();
+        if (!k) return;
+        if (!porNombre.has(k)) porNombre.set(k, { nombre: i.nombre, total: 0, min: 0, detalles: [] });
+        const g = porNombre.get(k);
+        g.total += (i.stock_cierre || 0);
+        g.min = Math.max(g.min, i.cantidad_minima || 0);
+        g.detalles.push({ almacen: a.nombre, cantidad: i.stock_cierre || 0 });
       });
-      if (!itemsBajos.length) return;
-      totalItems += itemsBajos.length;
-      lista.push({ almacen: a.nombre, items: itemsBajos.map(i => ({ nombre: i.nombre, cantidad: i.stock_cierre || 0 })) });
-      html += '<div class="diff-almacen">';
-      html += '<div class="diff-header" onclick="toggleAcordeon(this)"><span>' + a.nombre + '</span><span class="accordion-arrow">▶</span></div>';
-      html += '<div class="accordion-body">';
-      html += '<table><thead><tr><th>Item</th><th>Cantidad Minima</th><th>Stock Actual</th></tr></thead><tbody>';
-      itemsBajos.forEach(i => {
-        html += '<tr class="stock-bajo"><td>' + i.nombre + '</td><td>' + (i.cantidad_minima || 0) + '</td><td>' + (i.stock_cierre || 0) + '</td></tr>';
-      });
-      html += '</tbody></table></div></div>';
     });
-    _stocksBajosData = { fecha, lista };
-    if (!totalItems) {
+    const bajos = [];
+    porNombre.forEach(g => { if (g.min > 0 && g.total < g.min) bajos.push(g); });
+    bajos.sort((x, y) => x.total - y.total);
+    let html = '<h3>Productos con Stock Bajo — ' + fecha + ' (todos los almacenes)</h3>';
+    if (!bajos.length) {
       html += '<p>No hay productos con stock bajo.</p>';
     } else {
+      html += '<p style="font-size:0.8rem;color:#666;">Stock TOTAL del restaurante (suma de todos los almacenes) por debajo de la cantidad mínima.</p>';
+      html += '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Stock Total</th><th>Cant. Mínima</th><th>Por almacén</th></tr></thead><tbody>';
+      bajos.forEach(g => {
+        const detalle = g.detalles.filter(d => (d.cantidad || 0) > 0).map(d => d.almacen + ': ' + d.cantidad).join(', ') || '—';
+        html += '<tr class="stock-bajo"><td>' + g.nombre + '</td><td>' + g.total + '</td><td>' + g.min + '</td><td style="font-size:0.8rem;">' + detalle + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
       html = '<div style="margin-bottom:0.75rem;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">'
         + '<button class="btn-detalles" onclick="enviarAvisoStockWhatsApp()" style="width:auto;margin-top:0;background:#25d366;color:#fff;font-weight:700;">📲 AVISO DE STOCK</button>'
         + '<span style="font-size:0.8rem;color:#888;">Envía el detalle por WhatsApp</span></div>' + html;
     }
+    _stocksBajosData = { fecha, lista: bajos.map(g => ({ nombre: g.nombre, total: g.total, min: g.min, detalles: g.detalles })) };
     document.getElementById('modal-body').innerHTML = html;
     document.getElementById('modal').style.display = 'block';
   });
@@ -2450,14 +2453,9 @@ function verReporteStocksBajos() {
 function enviarAvisoStockWhatsApp() {
   if (!_stocksBajosData || !_stocksBajosData.lista.length) return;
   const lines = ['AVISO DE STOCK BAJO - ' + _stocksBajosData.fecha, ''];
-  _stocksBajosData.lista.forEach(gr => {
-    if (!gr.items.length) return;
-    lines.push(gr.almacen.toUpperCase());
-    lines.push('');
-    gr.items.forEach((i, idx) => {
-      lines.push((idx + 1) + '. ' + i.nombre + ' - ' + i.cantidad);
-    });
-    lines.push('');
+  _stocksBajosData.lista.forEach((i, idx) => {
+    const det = i.detalles.filter(d => (d.cantidad || 0) > 0).map(d => d.almacen + ': ' + d.cantidad).join(', ');
+    lines.push((idx + 1) + '. ' + i.nombre + ' - ' + i.total + (det ? ' (' + det + ')' : ''));
   });
   const msg = lines.join('\n');
   const url = 'https://wa.me/?text=' + encodeURIComponent(msg);
