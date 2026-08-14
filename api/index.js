@@ -489,8 +489,13 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     const cierre = apertura + ingreso - salida - ventas - falta - baja;
     const cierreR = Math.round(cierre * 100) / 100;
 
-    // Solo se propagan los items cuyo cierre/apertura realmente cambió
-    if ((prev.stock_apertura || 0) !== apertura || (prev.stock_cierre || 0) !== cierreR) {
+    // Solo se propagan los items cuyo cierre/apertura realmente cambió.
+    // Endurecido: cualquier guardado de movimientos también propaga (aunque el cierre no cambie
+    // numéricamente), para que la apertura del día siguiente SIEMPRE quede = cierre de hoy.
+    const cierreCambio = (prev.stock_apertura || 0) !== apertura || (prev.stock_cierre || 0) !== cierreR;
+    const esMovimiento = r.total_ventas !== undefined || r.salida_almacen !== undefined ||
+      r.stock_ingreso !== undefined || r.falta_almacen !== undefined || r.stock_baja !== undefined;
+    if (cierreCambio || esMovimiento) {
       changedKeys.add(Number(r.almacen_id) + '_' + Number(r.item_id));
     }
 
