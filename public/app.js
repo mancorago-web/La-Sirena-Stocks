@@ -270,36 +270,72 @@ function renderBaseDatosUnificada() {
   const wrap = document.getElementById('bd-unificada-wrap');
   if (!wrap) return;
   const filtrados = q ? _bdUnificada.filter(x => x.nombre.toLowerCase().includes(q)) : _bdUnificada;
-  // Detectar posibles duplicados por nombre normalizado
-  const grupos = {};
+  // Agrupar por nombre (mismo nombre en varias zonas => una sola fila con todas las zonas)
+  const grupos = new Map();
   filtrados.forEach(x => {
-    const k = bdNormKey(x.nombre);
-    if (!k) return;
-    if (!grupos[k]) grupos[k] = [];
-    grupos[k].push(x);
+    const k = x.nombre.trim().toUpperCase();
+    if (!grupos.has(k)) grupos.set(k, { nombre: x.nombre, items: [] });
+    grupos.get(k).items.push(x);
   });
-  const duplicados = new Set();
-  Object.keys(grupos).forEach(k => { if (grupos[k].length > 1) grupos[k].forEach(x => duplicados.add(x)); });
-  if (!filtrados.length) { wrap.innerHTML = '<p>Sin resultados.</p>'; return; }
-  let html = '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Zona</th><th>Unidad Compra</th><th>Precio Compra</th><th>Unidad Venta</th><th>Precio Venta</th><th></th></tr></thead><tbody>';
-  filtrados.forEach(x => {
-    const dup = duplicados.has(x);
+  // Posibles duplicados: dos NOMBRES distintos que normalizados coinciden (candidatos a unificar)
+  const gruposDup = new Map();
+  [...grupos.keys()].forEach(k => {
+    const nk = bdNormKey(grupos.get(k).nombre);
+    if (!nk) return;
+    if (!gruposDup.has(nk)) gruposDup.set(nk, []);
+    gruposDup.get(nk).push(k);
+  });
+  const esDup = new Set();
+  gruposDup.forEach(keys => { if (keys.length > 1) keys.forEach(k => esDup.add(k)); });
+  const claves = [...grupos.keys()].sort((a, b) => a.localeCompare(b));
+  if (!claves.length) { wrap.innerHTML = '<p>Sin resultados.</p>'; return; }
+  let html = '<div style="margin-bottom:0.6rem;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">'
+    + '<button class="btn-guardar-dia" onclick="unificarItemsBaseDatos()" style="width:auto;">🔗 UNIFICAR</button>'
+    + '<span style="font-size:0.8rem;color:#888;">Marca los items que son el mismo producto y presiona UNIFICAR (se usará 1 solo nombre en toda la app).</span></div>';
+  html += '<div class="table-wrap"><table><thead><tr><th></th><th>Item</th><th>Zonas</th><th>Unidad Compra</th><th>Precio Compra</th><th>Unidad Venta</th><th>Precio Venta</th><th></th></tr></thead><tbody>';
+  claves.forEach(k => {
+    const g = grupos.get(k);
+    const zonas = [...new Set(g.items.map(x => x.zona))].join(' · ');
+    const dup = esDup.has(k);
+    const primero = g.items[0];
     html += `<tr style="${dup ? 'background:#fff9c4;' : ''}">
-      <td>${esc(x.nombre)}${dup ? ' <span class="badge-observacion" style="background:#f57f17;">DUP</span>' : ''}</td>
-      <td>${x.zona}</td>
-      <td>${esc(x.unidad_compra || '—')}</td>
-      <td>${x.precio_compra || 0}</td>
-      <td>${esc(x.unidad_venta || '—')}</td>
-      <td>${x.precio_venta || 0}</td>
+      <td><input type="checkbox" class="chk-bd-unificar" data-nombre="${esc(g.nombre)}" title="Marcar para unificar"></td>
+      <td>${esc(g.nombre)}${dup ? ' <span class="badge-observacion" style="background:#f57f17;">DUP</span>' : ''}</td>
+      <td><span class="badge-zona">${zonas}</span></td>
+      <td>${esc(primero.unidad_compra || '—')}</td>
+      <td>${primero.precio_compra || 0}</td>
+      <td>${esc(primero.unidad_venta || '—')}</td>
+      <td>${primero.precio_venta || 0}</td>
       <td style="white-space:nowrap;">
-        <button onclick="editarItemBaseDatos('${x.origen}', ${x.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.75rem;">EDITAR</button>
-        <button onclick="eliminarItemBaseDatos('${x.origen}', ${x.id})" style="background:#c62828;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.75rem;" title="Eliminar">✕</button>
+        <button onclick="editarItemBaseDatos('${primero.origen}', ${primero.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.75rem;">EDITAR</button>
       </td>
     </tr>`;
   });
   html += '</tbody></table></div>';
-  html += '<p style="font-size:0.8rem;color:#666;margin-top:0.5rem;">Total: <strong>' + filtrados.length + '</strong> items · posibles duplicados: <strong style="color:#f57f17;">' + duplicados.size + '</strong></p>';
+  html += '<p style="font-size:0.8rem;color:#666;margin-top:0.5rem;">Total: <strong>' + claves.length + '</strong> items · candidatos a unificar: <strong style="color:#f57f17;">' + esDup.size + '</strong></p>';
   wrap.innerHTML = html;
+}
+
+function unificarItemsBaseDatos() {
+  const nombres = Array.from(document.querySelectorAll('.chk-bd-unificar:checked')).map(cb => cb.dataset.nombre);
+  if (nombres.length < 2) { alert('Selecciona al menos 2 items que sean el mismo producto.'); return; }
+  const canonico = prompt('Nombre unificado para estos items (se usará en toda la app):', nombres[0]);
+  if (!canonico || !canonico.trim()) return;
+  const nombreFinal = canonico.trim();
+  const ops = [];
+  const vistos = new Set();
+  nombres.forEach(n => {
+    const nk = String(n || '').trim().toUpperCase();
+    if (nk === nombreFinal.trim().toUpperCase() || vistos.has(nk)) return;
+    vistos.add(nk);
+    const item = _bdUnificada.find(x => x.nombre.trim().toUpperCase() === nk);
+    if (item) ops.push(api('POST', '/api/basedatos/renombrar', { origen: item.origen, id: item.id, nombre_anterior: item.nombre, nombre_nuevo: nombreFinal }));
+  });
+  if (!ops.length) { alert('Nada que unificar (ya tienen el mismo nombre).'); return; }
+  Promise.all(ops).then(() => {
+    showToast('Unificado como "' + nombreFinal + '"');
+    cargarBaseDatosUnificada();
+  }).catch(() => alert('Error al unificar'));
 }
 
 function irACategoria(cat) {
@@ -2726,17 +2762,6 @@ function guardarItemBaseDatos() {
     cerrarModal();
     cargarBaseDatosUnificada();
   }).catch(() => alert('Error al guardar'));
-}
-
-function eliminarItemBaseDatos(origen, id) {
-  const x = _bdUnificada.find(i => i.origen === origen && i.id === id);
-  if (!x) return;
-  if (!confirm('¿Eliminar "' + x.nombre + '" de la Base de Datos (' + x.zona + ')?')) return;
-  const url = origen === 'stock' ? '/api/stock/precios/' + id : (origen === 'barra' ? '/api/barra/precios/' + id : '/api/cocina/precios/' + id);
-  api('DELETE', url).then(() => {
-    showToast('Item eliminado');
-    cargarBaseDatosUnificada();
-  }).catch(() => alert('Error al eliminar'));
 }
 
 function cargarReporteDiferencias() {
