@@ -323,7 +323,8 @@ function renderBaseDatosUnificada() {
       const g = grupos.get(k);
       const zonas = [...new Set(g.items.map(x => x.zona))].join(' · ');
       const dup = esDup.has(k);
-      const primero = g.items[0];
+      // Al unificar, se prioriza mostrar los datos del item de BARRA (luego COCINA, luego STOCKS)
+      const primero = g.items.find(x => x.zona === 'BARRA') || g.items.find(x => x.zona === 'COCINA') || g.items[0];
       html += `<tr style="${dup ? 'background:#fff9c4;' : ''}">
         <td><input type="checkbox" class="chk-bd-unificar" data-nombre="${esc(g.nombre)}" title="Marcar para unificar"></td>
         <td>${esc(g.nombre)}${dup ? ' <span class="badge-observacion" style="background:#f57f17;">DUP</span>' : ''}</td>
