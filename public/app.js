@@ -1204,13 +1204,13 @@ function cargarAlmacenes(fecha) {
       ],
     };
     const defaultCategorias = [
-      { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
-      { label: 'GASEOSAS', test: i => /COCA|INKA/i.test(i.nombre) },
+      { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS/i.test(i.nombre) },
+      { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS/i.test(i.nombre) },
       { label: 'KOMBUCHAS', test: i => /^KOMBUCHA/i.test(i.nombre) },
       { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
-      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS/i.test(i.nombre) },
-      { label: 'BARRA', test: i => /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF/i.test(i.nombre) },
-      { label: 'LACTEOS', test: i => /NESTLE LECHE CONDENSADA|NESTLE - CREMA DE LECHE|LA TABERNA CREMA DE COCO|GLORIA LECHE EVAPORDA|GLORIA LECHE CAJA/i.test(i.nombre) },
+      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS|VERMOUTH CINZANO/i.test(i.nombre) },
+      { label: 'BARRA', test: i => /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF|PISCO PORTON ACHOLADO/i.test(i.nombre) },
+      { label: 'LACTEOS', test: i => /NESTLE LECHE CONDENSADA|NESTLE - CREMA DE LECHE|LA TABERNA CREMA DE COCO|GLORIA LECHE EVAPORDA|GLORIA LECHE CAJA|LECHE DE COCO|LECHE EVAPORADA DE COCO|LECHE PURA VIDA/i.test(i.nombre) },
     ];
     data = data.map(a => {
       const categorias = categoriasPorAlmacen[a.id] || defaultCategorias;
@@ -1267,7 +1267,7 @@ function cargarAlmacenes(fecha) {
                   ${s.items.map(i => itemRow(i, a)).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="8">— OTROS —</td></tr>
+                  <tr class="section-header"><td colspan="8">— COCINA —</td></tr>
                   ${a.otros.map(i => itemRow(i, a)).join('')}
                 ` : ''}
               </tbody>
@@ -1394,12 +1394,12 @@ function cargarSalidas(fecha) {
     });
     const categoriasPorAlmacen = {};
     const defaultCategorias = [
-      { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
-      { label: 'GASEOSAS', test: i => /COCA|INKA/i.test(i.nombre) },
+      { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS/i.test(i.nombre) },
+      { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS/i.test(i.nombre) },
       { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
-      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS/i.test(i.nombre) },
-      { label: 'BARRA', test: i => /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF/i.test(i.nombre) },
-      { label: 'LACTEOS', test: i => /NESTLE LECHE CONDENSADA|NESTLE - CREMA DE LECHE|LA TABERNA CREMA DE COCO|GLORIA LECHE EVAPORDA|GLORIA LECHE CAJA/i.test(i.nombre) },
+      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS|VERMOUTH CINZANO/i.test(i.nombre) },
+      { label: 'BARRA', test: i => /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF|PISCO PORTON ACHOLADO/i.test(i.nombre) },
+      { label: 'LACTEOS', test: i => /NESTLE LECHE CONDENSADA|NESTLE - CREMA DE LECHE|LA TABERNA CREMA DE COCO|GLORIA LECHE EVAPORDA|GLORIA LECHE CAJA|LECHE DE COCO|LECHE EVAPORADA DE COCO|LECHE PURA VIDA/i.test(i.nombre) },
     ];
     data = data.map(a => {
       const categorias = defaultCategorias;
@@ -1477,7 +1477,7 @@ function cargarSalidas(fecha) {
                   </tr>`).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="4">— OTROS —</td></tr>
+                  <tr class="section-header"><td colspan="4">— COCINA —</td></tr>
                   ${a.otros.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
@@ -1709,12 +1709,12 @@ function cargarVentas(fecha) {
     });
     const categoriasPorAlmacen = {};
     const defaultCategorias = [
-      { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
-      { label: 'GASEOSAS', test: i => /COCA|INKA/i.test(i.nombre) },
+      { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS/i.test(i.nombre) },
+      { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS/i.test(i.nombre) },
       { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
-      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS/i.test(i.nombre) },
-      { label: 'BARRA', test: i => /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF/i.test(i.nombre) },
-      { label: 'LACTEOS', test: i => /NESTLE LECHE CONDENSADA|NESTLE - CREMA DE LECHE|LA TABERNA CREMA DE COCO|GLORIA LECHE EVAPORDA|GLORIA LECHE CAJA/i.test(i.nombre) },
+      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS|VERMOUTH CINZANO/i.test(i.nombre) },
+      { label: 'BARRA', test: i => /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF|PISCO PORTON ACHOLADO/i.test(i.nombre) },
+      { label: 'LACTEOS', test: i => /NESTLE LECHE CONDENSADA|NESTLE - CREMA DE LECHE|LA TABERNA CREMA DE COCO|GLORIA LECHE EVAPORDA|GLORIA LECHE CAJA|LECHE DE COCO|LECHE EVAPORADA DE COCO|LECHE PURA VIDA/i.test(i.nombre) },
     ];
     data = data.map(a => {
       const categorias = defaultCategorias;
@@ -1777,7 +1777,7 @@ function cargarVentas(fecha) {
                   </tr>`).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="3">— OTROS —</td></tr>
+                  <tr class="section-header"><td colspan="3">— COCINA —</td></tr>
                   ${a.otros.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
@@ -1830,12 +1830,12 @@ function cargarBajas(fecha) {
   getInventario(fecha).then(data => {
     const categoriasPorAlmacen = {};
     const defaultCategorias = [
-      { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
-      { label: 'GASEOSAS', test: i => /COCA|INKA/i.test(i.nombre) },
+      { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS/i.test(i.nombre) },
+      { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS/i.test(i.nombre) },
       { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
-      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS/i.test(i.nombre) },
-      { label: 'BARRA', test: i => /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF/i.test(i.nombre) },
-      { label: 'LACTEOS', test: i => /NESTLE LECHE CONDENSADA|NESTLE - CREMA DE LECHE|LA TABERNA CREMA DE COCO|GLORIA LECHE EVAPORDA|GLORIA LECHE CAJA/i.test(i.nombre) },
+      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS|VERMOUTH CINZANO/i.test(i.nombre) },
+      { label: 'BARRA', test: i => /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF|PISCO PORTON ACHOLADO/i.test(i.nombre) },
+      { label: 'LACTEOS', test: i => /NESTLE LECHE CONDENSADA|NESTLE - CREMA DE LECHE|LA TABERNA CREMA DE COCO|GLORIA LECHE EVAPORDA|GLORIA LECHE CAJA|LECHE DE COCO|LECHE EVAPORADA DE COCO|LECHE PURA VIDA/i.test(i.nombre) },
     ];
     data = data.map(a => {
       const categorias = defaultCategorias;
@@ -1900,7 +1900,7 @@ function cargarBajas(fecha) {
                   </tr>`).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="4">— OTROS —</td></tr>
+                  <tr class="section-header"><td colspan="4">— COCINA —</td></tr>
                   ${a.otros.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
@@ -2001,12 +2001,12 @@ function cargarIngresos(fecha) {
       return a.items.length > 0;
     });
     const defaultCategorias = [
-      { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
-      { label: 'GASEOSAS', test: i => /COCA|INKA/i.test(i.nombre) },
+      { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS/i.test(i.nombre) },
+      { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS/i.test(i.nombre) },
       { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
-      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS/i.test(i.nombre) },
-      { label: 'BARRA', test: i => /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF/i.test(i.nombre) },
-      { label: 'LACTEOS', test: i => /NESTLE LECHE CONDENSADA|NESTLE - CREMA DE LECHE|LA TABERNA CREMA DE COCO|GLORIA LECHE EVAPORDA|GLORIA LECHE CAJA/i.test(i.nombre) },
+      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS|VERMOUTH CINZANO/i.test(i.nombre) },
+      { label: 'BARRA', test: i => /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF|PISCO PORTON ACHOLADO/i.test(i.nombre) },
+      { label: 'LACTEOS', test: i => /NESTLE LECHE CONDENSADA|NESTLE - CREMA DE LECHE|LA TABERNA CREMA DE COCO|GLORIA LECHE EVAPORDA|GLORIA LECHE CAJA|LECHE DE COCO|LECHE EVAPORADA DE COCO|LECHE PURA VIDA/i.test(i.nombre) },
     ];
     data = data.map(a => {
       const categorias = defaultCategorias;
@@ -2070,7 +2070,7 @@ function cargarIngresos(fecha) {
                   </tr>`).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="4">— OTROS —</td></tr>
+                  <tr class="section-header"><td colspan="4">— COCINA —</td></tr>
                   ${a.otros.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
@@ -2442,13 +2442,13 @@ function cargarStocks() {
     };
     const defaultCategorias = [
       { label: 'LECHES', test: i => /leche/i.test(i.nombre) },
-      { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
-      { label: 'GASEOSAS', test: i => /COCA|INKA/i.test(i.nombre) },
+      { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS/i.test(i.nombre) },
+      { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS/i.test(i.nombre) },
       { label: 'KOMBUCHAS', test: i => /^KOMBUCHA/i.test(i.nombre) },
       { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
-      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS/i.test(i.nombre) },
-      { label: 'BARRA', test: i => /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF/i.test(i.nombre) },
-      { label: 'LACTEOS', test: i => /NESTLE LECHE CONDENSADA|NESTLE - CREMA DE LECHE|LA TABERNA CREMA DE COCO|GLORIA LECHE EVAPORDA|GLORIA LECHE CAJA/i.test(i.nombre) },
+      { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS|VERMOUTH CINZANO/i.test(i.nombre) },
+      { label: 'BARRA', test: i => /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF|PISCO PORTON ACHOLADO/i.test(i.nombre) },
+      { label: 'LACTEOS', test: i => /NESTLE LECHE CONDENSADA|NESTLE - CREMA DE LECHE|LA TABERNA CREMA DE COCO|GLORIA LECHE EVAPORDA|GLORIA LECHE CAJA|LECHE DE COCO|LECHE EVAPORADA DE COCO|LECHE PURA VIDA/i.test(i.nombre) },
     ];
     data = data.map(a => {
       const categorias = categoriasPorAlmacen[a.id] || defaultCategorias;
@@ -2511,7 +2511,7 @@ function cargarStocks() {
                 ${renderItems(s.items)}
               ` : '').join('')}
               ${a.otros.length ? `
-                <tr class="section-header"><td colspan="3">— OTROS —</td></tr>
+                <tr class="section-header"><td colspan="3">— COCINA —</td></tr>
                 ${renderItems(a.otros)}
               ` : ''}
             </tbody>
