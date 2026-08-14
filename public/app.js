@@ -1224,8 +1224,8 @@ function cargarAlmacenes(fecha) {
     }
     const categoriasPorAlmacen = {
       1: [
-        { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
-        { label: 'GASEOSAS', test: i => /COCA|INKA/i.test(i.nombre) },
+        { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS|TONIC WATER BRITVIC/i.test(i.nombre) },
+        { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS|GINGER MR PERKINS/i.test(i.nombre) },
         { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
         { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|PROTOS/i.test(i.nombre) },
       ],
@@ -2472,8 +2472,8 @@ function cargarStocks() {
     data = data.filter(a => a.id === 4 || a.id === 8);
     const categoriasPorAlmacen = {
       1: [
-        { label: 'AGUAS', test: i => /^AGUA\s/i.test(i.nombre) },
-        { label: 'GASEOSAS', test: i => /COCA|INKA/i.test(i.nombre) },
+        { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS|TONIC WATER BRITVIC/i.test(i.nombre) },
+        { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS|GINGER MR PERKINS/i.test(i.nombre) },
         { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
         { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO/i.test(i.nombre) },
       ],
