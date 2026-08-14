@@ -63,6 +63,7 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 
 /* Main menu */
 .main-menu {
+  position: relative;
   display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: calc(100vh - 4rem);
   padding: 2rem;
 }
@@ -487,7 +488,18 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .menu-stocks { grid-column: 1; grid-row: 2; }
   .menu-barra { grid-column: 2; grid-row: 2; }
   .menu-cocina { grid-column: 3; grid-row: 2; }
-  .menu-ventas { grid-column: 2; grid-row: 3; }
+.menu-ventas { grid-column: 2; grid-row: 3; }
+/* En PC (pantalla amplia) BASE DE DATOS y CONSOLIDADO se pegan al borde derecho, fuera de la cuadrícula */
+@media (min-width: 1300px) {
+  .menu-bd,
+  .menu-costos {
+    position: absolute;
+    right: 2.5rem;
+    width: 230px;
+  }
+  .menu-bd { top: calc(50% - 150px); }
+  .menu-costos { top: calc(50% + 15px); }
+}
   .menu-bd { grid-column: 1; grid-row: 4; }
   .menu-costos { grid-column: 2; grid-row: 4; }
   .flow-path { stroke-width: 2.5; opacity: 0.85; }
