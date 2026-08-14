@@ -200,12 +200,12 @@ function refrescarVista() {
 }
 window.addEventListener('focus', refrescarVista);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refrescarVista(); });
-// Actualización automática cada 5 minutos (no interrumpe mientras el usuario escribe)
+// Actualización automática cada 30 minutos (no interrumpe mientras el usuario escribe)
 setInterval(() => {
   const el = document.activeElement;
   if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
   refrescarVista();
-}, 300000);
+}, 1800000);
 
 function actualizarContadoresMenu() {
   const s = document.getElementById('menu-items-stocks');
