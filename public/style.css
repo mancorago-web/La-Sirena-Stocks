@@ -16,8 +16,11 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .nav-brand-name { font-size: 0.85rem; font-weight: 800; letter-spacing: 1.5px; }
 .nav-brand-url { font-size: 0.58rem; opacity: 0.85; }
 .nav-brand:hover { background: rgba(26,35,126,1); }
-/* Footer BLAKBOX dentro del menú principal (visible en todas las plataformas) */
+/* Footer BLAKBOX dentro del menú principal (visible en todas las plataformas, queda fijo abajo al hacer scroll) */
 .menu-brand-footer {
+  position: sticky;
+  bottom: 0.75rem;
+  z-index: 5;
   align-self: flex-end;
   margin-top: 1.25rem;
   margin-right: 0.5rem;
