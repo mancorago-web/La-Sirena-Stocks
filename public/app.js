@@ -1231,8 +1231,8 @@ function cargarAlmacenes(fecha) {
       ],
     };
     const defaultCategorias = [
-      { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS/i.test(i.nombre) },
-      { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS/i.test(i.nombre) },
+      { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS|TONIC WATER BRITVIC/i.test(i.nombre) },
+      { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS|GINGER MR PERKINS/i.test(i.nombre) },
       { label: 'KOMBUCHAS', test: i => /^KOMBUCHA/i.test(i.nombre) },
       { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
       { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS|VERMOUTH CINZANO/i.test(i.nombre) && !/^VINO CLOS CBERNET/i.test(i.nombre) },
@@ -1296,7 +1296,7 @@ function cargarAlmacenes(fecha) {
                   ${s.items.map(i => itemRow(i, a)).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="8">— ${a.id === 3 ? 'CAFE' : 'COCINA'} —</td></tr>
+                  <tr class="section-header"><td colspan="8">— ${a.id === 3 ? 'CAFE' : (a.id === 1 ? 'KOMBUCHAS' : 'COCINA')} —</td></tr>
                   ${a.otros.map(i => itemRow(i, a)).join('')}
                 ` : ''}
               </tbody>
@@ -1423,8 +1423,8 @@ function cargarSalidas(fecha) {
     });
     const categoriasPorAlmacen = {};
     const defaultCategorias = [
-      { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS/i.test(i.nombre) },
-      { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS/i.test(i.nombre) },
+      { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS|TONIC WATER BRITVIC/i.test(i.nombre) },
+      { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS|GINGER MR PERKINS/i.test(i.nombre) },
       { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
       { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS|VERMOUTH CINZANO/i.test(i.nombre) && !/^VINO CLOS CBERNET/i.test(i.nombre) },
       { label: 'BARRA', test: i => /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF|PISCO PORTON ACHOLADO/i.test(i.nombre) },
@@ -1508,7 +1508,7 @@ function cargarSalidas(fecha) {
                   </tr>`).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="4">— ${a.id === 3 ? 'CAFE' : 'COCINA'} —</td></tr>
+                  <tr class="section-header"><td colspan="4">— ${a.id === 3 ? 'CAFE' : (a.id === 1 ? 'KOMBUCHAS' : 'COCINA')} —</td></tr>
                   ${a.otros.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
@@ -1740,8 +1740,8 @@ function cargarVentas(fecha) {
     });
     const categoriasPorAlmacen = {};
     const defaultCategorias = [
-      { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS/i.test(i.nombre) },
-      { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS/i.test(i.nombre) },
+      { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS|TONIC WATER BRITVIC/i.test(i.nombre) },
+      { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS|GINGER MR PERKINS/i.test(i.nombre) },
       { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
       { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS|VERMOUTH CINZANO/i.test(i.nombre) && !/^VINO CLOS CBERNET/i.test(i.nombre) },
       { label: 'BARRA', test: i => /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF|PISCO PORTON ACHOLADO/i.test(i.nombre) },
@@ -1810,7 +1810,7 @@ function cargarVentas(fecha) {
                   </tr>`).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="3">— ${a.id === 3 ? 'CAFE' : 'COCINA'} —</td></tr>
+                  <tr class="section-header"><td colspan="3">— ${a.id === 3 ? 'CAFE' : (a.id === 1 ? 'KOMBUCHAS' : 'COCINA')} —</td></tr>
                   ${a.otros.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
@@ -1863,8 +1863,8 @@ function cargarBajas(fecha) {
   getInventario(fecha).then(data => {
     const categoriasPorAlmacen = {};
     const defaultCategorias = [
-      { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS/i.test(i.nombre) },
-      { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS/i.test(i.nombre) },
+      { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS|TONIC WATER BRITVIC/i.test(i.nombre) },
+      { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS|GINGER MR PERKINS/i.test(i.nombre) },
       { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
       { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS|VERMOUTH CINZANO/i.test(i.nombre) && !/^VINO CLOS CBERNET/i.test(i.nombre) },
       { label: 'BARRA', test: i => /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF|PISCO PORTON ACHOLADO/i.test(i.nombre) },
@@ -1935,7 +1935,7 @@ function cargarBajas(fecha) {
                   </tr>`).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="4">— ${a.id === 3 ? 'CAFE' : 'COCINA'} —</td></tr>
+                  <tr class="section-header"><td colspan="4">— ${a.id === 3 ? 'CAFE' : (a.id === 1 ? 'KOMBUCHAS' : 'COCINA')} —</td></tr>
                   ${a.otros.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
@@ -2036,8 +2036,8 @@ function cargarIngresos(fecha) {
       return a.items.length > 0;
     });
     const defaultCategorias = [
-      { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS/i.test(i.nombre) },
-      { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS/i.test(i.nombre) },
+      { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS|TONIC WATER BRITVIC/i.test(i.nombre) },
+      { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS|GINGER MR PERKINS/i.test(i.nombre) },
       { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
       { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS|VERMOUTH CINZANO/i.test(i.nombre) && !/^VINO CLOS CBERNET/i.test(i.nombre) },
       { label: 'BARRA', test: i => /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF|PISCO PORTON ACHOLADO/i.test(i.nombre) },
@@ -2107,7 +2107,7 @@ function cargarIngresos(fecha) {
                   </tr>`).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="4">— ${a.id === 3 ? 'CAFE' : 'COCINA'} —</td></tr>
+                  <tr class="section-header"><td colspan="4">— ${a.id === 3 ? 'CAFE' : (a.id === 1 ? 'KOMBUCHAS' : 'COCINA')} —</td></tr>
                   ${a.otros.map(i => `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
@@ -2480,8 +2480,8 @@ function cargarStocks() {
     };
     const defaultCategorias = [
       { label: 'LECHES', test: i => /leche/i.test(i.nombre) },
-      { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS/i.test(i.nombre) },
-      { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS/i.test(i.nombre) },
+      { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS|TONIC WATER BRITVIC/i.test(i.nombre) },
+      { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS|GINGER MR PERKINS/i.test(i.nombre) },
       { label: 'KOMBUCHAS', test: i => /^KOMBUCHA/i.test(i.nombre) },
       { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
       { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|MALBEC|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|TINTO|PRADOREY|CRODERO|ESCORIHUELA|MALAJUNTA|MALJUNTA|MONTGRASS|VERMOUTH CINZANO/i.test(i.nombre) && !/^VINO CLOS CBERNET/i.test(i.nombre) },
@@ -2551,7 +2551,7 @@ function cargarStocks() {
                 ${renderItems(s.items)}
               ` : '').join('')}
               ${a.otros.length ? `
-                <tr class="section-header"><td colspan="3">— ${a.id === 3 ? 'CAFE' : 'COCINA'} —</td></tr>
+                <tr class="section-header"><td colspan="3">— ${a.id === 3 ? 'CAFE' : (a.id === 1 ? 'KOMBUCHAS' : 'COCINA')} —</td></tr>
                 ${renderItems(a.otros)}
               ` : ''}
             </tbody>
