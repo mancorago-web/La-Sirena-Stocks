@@ -3300,7 +3300,8 @@ async function consumirCopaDesdeStocks(fecha, nombre, copas, savedBy, destino) {
         const origen = (Array.isArray(dp.ingreso_origen) ? dp.ingreso_origen.filter(o => o.tipo !== 'conversion').map(o => ({ tipo: o.tipo, almacen_id: o.almacen_id, cantidad: o.cantidad })) : []);
         origen.push({ tipo: 'conversion', cantidad: copasGanadas });
         registros.push({ item_id: item, almacen_id: al, stock_ingreso: nuevoIngreso, salida_almacen: (dp.salida_almacen || 0) + restante, ingreso_origen: origen, destino_salida: destino || '' });
-        registros.push({ item_id: Number(botInv.data().item_id), almacen_id: al, salida_almacen: (dbot.salida_almacen || 0) + aAbrir, destino_salida: destino || '' });
+        // La botella abierta es una CONVERSION a copas (1 botella = 5 copas): destino COPAS
+        registros.push({ item_id: Number(botInv.data().item_id), almacen_id: al, salida_almacen: (dbot.salida_almacen || 0) + aAbrir, destino_salida: 'COPAS' });
         restante = 0;
       } else if (disp > 0) {
         registros.push({ item_id: item, almacen_id: al, salida_almacen: (dp.salida_almacen || 0) + disp, destino_salida: destino || '' });
