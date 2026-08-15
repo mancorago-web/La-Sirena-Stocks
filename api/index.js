@@ -519,6 +519,7 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
   }
 
   const cocinaStockAjustes = [];
+  const barraStockAjustes = [];
   for (const r of registros) {
     const id = docId('invdiario', fecha, r.almacen_id, r.item_id);
     const prev = existentes[id] || {};
@@ -539,10 +540,19 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     savedValues[id] = { stock_apertura: apertura, stock_ingreso: ingreso, salida_almacen: salida, total_ventas: ventas, falta_almacen: falta, stock_baja: baja };
     const cierre = apertura + ingreso - salida - ventas - falta - baja;
     const cierreR = Math.round(cierre * 100) / 100;
-    // SALIDA con destino COCINA: sumar al COCINA/STOCK
-    if (String(r.destino_salida || '') === 'cocina' && salida > 0) {
+    // SALIDA con destino COCINA: sumar al COCINA/STOCK (respeta el desglose de destinos si existe)
+    const dsCocina = Array.isArray(r.destino_salidas) ? r.destino_salidas.filter(d => String(d.destino).toLowerCase() === 'cocina').reduce((s, d) => s + (Number(d.cantidad) || 0), 0) : 0;
+    const cocinaDelta = dsCocina || (String(r.destino_salida || '') === 'cocina' ? salida : 0);
+    if (cocinaDelta > 0) {
       const nCoc = invDocMap[Number(r.almacen_id) + '_' + Number(r.item_id)];
-      if (nCoc && nCoc.nombre) cocinaStockAjustes.push({ nombre: nCoc.nombre, delta: salida, unidad: 'unidad' });
+      if (nCoc && nCoc.nombre) cocinaStockAjustes.push({ nombre: nCoc.nombre, delta: cocinaDelta, unidad: 'unidad' });
+    }
+    // SALIDA con destino BARRA: sumar al BARRA/STOCK (para que las recetas de ventas tengan stock que descontar)
+    const dsBarra = Array.isArray(r.destino_salidas) ? r.destino_salidas.filter(d => String(d.destino).toLowerCase() === 'barra').reduce((s, d) => s + (Number(d.cantidad) || 0), 0) : 0;
+    const barraDelta = dsBarra || (String(r.destino_salida || '') === 'barra' ? salida : 0);
+    if (barraDelta > 0) {
+      const nBar = invDocMap[Number(r.almacen_id) + '_' + Number(r.item_id)];
+      if (nBar && nBar.nombre) barraStockAjustes.push({ nombre: nBar.nombre, delta: barraDelta, unidad: 'unidad' });
     }
 
     // Solo se propagan los items cuyo cierre/apertura realmente cambió.
@@ -669,6 +679,12 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
   // llegan tanto de COMPRAS/INGRESOS como de las SALIDAS de STOCKS con destino COCINA)
   if (cocinaStockAjustes.length) {
     await ajustarCocinaStock(cocinaStockAjustes);
+  }
+
+  // SALIDAS de STOCK con destino BARRA: sumar al BARRA/STOCK (los items que van a BARRA
+  // quedan disponibles para descontar en las VENTAS de recetas de BARRA)
+  if (barraStockAjustes.length) {
+    await ajustarBarraStock(barraStockAjustes);
   }
 
   await batch.commit();
@@ -2543,6 +2559,31 @@ async function ajustarCocinaStock(ajustes) {
       maxId++;
       const ref = col('cocina_stock').doc(String(maxId));
       batch.set(ref, { id: maxId, ingrediente: aj.nombre, cantidad: aj.delta, unidad: aj.unidad || 'unidad', familia: 'SIN CLASIFICAR', created_at: now, updated_at: now });
+      byName[key] = { ref, data: { cantidad: aj.delta } };
+    }
+  }
+  await batch.commit();
+}
+
+// Suma (o resta) cantidades al stock de BARRA; crea el item si no existe
+async function ajustarBarraStock(ajustes) {
+  const bs = await col('barra_stock').get();
+  let maxId = bs.docs.length > 0 ? Math.max(...bs.docs.map(d => Number(d.id) || 0)) : 0;
+  const byName = {};
+  bs.docs.forEach(d => { byName[String(d.data().ingrediente || '').toUpperCase()] = d; });
+  const batch = db.batch();
+  const now = new Date().toISOString();
+  for (const aj of ajustes) {
+    const key = String(aj.nombre || '').toUpperCase();
+    if (!key || !aj.delta) continue;
+    const existente = byName[key];
+    if (existente) {
+      const nueva = Math.max(0, (parseFloat(existente.data().cantidad) || 0) + aj.delta);
+      batch.update(existente.ref, { cantidad: nueva, updated_at: now });
+    } else if (aj.delta > 0) {
+      maxId++;
+      const ref = col('barra_stock').doc(String(maxId));
+      batch.set(ref, { id: maxId, ingrediente: aj.nombre, cantidad: aj.delta, unidad: aj.unidad || 'unidad', grupo: 'MUEBLE DE APOYO', created_at: now, updated_at: now });
       byName[key] = { ref, data: { cantidad: aj.delta } };
     }
   }
