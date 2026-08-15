@@ -2831,7 +2831,10 @@ function abrirCuarentena() {
         <td>${esc(f.almacen_nombre)}</td>
         <td style="font-weight:700;color:#e65100;">${f.cantidad}</td>
         <td><input type="date" class="input-fecha-venta" value="${f.fecha}"></td>
-        <td><button class="btn-detalles" onclick="usarObservacionComoVenta(this)" style="background:#0f3460;color:#fff;">USAR COMO VENTA</button></td>
+        <td style="white-space:nowrap;">
+          <button class="btn-detalles" onclick="usarObservacionComoVenta(this)" style="background:#0f3460;color:#fff;">USAR COMO VENTA</button>
+          <button class="btn-detalles" onclick="sacarDeCuarentena(this)" style="background:#c62828;color:#fff;">SACAR</button>
+        </td>
       </tr>`;
     });
     html += '</tbody></table></div>';
@@ -2859,6 +2862,23 @@ function usarObservacionComoVenta(btn) {
     cerrarModal();
     cargarReporteDiferencias();
   }).catch(() => { btn.disabled = false; btn.textContent = 'USAR COMO VENTA'; alert('Error al usar como venta'); });
+}
+
+function sacarDeCuarentena(btn) {
+  const tr = btn.closest('tr');
+  const item_id = parseInt(tr.dataset.cuaItem);
+  const almacen_id = parseInt(tr.dataset.cuaAl);
+  const cantidad = parseFloat(tr.dataset.cuaCant);
+  const fecha = tr.dataset.cuaFecha;
+  if (!confirm('¿Sacar ' + cantidad + ' de este item de cuarentena? Volverá a REPORTES como FALTANTE (se restaura la falta).')) return;
+  btn.disabled = true; btn.textContent = 'Procesando...';
+  api('POST', '/api/reportes/accion/sacar-cuarentena', {
+    fecha, item_id, almacen_id, cantidad, saved_by: currentUserName
+  }).then(() => {
+    showToast('Sacado de cuarentena y devuelto como falta');
+    abrirCuarentena();
+    cargarReporteDiferencias();
+  }).catch(() => { btn.disabled = false; btn.textContent = 'SACAR'; alert('Error al sacar de cuarentena'); });
 }
 
 let _bdEditando = null;

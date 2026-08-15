@@ -3860,6 +3860,38 @@ app.post('/api/reportes/accion/usar-venta', async (req, res) => {
   }
 });
 
+// --- ACCION en CUARENTENA: SACAR de cuarentena y devolver a REPORTES como FALTA ---
+app.post('/api/reportes/accion/sacar-cuarentena', async (req, res) => {
+  try {
+    const { fecha, item_id, almacen_id, cantidad, saved_by } = req.body;
+    if (!fecha || !item_id || !almacen_id || !(Number(cantidad) > 0)) {
+      return res.status(400).json({ error: 'fecha, item_id, almacen_id y cantidad son requeridos' });
+    }
+    const savedBy = saved_by || (req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown');
+    const al = Number(almacen_id);
+    const item = Number(item_id);
+    const redondear = n => Math.round(n * 100) / 100;
+
+    const diaId = docId('invdiario', fecha, al, item);
+    const diaSnap = await col('inventario_diario').doc(diaId).get();
+    const x = diaSnap.exists ? diaSnap.data() : {};
+    const curObs = x.stock_observado || 0;
+    const aMover = redondear(Math.min(Number(cantidad), curObs));
+    if (aMover <= 0) return res.status(400).json({ error: 'El item no tiene stock en observación en la fecha indicada' });
+
+    // Liberar de cuarentena y devolver como FALTA (vuelve a REPORTES/FALTANTES)
+    await guardarDiaInterno(fecha, [{
+      item_id: item, almacen_id: al,
+      stock_observado: redondear(curObs - aMover),
+      falta_almacen: redondear((x.falta_almacen || 0) + aMover),
+    }], savedBy);
+
+    res.json({ ok: true, movido: aMover });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- AUTH CHECK ---
 app.get('/api/check-auth', authMiddleware, (req, res) => {
   res.json({ ok: true, name: req.user.name || null, email: req.user.email });
