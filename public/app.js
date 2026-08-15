@@ -1422,8 +1422,7 @@ function cargarSalidas(fecha) {
   _invCache = { fecha: null, data: null, pending: null };
   getInventario(fecha).then(data => {
     const todosAlmacenes = data.map(al => ({ id: al.id, nombre: al.nombre }));
-    data = data.filter(a => a.id === 4 || a.id === 8);
-    // Solo mostrar items con salida registrada en esta fecha
+    // Solo mostrar items con salida registrada en esta fecha (todos los almacenes)
     data = data.filter(a => {
       a.items = (a.items || []).filter(i => (i.salida_almacen || 0) > 0);
       return a.items.length > 0;
@@ -1499,6 +1498,7 @@ function cargarSalidas(fecha) {
                       <option value="cocina" ${i.destino_salida==='cocina'?'selected':''}>COCINA</option>
                       <option value="juan" ${i.destino_salida==='juan'?'selected':''}>JUAN</option>
                       <option value="stocks" ${i.destino_salida==='stocks'?'selected':''}>STOCKS</option>
+                      ${i.destino_salida && !['barra','cocina','juan','stocks'].includes(i.destino_salida) ? `<option value="${esc(i.destino_salida)}" selected>${esc(i.destino_salida)}</option>` : ''}
                     </select>
                     <div class="transfer-wrap" style="display:${i.destino_salida==='stocks'?'':'none'};margin-top:0.3rem;">
                       <div class="transfer-list">${buildTransferRows(i, alOpts)}</div>
@@ -1526,6 +1526,7 @@ function cargarSalidas(fecha) {
                       <option value="cocina" ${i.destino_salida==='cocina'?'selected':''}>COCINA</option>
                       <option value="juan" ${i.destino_salida==='juan'?'selected':''}>JUAN</option>
                       <option value="stocks" ${i.destino_salida==='stocks'?'selected':''}>STOCKS</option>
+                      ${i.destino_salida && !['barra','cocina','juan','stocks'].includes(i.destino_salida) ? `<option value="${esc(i.destino_salida)}" selected>${esc(i.destino_salida)}</option>` : ''}
                     </select>
                     <div class="transfer-wrap" style="display:${i.destino_salida==='stocks'?'':'none'};margin-top:0.3rem;">
                       <div class="transfer-list">${buildTransferRows(i, alOpts)}</div>

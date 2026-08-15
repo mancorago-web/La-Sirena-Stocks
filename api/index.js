@@ -3259,7 +3259,7 @@ function matchStockFuzzy(nombre, stockItems) {
 // Consumir copas de un item "- COPA" desde los STOCKS (almacenes), con prioridad de
 // almacén (Refrigerador Chica Vinos Abajo = 2, luego Almacén General Abajo = 4) y
 // conversión automática de BOTELLA -> COPA (1 botella = 5 copas) si no hay copas disponibles.
-async function consumirCopaDesdeStocks(fecha, nombre, copas, savedBy) {
+async function consumirCopaDesdeStocks(fecha, nombre, copas, savedBy, destino) {
   if (!fecha || !copas || copas <= 0) return;
   const base = String(nombre).replace(/ - COPA$/i, '');
   const botNombre = base + ' - BOTELLA';
@@ -3286,7 +3286,7 @@ async function consumirCopaDesdeStocks(fecha, nombre, copas, savedBy) {
     const dp = dayDocs[diaId] || {};
     const disp = (dp.stock_apertura || 0) + (dp.stock_ingreso || 0) - (dp.salida_almacen || 0) - (dp.total_ventas || 0) - (dp.falta_almacen || 0) - (dp.stock_baja || 0);
     if (disp >= restante) {
-      registros.push({ item_id: item, almacen_id: al, salida_almacen: (dp.salida_almacen || 0) + restante });
+      registros.push({ item_id: item, almacen_id: al, salida_almacen: (dp.salida_almacen || 0) + restante, destino_salida: destino || '' });
       restante = 0;
     } else {
       const botInv = invSnap.docs.find(dd => Number(dd.data().almacen_id) === al && String(dd.data().nombre || '').trim().toUpperCase() === botNombre.trim().toUpperCase());
@@ -3299,11 +3299,11 @@ async function consumirCopaDesdeStocks(fecha, nombre, copas, savedBy) {
         const nuevoIngreso = (dp.stock_ingreso || 0) + copasGanadas;
         const origen = (Array.isArray(dp.ingreso_origen) ? dp.ingreso_origen.filter(o => o.tipo !== 'conversion').map(o => ({ tipo: o.tipo, almacen_id: o.almacen_id, cantidad: o.cantidad })) : []);
         origen.push({ tipo: 'conversion', cantidad: copasGanadas });
-        registros.push({ item_id: item, almacen_id: al, stock_ingreso: nuevoIngreso, salida_almacen: (dp.salida_almacen || 0) + restante, ingreso_origen: origen });
-        registros.push({ item_id: Number(botInv.data().item_id), almacen_id: al, salida_almacen: (dbot.salida_almacen || 0) + aAbrir });
+        registros.push({ item_id: item, almacen_id: al, stock_ingreso: nuevoIngreso, salida_almacen: (dp.salida_almacen || 0) + restante, ingreso_origen: origen, destino_salida: destino || '' });
+        registros.push({ item_id: Number(botInv.data().item_id), almacen_id: al, salida_almacen: (dbot.salida_almacen || 0) + aAbrir, destino_salida: destino || '' });
         restante = 0;
       } else if (disp > 0) {
-        registros.push({ item_id: item, almacen_id: al, salida_almacen: (dp.salida_almacen || 0) + disp });
+        registros.push({ item_id: item, almacen_id: al, salida_almacen: (dp.salida_almacen || 0) + disp, destino_salida: destino || '' });
         restante -= disp;
       }
     }
@@ -3361,7 +3361,7 @@ app.post('/api/barra/movimientos', authMiddleware, async (req, res) => {
           if (it.es_receta === false) {
             const key = String(it.ingrediente || '').trim().toUpperCase();
             if (!key) return;
-            if (!newConsumo[key]) newConsumo[key] = { cant: 0, unidad: it.unidad || 'onzas', nombre: it.ingrediente };
+            if (!newConsumo[key]) newConsumo[key] = { cant: 0, unidad: it.unidad || 'onzas', nombre: it.ingrediente, receta: it.receta };
             newConsumo[key].cant += parseFloat(it.cantidad) || 0;
           }
         });
@@ -3387,7 +3387,7 @@ app.post('/api/barra/movimientos', authMiddleware, async (req, res) => {
           // Items "- COPA": el stock se jala de los STOCKS (almacenes), con conversión BOTELLA->COPA
           if (/ - COPA$/i.test(nombre)) {
             const copas = Math.max(0, (nc ? nc.cant : 0) - (oc ? oc.cant : 0));
-            if (copas > 0) await consumirCopaDesdeStocks(fecha, nombre, copas, savedBy);
+            if (copas > 0) await consumirCopaDesdeStocks(fecha, nombre, copas, savedBy, (nc && nc.receta) || (oc && oc.receta));
             continue;
           }
           const deltaOz = aOnzas(nc ? nc.cant : 0, nc ? nc.unidad : 'onzas', nombre) - aOnzas(oc ? oc.cant : 0, oc ? oc.unidad : 'onzas', nombre);
