@@ -2762,13 +2762,34 @@ app.put('/api/cocina/recetas/:id/with-ingredientes', async (req, res) => {
       }
     }
     await batch.commit();
-    // Asegurar que los ingredientes existan en cocina_stock (las recetas jalan del stock)
+    // Asegurar que los ingredientes existan en la BASE DE DATOS UNIFICADA
+    // (si un ingrediente nuevo no está en STOCKS/BARRA/COCINA, se agrega automáticamente sin duplicar)
     if (ingredientes && ingredientes.length) {
-      await Promise.all(ingredientes.map(ing => ensureIngredienteCocinaStock(ing.ingrediente, ing.unidad)));
+      await Promise.all(ingredientes.map(ing => ensureIngredienteEnBaseUnificada(ing.ingrediente, ing.unidad)));
     }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+// Verifica si un nombre ya existe en la base de datos unificada (cualquier zona)
+async function ingredienteExisteEnBaseUnificada(nombre) {
+  const key = normNombre(nombre);
+  if (!key) return true;
+  const [stocks, barra, cocina] = await Promise.all([
+    col('stock_precios').get(), col('barra_precios').get(), col('cocina_precios').get()
+  ]);
+  return [stocks, barra, cocina].some(snap => snap.docs.some(d =>
+    normNombre(String(d.data().nombre || d.data().ingrediente || '')) === key));
+}
+
+// Asegura que el ingrediente esté en la base unificada: si ya existe NO se duplica;
+// si no existe se crea en COCINA (cocina_stock + cocina_precios)
+async function ensureIngredienteEnBaseUnificada(ingrediente, unidad) {
+  const nombre = String(ingrediente || '').trim();
+  if (!nombre) return;
+  if (await ingredienteExisteEnBaseUnificada(nombre)) return;
+  await ensureIngredienteCocinaStock(ingrediente, unidad);
+}
 
 async function ensureIngredienteCocinaStock(ingrediente, unidad) {
   const nombre = String(ingrediente || '').trim();
@@ -2913,17 +2934,18 @@ app.delete('/api/stock/precios/:id', async (req, res) => {
 // --- BASE DE DATOS UNIFICADA (STOCKS + BARRA + COCINA) ---
 app.get('/api/basedatos/unificada', async (req, res) => {
   try {
-    const [stocks, barra, cocina] = await Promise.all([
+    const [stocks, barra, cocina, unificada] = await Promise.all([
       col('stock_precios').get(),
       col('barra_precios').get(),
       col('cocina_precios').get(),
+      col('base_unificada').get(),
     ]);
     const out = [];
     stocks.docs.forEach(d => {
       const x = d.data();
       out.push({
         id: Number(d.id), origen: 'stock', zona: 'STOCKS',
-        nombre: String(x.nombre || '').trim().toUpperCase(),
+        nombre: String(x.nombre || '').trim().toUpperCase(), categoria: '',
         unidad_compra: x.unidad || '', precio_compra: x.precio || 0,
         unidad_venta: x.unidad_venta || '', precio_venta: x.precio_venta || 0,
       });
@@ -2932,7 +2954,7 @@ app.get('/api/basedatos/unificada', async (req, res) => {
       const x = d.data();
       out.push({
         id: Number(d.id), origen: 'barra', zona: 'BARRA',
-        nombre: String(x.ingrediente || '').trim().toUpperCase(),
+        nombre: String(x.ingrediente || '').trim().toUpperCase(), categoria: '',
         unidad_compra: x.unidad_compra || '', precio_compra: x.precio_compra || 0,
         unidad_venta: x.unidad || '', precio_venta: x.precio || 0,
       });
@@ -2941,13 +2963,68 @@ app.get('/api/basedatos/unificada', async (req, res) => {
       const x = d.data();
       out.push({
         id: Number(d.id), origen: 'cocina', zona: 'COCINA',
-        nombre: String(x.ingrediente || '').trim().toUpperCase(),
+        nombre: String(x.ingrediente || '').trim().toUpperCase(), categoria: '',
         unidad_compra: x.unidad_compra || '', precio_compra: x.precio_compra || 0,
         unidad_venta: x.unidad || '', precio_venta: x.precio || 0,
       });
     });
+    unificada.docs.forEach(d => {
+      const x = d.data();
+      out.push({
+        id: Number(d.id), origen: 'unificada', zona: 'BASE',
+        nombre: String(x.nombre || '').trim().toUpperCase(),
+        categoria: String(x.categoria || '').trim().toUpperCase(),
+        unidad_compra: x.unidad_compra || '', precio_compra: x.precio_compra || 0,
+        unidad_venta: x.unidad_venta || '', precio_venta: x.precio_venta || 0,
+      });
+    });
     out.sort((a, b) => a.nombre.localeCompare(b.nombre));
     res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- BASE DE DATOS UNIFICADA: AGREGAR un nuevo item (con categoría) ---
+app.post('/api/basedatos/agregar', async (req, res) => {
+  try {
+    const { nombre, categoria, unidad_compra, precio_compra, unidad_venta, precio_venta } = req.body;
+    const nombreClean = String(nombre || '').trim();
+    if (!nombreClean) return res.status(400).json({ error: 'Nombre requerido' });
+    const key = normNombre(nombreClean);
+    // Si ya existe en cualquier zona de la base unificada, no duplicar
+    const [stocks, barra, cocina, unif] = await Promise.all([
+      col('stock_precios').get(), col('barra_precios').get(), col('cocina_precios').get(), col('base_unificada').get()
+    ]);
+    const existe = [stocks, barra, cocina, unif].some(snap => snap.docs.some(d =>
+      normNombre(String(d.data().nombre || d.data().ingrediente || '')) === key));
+    if (existe) return res.json({ ok: false, error: 'Ya existe un item con ese nombre en la base de datos unificada' });
+    const all = await col('base_unificada').get();
+    const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
+    await col('base_unificada').doc(String(nextId)).set({
+      id: nextId, nombre: nombreClean,
+      categoria: String(categoria || '').trim().toUpperCase() || 'COCINA',
+      unidad_compra: String(unidad_compra || 'unidad'),
+      precio_compra: parseFloat(precio_compra) || 0,
+      unidad_venta: String(unidad_venta || 'unidad'),
+      precio_venta: parseFloat(precio_venta) || 0,
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+    });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- BASE DE DATOS UNIFICADA: editar un item agregado manualmente ---
+app.put('/api/basedatos/items/:id', async (req, res) => {
+  try {
+    const { nombre, categoria, unidad_compra, precio_compra, unidad_venta, precio_venta } = req.body;
+    const upd = { updated_at: new Date().toISOString() };
+    if (nombre !== undefined) upd.nombre = String(nombre).trim();
+    if (categoria !== undefined) upd.categoria = String(categoria || '').trim().toUpperCase();
+    if (unidad_compra !== undefined) upd.unidad_compra = String(unidad_compra);
+    if (precio_compra !== undefined) upd.precio_compra = parseFloat(precio_compra) || 0;
+    if (unidad_venta !== undefined) upd.unidad_venta = String(unidad_venta);
+    if (precio_venta !== undefined) upd.precio_venta = parseFloat(precio_venta) || 0;
+    await col('base_unificada').doc(String(req.params.id)).update(upd);
+    res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -2965,6 +3042,7 @@ const COLS_RENOMBRAR = [
   { col: 'cocina_ventas', campo: 'nombre' },
   { col: 'receta_ingredientes', campo: 'ingrediente' },
   { col: 'ventas', campo: 'nombre' },
+  { col: 'base_unificada', campo: 'nombre' },
 ];
 const normNombre = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
 
@@ -3013,6 +3091,13 @@ app.post('/api/basedatos/renombrar', async (req, res) => {
       if (unidad_venta !== undefined) upd.unidad = unidad_venta;
       if (precio_venta !== undefined) upd.precio = precio_venta || 0;
       await col('barra_precios').doc(String(id)).update(upd);
+    } else if (origen === 'unificada') {
+      const upd = { nombre: nuevo, updated_at: now };
+      if (unidad_compra !== undefined) upd.unidad_compra = unidad_compra;
+      if (precio_compra !== undefined) upd.precio_compra = precio_compra || 0;
+      if (unidad_venta !== undefined) upd.unidad_venta = unidad_venta;
+      if (precio_venta !== undefined) upd.precio_venta = precio_venta || 0;
+      await col('base_unificada').doc(String(id)).update(upd);
     } else {
       const upd = { ingrediente: nuevo, updated_at: now };
       if (unidad_compra !== undefined) upd.unidad_compra = unidad_compra;

@@ -312,7 +312,9 @@ function renderBaseDatosUnificada() {
   // Agrupar los items por título (AGUAS, GASEOSAS, ..., COCINA)
   const porCategoria = new Map();
   claves.forEach(k => {
-    const label = bdCategoria(grupos.get(k).nombre);
+    const g = grupos.get(k);
+    const itCat = g.items.find(x => x.categoria) || g.items[0];
+    const label = itCat.categoria || bdCategoria(g.nombre);
     if (!porCategoria.has(label)) porCategoria.set(label, []);
     porCategoria.get(label).push(k);
   });
@@ -2784,13 +2786,58 @@ function usarObservacionComoVenta(btn) {
 }
 
 let _bdEditando = null;
+function agregarItemBaseDatos() {
+  const body = document.getElementById('modal-body');
+  const cats = _BD_CATEGORIAS.map(c => c.label);
+  body.innerHTML = '<h3>AGREGAR ITEM A LA BASE DE DATOS</h3>'
+    + '<label style="display:block;margin-bottom:0.4rem;">Nombre: <input id="bd-add-nombre" placeholder="Nombre del item" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;"></label>'
+    + '<label style="display:block;margin-bottom:0.4rem;">Categoría: <select id="bd-add-categoria" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;">'
+    + cats.map(c => '<option value="' + c + '">' + c + '</option>').join('')
+    + '<option value="COCINA">COCINA</option></select></label>'
+    + '<label style="display:block;margin-bottom:0.4rem;">Unidad Compra: <input id="bd-add-uc" value="unidad" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;"></label>'
+    + '<label style="display:block;margin-bottom:0.4rem;">Precio Compra: <input id="bd-add-pc" type="number" step="0.01" min="0" value="0" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;"></label>'
+    + '<label style="display:block;margin-bottom:0.4rem;">Unidad Venta: <input id="bd-add-uv" value="unidad" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;"></label>'
+    + '<label style="display:block;margin-bottom:0.4rem;">Precio Venta: <input id="bd-add-pv" type="number" step="0.01" min="0" value="0" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;"></label>'
+    + '<div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap;">'
+    + '<button onclick="guardarNuevoItemBaseDatos()" style="flex:1;min-width:120px;">AGREGAR</button>'
+    + '<button onclick="cerrarModal()" style="flex:1;min-width:120px;background:#888;">Cancelar</button>'
+    + '</div>';
+  document.getElementById('modal').style.display = 'block';
+}
+
+function guardarNuevoItemBaseDatos() {
+  const nombre = document.getElementById('bd-add-nombre').value.trim();
+  if (!nombre) { alert('El nombre es requerido'); return; }
+  api('POST', '/api/basedatos/agregar', {
+    nombre,
+    categoria: document.getElementById('bd-add-categoria').value,
+    unidad_compra: document.getElementById('bd-add-uc').value.trim(),
+    precio_compra: parseFloat(document.getElementById('bd-add-pc').value) || 0,
+    unidad_venta: document.getElementById('bd-add-uv').value.trim(),
+    precio_venta: parseFloat(document.getElementById('bd-add-pv').value) || 0
+  }).then(r => {
+    if (r && r.ok === false) { alert(r.error || 'El item ya existe'); return; }
+    cerrarModal();
+    showToast('Item agregado a la base de datos');
+    cargarBaseDatosUnificada();
+  }).catch(() => alert('Error al agregar el item'));
+}
+
 function editarItemBaseDatos(origen, id) {
   const x = _bdUnificada.find(i => i.origen === origen && i.id === id);
   if (!x) return;
   _bdEditando = x;
   const body = document.getElementById('modal-body');
+  let categoriaHtml = '';
+  if (x.origen === 'unificada') {
+    const cats = _BD_CATEGORIAS.map(c => c.label).concat('COCINA');
+    categoriaHtml = '<label>Categoría: <select id="bd-edit-categoria">'
+      + cats.map(c => '<option value="' + c + '" ' + (x.categoria === c ? 'selected' : '') + '>' + c + '</option>').join('')
+      + '</select></label>';
+  }
   body.innerHTML = '<h3>EDITAR ITEM (' + x.zona + ')</h3>'
     + '<label>Nombre: <input id="bd-edit-nombre" value="' + esc(x.nombre) + '"></label>'
+    + categoriaHtml
     + '<label>Unidad Compra: <input id="bd-edit-uc" value="' + esc(x.unidad_compra || '') + '"></label>'
     + '<label>Precio Compra: <input id="bd-edit-pc" type="number" step="0.01" min="0" value="' + (x.precio_compra || 0) + '"></label>'
     + '<label>Unidad Venta: <input id="bd-edit-uv" value="' + esc(x.unidad_venta || '') + '"></label>'
@@ -2842,6 +2889,12 @@ function guardarItemBaseDatos() {
   let url, data;
   if (o === 'stock') { url = '/api/stock/precios/' + id; data = { nombre, unidad: uc, precio: pc, unidad_venta: uv, precio_venta: pv }; }
   else if (o === 'barra') { url = '/api/barra/precios/' + id; data = { ingrediente: nombre, unidad_compra: uc, precio_compra: pc, unidad: uv, precio: pv }; }
+  else if (o === 'unificada') {
+    url = '/api/basedatos/items/' + id;
+    data = { nombre, unidad_compra: uc, precio_compra: pc, unidad_venta: uv, precio_venta: pv };
+    const catSel = document.getElementById('bd-edit-categoria');
+    if (catSel) data.categoria = catSel.value;
+  }
   else { url = '/api/cocina/precios/' + id; data = { ingrediente: nombre, unidad_compra: uc, precio_compra: pc, unidad: uv, precio: pv }; }
   api('PUT', url, data).then(() => {
     showToast('Item actualizado');
@@ -4180,9 +4233,18 @@ function editarRecetaCocina(id) {
   api('GET', '/api/cocina/recetas').then(recetas => {
     const r = recetas.find(rec => rec.id === id);
     if (!r) { alert('Receta no encontrada'); return; }
-    api('GET', '/api/cocina/stock').then(stock => {
+    api('GET', '/api/basedatos/unificada').then(uni => {
       const dl = document.getElementById('recetas-base-datalist');
-      if (dl) dl.innerHTML = (stock || []).map(p => `<option value="${esc(p.ingrediente)}">`).join('');
+      if (dl) {
+        const vistos = new Set();
+        dl.innerHTML = (uni || []).map(p => {
+          const n = String(p.nombre || '').trim();
+          const k = n.toUpperCase();
+          if (!n || vistos.has(k)) return '';
+          vistos.add(k);
+          return `<option value="${esc(n)}">`;
+        }).join('');
+      }
       const cats = ['PLATOS', 'ENTRADAS', 'SOPAS', 'CARNES', 'MARISCOS', 'POLLO', 'GUARNICIONES', 'POSTRES', 'OTROS'];
       document.getElementById('modal-body').innerHTML = `
         <h3 style="margin-top:0">EDITAR RECETA</h3>
@@ -4212,12 +4274,13 @@ function editarRecetaCocina(id) {
           </tbody>
         </table></div>
         <button onclick="agregarFilaIngredienteCocina()" style="margin:0.5rem 0">+ AGREGAR INGREDIENTE</button>
+        <div style="font-size:0.75rem;color:#777;margin:0.3rem 0 0.6rem;">Los ingredientes nuevos (que no existan en la base de datos) se agregan automáticamente a la base de datos unificada.</div>
         <br>
         <button onclick="guardarEdicionRecetaCocina(${id})" style="margin-top:0.5rem">GUARDAR</button>
         <button onclick="cerrarModal()" style="margin-top:0.5rem;margin-left:0.5rem">CANCELAR</button>
       `;
       document.getElementById('modal').style.display = 'block';
-    }).catch(() => alert('Error cargando stock'));
+    }).catch(() => alert('Error cargando base de datos'));
   }).catch(() => alert('Error al cargar receta'));
 }
 
