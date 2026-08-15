@@ -2548,8 +2548,7 @@ function enviarAvisoStockWhatsApp() {
   if (!_stocksBajosData || !_stocksBajosData.lista.length) return;
   const lines = ['AVISO DE STOCK BAJO - ' + _stocksBajosData.fecha, ''];
   _stocksBajosData.lista.forEach((i, idx) => {
-    const det = i.detalles.filter(d => (d.cantidad || 0) > 0).map(d => d.almacen + ': ' + d.cantidad).join(', ');
-    lines.push((idx + 1) + '. ' + i.nombre + ' - ' + i.total + (det ? ' (' + det + ')' : ''));
+    lines.push((idx + 1) + '. ' + i.nombre + ' - ' + i.total);
   });
   const msg = lines.join('\n');
   const url = 'https://wa.me/?text=' + encodeURIComponent(msg);
