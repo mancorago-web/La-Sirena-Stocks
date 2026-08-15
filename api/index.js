@@ -458,6 +458,12 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     const old = dayDocs[srcId];
     const srcInv = invDocMap[Number(r.almacen_id) + '_' + Number(r.item_id)];
     const nombre = srcInv ? srcInv.nombre : null;
+    // Transferencias efectivas: las del registro actual, o las ya guardadas (para no perderlas
+    // al re-guardar desde ALMACENES, que no envía este campo).
+    const destino = r.destino_salida !== undefined ? String(r.destino_salida) : (old ? String(old.destino_salida || '') : '');
+    let transf = null;
+    if (Array.isArray(r.transferencias)) transf = r.transferencias;
+    else if (destino === 'stocks' && old && Array.isArray(old.transferencias)) transf = old.transferencias;
     if (old && Array.isArray(old.transferencias) && nombre) {
       old.transferencias.forEach(t => {
         if (!t.almacen_id) return;
@@ -465,8 +471,8 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
         addTransf(k, Number(r.almacen_id), -(Number(t.cantidad) || 0));
       });
     }
-    if (String(r.destino_salida || '') === 'stocks' && Array.isArray(r.transferencias) && nombre) {
-      r.transferencias.forEach(t => {
+    if (destino === 'stocks' && transf && nombre) {
+      transf.forEach(t => {
         if (!t.almacen_id) return;
         const k = Number(t.almacen_id) + '_' + String(nombre).toUpperCase();
         destKeys.add(k);
