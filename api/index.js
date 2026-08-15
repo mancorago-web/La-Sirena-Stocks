@@ -432,6 +432,7 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
   const allDaySnap = await col('inventario_diario').where('fecha', '==', fecha).get();
   const dayDocs = {};
   allDaySnap.docs.forEach(d => { dayDocs[d.id] = d.data(); });
+  const savedValues = {}; // diaId -> valores finales calculados en ESTE guardado (para no sobrescribirlos)
   const transferMap = {}; // destAl_nombreUpper -> { [almacen_origen]: cantidad }
   const destKeys = new Set(); // destAl_nombreUpper que tienen transferencias hoy (para resetear si se eliminan)
   const addTransf = (k, srcAl, cant) => {
@@ -533,6 +534,8 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     // Ajustes por auto-apertura de botella (copa recibe ingreso, botella registra salida)
     if (ajusteCopa[clave]) ingreso += ajusteCopa[clave];
     if (ajusteBotella[clave]) salida += ajusteBotella[clave];
+    // Valores finales de este guardado (para que las transferencias no sobrescriban lo recién editado)
+    savedValues[id] = { stock_apertura: apertura, stock_ingreso: ingreso, salida_almacen: salida, total_ventas: ventas, falta_almacen: falta, stock_baja: baja };
     const cierre = apertura + ingreso - salida - ventas - falta - baja;
     const cierreR = Math.round(cierre * 100) / 100;
     // SALIDA con destino COCINA: sumar al COCINA/STOCK
@@ -612,8 +615,10 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
       transferCache[key] = { item_id: destItemId };
     }
     const destId = docId('invdiario', fecha, destAl, destItemId);
-    const dp = dayDocs[destId] || {};
-    const manual = Math.max(0, (dp.stock_ingreso || 0) - (dp.ingreso_transferencia || 0));
+    const prevDest = dayDocs[destId] || {};
+    // Usar los valores recién guardados si el destino también fue editado en este guardado
+    const dp = savedValues[destId] || prevDest;
+    const manual = Math.max(0, (dp.stock_ingreso || 0) - (prevDest.ingreso_transferencia || 0));
     const ingreso = Math.round((manual + newTransfer) * 100) / 100;
     const cierre = Math.round((((dp.stock_apertura || 0) + ingreso - (dp.salida_almacen || 0) - (dp.total_ventas || 0) - (dp.falta_almacen || 0) - (dp.stock_baja || 0)) * 100)) / 100;
     const ingreso_origen = [];
