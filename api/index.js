@@ -889,6 +889,25 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
     // Aplicar a STOCKS (inventario_diario + propagación)
     if (registrosStocks.length) {
       await guardarDiaInterno(fecha, registrosStocks, savedBy);
+      // Asegurar que los items nuevos existan en stock_precios (Base de Datos de STOCKS)
+      // para que aparezcan automáticamente en la BASE DE DATOS UNIFICADA.
+      const spSnap = await col('stock_precios').get();
+      const spBy = new Set(spSnap.docs.map(d => String(d.data().nombre || '').trim().toUpperCase()));
+      let maxSpId = spSnap.docs.length ? Math.max(...spSnap.docs.map(d => Number(d.id) || 0)) : 0;
+      const spBatch = db.batch();
+      let spNuevos = 0;
+      const now = new Date().toISOString();
+      for (const r of resumen.stocks) {
+        const key = String(r.nombre || '').trim().toUpperCase();
+        if (!key || spBy.has(key)) continue;
+        maxSpId++;
+        spBatch.set(col('stock_precios').doc(String(maxSpId)), {
+          id: maxSpId, nombre: r.nombre, unidad: 'unidad', precio: 0,
+          unidad_venta: 'unidad', precio_venta: 0, created_at: now, updated_at: now
+        });
+        spBy.add(key); spNuevos++;
+      }
+      if (spNuevos) await spBatch.commit();
     }
 
     // Aplicar a BARRA (movimientos de ingreso + sumar al stock de barra según mueble)
@@ -944,6 +963,30 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
         }
       }
       if (ajustados) await stockBatch.commit();
+
+      // Asegurar que los items nuevos existan en barra_precios (Base de Datos de BARRA)
+      // para que aparezcan automáticamente en la BASE DE DATOS UNIFICADA.
+      const precSnap = await col('barra_precios').get();
+      const precBy = new Set(precSnap.docs.map(d => String(d.data().ingrediente || '').trim().toUpperCase()));
+      let maxPrecId = precSnap.docs.length ? Math.max(...precSnap.docs.map(d => Number(d.id) || 0)) : 0;
+      const precBatch = db.batch();
+      let precNuevos = 0;
+      const now = new Date().toISOString();
+      for (const m of movsBarra) {
+        const key = String(m.ingrediente || '').trim().toUpperCase();
+        if (!key || precBy.has(key)) continue;
+        maxPrecId++;
+        const uni = normalizeUnit(m.unidad);
+        const parsed = uni === 'unidad' ? parseEquivFromName(m.ingrediente) : {};
+        precBatch.set(col('barra_precios').doc(String(maxPrecId)), {
+          id: maxPrecId, ingrediente: m.ingrediente, precio: 0, unidad: uni,
+          precio_compra: 0, unidad_compra: '', equiv_ml: parsed.equiv_ml || 0, equiv_gr: parsed.equiv_gr || 0,
+          created_at: now, updated_at: now
+        });
+        precBy.add(key);
+        precNuevos++;
+      }
+      if (precNuevos) await precBatch.commit();
     }
 
     // Aplicar a COCINA (registro de compras + sumar al COCINA/STOCK)
@@ -958,6 +1001,25 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       await batch.commit();
       // Sumar al COCINA/STOCK (si el item no existe, se crea)
       await ajustarCocinaStock(cocinaCompras.map(m => ({ nombre: m.nombre, delta: m.cantidad, unidad: m.unidad })));
+      // Asegurar que los items nuevos existan en cocina_precios (Base de Datos de COCINA)
+      // para que aparezcan automáticamente en la BASE DE DATOS UNIFICADA.
+      const cpSnap = await col('cocina_precios').get();
+      const cpBy = new Set(cpSnap.docs.map(d => String(d.data().ingrediente || '').trim().toUpperCase()));
+      let maxCpId = cpSnap.docs.length ? Math.max(...cpSnap.docs.map(d => Number(d.id) || 0)) : 0;
+      const cpBatch = db.batch();
+      let cpNuevos = 0;
+      const now = new Date().toISOString();
+      for (const m of cocinaCompras) {
+        const key = String(m.nombre || '').trim().toUpperCase();
+        if (!key || cpBy.has(key)) continue;
+        maxCpId++;
+        cpBatch.set(col('cocina_precios').doc(String(maxCpId)), {
+          id: maxCpId, ingrediente: m.nombre, precio: 0, unidad: 'unidad',
+          precio_compra: 0, unidad_compra: '', created_at: now, updated_at: now
+        });
+        cpBy.add(key); cpNuevos++;
+      }
+      if (cpNuevos) await cpBatch.commit();
     }
 
     // Registrar el log de cada compra (para el detalle de COMPRAS/INGRESOS)
