@@ -2162,7 +2162,7 @@ async function ensureIngredienteInPrecios(ingrediente, unidad) {
 }
 
 // --- BARRA STOCK ---
-const GRUPOS_BARRA = ['MUEBLE DE ARRIBA', 'MUEBLE DE ABAJO', 'MUEBLE DE APOYO'];
+const GRUPOS_BARRA = ['MUEBLE DE ARRIBA', 'MUEBLE DE ABAJO', 'MUEBLE DE APOYO', 'REFRIGERADOR CHICO (VINOS)'];
 function normalizeGrupo(g) {
   const up = String(g || '').toUpperCase().trim();
   return GRUPOS_BARRA.find(x => x === up) || '';

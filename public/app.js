@@ -3522,7 +3522,7 @@ function cambiarSubTab(nombre, prefix) {
 }
 
 // --- BARRA: Stock ---
-const GRUPOS_BARRA = ['MUEBLE DE ARRIBA', 'MUEBLE DE ABAJO', 'MUEBLE DE APOYO'];
+const GRUPOS_BARRA = ['MUEBLE DE ARRIBA', 'MUEBLE DE ABAJO', 'MUEBLE DE APOYO', 'REFRIGERADOR CHICO (VINOS)'];
 const UNIDADES_STOCK = ['ml', 'unidad', 'onzas', 'gramos', 'kg', 'lt', 'hojas', 'gotas', 'rodajas'];
 let _stockDirty = false;
 
