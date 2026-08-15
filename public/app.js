@@ -1492,21 +1492,18 @@ function cargarSalidas(fecha) {
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
                     <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01" oninput="updateTransferTotal(this.closest('tr'))"></td>
-                    <td><select class="select-destino-salida" onchange="onCambioDestinoSalida(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">
-                      <option value="" ${(i.destino_salida||'')===''?'selected':''}>—</option>
-                      <option value="barra" ${i.destino_salida==='barra'?'selected':''}>BARRA</option>
-                      <option value="cocina" ${i.destino_salida==='cocina'?'selected':''}>COCINA</option>
-                      <option value="juan" ${i.destino_salida==='juan'?'selected':''}>JUAN</option>
-                      <option value="stocks" ${i.destino_salida==='stocks'?'selected':''}>STOCKS</option>
-                      ${i.destino_salida && !['barra','cocina','juan','stocks'].includes(i.destino_salida) ? `<option value="${esc(i.destino_salida)}" selected>${esc(i.destino_salida)}</option>` : ''}
-                    </select>
-                    <div class="transfer-wrap" style="display:${i.destino_salida==='stocks'?'':'none'};margin-top:0.3rem;">
-                      <div class="transfer-list">${buildTransferRows(i, alOpts)}</div>
-                      <div style="margin-top:0.3rem;">
-                        <button type="button" class="btn-add-transfer" onclick="addTransferencia(this)" style="padding:0.2rem 0.4rem;font-size:0.75rem;cursor:pointer;">+ Almacén</button>
-                        <span class="transfer-total" style="font-size:0.8rem;margin-left:0.4rem;">Suma: ${i.salida_almacen || 0} / ${i.salida_almacen || 0}</span>
+                    <td>
+                      <div class="destino-list">${buildDestinoRows(i)}</div>
+                      <button type="button" class="btn-add-destino" onclick="addDestinoSalida(this)" style="margin-top:0.25rem;padding:0.2rem 0.4rem;font-size:0.75rem;cursor:pointer;">+ Destino</button>
+                      <span class="destino-total" style="font-size:0.8rem;margin-left:0.4rem;">Suma: ${i.salida_almacen || 0} / ${i.salida_almacen || 0}</span>
+                      <div class="transfer-wrap" style="display:none;margin-top:0.3rem;">
+                        <div class="transfer-list">${buildTransferRows(i, alOpts)}</div>
+                        <div style="margin-top:0.3rem;">
+                          <button type="button" class="btn-add-transfer" onclick="addTransferencia(this)" style="padding:0.2rem 0.4rem;font-size:0.75rem;cursor:pointer;">+ Almacén</button>
+                          <span class="transfer-total" style="font-size:0.8rem;margin-left:0.4rem;">Suma: ${i.salida_almacen || 0} / ${i.salida_almacen || 0}</span>
+                        </div>
                       </div>
-                    </div></td>
+                    </td>
                     <input type="hidden" class="hidden-cierre" value="${i.stock_cierre || 0}">
                     <input type="hidden" class="hidden-ventas" value="${i.total_ventas || 0}">
                     <input type="hidden" class="hidden-ingreso" value="${i.stock_ingreso || 0}">
@@ -1520,21 +1517,18 @@ function cargarSalidas(fecha) {
                     <td>${i.nombre}</td>
                     <td>${i.stock_apertura || 0}</td>
                     <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01" oninput="updateTransferTotal(this.closest('tr'))"></td>
-                    <td><select class="select-destino-salida" onchange="onCambioDestinoSalida(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">
-                      <option value="" ${(i.destino_salida||'')===''?'selected':''}>—</option>
-                      <option value="barra" ${i.destino_salida==='barra'?'selected':''}>BARRA</option>
-                      <option value="cocina" ${i.destino_salida==='cocina'?'selected':''}>COCINA</option>
-                      <option value="juan" ${i.destino_salida==='juan'?'selected':''}>JUAN</option>
-                      <option value="stocks" ${i.destino_salida==='stocks'?'selected':''}>STOCKS</option>
-                      ${i.destino_salida && !['barra','cocina','juan','stocks'].includes(i.destino_salida) ? `<option value="${esc(i.destino_salida)}" selected>${esc(i.destino_salida)}</option>` : ''}
-                    </select>
-                    <div class="transfer-wrap" style="display:${i.destino_salida==='stocks'?'':'none'};margin-top:0.3rem;">
-                      <div class="transfer-list">${buildTransferRows(i, alOpts)}</div>
-                      <div style="margin-top:0.3rem;">
-                        <button type="button" class="btn-add-transfer" onclick="addTransferencia(this)" style="padding:0.2rem 0.4rem;font-size:0.75rem;cursor:pointer;">+ Almacén</button>
-                        <span class="transfer-total" style="font-size:0.8rem;margin-left:0.4rem;">Suma: ${i.salida_almacen || 0} / ${i.salida_almacen || 0}</span>
+                    <td>
+                      <div class="destino-list">${buildDestinoRows(i)}</div>
+                      <button type="button" class="btn-add-destino" onclick="addDestinoSalida(this)" style="margin-top:0.25rem;padding:0.2rem 0.4rem;font-size:0.75rem;cursor:pointer;">+ Destino</button>
+                      <span class="destino-total" style="font-size:0.8rem;margin-left:0.4rem;">Suma: ${i.salida_almacen || 0} / ${i.salida_almacen || 0}</span>
+                      <div class="transfer-wrap" style="display:none;margin-top:0.3rem;">
+                        <div class="transfer-list">${buildTransferRows(i, alOpts)}</div>
+                        <div style="margin-top:0.3rem;">
+                          <button type="button" class="btn-add-transfer" onclick="addTransferencia(this)" style="padding:0.2rem 0.4rem;font-size:0.75rem;cursor:pointer;">+ Almacén</button>
+                          <span class="transfer-total" style="font-size:0.8rem;margin-left:0.4rem;">Suma: ${i.salida_almacen || 0} / ${i.salida_almacen || 0}</span>
+                        </div>
                       </div>
-                    </div></td>
+                    </td>
                     <input type="hidden" class="hidden-cierre" value="${i.stock_cierre || 0}">
                     <input type="hidden" class="hidden-ventas" value="${i.total_ventas || 0}">
                     <input type="hidden" class="hidden-ingreso" value="${i.stock_ingreso || 0}">
@@ -1551,6 +1545,7 @@ function cargarSalidas(fecha) {
     `; }).join('');
     const bs = document.getElementById('buscar-salida');
     if (bs && bs.value) buscarEnTabla(bs.value, 'accordion-salidas');
+    container.querySelectorAll('.select-destino-salida').forEach(sel => onCambioDestinoSalida(sel));
   });
 }
 
@@ -1563,15 +1558,19 @@ function guardarSalidas() {
     item.querySelectorAll('tr[data-item-id]').forEach(tr => {
       const itemId = parseInt(tr.dataset.itemId);
       const salida = parseFloat(tr.querySelector('.input-salida').value) || 0;
-      const destino = tr.querySelector('.select-destino-salida')?.value || '';
+      const destinos = Array.from(tr.querySelectorAll('.destino-row')).map(r => ({
+        destino: r.querySelector('.select-destino-salida')?.value || '',
+        cantidad: parseFloat(r.querySelector('.input-destino-cant')?.value) || 0
+      })).filter(d => d.destino && d.cantidad > 0);
+      const destinoPrimario = destinos.length ? destinos[0].destino : '';
       let transferencias;
-      if (destino === 'stocks') {
+      if (destinos.some(d => d.destino === 'stocks')) {
         transferencias = Array.from(tr.querySelectorAll('.transfer-row')).map(r => ({
           almacen_id: parseInt(r.querySelector('.select-transfer-almacen')?.value) || 0,
           cantidad: parseFloat(r.querySelector('.input-transfer-cant')?.value) || 0
         })).filter(t => t.almacen_id > 0 && t.cantidad > 0);
       }
-      registros.push({ item_id: itemId, almacen_id: almacenId, salida_almacen: salida, destino_salida: destino, transferencias });
+      registros.push({ item_id: itemId, almacen_id: almacenId, salida_almacen: salida, destino_salida: destinoPrimario, destino_salidas: destinos, transferencias });
     });
   });
   const btn = document.querySelector('#tab-salidas .btn-guardar-dia');
@@ -1588,9 +1587,64 @@ function guardarSalidas() {
 
 function onCambioDestinoSalida(sel) {
   const tr = sel.closest('tr');
+  if (!tr) return;
   const wrap = tr.querySelector('.transfer-wrap');
-  if (wrap) wrap.style.display = sel.value === 'stocks' ? '' : 'none';
-  if (sel.value === 'stocks') updateTransferTotal(tr);
+  const tieneStocks = Array.from(tr.querySelectorAll('.select-destino-salida')).some(s => s.value === 'stocks');
+  if (wrap) wrap.style.display = tieneStocks ? '' : 'none';
+  if (tieneStocks) updateTransferTotal(tr);
+  updateDestinoTotal(tr);
+}
+
+function buildDestinoRows(i) {
+  let rows = (Array.isArray(i.destino_salidas) && i.destino_salidas.length)
+    ? i.destino_salidas.filter(r => r.destino || (r.cantidad || 0) > 0)
+    : [{ destino: i.destino_salida || '', cantidad: i.salida_almacen || 0 }];
+  if (!rows.length) rows = [{ destino: '', cantidad: 0 }];
+  return rows.map(r => {
+    const d = String(r.destino || '');
+    const fijos = ['', 'barra', 'cocina', 'juan', 'stocks'].map(v =>
+      `<option value="${v}" ${d === v ? 'selected' : ''}>${v === '' ? '—' : v.toUpperCase()}</option>`).join('');
+    const extra = d && !['barra', 'cocina', 'juan', 'stocks'].includes(d)
+      ? `<option value="${esc(d)}" selected>${esc(d)}</option>` : '';
+    return '<div class="destino-row">'
+      + '<select class="select-destino-salida" onchange="onCambioDestinoSalida(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">'
+      + fijos + extra
+      + '</select>'
+      + '<input type="number" class="input-num input-destino-cant" value="' + (r.cantidad || 0) + '" step="0.01" min="0" oninput="updateDestinoTotal(this.closest(\'tr\'))" style="width:70px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;margin-left:0.2rem;">'
+      + '<button type="button" class="btn-remove-destino" onclick="removeDestinoSalida(this)" title="Quitar" style="margin-left:0.2rem;cursor:pointer;">✕</button>'
+      + '</div>';
+  }).join('');
+}
+
+function addDestinoSalida(btn) {
+  const tr = btn.closest('tr');
+  const list = tr.querySelector('.destino-list');
+  const div = document.createElement('div');
+  div.className = 'destino-row';
+  div.innerHTML = '<select class="select-destino-salida" onchange="onCambioDestinoSalida(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">'
+    + '<option value="">—</option><option value="barra">BARRA</option><option value="cocina">COCINA</option><option value="juan">JUAN</option><option value="stocks">STOCKS</option>'
+    + '</select>'
+    + '<input type="number" class="input-num input-destino-cant" value="0" step="0.01" min="0" oninput="updateDestinoTotal(this.closest(\'tr\'))" style="width:70px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;margin-left:0.2rem;">'
+    + '<button type="button" class="btn-remove-destino" onclick="removeDestinoSalida(this)" title="Quitar" style="margin-left:0.2rem;cursor:pointer;">✕</button>';
+  list.appendChild(div);
+  updateDestinoTotal(tr);
+}
+
+function removeDestinoSalida(btn) {
+  const tr = btn.closest('tr');
+  btn.closest('.destino-row').remove();
+  onCambioDestinoSalida(tr.querySelector('.select-destino-salida'));
+}
+
+function updateDestinoTotal(tr) {
+  if (!tr) return;
+  const salida = parseFloat(tr.querySelector('.input-salida')?.value) || 0;
+  const sum = Array.from(tr.querySelectorAll('.input-destino-cant')).reduce((acc, el) => acc + (parseFloat(el.value) || 0), 0);
+  const total = tr.querySelector('.destino-total');
+  if (total) {
+    total.textContent = 'Suma: ' + Math.round(sum * 100) / 100 + ' / ' + Math.round(salida * 100) / 100;
+    total.style.color = Math.abs(sum - salida) < 0.005 ? '#28a745' : '#dc3545';
+  }
 }
 
 function buildTransferRows(i, alOpts) {
@@ -1637,6 +1691,7 @@ function updateTransferTotal(tr) {
     total.textContent = 'Suma: ' + Math.round(sum * 100) / 100 + ' / ' + Math.round(salida * 100) / 100;
     total.style.color = Math.abs(sum - salida) < 0.005 ? '#28a745' : '#dc3545';
   }
+  updateDestinoTotal(tr);
 }
 
 function verDetallesSalidas() {
@@ -1664,6 +1719,8 @@ function verDetallesSalidas() {
         if ((i.destino_salida || '').toLowerCase() === 'stocks') {
           const ts = (Array.isArray(i.transferencias) && i.transferencias.length) ? i.transferencias : (i.destino_almacen_id ? [{ almacen_id: i.destino_almacen_id, cantidad: i.salida_almacen || 0 }] : []);
           destinoMostrar = ts.length ? 'STOCKS: ' + ts.map(t => (alNombres[t.almacen_id] || 'Almacén ' + t.almacen_id) + ' (' + (t.cantidad || 0) + ')').join(' + ') : 'STOCKS';
+        } else if (Array.isArray(i.destino_salidas) && i.destino_salidas.length) {
+          destinoMostrar = i.destino_salidas.map(d => (d.destino || '').toUpperCase() + ' (' + (d.cantidad || 0) + ')').join(' + ');
         }
         html += '<tr><td>' + i.nombre + '</td><td>' + (i.salida_almacen || 0) + '</td><td>' + destinoMostrar + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
       });

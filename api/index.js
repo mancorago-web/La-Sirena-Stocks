@@ -563,6 +563,12 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     if (r.stock_baja !== undefined) data.stock_baja = baja;
     if (r.nota_baja !== undefined) data.nota_baja = notaBaja;
     if (r.destino_salida !== undefined) data.destino_salida = String(r.destino_salida || '');
+    // Desglose de destinos (varias salidas del mismo item a destinos distintos, ej. COPAS x4 + JUAN x1)
+    if (r.destino_salidas !== undefined) {
+      data.destino_salidas = Array.isArray(r.destino_salidas)
+        ? r.destino_salidas.map(d => ({ destino: String(d.destino || ''), cantidad: Number(d.cantidad) || 0 })).filter(d => d.destino && d.cantidad > 0)
+        : [];
+    }
     if (r.transferencias !== undefined) data.transferencias = Array.isArray(r.transferencias) ? r.transferencias.map(t => ({ almacen_id: Number(t.almacen_id), cantidad: Number(t.cantidad) || 0 })) : [];
     if (r.ingreso_origen !== undefined) data.ingreso_origen = Array.isArray(r.ingreso_origen) ? r.ingreso_origen : [];
     // Si hubo auto-apertura de botella, forzar la escritura del ingreso (copa) o salida (botella)
