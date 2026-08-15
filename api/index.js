@@ -3190,7 +3190,7 @@ async function consumirCopaDesdeStocks(fecha, nombre, copas, savedBy) {
     const dp = dayDocs[diaId] || {};
     const disp = (dp.stock_apertura || 0) + (dp.stock_ingreso || 0) - (dp.salida_almacen || 0) - (dp.total_ventas || 0) - (dp.falta_almacen || 0) - (dp.stock_baja || 0);
     if (disp >= restante) {
-      registros.push({ item_id: item, almacen_id: al, total_ventas: (dp.total_ventas || 0) + restante });
+      registros.push({ item_id: item, almacen_id: al, salida_almacen: (dp.salida_almacen || 0) + restante });
       restante = 0;
     } else {
       const botInv = invSnap.docs.find(dd => Number(dd.data().almacen_id) === al && String(dd.data().nombre || '').trim().toUpperCase() === botNombre.trim().toUpperCase());
@@ -3203,11 +3203,11 @@ async function consumirCopaDesdeStocks(fecha, nombre, copas, savedBy) {
         const nuevoIngreso = (dp.stock_ingreso || 0) + copasGanadas;
         const origen = (Array.isArray(dp.ingreso_origen) ? dp.ingreso_origen.filter(o => o.tipo !== 'conversion').map(o => ({ tipo: o.tipo, almacen_id: o.almacen_id, cantidad: o.cantidad })) : []);
         origen.push({ tipo: 'conversion', cantidad: copasGanadas });
-        registros.push({ item_id: item, almacen_id: al, stock_ingreso: nuevoIngreso, total_ventas: (dp.total_ventas || 0) + restante, ingreso_origen: origen });
+        registros.push({ item_id: item, almacen_id: al, stock_ingreso: nuevoIngreso, salida_almacen: (dp.salida_almacen || 0) + restante, ingreso_origen: origen });
         registros.push({ item_id: Number(botInv.data().item_id), almacen_id: al, salida_almacen: (dbot.salida_almacen || 0) + aAbrir });
         restante = 0;
       } else if (disp > 0) {
-        registros.push({ item_id: item, almacen_id: al, total_ventas: (dp.total_ventas || 0) + disp });
+        registros.push({ item_id: item, almacen_id: al, salida_almacen: (dp.salida_almacen || 0) + disp });
         restante -= disp;
       }
     }
