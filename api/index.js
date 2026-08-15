@@ -3227,19 +3227,42 @@ app.post('/api/barra/movimientos', authMiddleware, async (req, res) => {
         });
         // Acumular el descuento por item de stock (evita doble escritura del mismo doc en el batch)
         const ajustes = {};
+        const onzasStock = (dd) => aOnzas(dd.cantidad, dd.unidad, dd.ingrediente);
         for (const key of keys) {
           const nc = newConsumo[key];
           const oc = oldConsumo[key];
           const nombre = (nc && nc.nombre) || (oc && oc.nombre) || key;
           const deltaOz = aOnzas(nc ? nc.cant : 0, nc ? nc.unidad : 'onzas', nombre) - aOnzas(oc ? oc.cant : 0, oc ? oc.unidad : 'onzas', nombre);
           if (!deltaOz || isNaN(deltaOz)) continue;
-          let matches = stockByName[key] || [];
-          if (!matches.length) matches = matchStockFuzzy(nombre, allStock);
-          if (!matches.length) continue;
-          // Aplicar TODO el delta al primer item de stock que coincida (permite stock negativo)
-          const si = matches[0].item;
-          if (!ajustes[si.key]) ajustes[si.key] = { ref: matches[0].ref, deltaOz: 0 };
-          ajustes[si.key].deltaOz += deltaOz;
+
+          // 1) Candidatos con el MISMO nombre (en todos los muebles)
+          const exactos = (stockByName[key] || []).slice();
+          let pool = exactos.filter(e => onzasStock(e.data) > 0);
+          // 2) Si no hay exactos con stock, buscar OTRAS presentaciones del mismo producto (fuzzy) en todos los muebles
+          if (!pool.length) {
+            const alternos = matchStockFuzzy(nombre, allStock)
+              .map(m => m.item)
+              .filter(ent => String(ent.data.ingrediente || '').trim().toUpperCase() !== key && onzasStock(ent.data) > 0);
+            pool = alternos.length ? alternos : (exactos.length ? exactos : alternos);
+          }
+          if (!pool.length) continue;
+
+          // 3) Repartir el consumo entre los que tienen stock; el resto va al primero (permite negativo
+          //    solo si no hubo stock suficiente en ninguna presentación/mueble)
+          let restante = deltaOz;
+          for (const e of pool) {
+            if (Math.abs(restante) < 0.0001) break;
+            const oz = onzasStock(e.data);
+            const aDescontar = restante > 0 ? Math.min(oz, restante) : Math.max(-oz, restante);
+            if (!ajustes[e.key]) ajustes[e.key] = { ref: e.ref, deltaOz: 0 };
+            ajustes[e.key].deltaOz += aDescontar;
+            restante -= aDescontar;
+          }
+          if (Math.abs(restante) > 0.0001 && pool.length) {
+            const e = pool[0];
+            if (!ajustes[e.key]) ajustes[e.key] = { ref: e.ref, deltaOz: 0 };
+            ajustes[e.key].deltaOz += restante;
+          }
         }
         // Aplicar los ajustes (una sola escritura por documento)
         const sBatch = db.batch();
