@@ -349,6 +349,7 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
             nota_baja: dia.nota_baja || '',
             stock_observado: dia.stock_observado || 0,
             destino_salida: dia.destino_salida || '',
+            destino_salidas: Array.isArray(dia.destino_salidas) ? dia.destino_salidas.map(d => ({ destino: String(d.destino || ''), cantidad: Number(d.cantidad) || 0 })).filter(d => d.destino && d.cantidad > 0) : [],
             destino_almacen_id: dia.destino_almacen_id || null,
             transferencias: Array.isArray(dia.transferencias) ? dia.transferencias.map(t => ({ almacen_id: Number(t.almacen_id), cantidad: Number(t.cantidad) || 0 })) : [],
             ingreso_origen: (Array.isArray(dia.ingreso_origen) && dia.ingreso_origen.length)
