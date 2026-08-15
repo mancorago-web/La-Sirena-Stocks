@@ -510,6 +510,7 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     }
   }
 
+  const cocinaStockAjustes = [];
   for (const r of registros) {
     const id = docId('invdiario', fecha, r.almacen_id, r.item_id);
     const prev = existentes[id] || {};
@@ -528,6 +529,11 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     if (ajusteBotella[clave]) salida += ajusteBotella[clave];
     const cierre = apertura + ingreso - salida - ventas - falta - baja;
     const cierreR = Math.round(cierre * 100) / 100;
+    // SALIDA con destino COCINA: sumar al COCINA/STOCK
+    if (String(r.destino_salida || '') === 'cocina' && salida > 0) {
+      const nCoc = invDocMap[Number(r.almacen_id) + '_' + Number(r.item_id)];
+      if (nCoc && nCoc.nombre) cocinaStockAjustes.push({ nombre: nCoc.nombre, delta: salida, unidad: 'unidad' });
+    }
 
     // Solo se propagan los items cuyo cierre/apertura realmente cambió.
     // Endurecido: cualquier guardado de movimientos también propaga (aunque el cierre no cambie
@@ -638,6 +644,12 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
       stock_cierre: cierreBot, updated_at: new Date().toISOString()
     }, { merge: true });
     changedKeys.add(alBot + '_' + botItem);
+  }
+
+  // SALIDAS de STOCK con destino COCINA: sumar al COCINA/STOCK (los ingresos de cocina
+  // llegan tanto de COMPRAS/INGRESOS como de las SALIDAS de STOCKS con destino COCINA)
+  if (cocinaStockAjustes.length) {
+    await ajustarCocinaStock(cocinaStockAjustes);
   }
 
   await batch.commit();
@@ -934,7 +946,7 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       if (ajustados) await stockBatch.commit();
     }
 
-    // Aplicar a COCINA (registro de compras; sin inventario de cocina por ahora)
+    // Aplicar a COCINA (registro de compras + sumar al COCINA/STOCK)
     if (cocinaCompras.length) {
       const batch = db.batch();
       for (const m of cocinaCompras) {
@@ -944,6 +956,8 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
         });
       }
       await batch.commit();
+      // Sumar al COCINA/STOCK (si el item no existe, se crea)
+      await ajustarCocinaStock(cocinaCompras.map(m => ({ nombre: m.nombre, delta: m.cantidad, unidad: m.unidad })));
     }
 
     // Registrar el log de cada compra (para el detalle de COMPRAS/INGRESOS)
