@@ -1944,6 +1944,8 @@ function guardarVentas() {
 function cargarBajas(fecha) {
   if (!fecha) fecha = document.getElementById('fecha-bajas').value;
   getInventario(fecha).then(data => {
+    // Solo mostrar items con BAJA registrada en esta fecha
+    data = data.map(al => ({ ...al, items: (al.items || []).filter(i => (i.stock_baja || 0) > 0) })).filter(al => al.items.length > 0);
     const categoriasPorAlmacen = {};
     const defaultCategorias = [
       { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS|TONIC WATER BRITVIC/i.test(i.nombre) },
@@ -1990,6 +1992,12 @@ function cargarBajas(fecha) {
       return { ...a, secciones, otros };
     });
     const container = document.getElementById('accordion-bajas');
+    if (!data.length) {
+      container.innerHTML = '<p>No hay items con BAJA registrada en esta fecha.</p>';
+      const bb = document.getElementById('buscar-baja');
+      if (bb) bb.value = '';
+      return;
+    }
     container.innerHTML = data.map(a => `
       <div class="accordion-item" data-almacen-id="${a.id}">
         <div class="accordion-header" onclick="toggleAcordeon(this)">
