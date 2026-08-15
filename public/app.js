@@ -196,12 +196,13 @@ function refrescarVista() {
     cargarCostoCategoria(v.pestana);
   }
 }
-window.addEventListener('focus', refrescarVista);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) refrescarVista(); });
-// Actualización automática cada 30 minutos (no interrumpe mientras el usuario escribe)
+// No recargar por foco/visibilidad (en algunos navegadores eso se dispara al hacer clic y
+// colapsa las vistas). La actualización automática respeta la interacción reciente del usuario.
+let _ultimaInteraccion = Date.now();
+['click', 'keydown', 'touchstart', 'input'].forEach(ev => document.addEventListener(ev, () => { _ultimaInteraccion = Date.now(); }, { passive: true }));
+// Actualización automática cada 30 minutos (no interrumpe si hubo interacción reciente)
 setInterval(() => {
-  const el = document.activeElement;
-  if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+  if (Date.now() - _ultimaInteraccion < 30000) return;
   refrescarVista();
 }, 1800000);
 
