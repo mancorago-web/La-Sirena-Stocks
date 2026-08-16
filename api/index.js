@@ -2083,13 +2083,13 @@ app.post('/api/recetas', async (req, res) => {
   // Evitar recetas duplicadas: si ya existe con el mismo nombre (normalizado), devolver la existente
   const all = await col('recetas').get();
   const existente = all.docs.find(d => norm(d.data().nombre) === norm(n));
-  if (existente) return res.json({ id: Number(existente.id) || null, existente: true });
+  if (existente) return res.json({ id: Number(existente.id) || null, nombre: existente.data().nombre, existente: true });
   const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
   await col('recetas').doc(String(nextId)).set({
     nombre: n, categoria: categoria || 'Clásicos',
     created_at: new Date().toISOString(), updated_at: new Date().toISOString()
   });
-  res.json({ id: nextId });
+  res.json({ id: nextId, nombre: n });
 });
 
 app.put('/api/recetas/:id', async (req, res) => {
@@ -2758,13 +2758,13 @@ app.post('/api/cocina/recetas', async (req, res) => {
     const all = await col('cocina_recetas').get();
     // Evitar duplicados por nombre normalizado
     const existente = all.docs.find(d => norm(d.data().nombre) === norm(n));
-    if (existente) return res.json({ id: Number(existente.id) || null, existente: true });
+    if (existente) return res.json({ id: Number(existente.id) || null, nombre: existente.data().nombre, existente: true });
     const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
     await col('cocina_recetas').doc(String(nextId)).set({
       id: nextId, nombre: n, categoria: categoria || 'Platos',
       created_at: new Date().toISOString(), updated_at: new Date().toISOString()
     });
-    res.json({ id: nextId });
+    res.json({ id: nextId, nombre: n });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

@@ -1038,12 +1038,20 @@ function guardarVentasAsignadas(containerId, filas, onDone) {
     if (almacenes[k]) r.almacenes = [almacenes[k]];
   });
   const crearRecetas = recetasNuevas.map(rec => {
-    return rec.tipo === 'barra'
+    return (rec.tipo === 'barra'
       ? api('POST', '/api/recetas', { nombre: rec.nombre, categoria: 'Clásicos' })
-      : api('POST', '/api/cocina/recetas', { nombre: rec.nombre, categoria: 'PLATOS' });
+      : api('POST', '/api/cocina/recetas', { nombre: rec.nombre, categoria: 'PLATOS' }))
+      .then(res => ({ pedido: rec.nombre, real: (res && res.nombre) || rec.nombre }));
   });
   Promise.all(crearRecetas)
-    .then(() => api('POST', '/api/ventas/import-match', { match }))
+    .then(resps => {
+      // Corregir el match para que apunte a la receta REAL (si el servidor deduplicó o renombró)
+      resps.forEach(r => {
+        if (norm(r.real) === norm(r.pedido)) return;
+        Object.keys(match).forEach(mk => { if (norm(match[mk]) === norm(r.pedido)) match[mk] = r.real; });
+      });
+      return api('POST', '/api/ventas/import-match', { match });
+    })
     .then(() => api('POST', '/api/ventas/import-mapping', { mapping }))
     .then(() => { registrarVentasFilas(filas, onDone); })
     .catch(() => alert('Error al guardar'));
