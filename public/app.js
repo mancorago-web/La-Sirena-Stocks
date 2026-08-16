@@ -1220,15 +1220,26 @@ function guardarDia() {
 
 function cargarAlmacenes(fecha) {
   const openIds = [];
-  ocultarAvisoStockCero();
   document.querySelectorAll('.accordion-item .accordion-body.open').forEach(body => {
     const item = body.closest('.accordion-item');
     if (item) openIds.push(item.dataset.almacenId);
   });
+  // Preservar los valores ya escritos en los inputs (para no perder datos al re-renderizar al buscar)
+  const valores = {};
+  document.querySelectorAll('#accordion-almacenes tr[data-item-id]').forEach(tr => {
+    const key = tr.dataset.almacenId + '_' + tr.dataset.itemId;
+    const obj = {};
+    tr.querySelectorAll('input').forEach(inp => {
+      const cls = (inp.className || '').split(' ').find(c => c.startsWith('input-'));
+      if (cls) obj[cls] = inp.value;
+    });
+    valores[key] = obj;
+  });
   if (!fecha) fecha = document.getElementById('fecha-almacenes').value;
   getInventario(fecha).then(data => {
-    // Ocultar items con stock 0 (toggle del ojo)
-    if (_ocultarCero) {
+    // Si hay una busqueda activa, NO ocultar los items con stock 0 (para encontrarlos y evitar duplicados)
+    const buscarTerm = (document.getElementById('buscar-item')?.value || '').trim();
+    if (_ocultarCero && !buscarTerm) {
       data.forEach(a => { a.items = (a.items || []).filter(i => (i.stock_apertura || 0) !== 0 || (i.stock_cierre || 0) !== 0); });
     }
     const categoriasPorAlmacen = {
@@ -1340,7 +1351,28 @@ function cargarAlmacenes(fecha) {
         item.querySelector('.accordion-header').classList.add('active');
       }
     });
+    // Restaurar los valores editados (por si hubo re-render al buscar)
+    Object.entries(valores).forEach(([key, obj]) => {
+      const [al, item] = key.split('_');
+      const tr = container.querySelector(`tr[data-item-id="${item}"][data-almacen-id="${al}"]`);
+      if (!tr) return;
+      Object.entries(obj).forEach(([cls, val]) => {
+        const inp = tr.querySelector('input.' + cls);
+        if (inp && val !== '') inp.value = val;
+      });
+    });
   });
+}
+
+// Busqueda en ALMACENES: al iniciar o limpiar la busqueda se re-renderiza la lista para que los
+// items con stock 0 aparezcan (o se oculten) y evitar crear duplicados por no verlos.
+let _buscarAlmacenTerm = '';
+function buscarItemAlmacen(value) {
+  const term = (value || '').trim();
+  const cambioEstado = (_buscarAlmacenTerm === '') !== (term === '');
+  _buscarAlmacenTerm = term;
+  if (cambioEstado) cargarAlmacenes();
+  else buscarEnTabla(term, 'accordion-almacenes');
 }
 
 function toggleAcordeon(header) {
@@ -3215,55 +3247,6 @@ function buscarSmart(term, containerId, selector) {
 
 function buscarEnTabla(term, containerId) {
   buscarSmart(term, containerId, 'tr[data-item-id]');
-  // En ALMACENES: si la busqueda no encuentra nada visible, verificar si el item existe con stock 0
-  // (esta oculto por el boton 👁️) para avisar y evitar crear duplicados.
-  if (containerId === 'accordion-almacenes') verificarItemsOcultosEnBusqueda(term);
-}
-
-// Busca en el inventario COMPLETO (incluye items con stock 0 que estan ocultos) y avisa si el
-// termino de busqueda coincide con un item existente, para no crear un duplicado por olvido.
-function verificarItemsOcultosEnBusqueda(term) {
-  const q = (term || '').trim();
-  const cont = document.getElementById('accordion-almacenes');
-  if (!cont || !q) { ocultarAvisoStockCero(); return; }
-  const visible = Array.from(cont.querySelectorAll('tr[data-item-id]')).some(tr => tr.style.display !== 'none');
-  if (visible) { ocultarAvisoStockCero(); return; }
-  const fecha = document.getElementById('fecha-almacenes')?.value;
-  getInventario(fecha).then(data => {
-    const palabras = q.toLowerCase().split(/\s+/).filter(Boolean);
-    const cero = [];
-    (data || []).forEach(a => {
-      (a.items || []).forEach(it => {
-        const texto = String(it.nombre || '').toLowerCase();
-        if (palabras.every(p => texto.includes(p))) {
-          const esCero = (it.stock_apertura || 0) === 0 && (it.stock_cierre || 0) === 0;
-          if (esCero) cero.push({ nombre: it.nombre, almacen: a.nombre });
-        }
-      });
-    });
-    if (cero.length) mostrarAvisoStockCero(cero);
-    else ocultarAvisoStockCero();
-  }).catch(() => {});
-}
-
-function mostrarAvisoStockCero(lista) {
-  const cont = document.getElementById('accordion-almacenes');
-  if (!cont) return;
-  const nombres = [...new Set(lista.map(x => x.nombre))];
-  let aviso = document.getElementById('aviso-stock-cero-busqueda');
-  if (!aviso) {
-    aviso = document.createElement('div');
-    aviso.id = 'aviso-stock-cero-busqueda';
-    aviso.style.cssText = 'background:#fff3cd;border:1px solid #ffc107;color:#856404;padding:0.5rem 0.75rem;border-radius:6px;margin-bottom:0.5rem;font-size:0.85rem;';
-    const parent = cont.parentElement;
-    parent.insertBefore(aviso, cont);
-  }
-  aviso.innerHTML = '⚠️ Este item ya existe con <b>stock 0</b> (está oculto por el botón 👁️). Edítalo o actívalo en vez de crear uno nuevo: <b>' + esc(nombres.join(', ')) + '</b>';
-}
-
-function ocultarAvisoStockCero() {
-  const aviso = document.getElementById('aviso-stock-cero-busqueda');
-  if (aviso) aviso.remove();
 }
 
 function buscarTablaBarra(term, containerId, selector) {
