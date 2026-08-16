@@ -1267,6 +1267,16 @@ function cargarAlmacenes(fecha) {
         items.forEach(i => usado.add(i.id));
         return { ...cat, items };
       });
+      // La categoria explicita del item tiene prioridad sobre la seccion inferida por nombre
+      secciones.forEach(s => {
+        s.items = s.items.filter(i => {
+          if (i.categoria) {
+            const target = secciones.find(ss => ss.label.toUpperCase() === String(i.categoria).toUpperCase());
+            if (target && target !== s) { target.items.push(i); return false; }
+          }
+          return true;
+        });
+      });
       let otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
         const xg = (x.stock_apertura || 0) > 0 ? 0 : 1;
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
@@ -1451,6 +1461,16 @@ function cargarSalidas(fecha) {
         });
         items.forEach(i => usado.add(i.id));
         return { ...cat, items };
+      });
+      // La categoria explicita del item tiene prioridad sobre la seccion inferida por nombre
+      secciones.forEach(s => {
+        s.items = s.items.filter(i => {
+          if (i.categoria) {
+            const target = secciones.find(ss => ss.label.toUpperCase() === String(i.categoria).toUpperCase());
+            if (target && target !== s) { target.items.push(i); return false; }
+          }
+          return true;
+        });
       });
       let otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
         const xg = (x.stock_apertura || 0) > 0 ? 0 : 1;
@@ -1852,6 +1872,16 @@ function cargarVentas(fecha) {
         items.forEach(i => usado.add(i.id));
         return { ...cat, items };
       });
+      // La categoria explicita del item tiene prioridad sobre la seccion inferida por nombre
+      secciones.forEach(s => {
+        s.items = s.items.filter(i => {
+          if (i.categoria) {
+            const target = secciones.find(ss => ss.label.toUpperCase() === String(i.categoria).toUpperCase());
+            if (target && target !== s) { target.items.push(i); return false; }
+          }
+          return true;
+        });
+      });
       let otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
         const xg = (x.stock_apertura || 0) > 0 ? 0 : 1;
         const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
@@ -1976,6 +2006,16 @@ function cargarBajas(fecha) {
         });
         items.forEach(i => usado.add(i.id));
         return { ...cat, items };
+      });
+      // La categoria explicita del item tiene prioridad sobre la seccion inferida por nombre
+      secciones.forEach(s => {
+        s.items = s.items.filter(i => {
+          if (i.categoria) {
+            const target = secciones.find(ss => ss.label.toUpperCase() === String(i.categoria).toUpperCase());
+            if (target && target !== s) { target.items.push(i); return false; }
+          }
+          return true;
+        });
       });
       let otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
         const xg = (x.stock_apertura || 0) > 0 ? 0 : 1;
@@ -2155,6 +2195,16 @@ function cargarIngresos(fecha) {
         });
         items.forEach(i => usado.add(i.id));
         return { ...cat, items };
+      });
+      // La categoria explicita del item tiene prioridad sobre la seccion inferida por nombre
+      secciones.forEach(s => {
+        s.items = s.items.filter(i => {
+          if (i.categoria) {
+            const target = secciones.find(ss => ss.label.toUpperCase() === String(i.categoria).toUpperCase());
+            if (target && target !== s) { target.items.push(i); return false; }
+          }
+          return true;
+        });
       });
       let otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
         const xg = (x.stock_apertura || 0) > 0 ? 0 : 1;
@@ -2599,6 +2649,16 @@ function cargarStocks() {
         });
         items.forEach(i => usado.add(i.id));
         return { ...cat, items };
+      });
+      // La categoria explicita del item tiene prioridad sobre la seccion inferida por nombre
+      secciones.forEach(s => {
+        s.items = s.items.filter(i => {
+          if (i.categoria) {
+            const target = secciones.find(ss => ss.label.toUpperCase() === String(i.categoria).toUpperCase());
+            if (target && target !== s) { target.items.push(i); return false; }
+          }
+          return true;
+        });
       });
       let otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
         const xg = (x.stock_cierre || 0) > 0 ? 0 : 1;
