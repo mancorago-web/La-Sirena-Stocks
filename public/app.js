@@ -196,15 +196,8 @@ function refrescarVista() {
     cargarCostoCategoria(v.pestana);
   }
 }
-// No recargar por foco/visibilidad (en algunos navegadores eso se dispara al hacer clic y
-// colapsa las vistas). La actualización automática respeta la interacción reciente del usuario.
-let _ultimaInteraccion = Date.now();
-['click', 'keydown', 'touchstart', 'input'].forEach(ev => document.addEventListener(ev, () => { _ultimaInteraccion = Date.now(); }, { passive: true }));
-// Actualización automática cada 30 minutos (no interrumpe si hubo interacción reciente)
-setInterval(() => {
-  if (Date.now() - _ultimaInteraccion < 30000) return;
-  refrescarVista();
-}, 1800000);
+// Sin actualización automática de la vista: recargar la vista re-renderiza los formularios y
+// puede borrar valores sin guardar o colapsar los acordeones. La app se refresca al navegar o recargar.
 
 function actualizarContadoresMenu() {
   const s = document.getElementById('menu-items-stocks');
@@ -1325,7 +1318,8 @@ function cargarAlmacenes(fecha) {
     const ba = document.getElementById('buscar-item');
     if (ba && ba.value) buscarEnTabla(ba.value, 'accordion-almacenes');
     container.querySelectorAll('tr[data-item-id]').forEach(tr => {
-      calcCierre(tr.querySelector('.input-apertura'));
+      const el = tr.querySelector('.input-apertura');
+      if (el) { try { calcCierre(el); } catch (e) { console.error('calcCierre:', e); } }
     });
     openIds.forEach(id => {
       const item = container.querySelector(`.accordion-item[data-almacen-id="${id}"]`);
