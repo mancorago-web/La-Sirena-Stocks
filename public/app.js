@@ -6286,8 +6286,10 @@ function recalcularPrecioCompra(origen) {
 function agregarCompra() {
   const nombre = document.getElementById('nueva-compra-input').value.trim();
   const cantidad = parseFloat(document.getElementById('nueva-compra-cant').value);
-  let precioUni = parseFloat(document.getElementById('nueva-compra-precio-uni').value) || 0;
-  let precioTotal = parseFloat(document.getElementById('nueva-compra-precio-total').value) || 0;
+  const uniEl = document.getElementById('nueva-compra-precio-uni');
+  const totEl = document.getElementById('nueva-compra-precio-total');
+  let precioUni = uniEl ? (parseFloat(uniEl.value) || 0) : 0;
+  let precioTotal = totEl ? (parseFloat(totEl.value) || 0) : 0;
   const destino = document.getElementById('nueva-compra-destino').value;
   if (!nombre || isNaN(cantidad) || cantidad <= 0) { alert('Ingresa un item y una cantidad'); return; }
   // Auto-cálculo: si solo hay TOTAL y cantidad, dividir para el precio por unidad
