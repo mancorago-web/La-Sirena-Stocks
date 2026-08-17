@@ -540,19 +540,25 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     savedValues[id] = { stock_apertura: apertura, stock_ingreso: ingreso, salida_almacen: salida, total_ventas: ventas, falta_almacen: falta, stock_baja: baja };
     const cierre = apertura + ingreso - salida - ventas - falta - baja;
     const cierreR = Math.round(cierre * 100) / 100;
-    // SALIDA con destino COCINA: sumar al COCINA/STOCK (respeta el desglose de destinos si existe)
-    const dsCocina = Array.isArray(r.destino_salidas) ? r.destino_salidas.filter(d => String(d.destino).toLowerCase() === 'cocina').reduce((s, d) => s + (Number(d.cantidad) || 0), 0) : 0;
-    const cocinaDelta = dsCocina || (String(r.destino_salida || '') === 'cocina' ? salida : 0);
-    if (cocinaDelta > 0) {
+    // SALIDA con destino COCINA/BARRA: ajuste de stock IDEMPOTENTE (revierte el destino anterior si cambió,
+    // así cambiar COCINA->BARRA ya no deja rastro en COCINA ni duplica al re-guardar).
+    const sumDest = (ds, tipo) => Array.isArray(ds) ? ds.filter(d => String(d.destino).toLowerCase() === tipo).reduce((s, d) => s + (Number(d.cantidad) || 0), 0) : 0;
+    const montoDest = (doc, tipo) => {
+      if (!doc) return 0;
+      if (Array.isArray(doc.destino_salidas)) return sumDest(doc.destino_salidas, tipo);
+      return String(doc.destino_salida || '').toLowerCase() === tipo ? (doc.salida_almacen || 0) : 0;
+    };
+    const nuevoCoc = sumDest(r.destino_salidas, 'cocina') || (String(r.destino_salida || '') === 'cocina' ? salida : 0);
+    const cocinaNet = nuevoCoc - montoDest(prev, 'cocina');
+    if (cocinaNet !== 0) {
       const nCoc = invDocMap[Number(r.almacen_id) + '_' + Number(r.item_id)];
-      if (nCoc && nCoc.nombre) cocinaStockAjustes.push({ nombre: nCoc.nombre, delta: cocinaDelta, unidad: 'unidad' });
+      if (nCoc && nCoc.nombre) cocinaStockAjustes.push({ nombre: nCoc.nombre, delta: cocinaNet, unidad: 'unidad' });
     }
-    // SALIDA con destino BARRA: sumar al BARRA/STOCK (para que las recetas de ventas tengan stock que descontar)
-    const dsBarra = Array.isArray(r.destino_salidas) ? r.destino_salidas.filter(d => String(d.destino).toLowerCase() === 'barra').reduce((s, d) => s + (Number(d.cantidad) || 0), 0) : 0;
-    const barraDelta = dsBarra || (String(r.destino_salida || '') === 'barra' ? salida : 0);
-    if (barraDelta > 0) {
+    const nuevoBar = sumDest(r.destino_salidas, 'barra') || (String(r.destino_salida || '') === 'barra' ? salida : 0);
+    const barraNet = nuevoBar - montoDest(prev, 'barra');
+    if (barraNet !== 0) {
       const nBar = invDocMap[Number(r.almacen_id) + '_' + Number(r.item_id)];
-      if (nBar && nBar.nombre) barraStockAjustes.push({ nombre: nBar.nombre, delta: barraDelta, unidad: 'unidad' });
+      if (nBar && nBar.nombre) barraStockAjustes.push({ nombre: nBar.nombre, delta: barraNet, unidad: 'unidad' });
     }
 
     // Solo se propagan los items cuyo cierre/apertura realmente cambió.
@@ -2554,7 +2560,11 @@ async function ajustarCocinaStock(ajustes) {
     const existente = byName[key];
     if (existente) {
       const nueva = Math.max(0, (parseFloat(existente.data().cantidad) || 0) + aj.delta);
-      batch.update(existente.ref, { cantidad: nueva, updated_at: now });
+      if (nueva === 0 && aj.delta < 0) {
+        batch.delete(existente.ref);
+      } else {
+        batch.update(existente.ref, { cantidad: nueva, updated_at: now });
+      }
     } else if (aj.delta > 0) {
       maxId++;
       const ref = col('cocina_stock').doc(String(maxId));
@@ -2579,7 +2589,11 @@ async function ajustarBarraStock(ajustes) {
     const existente = byName[key];
     if (existente) {
       const nueva = Math.max(0, (parseFloat(existente.data().cantidad) || 0) + aj.delta);
-      batch.update(existente.ref, { cantidad: nueva, updated_at: now });
+      if (nueva === 0 && aj.delta < 0) {
+        batch.delete(existente.ref);
+      } else {
+        batch.update(existente.ref, { cantidad: nueva, updated_at: now });
+      }
     } else if (aj.delta > 0) {
       maxId++;
       const ref = col('barra_stock').doc(String(maxId));
