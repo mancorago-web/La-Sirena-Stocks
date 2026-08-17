@@ -1245,6 +1245,8 @@ app.delete('/api/compras/:id', authMiddleware, async (req, res) => {
         }
       });
       if (borrado) await batch.commit();
+      // Restar del COCINA/STOCK (si llega a 0 se elimina el item, no deja rastro)
+      await ajustarCocinaStock([{ nombre, delta: -cantidad, unidad: log.unidad || 'unidad' }]);
     }
 
     // Eliminar el registro del log
