@@ -6264,8 +6264,9 @@ function onCompraPrecioUnidadChange() {
 function onCompraPrecioTotalChange() {
   recalcularPrecioCompra('total');
 }
-// Calcula el precio faltante: si se ingresa el TOTAL, divide total/cantidad para el precio unidad;
-// si se ingresa el precio UNIDAD, multiplica unidad*cantidad para el total.
+// Calcula el precio faltante: si se ingresa el TOTAL, divide total/cantidad para el precio unidad
+// (ej. total 100 / cantidad 5 = 20 de precio unidad); si se ingresa el precio UNIDAD, multiplica
+// unidad*cantidad para el total.
 function recalcularPrecioCompra(origen) {
   const cant = parseFloat(document.getElementById('nueva-compra-cant').value) || 0;
   const uniEl = document.getElementById('nueva-compra-precio-uni');
@@ -6274,7 +6275,8 @@ function recalcularPrecioCompra(origen) {
   const uni = parseFloat(uniEl.value) || 0;
   const tot = parseFloat(totEl.value) || 0;
   if (cant <= 0) return;
-  if (origen === 'total' && tot > 0 && uni === 0) {
+  if (origen === 'total' && tot > 0) {
+    // Precio por unidad = total / cantidad (SIEMPRE se recalcula al cambiar el total o la cantidad)
     uniEl.value = Math.round((tot / cant) * 100) / 100;
   } else if (origen === 'unidad' && uni > 0) {
     totEl.value = Math.round(uni * cant * 100) / 100;
