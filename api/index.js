@@ -886,6 +886,7 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       const cantidad = parseFloat(it.cantidad) || 0;
       if (cantidad <= 0) continue;
       const precio = parseFloat(it.precio) || 0;
+      const precioTotal = parseFloat(it.precio_total) || 0;
       const key = nombre.toUpperCase();
       const destino = String(it.destino || 'stocks').toLowerCase();
       if (destino === 'stocks') {
@@ -915,14 +916,14 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
           registrosStocks.push({ almacen_id: match.almacen_id, item_id: match.item_id, stock_ingreso: nuevoTotal });
           almacenes.push(match.almacen_id);
         }
-        if (almacenes.length) resumen.stocks.push({ nombre, cantidad, almacenes, precio });
+        if (almacenes.length) resumen.stocks.push({ nombre, cantidad, almacenes, precio, precio_total: precioTotal });
         else resumen.noEncontrados.push({ nombre, cantidad, destino: 'stocks', msg: 'sin almacenes seleccionados' });
       } else if (destino === 'barra') {
-        movsBarra.push({ ingrediente: nombre, cantidad, unidad: it.unidad || 'unidad', muebles: Array.isArray(it.muebles) ? it.muebles : [], precio });
-        resumen.barra.push({ nombre, cantidad, unidad: it.unidad || 'unidad', muebles: Array.isArray(it.muebles) ? it.muebles : [], precio });
+        movsBarra.push({ ingrediente: nombre, cantidad, unidad: it.unidad || 'unidad', muebles: Array.isArray(it.muebles) ? it.muebles : [], precio, precio_total: precioTotal });
+        resumen.barra.push({ nombre, cantidad, unidad: it.unidad || 'unidad', muebles: Array.isArray(it.muebles) ? it.muebles : [], precio, precio_total: precioTotal });
       } else if (destino === 'cocina') {
-        cocinaCompras.push({ nombre, cantidad, unidad: it.unidad || 'unidad', precio });
-        resumen.cocina.push({ nombre, cantidad, unidad: it.unidad || 'unidad', precio });
+        cocinaCompras.push({ nombre, cantidad, unidad: it.unidad || 'unidad', precio, precio_total: precioTotal });
+        resumen.cocina.push({ nombre, cantidad, unidad: it.unidad || 'unidad', precio, precio_total: precioTotal });
       } else {
         resumen.noEncontrados.push({ nombre, cantidad, destino });
       }
@@ -958,7 +959,7 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       for (const m of movsBarra) {
         batch.set(col('barra_movimientos').doc(), {
           fecha, tipo: 'ingresos', ingrediente: m.ingrediente, cantidad: m.cantidad,
-          unidad: m.unidad, muebles: m.muebles || [], precio: m.precio || 0, saved_by: savedBy, created_at: new Date().toISOString()
+          unidad: m.unidad, muebles: m.muebles || [], precio: m.precio || 0, precio_total: m.precio_total || 0, saved_by: savedBy, created_at: new Date().toISOString()
         });
       }
       await batch.commit();
@@ -1036,7 +1037,7 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       const batch = db.batch();
       for (const m of cocinaCompras) {
         batch.set(col('cocina_compras').doc(), {
-          fecha, nombre: m.nombre, cantidad: m.cantidad, unidad: m.unidad, precio: m.precio || 0,
+          fecha, nombre: m.nombre, cantidad: m.cantidad, unidad: m.unidad, precio: m.precio || 0, precio_total: m.precio_total || 0,
           saved_by: savedBy, created_at: new Date().toISOString()
         });
       }
@@ -1070,19 +1071,19 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       resumen.stocks.forEach(r => {
         logBatch.set(col('compras').doc(), {
           fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: 'unidad', destino: 'stocks',
-          almacenes: r.almacenes || [], precio: r.precio || 0, saved_by: savedBy, created_at: new Date().toISOString()
+          almacenes: r.almacenes || [], precio: r.precio || 0, precio_total: r.precio_total || 0, saved_by: savedBy, created_at: new Date().toISOString()
         });
       });
       resumen.barra.forEach(r => {
         logBatch.set(col('compras').doc(), {
           fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: r.unidad || 'unidad', destino: 'barra',
-          muebles: r.muebles || [], precio: r.precio || 0, saved_by: savedBy, created_at: new Date().toISOString()
+          muebles: r.muebles || [], precio: r.precio || 0, precio_total: r.precio_total || 0, saved_by: savedBy, created_at: new Date().toISOString()
         });
       });
       resumen.cocina.forEach(r => {
         logBatch.set(col('compras').doc(), {
           fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: r.unidad || 'unidad', destino: 'cocina',
-          precio: r.precio || 0, saved_by: savedBy, created_at: new Date().toISOString()
+          precio: r.precio || 0, precio_total: r.precio_total || 0, saved_by: savedBy, created_at: new Date().toISOString()
         });
       });
       await logBatch.commit();
@@ -1103,10 +1104,12 @@ app.get('/api/compras/detalle', async (req, res) => {
     const logSnap = await col('compras').where('fecha', '==', fecha).get();
     const lista = logSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.destino !== 'stocks');
     const precioByNombre = {};
+    const precioTotalByNombre = {};
     logSnap.docs.forEach(d => {
       const x = d.data();
       const k = String(x.nombre || '').trim().toUpperCase();
       if (parseFloat(x.precio) > 0) precioByNombre[k] = parseFloat(x.precio);
+      if (parseFloat(x.precio_total) > 0) precioTotalByNombre[k] = parseFloat(x.precio_total);
     });
     const [invSnap, diaSnap] = await Promise.all([
       col('inventario').get(),
@@ -1132,6 +1135,7 @@ app.get('/api/compras/detalle', async (req, res) => {
         destino: 'stocks',
         almacenes: [Number(a.almacen_id)],
         precio: precioByNombre[String(nombre).trim().toUpperCase()] || 0,
+        precio_total: precioTotalByNombre[String(nombre).trim().toUpperCase()] || Math.round((precioByNombre[String(nombre).trim().toUpperCase()] || 0) * ing * 100) / 100,
         saved_by: a.saved_by || '-',
         created_at: a.updated_at || new Date().toISOString()
       });
