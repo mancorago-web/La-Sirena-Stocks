@@ -486,6 +486,7 @@
           <input type="text" id="nueva-compra-input" placeholder="Buscar item (ej. COCA COLA)..." list="sugerencia-compras" autocomplete="off" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:180px;" oninput="onBuscarItemCompra(this.value)">
           <datalist id="sugerencia-compras"></datalist>
           <input type="number" id="nueva-compra-cant" placeholder="Cantidad" step="0.01" min="0" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;width:110px;">
+          <input type="number" id="nueva-compra-precio" placeholder="Precio (S/)" step="0.01" min="0" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;width:110px;">
           <select id="nueva-compra-destino" onchange="onCambiarDestinoCompra()" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-weight:700;color:#1a237e;">
             <option value="stocks">STOCKS</option>
             <option value="barra">BARRA</option>

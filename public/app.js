@@ -5998,11 +5998,14 @@ function cargarComprasDetalle(fecha) {
       else if (r.destino === 'barra') det = 'BARRA → ' + (r.muebles || []).join(', ');
       else if (r.destino === 'cocina') det = 'COCINA';
       const t = r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
-      return `<tr><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${esc(det)}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td><button class="danger" onclick="confirmarEliminarCompra('${r.id}')">✕</button></td></tr>`;
+      const precio = parseFloat(r.precio) || 0;
+      return `<tr><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${precio > 0 ? 'S/ ' + precio.toFixed(2) : '—'}</td><td>${esc(det)}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td><button class="danger" onclick="confirmarEliminarCompra('${r.id}')">✕</button></td></tr>`;
     }).join('');
+    const totalCompra = (list || []).reduce((s, r) => s + (parseFloat(r.precio) || 0), 0);
     c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE COMPRAS/INGRESOS</h3>' +
-      '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Destino</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
-      filas + '</tbody></table></div>';
+      '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Precio</th><th>Destino</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
+      filas + '</tbody></table></div>' +
+      (totalCompra > 0 ? '<p style="font-weight:700;color:#0f3460;margin-top:0.5rem;">TOTAL COMPRAS: S/ ' + totalCompra.toFixed(2) + '</p>' : '');
   }).catch(() => { const actual = document.getElementById('fecha-compras')?.value || todayStr(); if (actual === fechaFinal) c.innerHTML = '<p style="color:#888;">DETALLE DE COMPRAS/INGRESOS</p>'; });
 }
 
@@ -6254,6 +6257,7 @@ function eliminarVenta(id) {
 function agregarCompra() {
   const nombre = document.getElementById('nueva-compra-input').value.trim();
   const cantidad = parseFloat(document.getElementById('nueva-compra-cant').value);
+  const precio = parseFloat(document.getElementById('nueva-compra-precio').value) || 0;
   const destino = document.getElementById('nueva-compra-destino').value;
   if (!nombre || isNaN(cantidad) || cantidad <= 0) { alert('Ingresa un item y una cantidad'); return; }
   const fecha = document.getElementById('fecha-compras')?.value;
@@ -6268,14 +6272,15 @@ function agregarCompra() {
   }
   const btn = document.getElementById('btn-agregar-compra');
   if (btn) btn.disabled = true;
-  api('POST', '/api/compras/guardar', { fecha, items: [{ nombre, cantidad, unidad: 'unidad', destino, almacenes, muebles }] }).then(r => {
+  api('POST', '/api/compras/guardar', { fecha, items: [{ nombre, cantidad, unidad: 'unidad', destino, almacenes, muebles, precio }] }).then(r => {
     if (btn) btn.disabled = false;
     const res = r.resumen || {};
-    let msg = 'Compra registrada: ' + nombre + ' x' + cantidad;
+    let msg = 'Compra registrada: ' + nombre + ' x' + cantidad + (precio > 0 ? ' (S/ ' + precio + ')' : '');
     if (res.noEncontrados && res.noEncontrados.length) msg += ' (no encontrado)';
     showToast(msg);
     document.getElementById('nueva-compra-input').value = '';
     document.getElementById('nueva-compra-cant').value = '';
+    document.getElementById('nueva-compra-precio').value = '';
     cargarComprasDetalle(fecha);
     _invCache = { fecha: null, data: null, pending: null };
     actualizarContadoresMenu();
