@@ -2273,6 +2273,60 @@ app.get('/api/cocina/stock', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- COCINA: PORCIONAMIENTO ---
+// Registro manual de porcionamiento: un item de COCINA/STOCK se divide en secciones/porciones
+// (peso bruto, filetes, desperdicio, etc.) para anotar a dónde se fue el stock.
+app.get('/api/cocina/porcionamientos', async (req, res) => {
+  try {
+    const fecha = req.query.fecha;
+    const [porcSnap, csSnap] = await Promise.all([
+      fecha ? col('porcionamientos').where('fecha', '==', fecha).get() : col('porcionamientos').get(),
+      col('cocina_stock').get(),
+    ]);
+    const stockBy = {};
+    csSnap.docs.forEach(d => { stockBy[String(d.data().ingrediente || '').trim().toUpperCase()] = d.data().cantidad || 0; });
+    const out = porcSnap.docs.map(d => ({
+      id: d.id,
+      nombre: d.data().nombre || '',
+      fecha: d.data().fecha || '',
+      secciones: Array.isArray(d.data().secciones) ? d.data().secciones : [],
+      stock: stockBy[String(d.data().nombre || '').trim().toUpperCase()] || 0,
+    }));
+    out.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/cocina/porcionamientos', async (req, res) => {
+  try {
+    const { nombre, fecha, secciones } = req.body;
+    if (!nombre || !fecha) return res.status(400).json({ error: 'nombre y fecha requeridos' });
+    const nombreClean = String(nombre).trim();
+    const secs = Array.isArray(secciones)
+      ? secciones.filter(s => String(s.nombre || '').trim())
+          .map(s => ({ nombre: String(s.nombre).trim(), peso: Math.round((parseFloat(s.peso) || 0) * 100) / 100 }))
+      : [];
+    const key = String(nombreClean).toUpperCase();
+    const existing = await col('porcionamientos').get();
+    const doc = existing.docs.find(d => String(d.data().nombre || '').trim().toUpperCase() === key && d.data().fecha === fecha);
+    const now = new Date().toISOString();
+    if (doc) {
+      await col('porcionamientos').doc(doc.id).update({ nombre: nombreClean, secciones: secs, updated_at: now });
+      return res.json({ ok: true, id: doc.id });
+    }
+    const ref = col('porcionamientos').doc();
+    await ref.set({ nombre: nombreClean, fecha, secciones: secs, created_at: now, updated_at: now });
+    res.json({ ok: true, id: ref.id });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/cocina/porcionamientos/:id', async (req, res) => {
+  try {
+    await col('porcionamientos').doc(req.params.id).delete();
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/api/cocina/stock', async (req, res) => {
   try {
     const { ingrediente, cantidad, unidad, familia } = req.body;

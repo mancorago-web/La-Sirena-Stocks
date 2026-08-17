@@ -460,8 +460,12 @@
       <div id="sub-cocina-porcionamiento" class="sub-tab-content">
         <div class="header-actions">
           <h2>Porcionamiento</h2>
+          <div class="controles-dia">
+            <label>Fecha: <input type="date" id="fecha-porcionamiento" onchange="cargarPorcionamientoCocina()"></label>
+          </div>
         </div>
-        <div id="cocina-porcionamiento-container"><p>Próximamente.</p></div>
+        <div style="font-size:0.8rem;color:#888;margin-bottom:0.5rem;">Selecciona un item de COCINA/STOCK y define manualmente sus porcionamientos (peso bruto, filetes, desperdicio, etc.) para anotar a dónde se fue ese stock.</div>
+        <div id="cocina-porcionamiento-container"><p>Cargando...</p></div>
       </div>
     </div>
 

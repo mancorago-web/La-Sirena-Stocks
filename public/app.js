@@ -3757,6 +3757,11 @@ function cambiarSubTab(nombre, prefix) {
     const key = 'cocina_' + nombre;
     if (!_loaded[key]) { _loaded[key] = true; cargarCocinaMovimientos(nombre); }
   }
+  // Lazy load cocina porcionamiento
+  if (prefix === 'cocina' && nombre === 'porcionamiento') {
+    const key = 'cocina_porcionamiento';
+    if (!_loaded[key]) { _loaded[key] = true; cargarPorcionamientoCocina(); }
+  }
   // Lazy load costos tabs
   if (prefix === 'costos') {
     const key = 'costos_' + nombre;
@@ -4616,6 +4621,155 @@ function exportarRecetasCocina() {
     XLSX.utils.book_append_sheet(libro, hoja, 'Recetas');
     XLSX.writeFile(libro, 'Recetas_Cocina.xlsx');
   });
+}
+
+// --- COCINA: PORCIONAMIENTO ---
+let _porcionamientoCtx = null;
+
+function cargarPorcionamientoCocina() {
+  const fechaEl = document.getElementById('fecha-porcionamiento');
+  if (fechaEl && !fechaEl.value) fechaEl.value = todayStr();
+  const fecha = fechaEl ? fechaEl.value : todayStr();
+  const container = document.getElementById('cocina-porcionamiento-container');
+  if (!container) return;
+  Promise.all([
+    api('GET', '/api/cocina/stock'),
+    api('GET', '/api/cocina/porcionamientos?fecha=' + fecha)
+  ]).then(([stock, porcs]) => {
+    _porcionamientoCtx = { fecha, stock: stock || [], porcs: porcs || [], item: null };
+    const items = stock || [];
+    const porc = porcs || [];
+    let html = '<div class="table-wrap" style="margin-bottom:0.5rem;"><div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">'
+      + '<label style="font-weight:600;">Item de COCINA/STOCK:</label>'
+      + '<select id="porcionamiento-item" onchange="cargarPorcionamientoItem()" style="padding:0.4rem;border:1px solid #ccc;border-radius:4px;min-width:260px;">'
+      + '<option value="">— Seleccionar —</option>'
+      + items.map(s => `<option value="${esc(s.ingrediente)}">${esc(s.ingrediente)} (${s.cantidad || 0})</option>`).join('')
+      + '</select>'
+      + '</div></div>';
+    if (porc.length) {
+      html += '<div class="table-wrap" style="margin-bottom:0.5rem;"><table><thead><tr><th>Item</th><th>Stock</th><th>Secciones</th><th></th></tr></thead><tbody>';
+      porc.forEach(p => {
+        const sum = (p.secciones || []).reduce((s, sec) => s + (sec.peso || 0), 0);
+        html += `<tr>
+          <td>${esc(p.nombre)}</td>
+          <td>${p.stock}</td>
+          <td style="font-size:0.8rem;">${(p.secciones || []).map(s => esc(s.nombre) + ' ' + s.peso).join(' · ') || '—'}</td>
+          <td style="white-space:nowrap;">
+            <button onclick="cargarPorcionamientoExistente('${esc(p.nombre)}')" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.75rem;">ABRIR</button>
+            <button class="danger" onclick="eliminarPorcionamiento('${p.id}')">✕</button>
+          </td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+    }
+    html += '<div id="porcionamiento-editor"></div>';
+    container.innerHTML = html;
+  }).catch(() => { container.innerHTML = '<p style="color:#c62828;">Error cargando porcionamiento.</p>'; });
+}
+
+function cargarPorcionamientoItem() {
+  const ctx = _porcionamientoCtx;
+  if (!ctx) return;
+  const sel = document.getElementById('porcionamiento-item');
+  const nombre = sel ? sel.value : '';
+  const editor = document.getElementById('porcionamiento-editor');
+  if (!editor) return;
+  if (!nombre) { editor.innerHTML = ''; return; }
+  const item = (ctx.stock || []).find(s => String(s.ingrediente || '') === nombre);
+  const stock = item ? (item.cantidad || 0) : 0;
+  const porc = (ctx.porcs || []).find(p => String(p.nombre || '').trim().toUpperCase() === String(nombre).trim().toUpperCase());
+  const secciones = porc && porc.secciones && porc.secciones.length
+    ? porc.secciones
+    : [
+        { nombre: 'PESO BRUTO', peso: stock },
+        { nombre: 'CABEZA, COLA, ALETAS Y ESQUELETO', peso: 0 },
+        { nombre: 'FILETES', peso: 0 },
+        { nombre: 'DESPERDICIO', peso: 0 }
+      ];
+  _porcionamientoCtx.item = { nombre, stock };
+  renderPorcionamientoEditor(secciones);
+}
+
+function cargarPorcionamientoExistente(nombre) {
+  const sel = document.getElementById('porcionamiento-item');
+  if (sel) sel.value = nombre;
+  cargarPorcionamientoItem();
+}
+
+function renderPorcionamientoEditor(secciones) {
+  const ctx = _porcionamientoCtx;
+  const editor = document.getElementById('porcionamiento-editor');
+  if (!editor || !ctx || !ctx.item) return;
+  const stock = ctx.item.stock;
+  const sum = secciones.reduce((s, sec) => s + (sec.peso || 0), 0);
+  editor.innerHTML = '<h3 style="margin-top:0">Porcionamiento: ' + esc(ctx.item.nombre) + '</h3>'
+    + '<p style="font-size:0.85rem;color:#666;">Stock en COCINA: <b>' + stock + '</b>. Registra manualmente a dónde se fue cada porción.</p>'
+    + '<div class="table-wrap"><table>'
+    + '<thead><tr><th>Sección / Porcionamiento</th><th>Peso</th><th></th></tr></thead>'
+    + '<tbody id="porcionamiento-secciones">' + secciones.map(porcionFila).join('') + '</tbody>'
+    + '</table></div>'
+    + '<button onclick="agregarSeccionPorcionamiento()" style="margin:0.5rem 0;">+ SECCIÓN</button>'
+    + '<span id="porcionamiento-total" style="font-size:0.9rem;margin-left:0.5rem;">Suma: ' + (Math.round(sum * 100) / 100) + '</span>'
+    + '<br>'
+    + '<button onclick="guardarPorcionamiento()" style="margin-top:0.5rem;background:#2e7d32;color:#fff;font-weight:700;">💾 GUARDAR</button>'
+    + '<button onclick="eliminarPorcionamientoActual()" style="margin-top:0.5rem;margin-left:0.5rem;background:#b71c1c;color:#fff;">ELIMINAR</button>';
+}
+
+function porcionFila(sec) {
+  return '<tr>'
+    + '<td><input class="input-porc-nombre" value="' + esc(sec.nombre) + '" style="width:100%;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>'
+    + '<td><input class="input-porc-peso" type="number" step="0.01" min="0" value="' + (sec.peso || 0) + '" oninput="actualizarTotalPorcionamiento()" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>'
+    + '<td><button class="danger" onclick="this.closest(\'tr\').remove(); actualizarTotalPorcionamiento();">✕</button></td>'
+    + '</tr>';
+}
+
+function agregarSeccionPorcionamiento() {
+  const tbody = document.getElementById('porcionamiento-secciones');
+  if (!tbody) return;
+  const tr = document.createElement('tr');
+  tr.innerHTML = '<td><input class="input-porc-nombre" placeholder="Sección (ej. CABEZA, COLAS...)" style="width:100%;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>'
+    + '<td><input class="input-porc-peso" type="number" step="0.01" min="0" value="0" oninput="actualizarTotalPorcionamiento()" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>'
+    + '<td><button class="danger" onclick="this.closest(\'tr\').remove(); actualizarTotalPorcionamiento();">✕</button></td>';
+  tbody.appendChild(tr);
+  actualizarTotalPorcionamiento();
+}
+
+function actualizarTotalPorcionamiento() {
+  const sum = Array.from(document.querySelectorAll('#porcionamiento-secciones .input-porc-peso')).reduce((s, el) => s + (parseFloat(el.value) || 0), 0);
+  const total = document.getElementById('porcionamiento-total');
+  if (total) total.textContent = 'Suma: ' + (Math.round(sum * 100) / 100);
+}
+
+function guardarPorcionamiento() {
+  const ctx = _porcionamientoCtx;
+  if (!ctx || !ctx.item) { alert('Selecciona un item'); return; }
+  const secciones = [];
+  document.querySelectorAll('#porcionamiento-secciones tr').forEach(tr => {
+    const nom = tr.querySelector('.input-porc-nombre')?.value?.trim();
+    const peso = parseFloat(tr.querySelector('.input-porc-peso')?.value) || 0;
+    if (nom) secciones.push({ nombre: nom, peso });
+  });
+  if (!secciones.length) { alert('Agrega al menos una sección'); return; }
+  api('POST', '/api/cocina/porcionamientos', { nombre: ctx.item.nombre, fecha: ctx.fecha, secciones }).then(() => {
+    showToast('Porcionamiento guardado');
+    cargarPorcionamientoCocina();
+  }).catch(() => alert('Error al guardar'));
+}
+
+function eliminarPorcionamiento(id) {
+  if (!confirm('¿Eliminar este porcionamiento?')) return;
+  api('DELETE', '/api/cocina/porcionamientos/' + id).then(() => {
+    showToast('Eliminado');
+    cargarPorcionamientoCocina();
+  }).catch(() => alert('Error al eliminar'));
+}
+
+function eliminarPorcionamientoActual() {
+  const ctx = _porcionamientoCtx;
+  if (!ctx || !ctx.item) return;
+  const porc = (ctx.porcs || []).find(p => String(p.nombre || '').trim().toUpperCase() === String(ctx.item.nombre).trim().toUpperCase());
+  if (!porc) return;
+  eliminarPorcionamiento(porc.id);
 }
 
 // --- COCINA: Base de Datos (precios) ---
