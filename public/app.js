@@ -4701,7 +4701,6 @@ function renderPorcionamientoEditor(secciones) {
   const editor = document.getElementById('porcionamiento-editor');
   if (!editor || !ctx || !ctx.item) return;
   const stock = ctx.item.stock;
-  const sum = secciones.reduce((s, sec) => s + (sec.peso || 0), 0);
   editor.innerHTML = '<h3 style="margin-top:0">Porcionamiento: ' + esc(ctx.item.nombre) + '</h3>'
     + '<p style="font-size:0.85rem;color:#666;">Stock en COCINA: <b>' + stock + '</b>. Registra manualmente a dónde se fue cada porción.</p>'
     + '<div class="table-wrap"><table>'
@@ -4709,10 +4708,11 @@ function renderPorcionamientoEditor(secciones) {
     + '<tbody id="porcionamiento-secciones">' + secciones.map(porcionFila).join('') + '</tbody>'
     + '</table></div>'
     + '<button onclick="agregarSeccionPorcionamiento()" style="margin:0.5rem 0;">+ SECCIÓN</button>'
-    + '<span id="porcionamiento-total" style="font-size:0.9rem;margin-left:0.5rem;">Suma: ' + (Math.round(sum * 100) / 100) + '</span>'
+    + '<span id="porcionamiento-total" style="font-size:0.9rem;margin-left:0.5rem;display:inline-block;margin-top:0.2rem;"></span>'
     + '<br>'
     + '<button onclick="guardarPorcionamiento()" style="margin-top:0.5rem;background:#2e7d32;color:#fff;font-weight:700;">💾 GUARDAR</button>'
     + '<button onclick="eliminarPorcionamientoActual()" style="margin-top:0.5rem;margin-left:0.5rem;background:#b71c1c;color:#fff;">ELIMINAR</button>';
+  actualizarTotalPorcionamiento();
 }
 
 function porcionFila(sec) {
@@ -4734,10 +4734,31 @@ function agregarSeccionPorcionamiento() {
   actualizarTotalPorcionamiento();
 }
 
+// PESO BRUTO = total de peso que entra al porcionamiento. Las DEMAS secciones deben sumar
+// igual que el PESO BRUTO; la diferencia se muestra como FALTANTE (o EXCESO).
+function sumarPorcionamiento() {
+  let bruto = 0;
+  let sumaOtros = 0;
+  document.querySelectorAll('#porcionamiento-secciones tr').forEach(tr => {
+    const nom = (tr.querySelector('.input-porc-nombre')?.value || '').trim().toUpperCase();
+    const peso = parseFloat(tr.querySelector('.input-porc-peso')?.value) || 0;
+    if (nom === 'PESO BRUTO') bruto = peso;
+    else sumaOtros += peso;
+  });
+  return { bruto, sumaOtros, faltante: bruto - sumaOtros };
+}
+
 function actualizarTotalPorcionamiento() {
-  const sum = Array.from(document.querySelectorAll('#porcionamiento-secciones .input-porc-peso')).reduce((s, el) => s + (parseFloat(el.value) || 0), 0);
+  const { bruto, sumaOtros, faltante } = sumarPorcionamiento();
   const total = document.getElementById('porcionamiento-total');
-  if (total) total.textContent = 'Suma: ' + (Math.round(sum * 100) / 100);
+  if (!total) return;
+  const sumO = Math.round(sumaOtros * 100) / 100;
+  const diff = Math.round(faltante * 100) / 100;
+  let html = 'Peso bruto: <b>' + bruto + '</b> · Suma porciones: <b>' + sumO + '</b>';
+  if (diff > 0) html += ' · <span style="color:#c62828;font-weight:700;">FALTANTE: ' + diff + '</span>';
+  else if (diff < 0) html += ' · <span style="color:#e65100;font-weight:700;">EXCESO: ' + Math.abs(diff) + '</span>';
+  else html += ' · <span style="color:#2e7d32;font-weight:700;">OK ✓</span>';
+  total.innerHTML = html;
 }
 
 function guardarPorcionamiento() {
