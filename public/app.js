@@ -2837,8 +2837,8 @@ function abrirAccionesReportes() {
       return;
     }
     let html = '<h3>ACCIONES — Items con FALTA</h3>';
-    html += '<p style="font-size:0.8rem;color:#888;margin-bottom:0.6rem;">Elige la acción para cada faltante: <strong>→ COCINA</strong> (salida a cocina el día real), <strong>BAJA</strong> (registra en STOCK/BAJAS) u <strong>OBSERVAR</strong> (cuarentena: la próxima venta del item se cubre con esta cantidad).</p>';
-    html += '<div class="table-wrap"><table><thead><tr><th>Fecha Falta</th><th>Item</th><th>Almacén</th><th>Falta</th><th>Fecha Real Salida</th><th>→ COCINA</th><th>BAJA</th><th>OBSERVAR</th></tr></thead><tbody>';
+    html += '<p style="font-size:0.8rem;color:#888;margin-bottom:0.6rem;">Elige la acción para cada faltante: <strong>→ COCINA</strong> (salida a cocina el día real), <strong>BAJA</strong> (registra en STOCK/BAJAS), <strong>OBSERVAR</strong> (cuarentena) o <strong>INTERCAMBIO</strong> (los meseros registraron un producto por otro: corrige la falta, el ingreso y las ventas).</p>';
+    html += '<div class="table-wrap"><table><thead><tr><th>Fecha Falta</th><th>Item</th><th>Almacén</th><th>Falta</th><th>Fecha Real Salida</th><th>→ COCINA</th><th>BAJA</th><th>OBSERVAR</th><th>INTERCAMBIO</th></tr></thead><tbody>';
     faltantes.forEach(f => {
       html += `<tr data-accion-item="${f.item_id}" data-accion-al="${f.almacen_id}" data-accion-falta="${f.falta}" data-accion-fecha="${f.fecha}">
         <td>${f.fecha}</td>
@@ -2849,6 +2849,7 @@ function abrirAccionesReportes() {
         <td><button class="btn-detalles" onclick="convertirFaltaACocina(this)" style="background:#2e7d32;color:#fff;">→ COCINA</button></td>
         <td><button class="btn-detalles" onclick="darDeBajaFalta(this)" style="background:#b71c1c;color:#fff;">BAJA</button></td>
         <td><button class="btn-detalles" onclick="observarFalta(this)" style="background:#e65100;color:#fff;">OBSERVAR</button></td>
+        <td><button class="btn-detalles" onclick="intercambiarFalta(this)" style="background:#6a1b9a;color:#fff;">INTERCAMBIO</button></td>
       </tr>`;
     });
     html += '</tbody></table></div>';
@@ -2891,6 +2892,60 @@ function observarFalta(btn) {
     cerrarModal();
     cargarReporteDiferencias();
   }).catch(() => { btn.disabled = false; btn.textContent = 'OBSERVAR'; alert('Error al marcar en observación'); });
+}
+
+function intercambiarFalta(btn) {
+  const tr = btn.closest('tr');
+  const item_id = parseInt(tr.dataset.accionItem);
+  const almacen_id = parseInt(tr.dataset.accionAl);
+  const cantidad = parseFloat(tr.dataset.accionFalta);
+  const fecha = tr.dataset.accionFecha;
+  const nombreItem = tr.querySelector('td:nth-child(2)').textContent.trim();
+  const body = document.getElementById('modal-body');
+  body.innerHTML = '<h3>INTERCAMBIO DE PRODUCTO</h3>'
+    + '<p style="font-size:0.85rem;color:#666;" id="intercambio-info">Cargando productos con INGRESO...</p>';
+  getInventario(fecha).then(data => {
+    const al = (data || []).find(a => a.id === almacen_id);
+    const conIngreso = (al && al.items ? al.items : []).filter(i => (i.stock_ingreso || 0) > 0 && i.id !== item_id);
+    if (!conIngreso.length) {
+      body.innerHTML = '<h3>INTERCAMBIO DE PRODUCTO</h3>'
+        + '<p style="color:#c62828;">No hay productos con INGRESO en <b>' + esc(al ? al.nombre : 'almacén ' + almacen_id) + '</b> el ' + fecha + ' para emparejar el intercambio. ¿Tal vez el ingreso sobrante está en otro almacén o se marcó como otro tipo de ajuste?</p>'
+        + '<button onclick="cerrarModal()" style="margin-top:0.5rem;">CERRAR</button>';
+      return;
+    }
+    body.innerHTML = '<h3>INTERCAMBIO DE PRODUCTO</h3>'
+      + '<p style="font-size:0.85rem;color:#666;margin-bottom:0.6rem;">El faltante es de <b>' + esc(nombreItem) + '</b> (' + cantidad + ') el ' + fecha + ' en <b>' + esc(al.nombre) + '</b>. Se registrará la venta del producto correcto y se quitará la del equivocado (corrige falta, ingreso y ventas).</p>'
+      + '<label style="display:block;font-weight:600;margin-bottom:0.3rem;">Producto registrado por error (el que tiene el INGRESO):</label>'
+      + '<select id="intercambio-producto" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;margin-bottom:0.6rem;">'
+      + conIngreso.map(i => `<option value="${i.id}" data-nombre="${esc(i.nombre)}">${esc(i.nombre)} (ingreso ${i.stock_ingreso})</option>`).join('')
+      + '</select>'
+      + '<label style="display:block;font-weight:600;margin-bottom:0.3rem;">Cantidad a intercambiar:</label>'
+      + '<input id="intercambio-cant" type="number" step="0.01" min="0" value="' + cantidad + '" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;margin-bottom:0.8rem;">'
+      + '<div style="display:flex;gap:0.5rem;flex-wrap:wrap;">'
+      + '<button onclick="confirmarIntercambio()" style="flex:1;min-width:120px;background:#6a1b9a;color:#fff;">CORREGIR INTERCAMBIO</button>'
+      + '<button onclick="cerrarModal()" style="flex:1;min-width:120px;background:#888;">Cancelar</button>'
+      + '</div>';
+    window._intercambioCtx = { fecha, almacen_id, item_falta: item_id };
+  }).catch(() => { body.innerHTML = '<p style="color:#c62828;">Error cargando el inventario.</p>'; });
+}
+
+function confirmarIntercambio() {
+  const ctx = window._intercambioCtx;
+  if (!ctx) return;
+  const sel = document.getElementById('intercambio-producto');
+  if (!sel) return;
+  const item_ingreso = parseInt(sel.value);
+  const nomIng = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].dataset.nombre : '';
+  const cantidad = parseFloat(document.getElementById('intercambio-cant').value) || 0;
+  if (!item_ingreso || cantidad <= 0) { alert('Selecciona el producto y la cantidad'); return; }
+  if (!confirm('¿Corregir el intercambio? Se registrará la venta real de ' + cantidad + ' ' + (nomIng ? 'del producto faltante' : '') + ', se quitará la venta de ' + nomIng + ' y se ajustarán la falta y el ingreso.')) return;
+  api('POST', '/api/reportes/accion/intercambio', {
+    fecha: ctx.fecha, almacen_id: ctx.almacen_id, item_falta: ctx.item_falta, item_ingreso, cantidad, saved_by: currentUserName
+  }).then(() => {
+    showToast('Intercambio corregido');
+    cerrarModal();
+    cargarReporteDiferencias();
+  }).catch(() => alert('Error al corregir intercambio'));
 }
 
 function convertirFaltaACocina(btn) {

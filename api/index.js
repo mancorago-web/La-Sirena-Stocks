@@ -3906,6 +3906,57 @@ app.post('/api/reportes/accion/sacar-cuarentena', async (req, res) => {
   }
 });
 
+// --- ACCION en REPORTES: INTERCAMBIO de producto (los meseros registraron uno por otro) ---
+// Corrige la conciliación Y las ventas: el producto real (con FALTA) registra la venta que faltaba,
+// y el producto equivocado (con INGRESO) quita la venta incorrecta y el ingreso sobrante.
+app.post('/api/reportes/accion/intercambio', async (req, res) => {
+  try {
+    const { fecha, almacen_id, item_falta, item_ingreso, cantidad, saved_by } = req.body;
+    if (!fecha || !almacen_id || !item_falta || !item_ingreso || !(Number(cantidad) > 0)) {
+      return res.status(400).json({ error: 'fecha, almacen_id, item_falta, item_ingreso y cantidad son requeridos' });
+    }
+    const savedBy = saved_by || (req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown');
+    const al = Number(almacen_id);
+    const itemA = Number(item_falta);
+    const itemB = Number(item_ingreso);
+    const cant = Math.round(Number(cantidad) * 100) / 100;
+
+    const [diaA, diaB] = await Promise.all([
+      col('inventario_diario').doc(docId('invdiario', fecha, al, itemA)).get(),
+      col('inventario_diario').doc(docId('invdiario', fecha, al, itemB)).get(),
+    ]);
+    const a = diaA.exists ? diaA.data() : {};
+    const b = diaB.exists ? diaB.data() : {};
+
+    // A = producto real vendido (tenía FALTA): registrar la venta real y quitar la falta
+    const regA = {
+      item_id: itemA, almacen_id: al,
+      total_ventas: Math.round(((a.total_ventas || 0) + cant) * 100) / 100,
+      falta_almacen: Math.max(0, Math.round(((a.falta_almacen || 0) - cant) * 100) / 100),
+    };
+    if (a.stock_apertura !== undefined) regA.stock_apertura = a.stock_apertura;
+    await guardarDiaInterno(fecha, [regA], savedBy);
+
+    // B = producto equivocado (tenía INGRESO): quitar la venta incorrecta y el ingreso sobrante
+    const nuevoIngB = Math.max(0, Math.round(((b.stock_ingreso || 0) - cant) * 100) / 100);
+    const regB = {
+      item_id: itemB, almacen_id: al,
+      total_ventas: Math.max(0, Math.round(((b.total_ventas || 0) - cant) * 100) / 100),
+      stock_ingreso: nuevoIngB,
+    };
+    if (b.stock_apertura !== undefined) regB.stock_apertura = b.stock_apertura;
+    if (nuevoIngB === 0) {
+      regB.ingreso_origen = [];
+      regB.ingreso_transferencia = 0;
+    }
+    await guardarDiaInterno(fecha, [regB], savedBy);
+
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- AUTH CHECK ---
 app.get('/api/check-auth', authMiddleware, (req, res) => {
   res.json({ ok: true, name: req.user.name || null, email: req.user.email });
