@@ -4304,6 +4304,18 @@ function cargarCocinaMovimientos(tipo) {
         if (!seen.has(n.toUpperCase())) lista.push({ ingrediente: n, unidad: movByIng[n].unidad || 'unidad' });
       });
     }
+    // INGRESOS: solo mostrar los items que SÍ tienen ingreso en la fecha (cantidad > 0)
+    if (tipo === 'ingresos') {
+      const conIngreso = lista.filter(s => (movByIng[s.ingrediente]?.cantidad || 0) > 0);
+      if (!conIngreso.length) {
+        container.innerHTML = '<p>No hay ingresos registrados en esta fecha (COMPRAS/INGRESOS o salidas de STOCK a COCINA).</p>';
+        const bp = document.getElementById('buscar-cocina-' + tipo);
+        if (bp) bp.value = '';
+        return;
+      }
+      lista.length = 0;
+      lista.push(...conIngreso);
+    }
     const esIngreso = tipo === 'ingresos';
     const colOrigen = esIngreso ? '<th>Origen</th>' : '';
     const cellOrigen = (mov) => esIngreso ? `<td><select class="select-origen-cocina" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">
