@@ -2582,7 +2582,7 @@ function editarAlmacen(id, nombre, descripcion) {
 
 function guardarMinimosStocks() {
   const btn = document.querySelector('#tab-stocks .btn-guardar-dia');
-  btn.disabled = true; btn.textContent = 'Guardando...';
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
   const minimos = [];
   document.querySelectorAll('#accordion-stocks tr[data-item-id]').forEach(tr => {
     const itemId = parseInt(tr.dataset.itemId);
@@ -2591,12 +2591,20 @@ function guardarMinimosStocks() {
     const val = parseFloat(tr.querySelector('.input-minimo').value) || 0;
     minimos.push({ item_id: itemId, almacen_id: almacenId, cantidad_minima: val });
   });
+  if (!minimos.length) {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR MINIMOS'; }
+    alert('No hay items para guardar en STOCK/STOCKS');
+    return;
+  }
   api('PUT', '/api/inventario/minimos', { minimos }).then(() => {
-    btn.textContent = '✓ Guardado';
-    setTimeout(() => { btn.disabled = false; btn.textContent = '💾 GUARDAR MINIMOS'; }, 2000);
+    if (btn) {
+      btn.textContent = '✓ Guardado';
+      setTimeout(() => { btn.disabled = false; btn.textContent = '💾 GUARDAR MINIMOS'; }, 2000);
+    }
+    showToast('Mínimos guardados');
     cargarStocks();
   }).catch(() => {
-    btn.disabled = false; btn.textContent = '💾 GUARDAR MINIMOS';
+    if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR MINIMOS'; }
     alert('Error al guardar');
   });
 }
