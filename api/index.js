@@ -2364,14 +2364,18 @@ app.post('/api/cocina/porcionamiento/transformar', async (req, res) => {
     const orig = cs.docs.find(d => String(d.data().ingrediente || '').trim().toUpperCase() === key);
     if (orig) await col('cocina_stock').doc(orig.id).update({ cantidad: 0, updated_at: new Date().toISOString() });
 
-    // 3) Ingresar CABEZA/COLAS (peso en kg) a COCINA/STOCK
+    // 3) Ingresar CABEZA/COLAS (peso en kg) a COCINA/STOCK + asegurar en BASE DE DATOS UNIFICADA
     if (cabeza && cabeza.nombre && (parseFloat(cabeza.peso) || 0) > 0) {
-      await ajustarCocinaStock([{ nombre: String(cabeza.nombre).trim(), delta: parseFloat(cabeza.peso) || 0, unidad: 'kg' }]);
+      const nombreCabeza = String(cabeza.nombre).trim();
+      await ajustarCocinaStock([{ nombre: nombreCabeza, delta: parseFloat(cabeza.peso) || 0, unidad: 'kg' }]);
+      await ensureIngredienteEnBaseUnificada(nombreCabeza, 'kg');
     }
 
-    // 4) Ingresar los PACKS (cantidad) a COCINA/STOCK
+    // 4) Ingresar los PACKS (cantidad) a COCINA/STOCK + asegurar en BASE DE DATOS UNIFICADA
     if (packs && packs.nombre && (parseInt(packs.cantidad) || 0) > 0) {
-      await ajustarCocinaStock([{ nombre: String(packs.nombre).trim(), delta: parseInt(packs.cantidad) || 0, unidad: 'unidad' }]);
+      const nombrePacks = String(packs.nombre).trim();
+      await ajustarCocinaStock([{ nombre: nombrePacks, delta: parseInt(packs.cantidad) || 0, unidad: 'unidad' }]);
+      await ensureIngredienteEnBaseUnificada(nombrePacks, 'unidad');
     }
 
     // 5) Registrar el desperdicio (no entra a stock)
