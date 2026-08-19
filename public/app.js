@@ -4674,9 +4674,11 @@ function cargarPorcionamientoCocina(seleccionarItem) {
   if (!container) return;
   Promise.all([
     api('GET', '/api/cocina/stock'),
-    api('GET', '/api/cocina/porcionamientos?fecha=' + fecha)
-  ]).then(([stock, porcs]) => {
-    _porcionamientoCtx = { fecha, stock: stock || [], porcs: porcs || [], item: null };
+    api('GET', '/api/cocina/porcionamientos?fecha=' + fecha),
+    api('GET', '/api/cocina/precios'),
+    api('GET', '/api/cocina/compras')
+  ]).then(([stock, porcs, precios, compras]) => {
+    _porcionamientoCtx = { fecha, stock: stock || [], porcs: porcs || [], precios: precios || [], compras: compras || [], item: null };
     const items = stock || [];
     const porc = porcs || [];
     let html = '<div class="table-wrap" style="margin-bottom:0.5rem;"><div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">'
@@ -4755,7 +4757,7 @@ function renderPorcionamientoEditor(secciones) {
   editor.innerHTML = '<h3 style="margin-top:0">Porcionamiento: ' + esc(ctx.item.nombre) + '</h3>'
     + '<p style="font-size:0.85rem;color:#666;">Stock en COCINA: <b>' + stock + '</b>. Registra manualmente a dónde se fue cada porción.</p>'
     + '<div class="table-wrap"><table>'
-    + '<thead><tr><th>Sección / Porcionamiento</th><th>Peso</th><th></th></tr></thead>'
+    + '<thead><tr><th>Sección / Porcionamiento</th><th>Peso</th><th>%</th><th>Precio</th><th></th></tr></thead>'
     + '<tbody id="porcionamiento-secciones">' + secciones.map(porcionFila).join('') + '</tbody>'
     + '</table></div>'
     + '<button onclick="agregarSeccionPorcionamiento()" style="margin:0.5rem 0;">+ SECCIÓN</button>'
@@ -4784,9 +4786,12 @@ function renderPorcionamientoEditor(secciones) {
 }
 
 function porcionFila(sec) {
+  const nom = esc(sec.nombre);
   return '<tr>'
-    + '<td><input class="input-porc-nombre" value="' + esc(sec.nombre) + '" style="width:100%;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();"></td>'
-    + '<td><input class="input-porc-peso" type="number" step="0.01" min="0" value="' + (sec.peso || 0) + '" oninput="actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>'
+    + '<td><input class="input-porc-nombre" value="' + nom + '" style="width:100%;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();"></td>'
+    + '<td><input class="input-porc-peso" type="number" step="0.01" min="0" value="' + (sec.peso || 0) + '" oninput="actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>'
+    + '<td class="celda-porc-pct" style="text-align:right;font-weight:600;color:#0f3460;">—</td>'
+    + '<td class="celda-porc-precio" style="text-align:right;">—</td>'
     + '<td><button class="danger" onclick="this.closest(\'tr\').remove(); actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();">✕</button></td>'
     + '</tr>';
 }
@@ -4796,7 +4801,9 @@ function agregarSeccionPorcionamiento() {
   if (!tbody) return;
   const tr = document.createElement('tr');
   tr.innerHTML = '<td><input class="input-porc-nombre" placeholder="Sección (ej. CABEZA, COLAS...)" style="width:100%;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();"></td>'
-    + '<td><input class="input-porc-peso" type="number" step="0.01" min="0" value="0" oninput="actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>'
+    + '<td><input class="input-porc-peso" type="number" step="0.01" min="0" value="0" oninput="actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>'
+    + '<td class="celda-porc-pct" style="text-align:right;font-weight:600;color:#0f3460;">—</td>'
+    + '<td class="celda-porc-precio" style="text-align:right;">—</td>'
     + '<td><button class="danger" onclick="this.closest(\'tr\').remove(); actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();">✕</button></td>';
   tbody.appendChild(tr);
   actualizarTotalPorcionamiento();
@@ -4820,14 +4827,78 @@ function sumarPorcionamiento() {
 function actualizarTotalPorcionamiento() {
   const { bruto, sumaOtros, faltante } = sumarPorcionamiento();
   const total = document.getElementById('porcionamiento-total');
+  const ctx = _porcionamientoCtx;
+
+  // Calcular % y PRECIO por fila
+  const filetesPeso = obtenerPesoSeccion('FILETE');
+  const norm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  const precioTotalBruto = obtenerPrecioItem(ctx, norm(ctx.item ? ctx.item.nombre : ''));
+  const precioPorKiloBruto = bruto > 0 ? (precioTotalBruto / bruto) : 0;
+  const precioPorKiloFiletes = filetesPeso > 0 ? (precioTotalBruto / filetesPeso) : 0;
+
+  document.querySelectorAll('#porcionamiento-secciones tr').forEach(tr => {
+    const nom = (tr.querySelector('.input-porc-nombre')?.value || '').trim().toUpperCase();
+    const peso = parseFloat(tr.querySelector('.input-porc-peso')?.value) || 0;
+    const pctCell = tr.querySelector('.celda-porc-pct');
+    const precioCell = tr.querySelector('.celda-porc-precio');
+    if (pctCell) {
+      pctCell.textContent = bruto > 0 ? (Math.round((peso / bruto) * 10000) / 100) + '%' : '—';
+    }
+    if (precioCell) {
+      if (nom === 'PESO BRUTO') {
+        // El peso bruto muestra su precio por kilo (ej. 100/5 = 20 soles/kg)
+        precioCell.textContent = precioPorKiloBruto > 0 ? 'S/ ' + precioPorKiloBruto.toFixed(2) + '/kg' : '—';
+      } else if (nom.includes('FILETE')) {
+        // El filete muestra su precio real por kilo (ej. 100/2.5 = 40 soles/kg)
+        precioCell.textContent = precioPorKiloFiletes > 0 ? 'S/ ' + precioPorKiloFiletes.toFixed(2) + '/kg' : '—';
+      } else {
+        // Las demas secciones muestran el precio por kilo del bruto
+        precioCell.textContent = precioPorKiloBruto > 0 ? 'S/ ' + precioPorKiloBruto.toFixed(2) + '/kg' : '—';
+      }
+    }
+  });
+
   if (!total) return;
   const sumO = Math.round(sumaOtros * 100) / 100;
   const diff = Math.round(faltante * 100) / 100;
-  let html = 'Peso bruto: <b>' + bruto + '</b> · Suma porciones: <b>' + sumO + '</b>';
+  let html = 'Peso bruto: <b>' + bruto + '</b> kg · Precio/kg bruto: <b>S/ ' + (precioPorKiloBruto > 0 ? precioPorKiloBruto.toFixed(2) : '0') + '</b> · Suma porciones: <b>' + sumO + '</b>';
   if (diff > 0) html += ' · <span style="color:#c62828;font-weight:700;">FALTANTE: ' + diff + '</span>';
   else if (diff < 0) html += ' · <span style="color:#e65100;font-weight:700;">EXCESO: ' + Math.abs(diff) + '</span>';
   else html += ' · <span style="color:#2e7d32;font-weight:700;">OK ✓</span>';
   total.innerHTML = html;
+}
+
+// Obtiene el peso de una sección por nombre (ej. FILETE)
+function obtenerPesoSeccion(filtro) {
+  let peso = 0;
+  document.querySelectorAll('#porcionamiento-secciones tr').forEach(tr => {
+    const nom = (tr.querySelector('.input-porc-nombre')?.value || '').trim().toUpperCase();
+    const p = parseFloat(tr.querySelector('.input-porc-peso')?.value) || 0;
+    if (filtro.test(nom)) peso = p;
+  });
+  return peso;
+}
+
+// Obtiene el precio TOTAL del peso bruto del item (el precio que se pago por la compra)
+function obtenerPrecioItem(ctx, nombreNorm) {
+  if (!ctx) return 0;
+  const normF = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  // 1) Buscar la compra MÁS RECIENTE del item (precio_total = el precio real pagado por el peso bruto)
+  const comprasItem = (ctx.compras || []).filter(c => normF(c.nombre) === nombreNorm);
+  if (comprasItem.length) {
+    comprasItem.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+    const c = comprasItem[0];
+    if (parseFloat(c.precio_total) > 0) return parseFloat(c.precio_total);
+    if (parseFloat(c.precio) > 0) return parseFloat(c.precio) * (parseFloat(c.cantidad) || 1);
+  }
+  // 2) Buscar en cocina_precios el precio_compra (por unidad) * cantidad del stock
+  const prec = (ctx.precios || []).find(p => normF(p.ingrediente) === nombreNorm);
+  if (prec && parseFloat(prec.precio_compra) > 0) {
+    const stock = (ctx.stock || []).find(s => normF(s.ingrediente) === nombreNorm);
+    const cant = stock ? (parseFloat(stock.cantidad) || 0) : 1;
+    return parseFloat(prec.precio_compra) * (cant > 0 ? cant : 1);
+  }
+  return 0;
 }
 
 function guardarPorcionamiento() {

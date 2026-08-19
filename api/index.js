@@ -2618,8 +2618,9 @@ app.get('/api/cocina/ventas', async (req, res) => {
 app.get('/api/cocina/compras', async (req, res) => {
   try {
     const fecha = req.query.fecha;
-    if (!fecha) return res.json([]);
-    const snap = await col('cocina_compras').where('fecha', '==', fecha).get();
+    const snap = fecha
+      ? await col('cocina_compras').where('fecha', '==', fecha).get()
+      : await col('cocina_compras').get();
     res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
