@@ -4666,7 +4666,7 @@ function exportarRecetasCocina() {
 // --- COCINA: PORCIONAMIENTO ---
 let _porcionamientoCtx = null;
 
-function cargarPorcionamientoCocina() {
+function cargarPorcionamientoCocina(seleccionarItem) {
   const fechaEl = document.getElementById('fecha-porcionamiento');
   if (fechaEl && !fechaEl.value) fechaEl.value = todayStr();
   const fecha = fechaEl ? fechaEl.value : todayStr();
@@ -4686,10 +4686,11 @@ function cargarPorcionamientoCocina() {
       + items.map(s => `<option value="${esc(s.ingrediente)}">${esc(s.ingrediente)} (${s.cantidad || 0})</option>`).join('')
       + '</select>'
       + '</div></div>';
+    // Lista de TODOS los porcionamientos del día (guardados)
+    html += '<div style="margin-top:0.5rem;margin-bottom:0.5rem;"><strong style="color:#0f3460;">Porcionamientos del día (' + porc.length + ')</strong></div>';
     if (porc.length) {
       html += '<div class="table-wrap" style="margin-bottom:0.5rem;"><table><thead><tr><th>Item</th><th>Stock</th><th>Secciones</th><th></th></tr></thead><tbody>';
       porc.forEach(p => {
-        const sum = (p.secciones || []).reduce((s, sec) => s + (sec.peso || 0), 0);
         html += `<tr>
           <td>${esc(p.nombre)}</td>
           <td>${p.stock}</td>
@@ -4701,9 +4702,19 @@ function cargarPorcionamientoCocina() {
         </tr>`;
       });
       html += '</tbody></table></div>';
+    } else {
+      html += '<p style="font-size:0.85rem;color:#888;margin-bottom:0.5rem;">Aún no hay porcionamientos guardados hoy. Selecciona un item y guarda.</p>';
     }
     html += '<div id="porcionamiento-editor"></div>';
     container.innerHTML = html;
+    // Re-seleccionar el item que estaba activo (para seguir guardando varios)
+    if (seleccionarItem) {
+      const sel = document.getElementById('porcionamiento-item');
+      if (sel) {
+        sel.value = seleccionarItem;
+        cargarPorcionamientoItem();
+      }
+    }
   }).catch(() => { container.innerHTML = '<p style="color:#c62828;">Error cargando porcionamiento.</p>'; });
 }
 
@@ -4829,9 +4840,11 @@ function guardarPorcionamiento() {
     if (nom) secciones.push({ nombre: nom, peso });
   });
   if (!secciones.length) { alert('Agrega al menos una sección'); return; }
+  const nombreGuardado = ctx.item.nombre;
   api('POST', '/api/cocina/porcionamientos', { nombre: ctx.item.nombre, fecha: ctx.fecha, secciones }).then(() => {
     showToast('Porcionamiento guardado');
-    cargarPorcionamientoCocina();
+    // Recargar la lista manteniendo el item seleccionado (para seguir con varios del día)
+    cargarPorcionamientoCocina(nombreGuardado);
   }).catch(() => alert('Error al guardar'));
 }
 
