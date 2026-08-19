@@ -4691,12 +4691,21 @@ function cargarPorcionamientoCocina(seleccionarItem) {
     // Lista de TODOS los porcionamientos del día (guardados)
     html += '<div style="margin-top:0.5rem;margin-bottom:0.5rem;"><strong style="color:#0f3460;">Porcionamientos del día (' + porc.length + ')</strong></div>';
     if (porc.length) {
-      html += '<div class="table-wrap" style="margin-bottom:0.5rem;"><table><thead><tr><th>Item</th><th>Stock</th><th>Secciones</th><th></th></tr></thead><tbody>';
+      html += '<div class="table-wrap" style="margin-bottom:0.5rem;"><table><thead><tr><th>Item</th><th>Stock</th><th>Secciones</th><th>%</th><th>Precio/kg</th><th></th></tr></thead><tbody>';
       porc.forEach(p => {
+        const seccs = p.secciones || [];
+        const pesoBruto = seccs.find(s => /PESO BRUTO/i.test(s.nombre || ''))?.peso || 0;
+        const filete = seccs.find(s => /FILETE/i.test(s.nombre || ''))?.peso || 0;
+        const normF = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+        const precioTotal = obtenerPrecioItem(_porcionamientoCtx, normF(p.nombre));
+        const pct = pesoBruto > 0 ? Math.round((filete / pesoBruto) * 10000) / 100 + '%' : '—';
+        const precioKgFilete = filete > 0 && precioTotal > 0 ? 'S/ ' + (precioTotal / filete).toFixed(2) : '—';
         html += `<tr>
           <td>${esc(p.nombre)}</td>
           <td>${p.stock}</td>
-          <td style="font-size:0.8rem;">${(p.secciones || []).map(s => esc(s.nombre) + ' ' + s.peso).join(' · ') || '—'}</td>
+          <td style="font-size:0.8rem;">${seccs.map(s => esc(s.nombre) + ' ' + s.peso).join(' · ') || '—'}</td>
+          <td style="text-align:right;font-weight:600;color:#0f3460;">${pct}</td>
+          <td style="text-align:right;">${precioKgFilete}</td>
           <td style="white-space:nowrap;">
             <button onclick="cargarPorcionamientoExistente('${esc(p.nombre)}')" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.75rem;">ABRIR</button>
             <button class="danger" onclick="eliminarPorcionamiento('${p.id}')">✕</button>
