@@ -1095,13 +1095,20 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
   }
 });
 
-// --- COMPRAS: detalle de compras/ingresos registrados por fecha ---
+// --- COMPRAS: detalle de compras/ingresos registrados por fecha o rango de fechas ---
 app.get('/api/compras/detalle', async (req, res) => {
   try {
     const fecha = req.query.fecha;
-    if (!fecha) return res.json([]);
+    const fechaIni = req.query.fecha_inicio;
+    const fechaFin = req.query.fecha_fin;
+    if (!fecha && !(fechaIni && fechaFin)) return res.json([]);
     // BARRA y COCINA desde el log; los de STOCKS se derivan de inventario_diario (fuente única)
-    const logSnap = await col('compras').where('fecha', '==', fecha).get();
+    let logSnap;
+    if (fecha) {
+      logSnap = await col('compras').where('fecha', '==', fecha).get();
+    } else {
+      logSnap = await col('compras').where('fecha', '>=', fechaIni).where('fecha', '<=', fechaFin).get();
+    }
     const lista = logSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.destino !== 'stocks');
     const precioByNombre = {};
     const precioTotalByNombre = {};
@@ -1113,7 +1120,7 @@ app.get('/api/compras/detalle', async (req, res) => {
     });
     const [invSnap, diaSnap] = await Promise.all([
       col('inventario').get(),
-      col('inventario_diario').where('fecha', '==', fecha).get()
+      fecha ? col('inventario_diario').where('fecha', '==', fecha).get() : col('inventario_diario').where('fecha', '>=', fechaIni).where('fecha', '<=', fechaFin).get()
     ]);
     const nombres = {};
     invSnap.docs.forEach(d => {
@@ -1128,7 +1135,7 @@ app.get('/api/compras/detalle', async (req, res) => {
       if (!nombre) return;
       lista.push({
         id: 'inv:' + a.almacen_id + ':' + a.item_id,
-        fecha,
+        fecha: a.fecha || fecha,
         nombre,
         cantidad: ing,
         unidad: 'unidad',
@@ -1140,7 +1147,7 @@ app.get('/api/compras/detalle', async (req, res) => {
         created_at: a.updated_at || new Date().toISOString()
       });
     });
-    lista.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+    lista.sort((a, b) => String(a.fecha || '').localeCompare(String(b.fecha || '')) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
     res.json(lista);
   } catch (e) {
     res.status(500).json({ error: e.message });

@@ -3472,7 +3472,6 @@ initPicker('fecha-salidas', cargarSalidas);
 initPicker('fecha-ventas', cargarVentas);
 initPicker('fecha-bajas', cargarBajas);
 initPicker('fecha-ingresos', cargarIngresos);
-initPicker('fecha-compras', cargarCompras);
 initPicker('fecha-ventas-menu', cargarVentasCentral);
 // Barra: just set today's date, actual load happens via lazy-load in cambiarSubTab
 initPicker('fecha-stock-barra');
@@ -6220,7 +6219,7 @@ function renderComprasAlmacenes(lista) {
 
 function actualizarAlmacenesCompra(nombre) {
   const q = (nombre || '').trim().toLowerCase().replace(/\s+/g, '');
-  const fecha = document.getElementById('fecha-compras')?.value || todayStr();
+  const { ini: fecha } = getFechasCompras();
   getInventario(fecha).then(inv => {
     const list = [];
     (inv || []).forEach(a => {
@@ -6233,8 +6232,18 @@ function actualizarAlmacenesCompra(nombre) {
   }).catch(() => {});
 }
 
+function getFechasCompras() {
+  const ini = document.getElementById('fecha-compras-ini')?.value;
+  const fin = document.getElementById('fecha-compras-fin')?.value;
+  return {
+    ini: ini || todayStr(),
+    fin: fin || todayStr()
+  };
+}
+
 function cargarCompras() {
-  const fecha = document.getElementById('fecha-compras')?.value || todayStr();
+  const { ini, fin } = getFechasCompras();
+  const fecha = ini; // para sugerencias de stock usar la fecha de inicio
   Promise.all([getInventario(fecha), api('GET', '/api/barra/precios'), api('GET', '/api/almacenes')]).then(([inv, precios, alms]) => {
     const dl = document.getElementById('sugerencia-compras');
     if (dl) {
@@ -6261,8 +6270,8 @@ function cargarCompras() {
       ).join('');
     }
     onCambiarDestinoCompra();
-    cargarComprasDetalle(fecha);
-  }).catch(() => { cargarComprasDetalle(fecha); });
+    cargarComprasDetalle(ini, fin);
+  }).catch(() => { cargarComprasDetalle(ini, fin); });
 }
 
 function comprasAlmacenesSeleccionados() {
@@ -6273,15 +6282,18 @@ function comprasMueblesSeleccionados() {
   return Array.from(document.querySelectorAll('.compra-mueble:checked')).map(cb => cb.value);
 }
 
-function cargarComprasDetalle(fecha) {
+function cargarComprasDetalle(ini, fin) {
   const c = document.getElementById('compras-detalle-container');
   if (!c) return;
-  const fechaFinal = fecha || document.getElementById('fecha-compras')?.value || todayStr();
-  api('GET', '/api/compras/detalle?fecha=' + encodeURIComponent(fechaFinal)).then(list => {
-    const actual = document.getElementById('fecha-compras')?.value || todayStr();
-    if (actual !== fechaFinal) return; // la fecha cambió, ignorar respuesta vieja
+  const fs = getFechasCompras();
+  const fechaIni = ini || fs.ini;
+  const fechaFin = fin || fs.fin;
+  api('GET', '/api/compras/detalle?fecha_inicio=' + encodeURIComponent(fechaIni) + '&fecha_fin=' + encodeURIComponent(fechaFin)).then(list => {
+    const actualIni = document.getElementById('fecha-compras-ini')?.value || todayStr();
+    const actualFin = document.getElementById('fecha-compras-fin')?.value || todayStr();
+    if (actualIni !== fechaIni || actualFin !== fechaFin) return; // el rango cambió, ignorar respuesta vieja
     if (!list || !list.length) {
-      c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE COMPRAS/INGRESOS</h3><p style="color:#888;">Aún no hay compras registradas en esta fecha.</p>';
+      c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE COMPRAS/INGRESOS</h3><p style="color:#888;">No hay compras registradas en el rango <b>' + fechaIni + ' a ' + fechaFin + '</b>.</p>';
       return;
     }
     const filas = list.map(r => {
@@ -6296,14 +6308,14 @@ function cargarComprasDetalle(fecha) {
       const t = r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
       const precioUni = parseFloat(r.precio) || 0;
       const precioTot = parseFloat(r.precio_total) || (precioUni * (r.cantidad || 0));
-      return `<tr><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${precioUni > 0 ? 'S/ ' + precioUni.toFixed(2) : '—'}</td><td>${precioTot > 0 ? 'S/ ' + precioTot.toFixed(2) : '—'}</td><td>${esc(det)}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td><button class="danger" onclick="confirmarEliminarCompra('${r.id}')">✕</button></td></tr>`;
+      return `<tr><td>${r.fecha || '—'}</td><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${precioUni > 0 ? 'S/ ' + precioUni.toFixed(2) : '—'}</td><td>${precioTot > 0 ? 'S/ ' + precioTot.toFixed(2) : '—'}</td><td>${esc(det)}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td><button class="danger" onclick="confirmarEliminarCompra('${r.id}')">✕</button></td></tr>`;
     }).join('');
     const totalCompra = (list || []).reduce((s, r) => s + (parseFloat(r.precio_total) || ((parseFloat(r.precio) || 0) * (r.cantidad || 0))), 0);
-    c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE COMPRAS/INGRESOS</h3>' +
-      '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Precio Unidad</th><th>Precio Total</th><th>Destino</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
+    c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE COMPRAS/INGRESOS (' + fechaIni + ' a ' + fechaFin + ')</h3>' +
+      '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Item</th><th>Cantidad</th><th>Precio Unidad</th><th>Precio Total</th><th>Destino</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
       filas + '</tbody></table></div>' +
       (totalCompra > 0 ? '<p style="font-weight:700;color:#0f3460;margin-top:0.5rem;">TOTAL COMPRAS: S/ ' + totalCompra.toFixed(2) + '</p>' : '');
-  }).catch(() => { const actual = document.getElementById('fecha-compras')?.value || todayStr(); if (actual === fechaFinal) c.innerHTML = '<p style="color:#888;">DETALLE DE COMPRAS/INGRESOS</p>'; });
+  }).catch(() => { const ai = document.getElementById('fecha-compras-ini')?.value || todayStr(); const af = document.getElementById('fecha-compras-fin')?.value || todayStr(); if (ai === fechaIni && af === fechaFin) c.innerHTML = '<p style="color:#888;">DETALLE DE COMPRAS/INGRESOS</p>'; });
 }
 
 function confirmarEliminarCompra(id) {
@@ -6321,11 +6333,11 @@ function confirmarEliminarCompra(id) {
 }
 
 function eliminarCompra(id) {
-  const fecha = document.getElementById('fecha-compras')?.value || todayStr();
+  const { ini: fecha } = getFechasCompras();
   api('DELETE', '/api/compras/' + id + '?fecha=' + encodeURIComponent(fecha)).then(() => {
     cerrarModal();
     showToast('Compra/Ingreso eliminado');
-    cargarComprasDetalle(fecha);
+    cargarComprasDetalle();
     _invCache = { fecha: null, data: null, pending: null };
     actualizarContadoresMenu();
     if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fecha);
@@ -6593,8 +6605,9 @@ function agregarCompra() {
   // Auto-cálculo: si solo hay TOTAL y cantidad, dividir para el precio por unidad
   if (precioTotal > 0 && precioUni === 0) precioUni = Math.round((precioTotal / cantidad) * 100) / 100;
   if (precioUni > 0 && precioTotal === 0) precioTotal = Math.round(precioUni * cantidad * 100) / 100;
-  const fecha = document.getElementById('fecha-compras')?.value;
-  if (!fecha) { alert('Selecciona una fecha'); return; }
+  const { ini: fechaIni } = getFechasCompras();
+  const fecha = fechaIni;
+  if (!fecha) { alert('Selecciona una fecha de inicio'); return; }
   let almacenes;
   let muebles;
   if (destino === 'stocks') {
@@ -6615,7 +6628,7 @@ function agregarCompra() {
     document.getElementById('nueva-compra-cant').value = '';
     document.getElementById('nueva-compra-precio-uni').value = '';
     document.getElementById('nueva-compra-precio-total').value = '';
-    cargarComprasDetalle(fecha);
+    cargarComprasDetalle();
     _invCache = { fecha: null, data: null, pending: null };
     actualizarContadoresMenu();
     if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fecha);
