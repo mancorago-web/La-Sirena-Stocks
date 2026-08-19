@@ -4845,15 +4845,13 @@ function actualizarTotalPorcionamiento() {
       pctCell.textContent = bruto > 0 ? (Math.round((peso / bruto) * 10000) / 100) + '%' : '—';
     }
     if (precioCell) {
+      // Solo mostrar precio/kilo en PESO BRUTO y FILETES
       if (nom === 'PESO BRUTO') {
-        // El peso bruto muestra su precio por kilo (ej. 100/5 = 20 soles/kg)
         precioCell.textContent = precioPorKiloBruto > 0 ? 'S/ ' + precioPorKiloBruto.toFixed(2) + '/kg' : '—';
       } else if (nom.includes('FILETE')) {
-        // El filete muestra su precio real por kilo (ej. 100/2.5 = 40 soles/kg)
         precioCell.textContent = precioPorKiloFiletes > 0 ? 'S/ ' + precioPorKiloFiletes.toFixed(2) + '/kg' : '—';
       } else {
-        // Las demas secciones muestran el precio por kilo del bruto
-        precioCell.textContent = precioPorKiloBruto > 0 ? 'S/ ' + precioPorKiloBruto.toFixed(2) + '/kg' : '—';
+        precioCell.textContent = '';
       }
     }
   });
