@@ -4773,9 +4773,9 @@ function renderPorcionamientoEditor(secciones) {
 
 function porcionFila(sec) {
   return '<tr>'
-    + '<td><input class="input-porc-nombre" value="' + esc(sec.nombre) + '" style="width:100%;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>'
-    + '<td><input class="input-porc-peso" type="number" step="0.01" min="0" value="' + (sec.peso || 0) + '" oninput="actualizarTotalPorcionamiento()" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>'
-    + '<td><button class="danger" onclick="this.closest(\'tr\').remove(); actualizarTotalPorcionamiento();">✕</button></td>'
+    + '<td><input class="input-porc-nombre" value="' + esc(sec.nombre) + '" style="width:100%;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();"></td>'
+    + '<td><input class="input-porc-peso" type="number" step="0.01" min="0" value="' + (sec.peso || 0) + '" oninput="actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>'
+    + '<td><button class="danger" onclick="this.closest(\'tr\').remove(); actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();">✕</button></td>'
     + '</tr>';
 }
 
@@ -4783,11 +4783,12 @@ function agregarSeccionPorcionamiento() {
   const tbody = document.getElementById('porcionamiento-secciones');
   if (!tbody) return;
   const tr = document.createElement('tr');
-  tr.innerHTML = '<td><input class="input-porc-nombre" placeholder="Sección (ej. CABEZA, COLAS...)" style="width:100%;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>'
-    + '<td><input class="input-porc-peso" type="number" step="0.01" min="0" value="0" oninput="actualizarTotalPorcionamiento()" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>'
-    + '<td><button class="danger" onclick="this.closest(\'tr\').remove(); actualizarTotalPorcionamiento();">✕</button></td>';
+  tr.innerHTML = '<td><input class="input-porc-nombre" placeholder="Sección (ej. CABEZA, COLAS...)" style="width:100%;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();"></td>'
+    + '<td><input class="input-porc-peso" type="number" step="0.01" min="0" value="0" oninput="actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>'
+    + '<td><button class="danger" onclick="this.closest(\'tr\').remove(); actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();">✕</button></td>';
   tbody.appendChild(tr);
   actualizarTotalPorcionamiento();
+  calcularPacksPorcionamiento();
 }
 
 // PESO BRUTO = total de peso que entra al porcionamiento. Las DEMAS secciones deben sumar
