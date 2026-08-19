@@ -114,6 +114,7 @@
       <button class="sub-tab" data-subtab="stock" onclick="cambiarSubTab('stock','cocina')">Stock</button>
       <button class="sub-tab" data-subtab="basedatos" onclick="cambiarSubTab('basedatos','cocina')">Base de Datos</button>
       <button class="sub-tab" data-subtab="porcionamiento" onclick="cambiarSubTab('porcionamiento','cocina')">Porcionamiento</button>
+      <button class="sub-tab" data-subtab="desperdicios" onclick="cambiarSubTab('desperdicios','cocina')">Desperdicios</button>
     </div>
   </div>
 
@@ -467,6 +468,17 @@
         </div>
         <div style="font-size:0.8rem;color:#888;margin-bottom:0.5rem;">Selecciona un item de COCINA/STOCK y define manualmente sus porcionamientos (peso bruto, filetes, desperdicio, etc.) para anotar a dónde se fue ese stock.</div>
         <div id="cocina-porcionamiento-container"><p>Cargando...</p></div>
+      </div>
+
+      <div id="sub-cocina-desperdicios" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>Desperdicios</h2>
+          <div class="controles-dia">
+            <label>Fecha: <input type="date" id="fecha-desperdicios" onchange="cargarDesperdicios()"></label>
+          </div>
+        </div>
+        <div style="font-size:0.8rem;color:#888;margin-bottom:0.5rem;">Registro de desperdicios generados en los porcionamientos (el desperdicio no vuelve a entrar a STOCK).</div>
+        <div id="cocina-desperdicios-container"><p>Cargando...</p></div>
       </div>
     </div>
 

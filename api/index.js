@@ -2341,6 +2341,70 @@ app.delete('/api/cocina/porcionamientos/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- COCINA: TRANSFORMAR por porcionamiento ---
+// Saca el item original (queda en 0), ingresa los productos resultantes (cabeza/colas + packs)
+// a COCINA/STOCK, y registra el desperdicio (no entra a stock).
+app.post('/api/cocina/porcionamiento/transformar', async (req, res) => {
+  try {
+    const { nombre, fecha, cabeza, packs, desperdicio, secciones } = req.body;
+    if (!nombre || !fecha) return res.status(400).json({ error: 'nombre y fecha requeridos' });
+
+    // 1) Guardar el porcionamiento
+    const secs = (Array.isArray(secciones) ? secciones : [])
+      .filter(s => String(s.nombre || '').trim())
+      .map(s => ({ nombre: String(s.nombre).trim(), peso: Math.round((parseFloat(s.peso) || 0) * 100) / 100 }));
+    const key = String(nombre).trim().toUpperCase();
+    const porcExisting = await col('porcionamientos').get();
+    const porcDoc = porcExisting.docs.find(d => String(d.data().nombre || '').trim().toUpperCase() === key && d.data().fecha === fecha);
+    if (porcDoc) await col('porcionamientos').doc(porcDoc.id).update({ secciones: secs, updated_at: new Date().toISOString() });
+    else await col('porcionamientos').doc().set({ nombre: String(nombre).trim(), fecha, secciones: secs, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+
+    // 2) Sacar el item original de COCINA/STOCK (queda en 0, no se elimina)
+    const cs = await col('cocina_stock').get();
+    const orig = cs.docs.find(d => String(d.data().ingrediente || '').trim().toUpperCase() === key);
+    if (orig) await col('cocina_stock').doc(orig.id).update({ cantidad: 0, updated_at: new Date().toISOString() });
+
+    // 3) Ingresar CABEZA/COLAS (peso en kg) a COCINA/STOCK
+    if (cabeza && cabeza.nombre && (parseFloat(cabeza.peso) || 0) > 0) {
+      await ajustarCocinaStock([{ nombre: String(cabeza.nombre).trim(), delta: parseFloat(cabeza.peso) || 0, unidad: 'kg' }]);
+    }
+
+    // 4) Ingresar los PACKS (cantidad) a COCINA/STOCK
+    if (packs && packs.nombre && (parseInt(packs.cantidad) || 0) > 0) {
+      await ajustarCocinaStock([{ nombre: String(packs.nombre).trim(), delta: parseInt(packs.cantidad) || 0, unidad: 'unidad' }]);
+    }
+
+    // 5) Registrar el desperdicio (no entra a stock)
+    if (desperdicio && (parseFloat(desperdicio.peso) || 0) > 0) {
+      await col('desperdicios').doc().set({
+        fecha, nombre: String(desperdicio.nombre || nombre).trim(), peso: Math.round((parseFloat(desperdicio.peso) || 0) * 100) / 100,
+        created_at: new Date().toISOString()
+      });
+    }
+
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- COCINA: DESPERDICIOS ---
+app.get('/api/cocina/desperdicios', async (req, res) => {
+  try {
+    const fecha = req.query.fecha;
+    const snap = fecha ? await col('desperdicios').where('fecha', '==', fecha).get() : await col('desperdicios').get();
+    const out = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    out.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/cocina/desperdicios/:id', async (req, res) => {
+  try {
+    await col('desperdicios').doc(req.params.id).delete();
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+
 app.post('/api/cocina/stock', async (req, res) => {
   try {
     const { ingrediente, cantidad, unidad, familia } = req.body;

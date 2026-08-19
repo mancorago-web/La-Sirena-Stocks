@@ -3785,6 +3785,11 @@ function cambiarSubTab(nombre, prefix) {
     const key = 'cocina_porcionamiento';
     if (!_loaded[key]) { _loaded[key] = true; cargarPorcionamientoCocina(); }
   }
+  // Lazy load cocina desperdicios
+  if (prefix === 'cocina' && nombre === 'desperdicios') {
+    const key = 'cocina_desperdicios';
+    if (!_loaded[key]) { _loaded[key] = true; cargarDesperdicios(); }
+  }
   // Lazy load costos tabs
   if (prefix === 'costos') {
     const key = 'costos_' + nombre;
@@ -4745,9 +4750,25 @@ function renderPorcionamientoEditor(secciones) {
     + '<button onclick="agregarSeccionPorcionamiento()" style="margin:0.5rem 0;">+ SECCIÓN</button>'
     + '<span id="porcionamiento-total" style="font-size:0.9rem;margin-left:0.5rem;display:inline-block;margin-top:0.2rem;"></span>'
     + '<br>'
+    + '<div id="porcionamiento-packs" style="margin-top:0.75rem;padding:0.75rem;background:#e8f5e9;border-radius:8px;border:1px solid #c8e6c9;">'
+    + '<strong style="color:#2e7d32;">📦 GENERAR PACKS desde FILETES</strong>'
+    + '<div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-top:0.5rem;">'
+    + '<label>Tamaño del pack (gr):</label>'
+    + '<input id="pack-gramos" type="number" step="1" min="1" value="150" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="calcularPacksPorcionamiento()">'
+    + '<span style="font-size:0.9rem;">Peso de FILETES: <b id="pack-filet-peso">0</b> kg</span>'
+    + '</div>'
+    + '<div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-top:0.5rem;">'
+    + '<label>Packs calculados:</label>'
+    + '<input id="pack-cantidad" type="number" step="1" min="0" value="0" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;">'
+    + '<span style="font-size:0.8rem;color:#666;">(calculado automáticamente, puedes calibrarlo manualmente)</span>'
+    + '</div>'
+    + '</div>'
+    + '<br>'
+    + '<button onclick="aplicarTransformacionPorcionamiento()" style="margin-top:0.5rem;background:#6a1b9a;color:#fff;font-weight:700;">🔄 APLICAR TRANSFORMACIÓN</button>'
     + '<button onclick="guardarPorcionamiento()" style="margin-top:0.5rem;background:#2e7d32;color:#fff;font-weight:700;">💾 GUARDAR</button>'
     + '<button onclick="eliminarPorcionamientoActual()" style="margin-top:0.5rem;margin-left:0.5rem;background:#b71c1c;color:#fff;">ELIMINAR</button>';
   actualizarTotalPorcionamiento();
+  calcularPacksPorcionamiento();
 }
 
 function porcionFila(sec) {
@@ -4826,6 +4847,101 @@ function eliminarPorcionamientoActual() {
   const porc = (ctx.porcs || []).find(p => String(p.nombre || '').trim().toUpperCase() === String(ctx.item.nombre).trim().toUpperCase());
   if (!porc) return;
   eliminarPorcionamiento(porc.id);
+}
+
+// Calcula cuantos PACKS salen del peso de FILETES (automático, con opción de calibrar manual)
+function calcularPacksPorcionamiento() {
+  const filetEl = Array.from(document.querySelectorAll('#porcionamiento-secciones tr')).find(tr => {
+    const nom = (tr.querySelector('.input-porc-nombre')?.value || '').trim().toUpperCase();
+    return nom.includes('FILETE');
+  });
+  const filetPesoKg = filetEl ? (parseFloat(filetEl.querySelector('.input-porc-peso')?.value) || 0) : 0;
+  const pesoEl = document.getElementById('pack-filet-peso');
+  if (pesoEl) pesoEl.textContent = filetPesoKg;
+  const gramos = parseFloat(document.getElementById('pack-gramos')?.value) || 0;
+  const cantEl = document.getElementById('pack-cantidad');
+  if (!cantEl) return;
+  if (gramos > 0 && filetPesoKg > 0) {
+    const packs = Math.floor((filetPesoKg * 1000) / gramos);
+    cantEl.value = packs;
+  }
+}
+
+// Aplica la transformacion: saca el item original (queda en 0) y mete los productos resultantes
+// (cabeza/colas + packs) a COCINA/STOCK; registra el desperdicio en la pestaña DESPERDICIOS.
+function aplicarTransformacionPorcionamiento() {
+  const ctx = _porcionamientoCtx;
+  if (!ctx || !ctx.item) { alert('Selecciona un item'); return; }
+  const secciones = [];
+  document.querySelectorAll('#porcionamiento-secciones tr').forEach(tr => {
+    const nom = tr.querySelector('.input-porc-nombre')?.value?.trim();
+    const peso = parseFloat(tr.querySelector('.input-porc-peso')?.value) || 0;
+    if (nom) secciones.push({ nombre: nom, peso });
+  });
+  if (!secciones.length) { alert('Agrega al menos una sección'); return; }
+
+  // Identificar secciones
+  const getSeccion = (filtro) => {
+    const s = secciones.find(x => filtro.test(x.nombre.toUpperCase()));
+    return s ? s.peso : 0;
+  };
+  const bruto = getSeccion(/PESO BRUTO/);
+  const cabeza = getSeccion(/CABEZA|COLA|ALETAS|ESQUELETO/);
+  const filetes = getSeccion(/FILETE/);
+  const desperdicio = getSeccion(/DESPERDICIO/);
+  const gramos = parseFloat(document.getElementById('pack-gramos')?.value) || 0;
+  const packs = parseInt(document.getElementById('pack-cantidad')?.value) || 0;
+
+  if (!cabeza && !filetes) { alert('Define CABEZA/COLAS y FILETES en el porcionamiento'); return; }
+
+  // Confirmar la transformación
+  const nombreBase = ctx.item.nombre;
+  const nombreCabeza = 'CABEZA, COLA, ALETAS Y ESQUELETO - ' + nombreBase;
+  const nombrePacks = packs > 0 ? 'PACK ' + gramos + 'GR ' + nombreBase : null;
+  let msg = 'APLICAR TRANSFORMACIÓN de ' + nombreBase + ':\n\n'
+    + '- Saldrá del stock de COCINA (queda en 0).\n';
+  if (cabeza > 0) msg += '- Entrará: ' + nombreCabeza + ' = ' + cabeza + ' kg\n';
+  if (nombrePacks) msg += '- Entrará: ' + nombrePacks + ' = ' + packs + ' packs\n';
+  if (desperdicio > 0) msg += '- DESPERDICIO (no entra a stock): ' + desperdicio + ' kg\n';
+  if (!confirm(msg + '\n¿Continuar?')) return;
+
+  api('POST', '/api/cocina/porcionamiento/transformar', {
+    nombre: nombreBase, fecha: ctx.fecha,
+    cabeza: { nombre: nombreCabeza, peso: cabeza },
+    packs: nombrePacks ? { nombre: nombrePacks, cantidad: packs } : null,
+    desperdicio: { nombre: nombreBase, peso: desperdicio },
+    secciones
+  }).then(() => {
+    showToast('Transformación aplicada');
+    cargarPorcionamientoCocina();
+  }).catch(() => alert('Error al aplicar transformación'));
+}
+
+// --- COCINA: DESPERDICIOS ---
+function cargarDesperdicios() {
+  const fechaEl = document.getElementById('fecha-desperdicios');
+  if (fechaEl && !fechaEl.value) fechaEl.value = todayStr();
+  const fecha = fechaEl ? fechaEl.value : todayStr();
+  const container = document.getElementById('cocina-desperdicios-container');
+  if (!container) return;
+  api('GET', '/api/cocina/desperdicios?fecha=' + fecha).then(lista => {
+    if (!lista.length) { container.innerHTML = '<p>No hay desperdicios registrados en esta fecha.</p>'; return; }
+    let html = '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Producto</th><th>Peso (kg)</th><th>Hora</th><th></th></tr></thead><tbody>';
+    lista.forEach(d => {
+      const t = d.created_at ? new Date(d.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
+      html += `<tr><td>${d.fecha}</td><td>${esc(d.nombre)}</td><td>${d.peso}</td><td>${t}</td><td><button class="danger" onclick="eliminarDesperdicio('${d.id}')">✕</button></td></tr>`;
+    });
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+  }).catch(() => { container.innerHTML = '<p style="color:#c62828;">Error cargando desperdicios.</p>'; });
+}
+
+function eliminarDesperdicio(id) {
+  if (!confirm('¿Eliminar este registro de desperdicio?')) return;
+  api('DELETE', '/api/cocina/desperdicios/' + id).then(() => {
+    showToast('Eliminado');
+    cargarDesperdicios();
+  }).catch(() => alert('Error al eliminar'));
 }
 
 // --- COCINA: Base de Datos (precios) ---
