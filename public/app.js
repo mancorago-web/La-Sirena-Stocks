@@ -4763,10 +4763,11 @@ function renderPorcionamientoEditor(secciones) {
     + '<span style="font-size:0.8rem;color:#666;">(calculado automáticamente, puedes calibrarlo manualmente)</span>'
     + '</div>'
     + '</div>'
-    + '<br>'
-    + '<button onclick="aplicarTransformacionPorcionamiento()" style="margin-top:0.5rem;background:#6a1b9a;color:#fff;font-weight:700;">🔄 APLICAR TRANSFORMACIÓN</button>'
-    + '<button onclick="guardarPorcionamiento()" style="margin-top:0.5rem;background:#2e7d32;color:#fff;font-weight:700;">💾 GUARDAR</button>'
-    + '<button onclick="eliminarPorcionamientoActual()" style="margin-top:0.5rem;margin-left:0.5rem;background:#b71c1c;color:#fff;">ELIMINAR</button>';
+    + '<div class="porcionamiento-acciones">'
+    + '<button class="btn-accion btn-transformar" onclick="aplicarTransformacionPorcionamiento()">🔄 APLICAR TRANSFORMACIÓN</button>'
+    + '<button class="btn-accion btn-guardar" onclick="guardarPorcionamiento()">💾 GUARDAR</button>'
+    + '<button class="btn-accion btn-eliminar" onclick="eliminarPorcionamientoActual()">🗑️ ELIMINAR</button>'
+    + '</div>';
   actualizarTotalPorcionamiento();
   calcularPacksPorcionamiento();
 }

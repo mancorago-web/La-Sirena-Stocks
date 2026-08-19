@@ -669,3 +669,41 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .category-btn.menu-compras .category-icon, .category-btn.menu-ventas .category-icon, .category-btn.menu-bd .category-icon, .category-btn.menu-costos .category-icon { font-size: 1.05rem; }
   .category-btn.menu-compras .category-label, .category-btn.menu-ventas .category-label, .category-btn.menu-bd .category-label, .category-btn.menu-costos .category-label { font-size: 0.6rem; }
 }
+
+/* --- Botones de acción de PORCIONAMIENTO --- */
+.porcionamiento-acciones {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e0e0e0;
+}
+.btn-accion {
+  flex: 1;
+  min-width: 130px;
+  padding: 0.7rem 1rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #fff;
+  transition: transform 0.1s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+.btn-accion:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+.btn-accion:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+}
+.btn-transformar { background: linear-gradient(135deg, #7b1fa2, #6a1b9a); }
+.btn-guardar { background: linear-gradient(135deg, #43a047, #2e7d32); }
+.btn-eliminar { background: linear-gradient(135deg, #e53935, #b71c1c); }
+@media (max-width: 480px) {
+  .btn-accion { min-width: 100%; font-size: 0.82rem; padding: 0.65rem; }
+}
+
