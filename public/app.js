@@ -4904,10 +4904,12 @@ function actualizarTotalPorcionamiento() {
 // Obtiene el peso de una sección por nombre (ej. FILETE)
 function obtenerPesoSeccion(filtro) {
   let peso = 0;
+  // Acepta string (ej. 'FILETE') o regex (/FILETE/i)
+  const esString = typeof filtro === 'string';
   document.querySelectorAll('#porcionamiento-secciones tr').forEach(tr => {
     const nom = (tr.querySelector('.input-porc-nombre')?.value || '').trim().toUpperCase();
     const p = parseFloat(tr.querySelector('.input-porc-peso')?.value) || 0;
-    if (filtro.test(nom)) peso = p;
+    if (esString ? nom.includes(filtro.toUpperCase()) : filtro.test(nom)) peso = p;
   });
   return peso;
 }
