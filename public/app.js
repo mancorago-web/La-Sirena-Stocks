@@ -453,11 +453,26 @@ function api(method, url, data) {
   });
 }
 
+let _aperturaEditable = false;
+function setAperturaEditable(val) {
+  _aperturaEditable = !!val;
+  const fecha = document.getElementById('fecha-almacenes')?.value;
+  if (fecha) cargarAlmacenes(fecha);
+  const btn = document.getElementById('btn-toggle-apertura');
+  if (btn) {
+    btn.textContent = _aperturaEditable ? '🔒 BLOQUEAR APERTURA' : '✏️ EDITAR APERTURA (conteo)';
+    btn.style.background = _aperturaEditable ? '#c62828' : '#0f3460';
+  }
+}
+
 function itemRow(i, a) {
   const obs = (i.stock_observado || 0) > 0 ? ' <span class="badge-observacion" title="En observación (cuarentena): ' + (i.stock_observado || 0) + '">EN OBSERVACIÓN</span>' : '';
+  const aperturaReadonly = _aperturaEditable
+    ? ''
+    : 'readonly title="Apertura fija del día (no editable)" style="background:#f0f0f0;color:#555;cursor:not-allowed;"';
   return `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
     <td>${i.nombre}${obs}</td>
-    <td><input type="number" class="input-num input-apertura" value="${i.stock_apertura || 0}" step="0.01" readonly title="Apertura fija del día (no editable)" style="background:#f0f0f0;color:#555;cursor:not-allowed;"></td>
+    <td><input type="number" class="input-num input-apertura" value="${i.stock_apertura || 0}" step="0.01" ${aperturaReadonly} oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-ingreso" value="${i.stock_ingreso || 0}" step="0.01" oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01" oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-ventas" value="${i.total_ventas || 0}" step="0.01" oninput="calcCierre(this)"></td>
