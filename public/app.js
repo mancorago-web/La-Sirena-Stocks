@@ -4911,7 +4911,8 @@ function aplicarTransformacionPorcionamiento() {
 
   // Confirmar la transformación
   const nombreBase = ctx.item.nombre;
-  const nombreCabeza = 'CABEZA, COLA, ALETAS Y ESQUELETO - ' + nombreBase;
+  // Patrón de nombres usado: cabeza/colas = "MERMA UTIL - <base>", packs = "PACK <gr>GR <base>"
+  const nombreCabeza = cabeza > 0 ? 'MERMA UTIL - ' + nombreBase : null;
   const nombrePacks = packs > 0 ? 'PACK ' + gramos + 'GR ' + nombreBase : null;
   let msg = 'APLICAR TRANSFORMACIÓN de ' + nombreBase + ':\n\n'
     + '- Saldrá del stock de COCINA (queda en 0).\n';
