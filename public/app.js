@@ -4739,7 +4739,17 @@ function cargarPorcionamientoItem() {
         { nombre: 'FILETES', peso: 0 },
         { nombre: 'DESPERDICIO', peso: 0 }
       ];
-  _porcionamientoCtx.item = { nombre, stock };
+  // Calcular el precio TOTAL pagado por el item (ultima compra) para mostrarlo en el detalle
+  const normF = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  const nombreNorm = normF(nombre);
+  const comprasItem = (ctx.compras || []).filter(c => normF(c.nombre) === nombreNorm);
+  let precioTotal = 0;
+  if (comprasItem.length) {
+    comprasItem.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+    const c = comprasItem[0];
+    precioTotal = parseFloat(c.precio_total) > 0 ? parseFloat(c.precio_total) : (parseFloat(c.precio) || 0) * (parseFloat(c.cantidad) || 1);
+  }
+  _porcionamientoCtx.item = { nombre, stock, precioTotal };
   renderPorcionamientoEditor(secciones);
 }
 
@@ -4890,6 +4900,8 @@ function obtenerPesoSeccion(filtro) {
 // Obtiene el precio TOTAL del peso bruto del item (el precio que se pago por la compra)
 function obtenerPrecioItem(ctx, nombreNorm) {
   if (!ctx) return 0;
+  // 0) Si ya se calculo el precioTotal al seleccionar el item, usarlo directamente
+  if (ctx.item && ctx.item.precioTotal > 0) return ctx.item.precioTotal;
   const normF = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
   // 1) Buscar la compra MÁS RECIENTE del item (precio_total = el precio real pagado por el peso bruto)
   const comprasItem = (ctx.compras || []).filter(c => normF(c.nombre) === nombreNorm);
