@@ -4825,45 +4825,51 @@ function sumarPorcionamiento() {
 }
 
 function actualizarTotalPorcionamiento() {
-  const { bruto, sumaOtros, faltante } = sumarPorcionamiento();
-  const total = document.getElementById('porcionamiento-total');
-  const ctx = _porcionamientoCtx;
+  try {
+    const { bruto, sumaOtros, faltante } = sumarPorcionamiento();
+    const total = document.getElementById('porcionamiento-total');
+    const ctx = _porcionamientoCtx;
 
-  // Calcular % y PRECIO por fila
-  const filetesPeso = obtenerPesoSeccion('FILETE');
-  const norm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-  const precioTotalBruto = obtenerPrecioItem(ctx, norm(ctx.item ? ctx.item.nombre : ''));
-  const precioPorKiloBruto = bruto > 0 ? (precioTotalBruto / bruto) : 0;
-  const precioPorKiloFiletes = filetesPeso > 0 ? (precioTotalBruto / filetesPeso) : 0;
+    // Calcular % y PRECIO por fila
+    const filetesPeso = obtenerPesoSeccion('FILETE');
+    const norm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    const nombreItem = ctx && ctx.item ? ctx.item.nombre : '';
+    const precioTotalBruto = obtenerPrecioItem(ctx, norm(nombreItem));
+    const precioPorKiloBruto = bruto > 0 ? (precioTotalBruto / bruto) : 0;
+    const precioPorKiloFiletes = filetesPeso > 0 ? (precioTotalBruto / filetesPeso) : 0;
 
-  document.querySelectorAll('#porcionamiento-secciones tr').forEach(tr => {
-    const nom = (tr.querySelector('.input-porc-nombre')?.value || '').trim().toUpperCase();
-    const peso = parseFloat(tr.querySelector('.input-porc-peso')?.value) || 0;
-    const pctCell = tr.querySelector('.celda-porc-pct');
-    const precioCell = tr.querySelector('.celda-porc-precio');
-    if (pctCell) {
-      pctCell.textContent = bruto > 0 ? (Math.round((peso / bruto) * 10000) / 100) + '%' : '—';
-    }
-    if (precioCell) {
-      // Solo mostrar precio/kilo en PESO BRUTO y FILETES
-      if (nom === 'PESO BRUTO') {
-        precioCell.textContent = precioPorKiloBruto > 0 ? 'S/ ' + precioPorKiloBruto.toFixed(2) + '/kg' : '—';
-      } else if (nom.includes('FILETE')) {
-        precioCell.textContent = precioPorKiloFiletes > 0 ? 'S/ ' + precioPorKiloFiletes.toFixed(2) + '/kg' : '—';
-      } else {
-        precioCell.textContent = '';
+    document.querySelectorAll('#porcionamiento-secciones tr').forEach(tr => {
+      const nom = (tr.querySelector('.input-porc-nombre')?.value || '').trim().toUpperCase();
+      const peso = parseFloat(tr.querySelector('.input-porc-peso')?.value) || 0;
+      const pctCell = tr.querySelector('.celda-porc-pct');
+      const precioCell = tr.querySelector('.celda-porc-precio');
+      if (pctCell) {
+        pctCell.textContent = bruto > 0 ? (Math.round((peso / bruto) * 10000) / 100) + '%' : '—';
       }
-    }
-  });
+      if (precioCell) {
+        // Solo mostrar precio/kilo en PESO BRUTO y FILETES
+        if (nom === 'PESO BRUTO') {
+          precioCell.textContent = precioPorKiloBruto > 0 ? 'S/ ' + precioPorKiloBruto.toFixed(2) + '/kg' : '—';
+        } else if (nom.includes('FILETE')) {
+          precioCell.textContent = precioPorKiloFiletes > 0 ? 'S/ ' + precioPorKiloFiletes.toFixed(2) + '/kg' : '—';
+        } else {
+          precioCell.textContent = '';
+        }
+      }
+    });
 
-  if (!total) return;
-  const sumO = Math.round(sumaOtros * 100) / 100;
-  const diff = Math.round(faltante * 100) / 100;
-  let html = 'Peso bruto: <b>' + bruto + '</b> kg · Precio/kg bruto: <b>S/ ' + (precioPorKiloBruto > 0 ? precioPorKiloBruto.toFixed(2) : '0') + '</b> · Suma porciones: <b>' + sumO + '</b>';
-  if (diff > 0) html += ' · <span style="color:#c62828;font-weight:700;">FALTANTE: ' + diff + '</span>';
-  else if (diff < 0) html += ' · <span style="color:#e65100;font-weight:700;">EXCESO: ' + Math.abs(diff) + '</span>';
-  else html += ' · <span style="color:#2e7d32;font-weight:700;">OK ✓</span>';
-  total.innerHTML = html;
+    if (total) {
+      const sumO = Math.round(sumaOtros * 100) / 100;
+      const diff = Math.round(faltante * 100) / 100;
+      let html = 'Peso bruto: <b>' + bruto + '</b> kg · Precio/kg bruto: <b>S/ ' + (precioPorKiloBruto > 0 ? precioPorKiloBruto.toFixed(2) : '0') + '</b> · Suma porciones: <b>' + sumO + '</b>';
+      if (diff > 0) html += ' · <span style="color:#c62828;font-weight:700;">FALTANTE: ' + diff + '</span>';
+      else if (diff < 0) html += ' · <span style="color:#e65100;font-weight:700;">EXCESO: ' + Math.abs(diff) + '</span>';
+      else html += ' · <span style="color:#2e7d32;font-weight:700;">OK ✓</span>';
+      total.innerHTML = html;
+    }
+  } catch (e) {
+    console.error('Error actualizando porcionamiento:', e);
+  }
 }
 
 // Obtiene el peso de una sección por nombre (ej. FILETE)
