@@ -4751,6 +4751,23 @@ function cargarPorcionamientoItem() {
   }
   _porcionamientoCtx.item = { nombre, stock, precioTotal };
   renderPorcionamientoEditor(secciones);
+  // Si no se encontro el precio en el contexto, consultarlo en vivo al backend (respaldo)
+  if (precioTotal <= 0) {
+    api('GET', '/api/cocina/compras').then(comprasAll => {
+      const norm2 = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+      const list = (comprasAll || []).filter(c => norm2(c.nombre) === nombreNorm);
+      if (list.length) {
+        list.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+        const c = list[0];
+        const pt = parseFloat(c.precio_total) > 0 ? parseFloat(c.precio_total) : (parseFloat(c.precio) || 0) * (parseFloat(c.cantidad) || 1);
+        if (pt > 0) {
+          _porcionamientoCtx.item.precioTotal = pt;
+          _porcionamientoCtx.compras = comprasAll || [];
+          actualizarTotalPorcionamiento();
+        }
+      }
+    }).catch(() => {});
+  }
 }
 
 function cargarPorcionamientoExistente(nombre) {
