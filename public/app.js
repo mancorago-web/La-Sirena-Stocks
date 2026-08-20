@@ -4762,10 +4762,15 @@ function cargarPorcionamientoCocina(seleccionarItem) {
     _porcionamientoCtx = { fecha, stock: stock || [], porcs: porcs || [], precios: precios || [], compras: compras || [], item: null };
     // En el selector de COCINA/PORCIONAMIENTO solo se muestran los items de los grupos
     // PESCADO, CARNE y POLLO (los que se pueden porcionar). El resto de familias se oculta.
+    // Además, dentro del grupo PESCADO se excluyen los items derivados (MERMA, PACK) para
+    // mostrar únicamente los pescados enteros (los que empiezan por "PESCADO").
     const familiasPorcionamiento = ['PESCADO', 'CARNE', 'POLLO'];
     const items = (stock || []).filter(s => {
       const fam = String(s.familia || '').trim().toUpperCase();
-      return familiasPorcionamiento.includes(fam);
+      if (!familiasPorcionamiento.includes(fam)) return false;
+      const nombre = String(s.ingrediente || '').toUpperCase();
+      const esDerivado = /(^|\s)(MERMA|PACK)\b/.test(nombre) || nombre.startsWith('MERMA') || nombre.startsWith('PACK');
+      return !esDerivado;
     });
     const porc = porcs || [];
     let html = '<div class="table-wrap" style="margin-bottom:0.5rem;"><div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">'
