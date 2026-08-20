@@ -735,19 +735,34 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
         }
       });
       // Calcular la cadena en memoria (el cierre de un día alimenta la apertura del siguiente)
+      // REGLA ANTI-ROTURA: si el día siguiente YA tiene una apertura que fue contada físicamente
+      // (es decir, su stock_apertura no coincide con el cierre que se propagaría del día anterior),
+      // entonces ese día ya se contó a mano y NO debe sobrescribirse, ni se sigue propagando
+      // hacia adelante para ese item (para no pisar conteos reales de días posteriores).
       const prevCierre = {};
       const perDayWrites = {};
+      const detenidos = {}; // key -> true (deja de propagar ese item porque encontró un conteo manual)
       for (let si = 0; si < secuencia.length; si++) {
         const srcs = srcData[si] || {};
         const tgts = tgtData[si] || {};
         if (!Object.keys(srcs).length) break;
         const tgt = secuencia[si].tgt;
         for (const key of Object.keys(srcs)) {
+          if (detenidos[key]) continue; // ya se topó con un conteo manual; no seguir
           const d = srcs[key];
           const existing = tgts[key];
           const apertura = prevCierre[key] !== undefined ? prevCierre[key] : (d.stock_cierre ?? 0);
           const nextId = docId('invdiario', tgt, d.almacen_id, d.item_id);
           if (existing) {
+            // Apertura manual detectada: la apertura guardada difiere del cierre que se propagaría
+            const aperturaActual = existing.stock_apertura ?? 0;
+            const esConteoManual = Math.abs(aperturaActual - apertura) > 0.001;
+            if (esConteoManual) {
+              // Este día fue contado físicamente (o ya tiene un valor editado que debe respetarse).
+              // No sobrescribir y no propagar más allá para este item.
+              detenidos[key] = true;
+              continue;
+            }
             const ingreso = existing.stock_ingreso ?? 0;
             const salida = existing.salida_almacen ?? 0;
             const ventas = existing.total_ventas ?? 0;
@@ -3484,6 +3499,28 @@ async function consumirCopaDesdeStocks(fecha, nombre, copas, savedBy, destino) {
   diaSnap.docs.forEach(d => { dayDocs[d.id] = d.data(); });
   let restante = copas;
   const registros = [];
+  // Todas las botellas del producto
+  const botellas = invSnap.docs
+    .filter(d => String(d.data().nombre || '').trim().toUpperCase() === botNombre.trim().toUpperCase());
+  // Orden de prioridad de almacenes para buscar botellas (se define por copa actual):
+  // 1) mismo almacén de la COPA, 2) Almacén General Abajo (al4), 3) todos los demás
+  const botellaConStock = (alCopa) => {
+    const prioridad = [alCopa, 4];
+    let mejor = null, mejorRank = Infinity;
+    botellas.forEach(b => {
+      const alB = Number(b.data().almacen_id);
+      const itB = Number(b.data().item_id);
+      const d = dayDocs[fecha + '_' + alB + '_' + itB] || {};
+      const dispB = (d.stock_apertura || 0) + (d.stock_ingreso || 0) - (d.salida_almacen || 0) - (d.total_ventas || 0) - (d.falta_almacen || 0) - (d.stock_baja || 0);
+      if (dispB > 0) {
+        let rank = prioridad.indexOf(alB);
+        if (rank === -1) rank = 100 + alB; // otros almacenes después de los prioritarios
+        if (rank < mejorRank) { mejorRank = rank; mejor = { al: alB, item: itB, dispB }; }
+      }
+    });
+    return mejor;
+  };
+
   for (const inv of copaInv) {
     if (restante <= 0) break;
     const al = Number(inv.data().almacen_id);
@@ -3495,25 +3532,37 @@ async function consumirCopaDesdeStocks(fecha, nombre, copas, savedBy, destino) {
       registros.push({ item_id: item, almacen_id: al, salida_almacen: (dp.salida_almacen || 0) + restante, destino_salida: destino || '' });
       restante = 0;
     } else {
-      const botInv = invSnap.docs.find(dd => Number(dd.data().almacen_id) === al && String(dd.data().nombre || '').trim().toUpperCase() === botNombre.trim().toUpperCase());
-      const dbot = botInv ? (dayDocs[fecha + '_' + al + '_' + Number(botInv.data().item_id)] || {}) : null;
-      const dispBot = dbot ? (dbot.stock_apertura || 0) + (dbot.stock_ingreso || 0) - (dbot.salida_almacen || 0) - (dbot.total_ventas || 0) - (dbot.falta_almacen || 0) - (dbot.stock_baja || 0) : 0;
-      const botellasNecesarias = Math.ceil((restante - disp) / 5);
-      const aAbrir = botInv ? Math.min(botellasNecesarias, Math.max(0, dispBot)) : 0;
-      if (aAbrir > 0) {
+      // Faltan copas
+      const faltante = restante - disp;
+      const bot = botellaConStock(al);
+      if (bot) {
+        // Hay botella con stock: convertir
+        const botellasNecesarias = Math.ceil(faltante / 5);
+        const aAbrir = Math.min(botellasNecesarias, bot.dispB);
         const copasGanadas = aAbrir * 5;
         const nuevoIngreso = (dp.stock_ingreso || 0) + copasGanadas;
         const origen = (Array.isArray(dp.ingreso_origen) ? dp.ingreso_origen.filter(o => o.tipo !== 'conversion').map(o => ({ tipo: o.tipo, almacen_id: o.almacen_id, cantidad: o.cantidad })) : []);
         origen.push({ tipo: 'conversion', cantidad: copasGanadas });
+        // La copa recibe las copas convertidas y registra la venta del total vendido
         registros.push({ item_id: item, almacen_id: al, stock_ingreso: nuevoIngreso, salida_almacen: (dp.salida_almacen || 0) + restante, ingreso_origen: origen, destino_salida: destino || '' });
-        // La botella abierta es una CONVERSION a copas (1 botella = 5 copas): destino COPAS
-        registros.push({ item_id: Number(botInv.data().item_id), almacen_id: al, salida_almacen: (dbot.salida_almacen || 0) + aAbrir, destino_salida: 'COPAS' });
+        // La botella sale del almacén donde está, destino COPAS
+        const dbot = dayDocs[fecha + '_' + bot.al + '_' + bot.item] || {};
+        registros.push({ item_id: bot.item, almacen_id: bot.al, salida_almacen: (dbot.salida_almacen || 0) + aAbrir, destino_salida: 'COPAS' });
         restante = 0;
-      } else if (disp > 0) {
-        registros.push({ item_id: item, almacen_id: al, salida_almacen: (dp.salida_almacen || 0) + disp, destino_salida: destino || '' });
-        restante -= disp;
+      } else {
+        // NO hay botellas con stock en ningún almacén: registrar venta como número negativo
+        registros.push({ item_id: item, almacen_id: al, salida_almacen: (dp.salida_almacen || 0) + restante, destino_salida: destino || '' });
+        restante = 0;
       }
     }
+  }
+  // Si quedó restante sin cubrir, registrar venta negativa en la primera copa
+  if (restante > 0 && copaInv.length) {
+    const inv = copaInv[0];
+    const al = Number(inv.data().almacen_id);
+    const item = Number(inv.data().item_id);
+    const dp = dayDocs[fecha + '_' + al + '_' + item] || {};
+    registros.push({ item_id: item, almacen_id: al, salida_almacen: (dp.salida_almacen || 0) + restante, destino_salida: destino || '' });
   }
   if (registros.length) await guardarDiaInterno(fecha, registros, savedBy);
 }

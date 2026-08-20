@@ -438,18 +438,37 @@ function api(method, url, data) {
   return waitForAuth().then(() => {
     return firebase.auth().currentUser.getIdToken();
   }).then(token => {
+    // Timeout para evitar que con mala señal el fetch quede colgado indefinidamente.
+    // Al cortarse, lanzamos un error de red claro (no abortado silenciosamente).
+    const soportaAbort = typeof AbortController !== 'undefined' && typeof AbortSignal !== 'undefined';
+    const controller = soportaAbort ? new AbortController() : null;
+    const timer = soportaAbort ? setTimeout(() => controller.abort(), 45000) : null;
     return fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: data ? JSON.stringify(data) : undefined
+      body: data ? JSON.stringify(data) : undefined,
+      signal: controller ? controller.signal : undefined
     }).then(r => {
+      if (timer) clearTimeout(timer);
       if (r.status === 401) { window.location.href = '/login.html'; throw new Error('No autorizado'); }
       if (!r.ok) throw new Error('Error del servidor: ' + r.status);
       return r.json();
+    }).catch(err => {
+      clearTimeout(timer);
+      if (err && err.name === 'AbortError') {
+        const e = new Error('Timeout de red: el servidor pudo o no haber procesado el guardado. Verifica antes de reintentar.');
+        e.name = 'NetworkTimeout';
+        e.url = url;
+        throw e;
+      }
+      if (err && (err.name === 'TypeError' || err instanceof TypeError)) {
+        const e = new Error('Sin conexión: no se pudo comunicar con el servidor. Revisa tu internet e inténtalo de nuevo.');
+        e.name = 'NetworkError';
+        e.url = url;
+        throw e;
+      }
+      throw err;
     });
-  }).catch(err => {
-    console.error('API error:', url, err);
-    throw err;
   });
 }
 
@@ -727,7 +746,12 @@ function analizarVentas(esPrueba) {
   ]).then(([mapRes, matchRes, barraRec, cocinaRec, stockItems, invData]) => {
     const mapping = (mapRes && mapRes.mapping) || {};
     const match = (matchRes && matchRes.match) || {};
-    const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    const norm = (s) => String(s || '').trim().toUpperCase().replace(/[\u2018\u2019\u201A\u201C\u201D\u00B4]/g, "'").replace(/\s+/g, ' ');
+    // Normaliza las claves guardadas (pueden venir con mayúsculas mezcladas o apóstrofes curvos)
+    const matchNorm = {};
+    Object.keys(match).forEach(k2 => { matchNorm[norm(k2)] = match[k2]; });
+    const mappingNorm = {};
+    Object.keys(mapping).forEach(k2 => { mappingNorm[norm(k2)] = mapping[k2]; });
     const barraSet = new Set((barraRec || []).map(x => norm(x.nombre)));
     const cocinaSet = new Set((cocinaRec || []).map(x => norm(x.nombre)));
     const stockSet = new Set((stockItems || []).map(n => norm(n)));
@@ -767,13 +791,13 @@ function analizarVentas(esPrueba) {
       const k = norm(i.nombre);
       const fuzzy = mejorCandidato(i.nombre);
       // Destino: mapeo guardado > coincidencia exacta > coincidencia difusa
-      if (mapping[k]) { i.destino = mapping[k]; }
+      if (mappingNorm[k]) { i.destino = mappingNorm[k]; }
       else if (cocinaSet.has(k)) i.destino = 'cocina';
       else if (barraSet.has(k)) i.destino = 'barra';
       else if (stockSet.has(k)) i.destino = 'stocks';
       else i.destino = (fuzzy ? fuzzy.zona : 'stocks');
       // Emparejamiento: nombre del Excel ya mapeado a un item/receta real de la app
-      const m = match[k];
+      const m = matchNorm[k];
       const esSelf = m && norm(m) === k;
       const mValido = m && ((i.destino === 'cocina' && cocinaSet.has(norm(m))) ||
                             (i.destino === 'barra' && barraSet.has(norm(m))) ||
@@ -942,7 +966,7 @@ function candidatosTodos(nombre, destino) {
 // Selector de almacén para items de STOCKS (muestra cuántos hay en cada almacén)
 function buildAlmacenSelect(nombre) {
   const stocks = window._ventasImportStocks || {};
-  const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  const norm = (s) => String(s || '').trim().toUpperCase().replace(/[\u2018\u2019\u201A\u201C\u201D\u00B4]/g, "'").replace(/\s+/g, ' ');
   const list = stocks[norm(nombre)] || [];
   if (!list.length) return '<span style="color:#c62828;">Sin stock</span>';
   return '<select class="select-almacen-import" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">' +
@@ -979,7 +1003,7 @@ function guardarVentasReal() {
 
 function guardarVentasAsignadas(containerId, filas, onDone) {
   const ctx = window._ventasImportCtx || { barraNombres: [], cocinaNombres: [], stockNombres: [] };
-  const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  const norm = (s) => String(s || '').trim().toUpperCase().replace(/[\u2018\u2019\u201A\u201C\u201D\u00B4]/g, "'").replace(/\s+/g, ' ');
   const barraSet = new Set(ctx.barraNombres.map(n => norm(n)));
   const cocinaSet = new Set(ctx.cocinaNombres.map(n => norm(n)));
   const stockSet = new Set((ctx.stockNombres || []).map(n => norm(n)));
@@ -1107,11 +1131,11 @@ function guardarAsignacionVentas(esPrueba) {
   document.querySelectorAll('#modal-body tbody input[type="radio"]:checked').forEach(radio => {
     const tr = radio.closest('tr');
     const itemNombre = tr.querySelector('td') ? tr.querySelector('td').textContent.replace(/ *\*?$/, '').trim() : '';
-    if (itemNombre) mapping[itemNombre.toUpperCase().replace(/\s+/g, ' ')] = radio.value;
+    if (itemNombre) mapping[itemNombre.toUpperCase().replace(/[\u2018\u2019\u201A\u201C\u201D\u00B4]/g, "'").replace(/\s+/g, ' ')] = radio.value;
   });
   const aplicar = () => {
     cerrarModal();
-    const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    const norm = (s) => String(s || '').trim().toUpperCase().replace(/[\u2018\u2019\u201A\u201C\u201D\u00B4]/g, "'").replace(/\s+/g, ' ');
     const filas = esPrueba ? ventasPruebaRows : ventasImportRows;
     filas.forEach(r => { const k = norm(r.item); if (mapping[k]) r.destino = mapping[k]; });
     renderVentasImportPreview(esPrueba);
@@ -1203,6 +1227,8 @@ function registrarVentasFilas(filas, onDone) {
 function guardarDia() {
   const fecha = document.getElementById('fecha-almacenes').value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
+  // Protección anti doble-guardado: si ya hay un guardado en curso, no repetir.
+  if (window._guardandoDia) { showToast('Ya hay un guardado en curso, espera...'); return; }
   const registros = [];
   document.querySelectorAll('#accordion-almacenes .accordion-item').forEach(item => {
     const almacenId = parseInt(item.dataset.almacenId);
@@ -1221,16 +1247,84 @@ function guardarDia() {
       });
     });
   });
+  if (!registros.length) { alert('No hay items para guardar'); return; }
   const btn = document.querySelector('.btn-guardar-dia');
+  window._guardandoDia = true;
   btn.disabled = true; btn.textContent = 'Guardando...';
-  api('POST', '/api/almacenes/guardar-dia', { fecha, registros, saved_by: currentUserName }).then(() => {
-    btn.disabled = false; btn.textContent = '💾 GUARDAR';
-    showToast('Datos Guardados');
-    recargarTodo(fecha);
-  }).catch(() => {
-    btn.disabled = false; btn.textContent = '💾 GUARDAR';
-    alert('Error al guardar');
-  });
+
+  // Intenta el guardado con reintentos ante fallas de red/tiempo.
+  const MAX_INTENTOS = 3;
+  const enviar = (intento) => {
+    api('POST', '/api/almacenes/guardar-dia', { fecha, registros, saved_by: currentUserName }).then(() => {
+      window._guardandoDia = false;
+      btn.disabled = false; btn.textContent = '💾 GUARDAR';
+      showToast('Datos Guardados');
+      recargarTodo(fecha);
+    }).catch(err => {
+      const nombre = err && err.name;
+      // Errores de red/timeout: reintentar automáticamente (no hay certeza de que llegó).
+      if ((nombre === 'NetworkError' || nombre === 'NetworkTimeout' || nombre === 'TypeError') && intento < MAX_INTENTOS) {
+        btn.textContent = 'Reintentando (' + intento + '/' + MAX_INTENTOS + ')...';
+        setTimeout(() => enviar(intento + 1), 2000);
+        return;
+      }
+      window._guardandoDia = false;
+      btn.disabled = false; btn.textContent = '💾 GUARDAR';
+      if (nombre === 'NetworkTimeout') {
+        alert('El servidor pudo haber guardado los datos pero no se confirmó por la conexión.\n\nRevisa en la pantalla si los montos cambiaron. Si NO cambiaron, vuelve a guardar.');
+      } else if (nombre === 'NetworkError') {
+        alert('Sin conexión: no se pudo guardar. Revisa tu internet e inténtalo de nuevo.');
+      } else {
+        alert('Error al guardar: ' + (err && err.message ? err.message : 'desconocido'));
+      }
+    });
+  };
+  enviar(1);
+}
+
+// Helper genérico de guardado de almacenes con protección anti conexión mala:
+// evita el doble-envío simultáneo, reintenta automáticamente ante fallas de red/timeout,
+// y da mensajes claros sobre si el guardado pudo o no haberse procesado.
+function guardarDiaAlmacenes({ fecha, registros, selectorBtn, textoBtn, textoOk, flag, onSuccess }) {
+  if (!fecha) { alert('Selecciona una fecha'); return false; }
+  if (!registros || !registros.length) { alert('No hay datos para guardar'); return false; }
+  // Anti doble-envío: si ya hay un guardado de esta pestaña en curso, no repetir.
+  const f = flag || ('_guardandoTab_' + (selectorBtn || ''));
+  if (window[f]) { showToast('Ya hay un guardado en curso, espera...'); return false; }
+  window[f] = true;
+  const btn = document.querySelector(selectorBtn);
+  const estadoInicial = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+
+  const MAX_INTENTOS = 3;
+  const enviar = (intento) => {
+    api('POST', '/api/almacenes/guardar-dia', { fecha, registros, saved_by: currentUserName }).then(() => {
+      window[f] = false;
+      if (btn) { btn.disabled = false; btn.textContent = textoBtn || estadoInicial; }
+      showToast(textoOk || 'Datos Guardados');
+      recargarTodo(fecha);
+      if (typeof onSuccess === 'function') onSuccess();
+    }).catch(err => {
+      const nombre = err && err.name;
+      // Errores de red/timeout: reintentar automáticamente (no hay certeza de que llegó).
+      if ((nombre === 'NetworkError' || nombre === 'NetworkTimeout' || nombre === 'TypeError') && intento < MAX_INTENTOS) {
+        if (btn) btn.textContent = 'Reintentando (' + intento + '/' + MAX_INTENTOS + ')...';
+        setTimeout(() => enviar(intento + 1), 2000);
+        return;
+      }
+      window[f] = false;
+      if (btn) { btn.disabled = false; btn.textContent = textoBtn || estadoInicial; }
+      if (nombre === 'NetworkTimeout') {
+        alert('El servidor pudo haber guardado los datos pero no se confirmó por la conexión.\n\nRevisa en la pantalla si los montos cambiaron. Si NO cambiaron, vuelve a guardar.');
+      } else if (nombre === 'NetworkError') {
+        alert('Sin conexión: no se pudo guardar. Revisa tu internet e inténtalo de nuevo.');
+      } else {
+        alert('Error al guardar: ' + (err && err.message ? err.message : 'desconocido'));
+      }
+    });
+  };
+  enviar(1);
+  return true;
 }
 
 function cargarAlmacenes(fecha) {
@@ -1648,15 +1742,12 @@ function guardarSalidas() {
       registros.push({ item_id: itemId, almacen_id: almacenId, salida_almacen: salida, destino_salida: destinoPrimario, destino_salidas: destinos, transferencias: transferencias.length ? transferencias : undefined });
     });
   });
-  const btn = document.querySelector('#tab-salidas .btn-guardar-dia');
-  btn.disabled = true; btn.textContent = 'Guardando...';
-  api('POST', '/api/almacenes/guardar-dia', { fecha, registros, saved_by: currentUserName }).then(() => {
-    btn.disabled = false; btn.textContent = '💾 GUARDAR SALIDAS';
-    showToast('Salida Guardada');
-    recargarTodo(fecha);
-  }).catch(() => {
-    btn.disabled = false; btn.textContent = '💾 GUARDAR SALIDAS';
-    alert('Error al guardar');
+  guardarDiaAlmacenes({
+    fecha, registros,
+    selectorBtn: '#tab-salidas .btn-guardar-dia',
+    textoBtn: '💾 GUARDAR SALIDAS',
+    textoOk: 'Salida Guardada',
+    flag: '_guardandoSalidas',
   });
 }
 
@@ -2009,15 +2100,12 @@ function guardarVentas() {
       registros.push({ item_id: itemId, almacen_id: almacenId, total_ventas: ventas });
     });
   });
-  const btn = document.querySelector('#tab-ventas .btn-guardar-dia');
-  btn.disabled = true; btn.textContent = 'Guardando...';
-  api('POST', '/api/almacenes/guardar-dia', { fecha, registros, saved_by: currentUserName }).then(() => {
-    btn.disabled = false; btn.textContent = '💾 GUARDAR VENTAS';
-    showToast('Venta Guardada');
-    recargarTodo(fecha);
-  }).catch(() => {
-    btn.disabled = false; btn.textContent = '💾 GUARDAR VENTAS';
-    alert('Error al guardar');
+  guardarDiaAlmacenes({
+    fecha, registros,
+    selectorBtn: '#tab-ventas .btn-guardar-dia',
+    textoBtn: '💾 GUARDAR VENTAS',
+    textoOk: 'Venta Guardada',
+    flag: '_guardandoVentas',
   });
 }
 
@@ -2155,15 +2243,12 @@ function guardarBajas() {
       registros.push({ item_id: itemId, almacen_id: almacenId, stock_baja: baja, nota_baja });
     });
   });
-  const btn = document.querySelector('#tab-bajas .btn-guardar-dia');
-  btn.disabled = true; btn.textContent = 'Guardando...';
-  api('POST', '/api/almacenes/guardar-dia', { fecha, registros, saved_by: currentUserName }).then(() => {
-    btn.disabled = false; btn.textContent = '💾 GUARDAR BAJAS';
-    showToast('Baja Guardada');
-    recargarTodo(fecha);
-  }).catch(() => {
-    btn.disabled = false; btn.textContent = '💾 GUARDAR BAJAS';
-    alert('Error al guardar');
+  guardarDiaAlmacenes({
+    fecha, registros,
+    selectorBtn: '#tab-bajas .btn-guardar-dia',
+    textoBtn: '💾 GUARDAR BAJAS',
+    textoOk: 'Baja Guardada',
+    flag: '_guardandoBajas',
   });
 }
 
@@ -2335,16 +2420,13 @@ function guardarIngresos() {
       registros.push({ item_id: itemId, almacen_id: almacenId, stock_ingreso: ingreso });
     });
   });
-  const btn = document.querySelector('#tab-ingresos .btn-guardar-dia');
-  btn.disabled = true; btn.textContent = 'Guardando...';
-  api('POST', '/api/almacenes/guardar-dia', { fecha, registros, saved_by: currentUserName }).then(() => {
-    btn.disabled = false; btn.textContent = '💾 GUARDAR INGRESOS';
-    showToast('Ingreso Guardado');
-    recargarTodo(fecha);
-    actualizarContadoresMenu();
-  }).catch(() => {
-    btn.disabled = false; btn.textContent = '💾 GUARDAR INGRESOS';
-    alert('Error al guardar');
+  guardarDiaAlmacenes({
+    fecha, registros,
+    selectorBtn: '#tab-ingresos .btn-guardar-dia',
+    textoBtn: '💾 GUARDAR INGRESOS',
+    textoOk: 'Ingreso Guardado',
+    flag: '_guardandoIngresos',
+    onSuccess: () => actualizarContadoresMenu(),
   });
 }
 
@@ -4678,7 +4760,13 @@ function cargarPorcionamientoCocina(seleccionarItem) {
     api('GET', '/api/cocina/compras')
   ]).then(([stock, porcs, precios, compras]) => {
     _porcionamientoCtx = { fecha, stock: stock || [], porcs: porcs || [], precios: precios || [], compras: compras || [], item: null };
-    const items = stock || [];
+    // En el selector de COCINA/PORCIONAMIENTO solo se muestran los items de los grupos
+    // PESCADO, CARNE y POLLO (los que se pueden porcionar). El resto de familias se oculta.
+    const familiasPorcionamiento = ['PESCADO', 'CARNE', 'POLLO'];
+    const items = (stock || []).filter(s => {
+      const fam = String(s.familia || '').trim().toUpperCase();
+      return familiasPorcionamiento.includes(fam);
+    });
     const porc = porcs || [];
     let html = '<div class="table-wrap" style="margin-bottom:0.5rem;"><div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">'
       + '<label style="font-weight:600;">Item de COCINA/STOCK:</label>'
@@ -6454,15 +6542,21 @@ function agregarVenta() {
   if (!nombre || isNaN(cantidad) || cantidad <= 0) { alert('Ingresa un item/receta y una cantidad'); return; }
   const fecha = document.getElementById('fecha-ventas-menu')?.value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
+  // Anti doble-envío: si ya se está registrando, no repetir.
+  if (window._guardandoVentaAgregar) { showToast('Ya hay un registro en curso, espera...'); return; }
+  window._guardandoVentaAgregar = true;
   let almacenes;
   if (destino === 'stocks') {
     const ids = ventasAlmacenesSeleccionados();
-    if (!ids.length) { alert('Selecciona al menos un almacén de donde sale esta venta'); return; }
+    if (!ids.length) { window._guardandoVentaAgregar = false; alert('Selecciona al menos un almacén de donde sale esta venta'); return; }
     almacenes = ventasAlmacenes.filter(a => ids.includes(Number(a.id))).map(a => Number(a.id));
   }
   const btn = document.getElementById('btn-agregar-venta');
   if (btn) btn.disabled = true;
+  // Esta operación SUMA al valor actual (cur + cantidad), así que ante un timeout NO se
+  // reintenta automáticamente (evita duplicar la venta). Solo se advierte con claridad.
   api('POST', '/api/ventas/guardar', { fecha, items: [{ nombre, cantidad, destino, almacenes }] }).then(r => {
+    window._guardandoVentaAgregar = false;
     if (btn) btn.disabled = false;
     const res = r.resumen || {};
     let msg = 'Venta registrada: ' + nombre + ' x' + cantidad;
@@ -6477,9 +6571,16 @@ function agregarVenta() {
     if (typeof cargarVentas === 'function') cargarVentas(fecha);
     if (typeof cargarStockBarra === 'function') cargarStockBarra();
   }).catch(e => {
+    window._guardandoVentaAgregar = false;
     console.error(e);
     if (btn) btn.disabled = false;
-    alert('Error al registrar');
+    if (e && e.name === 'NetworkTimeout') {
+      alert('La venta pudo o no haberse registrado por problemas de conexión.\n\nRevisa si aparece en la lista de ventas de hoy. Si NO aparece, vuelve a registrarla.');
+    } else if (e && e.name === 'NetworkError') {
+      alert('Sin conexión: no se pudo registrar la venta. Revisa tu internet e inténtalo de nuevo.');
+    } else {
+      alert('Error al registrar: ' + (e && e.message ? e.message : 'desconocido'));
+    }
   });
 }
 
@@ -6608,6 +6709,9 @@ function agregarCompra() {
   const { ini: fechaIni } = getFechasCompras();
   const fecha = fechaIni;
   if (!fecha) { alert('Selecciona una fecha de inicio'); return; }
+  // Anti doble-envío: si ya se está guardando, no repetir.
+  if (window._guardandoCompraAgregar) { showToast('Ya hay un registro en curso, espera...'); return; }
+  window._guardandoCompraAgregar = true;
   let almacenes;
   let muebles;
   if (destino === 'stocks') {
@@ -6618,7 +6722,10 @@ function agregarCompra() {
   }
   const btn = document.getElementById('btn-agregar-compra');
   if (btn) btn.disabled = true;
+  // Esta operación SUMA al valor actual (cur + cantidad), así que ante un timeout NO se
+  // reintenta automáticamente (evita duplicar la compra). Solo se advierte con claridad.
   api('POST', '/api/compras/guardar', { fecha, items: [{ nombre, cantidad, unidad: 'unidad', destino, almacenes, muebles, precio: precioUni, precio_total: precioTotal }] }).then(r => {
+    window._guardandoCompraAgregar = false;
     if (btn) btn.disabled = false;
     const res = r.resumen || {};
     let msg = 'Compra registrada: ' + nombre + ' x' + cantidad + (precioTotal > 0 ? ' (S/ ' + precioTotal + ')' : '');
@@ -6633,9 +6740,16 @@ function agregarCompra() {
     actualizarContadoresMenu();
     if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fecha);
   }).catch(e => {
+    window._guardandoCompraAgregar = false;
     console.error(e);
     if (btn) btn.disabled = false;
-    alert('Error al registrar');
+    if (e && e.name === 'NetworkTimeout') {
+      alert('La compra pudo o no haberse registrado por problemas de conexión.\n\nRevisa si aparece en la lista de compras. Si NO aparece, vuelve a registrarla.');
+    } else if (e && e.name === 'NetworkError') {
+      alert('Sin conexión: no se pudo registrar la compra. Revisa tu internet e inténtalo de nuevo.');
+    } else {
+      alert('Error al registrar: ' + (e && e.message ? e.message : 'desconocido'));
+    }
   });
 }
 
