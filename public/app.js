@@ -4831,17 +4831,23 @@ function cargarPorcionamientoItem() {
         { nombre: 'DESPERDICIO', peso: 0 },
         { nombre: 'FILETES', peso: 0 }
       ];
-  // Calcular el precio TOTAL pagado por el item (ultima compra) para mostrarlo en el detalle
+  // Calcular el precio TOTAL y el PRECIO/KILO BASE del item (de la ultima compra).
+  // El precio por kilo de la compra (total / cantidad comprada) es la base fija de referencia
+  // para el porcionamiento, SIN importar cuantos kilos se ingresen al porcionamiento.
   const normF = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
   const nombreNorm = normF(nombre);
   const comprasItem = (ctx.compras || []).filter(c => normF(c.nombre) === nombreNorm);
   let precioTotal = 0;
+  let precioKiloBase = 0;
   if (comprasItem.length) {
     comprasItem.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
     const c = comprasItem[0];
-    precioTotal = parseFloat(c.precio_total) > 0 ? parseFloat(c.precio_total) : (parseFloat(c.precio) || 0) * (parseFloat(c.cantidad) || 1);
+    const cantidadCompra = parseFloat(c.cantidad) || 0;
+    precioTotal = parseFloat(c.precio_total) > 0 ? parseFloat(c.precio_total) : (parseFloat(c.precio) || 0) * cantidadCompra;
+    // Precio por kilo de la compra: total pagado / kilos comprados (base fija, ej. 100/5 = 20/kg)
+    if (cantidadCompra > 0 && precioTotal > 0) precioKiloBase = precioTotal / cantidadCompra;
   }
-  _porcionamientoCtx.item = { nombre, stock, precioTotal };
+  _porcionamientoCtx.item = { nombre, stock, precioTotal, precioKiloBase };
   renderPorcionamientoEditor(secciones);
   // Consultar el precio SIEMPRE en vivo al backend y actualizar las celdas (garantiza el dato real)
   api('GET', '/api/cocina/compras').then(comprasAll => {
@@ -4850,9 +4856,12 @@ function cargarPorcionamientoItem() {
     if (list.length) {
       list.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
       const c = list[0];
-      const pt = parseFloat(c.precio_total) > 0 ? parseFloat(c.precio_total) : (parseFloat(c.precio) || 0) * (parseFloat(c.cantidad) || 1);
+      const cantCompra = parseFloat(c.cantidad) || 0;
+      const pt = parseFloat(c.precio_total) > 0 ? parseFloat(c.precio_total) : (parseFloat(c.precio) || 0) * cantCompra;
       if (pt > 0) {
         _porcionamientoCtx.item.precioTotal = pt;
+        // Precio por kilo base de la compra (total / kilos comprados)
+        if (cantCompra > 0) _porcionamientoCtx.item.precioKiloBase = pt / cantCompra;
         _porcionamientoCtx.compras = comprasAll || [];
         actualizarTotalPorcionamiento();
       }
@@ -4958,12 +4967,14 @@ function actualizarTotalPorcionamiento() {
   let precioPorKiloFiletes = 0;
   try {
     const ctx = _porcionamientoCtx;
-    const filetesPeso = obtenerPesoSeccion('FILETE');
-    const norm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-    const nombreItem = ctx && ctx.item ? ctx.item.nombre : '';
-    const precioTotalBruto = obtenerPrecioItem(ctx, norm(nombreItem));
-    precioPorKiloBruto = bruto > 0 ? (precioTotalBruto / bruto) : 0;
-    precioPorKiloFiletes = filetesPeso > 0 ? (precioTotalBruto / filetesPeso) : 0;
+    // PRECIO/KILO BASE: es el precio por kilo de la compra (total compra / kilos comprados),
+    // constante y de referencia para el porcionamiento SIN importar cuantos kilos se ingresen.
+    // Ej: se compraron 5 kg a S/100 => 20/kg; aunque se porcionen solo 3 kg, PESO BRUTO vale 20/kg.
+    const precioKiloBase = (ctx && ctx.item && ctx.item.precioKiloBase > 0)
+      ? ctx.item.precioKiloBase
+      : 0;
+    precioPorKiloBruto = precioKiloBase;
+    precioPorKiloFiletes = precioKiloBase;
 
     document.querySelectorAll('#porcionamiento-secciones tr').forEach(tr => {
       const nom = (tr.querySelector('.input-porc-nombre')?.value || '').trim().toUpperCase();
