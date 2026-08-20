@@ -4827,9 +4827,9 @@ function cargarPorcionamientoItem() {
     ? porc.secciones
     : [
         { nombre: 'PESO BRUTO', peso: stock },
-        { nombre: 'CABEZA, COLA, ALETAS Y ESQUELETO', peso: 0 },
-        { nombre: 'FILETES', peso: 0 },
-        { nombre: 'DESPERDICIO', peso: 0 }
+        { nombre: 'MERMA UTIL', peso: 0 },
+        { nombre: 'DESPERDICIO', peso: 0 },
+        { nombre: 'FILETES', peso: 0 }
       ];
   // Calcular el precio TOTAL pagado por el item (ultima compra) para mostrarlo en el detalle
   const normF = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
@@ -4917,7 +4917,7 @@ function agregarSeccionPorcionamiento() {
   const tbody = document.getElementById('porcionamiento-secciones');
   if (!tbody) return;
   const tr = document.createElement('tr');
-  tr.innerHTML = '<td><input class="input-porc-nombre" placeholder="Sección (ej. CABEZA, COLAS...)" style="width:100%;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();"></td>'
+  tr.innerHTML = '<td><input class="input-porc-nombre" placeholder="Sección (ej. MERMA UTIL, FILETES...)" style="width:100%;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();"></td>'
     + '<td><input class="input-porc-peso" type="number" step="0.01" min="0" value="0" oninput="actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>'
     + '<td class="celda-porc-pct" style="text-align:right;font-weight:600;color:#0f3460;">—</td>'
     + '<td class="celda-porc-precio" style="text-align:right;">—</td>'
@@ -5101,13 +5101,13 @@ function aplicarTransformacionPorcionamiento() {
     return s ? s.peso : 0;
   };
   const bruto = getSeccion(/PESO BRUTO/);
-  const cabeza = getSeccion(/CABEZA|COLA|ALETAS|ESQUELETO/);
+  const cabeza = getSeccion(/MERMA UTIL|CABEZA|COLA|ALETAS|ESQUELETO/);
   const filetes = getSeccion(/FILETE/);
   const desperdicio = getSeccion(/DESPERDICIO/);
   const gramos = parseFloat(document.getElementById('pack-gramos')?.value) || 0;
   const packs = parseInt(document.getElementById('pack-cantidad')?.value) || 0;
 
-  if (!cabeza && !filetes) { alert('Define CABEZA/COLAS y FILETES en el porcionamiento'); return; }
+  if (!cabeza && !filetes) { alert('Define MERMA UTIL y FILETES en el porcionamiento'); return; }
 
   // Confirmar la transformación
   const nombreBase = ctx.item.nombre;
