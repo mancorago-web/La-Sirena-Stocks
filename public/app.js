@@ -6337,7 +6337,13 @@ function getFechasCompras() {
 function cargarCompras() {
   const { ini, fin } = getFechasCompras();
   const fecha = ini; // para sugerencias de stock usar la fecha de inicio
-  Promise.all([getInventario(fecha), api('GET', '/api/barra/precios'), api('GET', '/api/almacenes')]).then(([inv, precios, alms]) => {
+  Promise.all([
+    getInventario(fecha),
+    api('GET', '/api/barra/precios'),
+    api('GET', '/api/almacenes'),
+    api('GET', '/api/cocina/stock'),
+    api('GET', '/api/basedatos/unificada')
+  ]).then(([inv, precios, alms, cocinaStock, bdUnificada]) => {
     const dl = document.getElementById('sugerencia-compras');
     if (dl) {
       const seen = new Set();
@@ -6350,8 +6356,15 @@ function cargarCompras() {
         seen.add(key);
         html += '<option value="' + nombre.replace(/"/g, '&quot;') + '"></option>';
       };
+      // STOCKS (almacenes)
       (inv || []).forEach(a => (a.items || []).forEach(i => addSug(i.nombre)));
+      // BARRA
       (precios || []).forEach(p => addSug(p.ingrediente));
+      // COCINA/STOCK: se incluyen TODOS los items (aunque estén en cantidad 0) para poder
+      // emparejar el ingreso con un producto que ya existe en la base de datos.
+      (cocinaStock || []).forEach(s => addSug(s.ingrediente));
+      // BASE DE DATOS UNIFICADA (refuerzo: STOCKS + BARRA + COCINA + BASE)
+      (bdUnificada || []).forEach(x => addSug(x.nombre));
       dl.innerHTML = html;
     }
     comprasAlmacenes = alms || [];
