@@ -101,7 +101,10 @@ document.querySelectorAll('.tab').forEach(tab => {
     const name = tab.dataset.tab;
     document.getElementById('tab-' + name).classList.add('active');
     window.__vista = { cat: 'stocks', tab: name };
-    // Recargar siempre para mantener todo actualizado en cadena
+    // Recargar siempre para mantener todo actualizado en cadena: se limpia el caché del
+    // inventario para que al entrar a cualquier vista de STOCKS siempre se lean datos frescos
+    // de la API (evita mostrar valores viejos tras guardar/reparar datos).
+    _invCache = { fecha: null, data: null, pending: null };
     const loaders = {
       almacenes: () => cargarAlmacenes(document.getElementById('fecha-almacenes')?.value),
       ingresos: () => cargarIngresos(document.getElementById('fecha-ingresos')?.value),
@@ -1238,6 +1241,7 @@ function guardarDia() {
         item_id: itemId,
         almacen_id: almacenId,
         stock_apertura: parseFloat(tr.querySelector('.input-apertura').value) || 0,
+        apertura_manual: _aperturaEditable,
         stock_ingreso: parseFloat(tr.querySelector('.input-ingreso').value) || 0,
         salida_almacen: parseFloat(tr.querySelector('.input-salida').value) || 0,
         total_ventas: parseFloat(tr.querySelector('.input-ventas').value) || 0,
@@ -4246,6 +4250,7 @@ function guardarCocinaDia() {
     registros.push({
       item_id: Number(tr.getAttribute('data-cocina-id')),
       stock_apertura: parseFloat(tr.querySelector('.input-apertura').value) || 0,
+      apertura_manual: true,
       stock_ingreso: parseFloat(tr.querySelector('.input-ingreso').value) || 0,
       salida_almacen: parseFloat(tr.querySelector('.input-salida').value) || 0,
       total_ventas: parseFloat(tr.querySelector('.input-ventas').value) || 0,

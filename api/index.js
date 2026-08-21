@@ -573,6 +573,7 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
 
     const data = { fecha, item_id: Number(r.item_id), almacen_id: Number(r.almacen_id) };
     if (r.stock_apertura !== undefined) data.stock_apertura = apertura;
+    if (r.apertura_manual !== undefined) data.apertura_manual = !!r.apertura_manual;
     if (r.stock_ingreso !== undefined) data.stock_ingreso = ingreso;
     if (r.salida_almacen !== undefined) data.salida_almacen = salida;
     if (r.total_ventas !== undefined) data.total_ventas = ventas;
@@ -741,7 +742,7 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
       // hacia adelante para ese item (para no pisar conteos reales de días posteriores).
       const prevCierre = {};
       const perDayWrites = {};
-      const detenidos = {}; // key -> true (deja de propagar ese item porque encontró un conteo manual)
+      const detenidos = {}; // key -> true (deja de propagar ese item porque encontró una apertura manual)
       for (let si = 0; si < secuencia.length; si++) {
         const srcs = srcData[si] || {};
         const tgts = tgtData[si] || {};
@@ -754,15 +755,15 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
           const apertura = prevCierre[key] !== undefined ? prevCierre[key] : (d.stock_cierre ?? 0);
           const nextId = docId('invdiario', tgt, d.almacen_id, d.item_id);
           if (existing) {
-            // Apertura manual detectada: la apertura guardada difiere del cierre que se propagaría
-            const aperturaActual = existing.stock_apertura ?? 0;
-            const esConteoManual = Math.abs(aperturaActual - apertura) > 0.001;
-            if (esConteoManual) {
-              // Este día fue contado físicamente (o ya tiene un valor editado que debe respetarse).
-              // No sobrescribir y no propagar más allá para este item.
+            // REGLA CADENA SIEMPRE: la apertura de un día SIEMPRE = cierre del día anterior,
+            // en cadena continua (apertura día N = cierre día N-1).
+            // SOLO se respeta una apertura cuando el usuario la fijó manualmente con
+            // EDITAR APERTURA (apertura_manual = true). No depende de la fecha.
+            if (existing.apertura_manual === true) {
               detenidos[key] = true;
               continue;
             }
+            // Apertura automática: actualizar con el cierre propagado del día anterior.
             const ingreso = existing.stock_ingreso ?? 0;
             const salida = existing.salida_almacen ?? 0;
             const ventas = existing.total_ventas ?? 0;
@@ -2541,6 +2542,7 @@ async function guardarCocinaDiaInterno(fecha, registros, savedBy) {
     }
     const data = { fecha, item_id: Number(r.item_id) };
     if (r.stock_apertura !== undefined) data.stock_apertura = apertura;
+    if (r.apertura_manual !== undefined) data.apertura_manual = !!r.apertura_manual;
     if (r.stock_ingreso !== undefined) data.stock_ingreso = ingreso;
     if (r.salida_almacen !== undefined) data.salida_almacen = salida;
     if (r.total_ventas !== undefined) data.total_ventas = ventas;
@@ -2579,6 +2581,9 @@ async function guardarCocinaDiaInterno(fecha, registros, savedBy) {
         const tgtSnap = await col('cocina_stock_diario').doc(nextId).get();
         if (tgtSnap.exists) {
           const t = tgtSnap.data();
+          // REGLA CADENA SIEMPRE (misma que en STOCKS): la apertura de un día siempre sigue al
+          // cierre del día anterior, salvo que se haya fijado manualmente (apertura_manual=true).
+          if (t.apertura_manual === true) break;
           const apertura = prevCierre[itemId] !== undefined ? prevCierre[itemId] : cierre;
           const nuevo = Math.round((apertura + (t.stock_ingreso ?? 0) - (t.salida_almacen ?? 0) - (t.total_ventas ?? 0) - (t.falta_almacen ?? 0) - (t.stock_baja ?? 0)) * 100) / 100;
           prevCierre[itemId] = nuevo;
