@@ -86,9 +86,11 @@ module.exports = app;
 const app = express();
 
 app.use(express.json());
-// No-cache para archivos estaticos (app.js, style.css) para evitar versiones viejas
+// No-cache para archivos estaticos (app.js, style.css) y para TODAS las respuestas de la API,
+// de modo que el CDN/proxy (Vercel) nunca sirva datos viejos (ej. STOCK TOTAL APERTURA
+// desactualizado tras guardar o reparar datos).
 app.use((req, res, next) => {
-  if (req.path === '/app.js' || req.path === '/style.css') {
+  if (req.path.startsWith('/api/') || req.path === '/app.js' || req.path === '/style.css') {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   }
   next();
