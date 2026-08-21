@@ -104,6 +104,11 @@ app.get('/api/diag', async (req, res) => {
     const inv = await col('inventario').get();
     const dia = await col('inventario_diario').limit(1).get();
     const rec = await col('recetas').get();
+    let item65 = null;
+    try {
+      const s = await col('inventario_diario').doc('2026-08-20_4_65').get();
+      if (s.exists) { const d = s.data(); item65 = { ap: d.stock_apertura, ing: d.stock_ingreso, cie: d.stock_cierre, saved_by: d.saved_by }; }
+    } catch (e) { item65 = { error: e.message }; }
     res.json({
       almacenes: alms.size,
       inventario: inv.size,
@@ -111,6 +116,7 @@ app.get('/api/diag', async (req, res) => {
       inventario_diario_fields: dia.docs.length ? Object.keys(dia.docs[0].data()) : null,
       inventario_diario_fecha: dia.docs.length ? dia.docs[0].data().fecha : null,
       recetas: rec.size,
+      item65_dia20: item65,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
