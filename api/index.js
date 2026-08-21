@@ -274,7 +274,7 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
   const fecha = req.query.fecha;
   if (!fecha) return res.json([]);
   try {
-    const result = await cached('con_inv_' + fecha, 5000, async () => {
+    const result = await cached('con_inv_' + fecha, 0, async () => {
       const [almsSnap, allItemsSnap] = await Promise.all([
         col('almacenes').orderBy('orden').get(),
         col('inventario').get(),
