@@ -1331,13 +1331,17 @@ function guardarDiaAlmacenes({ fecha, registros, selectorBtn, textoBtn, textoOk,
   return true;
 }
 
+let _almacenesRenderFecha = null; // fecha actualmente renderizada en el DOM de ALMACENES
 function cargarAlmacenes(fecha) {
   const openIds = [];
   document.querySelectorAll('.accordion-item .accordion-body.open').forEach(body => {
     const item = body.closest('.accordion-item');
     if (item) openIds.push(item.dataset.almacenId);
   });
-  // Preservar los valores ya escritos en los inputs (para no perder datos al re-renderizar al buscar)
+  // Preservar los valores ya escritos en los inputs (para no perder datos al re-renderizar al buscar).
+  // Solo se restauran si se re-renderiza la MISMA fecha (buscar/ver-cero/recargar). Si cambió la
+  // fecha, los valores del DOM corresponden al día anterior y NO deben pegarse sobre el día nuevo.
+  const fechaRenderizada = _almacenesRenderFecha;
   const valores = {};
   document.querySelectorAll('#accordion-almacenes tr[data-item-id]').forEach(tr => {
     const key = tr.dataset.almacenId + '_' + tr.dataset.itemId;
@@ -1464,16 +1468,20 @@ function cargarAlmacenes(fecha) {
         item.querySelector('.accordion-header').classList.add('active');
       }
     });
-    // Restaurar los valores editados (por si hubo re-render al buscar)
-    Object.entries(valores).forEach(([key, obj]) => {
-      const [al, item] = key.split('_');
-      const tr = container.querySelector(`tr[data-item-id="${item}"][data-almacen-id="${al}"]`);
-      if (!tr) return;
-      Object.entries(obj).forEach(([cls, val]) => {
-        const inp = tr.querySelector('input.' + cls);
-        if (inp && val !== '') inp.value = val;
+    _almacenesRenderFecha = fecha;
+    // Restaurar los valores editados SOLO si se mantiene la misma fecha (re-render por búsqueda).
+    // Si cambió la fecha, los valores capturados son del día anterior y no deben sobrescribir el nuevo.
+    if (fechaRenderizada === fecha) {
+      Object.entries(valores).forEach(([key, obj]) => {
+        const [al, item] = key.split('_');
+        const tr = container.querySelector(`tr[data-item-id="${item}"][data-almacen-id="${al}"]`);
+        if (!tr) return;
+        Object.entries(obj).forEach(([cls, val]) => {
+          const inp = tr.querySelector('input.' + cls);
+          if (inp && val !== '') inp.value = val;
+        });
       });
-    });
+    }
   });
 }
 
