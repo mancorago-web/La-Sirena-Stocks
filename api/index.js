@@ -104,6 +104,23 @@ app.get('/api/diag', async (req, res) => {
     const inv = await col('inventario').get();
     const dia = await col('inventario_diario').limit(1).get();
     const rec = await col('recetas').get();
+    // Replica EXACTA de la lógica de /api/almacenes/con-inventario (línea 332) para el item 65 al 4 del día 20
+    let aperturaCalc = null;
+    try {
+      const d = await col('inventario_diario').doc('2026-08-20_4_65').get();
+      const p = await col('inventario_diario').doc('2026-08-19_4_65').get();
+      const invItem = await col('inventario').doc('65_4').get();
+      const diaDoc = d.exists ? d.data() : {};
+      const prevDoc = p.exists ? p.data() : {};
+      const invData = invItem.exists ? invItem.data() : {};
+      aperturaCalc = {
+        dia_stock_apertura: diaDoc.stock_apertura,
+        prevDia_stock_cierre: prevDoc.stock_cierre,
+        inv_stock_apertura: invData.stock_apertura,
+        // fórmula línea 332
+        result: (diaDoc.stock_apertura ?? prevDoc.stock_cierre ?? invData.stock_apertura ?? 0)
+      };
+    } catch (e) { aperturaCalc = { error: e.message }; }
     res.json({
       almacenes: alms.size,
       inventario: inv.size,
@@ -111,6 +128,7 @@ app.get('/api/diag', async (req, res) => {
       inventario_diario_fields: dia.docs.length ? Object.keys(dia.docs[0].data()) : null,
       inventario_diario_fecha: dia.docs.length ? dia.docs[0].data().fecha : null,
       recetas: rec.size,
+      apertura_calc_65_20: aperturaCalc,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
