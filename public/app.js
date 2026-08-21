@@ -845,13 +845,19 @@ function renderVentasAsignacion(items, containerId) {
     return '<label style="display:inline-flex;align-items:center;gap:0.25rem;margin-right:0.75rem;font-size:0.85rem;cursor:pointer;"><input type="radio" name="dest-prueba-' + i.idx + '" value="' + d + '"' + checked + ' onchange="onPruebaDestinoChange(this)"> ' + d.toUpperCase() + '</label>';
   }).join('');
   const emparejar = (i) => {
-    if (i.emparejado) return '<span style="color:#2e7d32;">✓ ' + esc(i.matched) + '</span><input type="hidden" class="match-ya" value="' + esc(i.matched) + '">';
+    // KOMBUCHA: siempre mostrar el selector editable para poder cambiarla manualmente a un KEFIR
+    // del mismo sabor (los meseros a veces anotan KOMBUCHA cuando vendieron un KEFIR).
+    const normMatch = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    const esKombucha = /KOMBUCHA/i.test(i.nombre);
+    if (i.emparejado && !esKombucha) return '<span style="color:#2e7d32;">✓ ' + esc(i.matched) + '</span><input type="hidden" class="match-ya" value="' + esc(i.matched) + '">';
     const candidatos = candidatosTodos(i.nombre, i.destino);
-    const opts = candidatos.map(c => '<option value="' + esc(c.n) + '" data-zona="' + c.zona + '">' + esc(c.n) + ' (' + c.zona + ')</option>').join('') +
-      '<option value="__excel__">Usar nombre del Excel</option>' +
+    const ya = i.emparejado ? i.matched : '';
+    const marcado = (n) => ya && normMatch(ya) === normMatch(n);
+    const opts = candidatos.map(c => '<option value="' + esc(c.n) + '" data-zona="' + c.zona + '"' + (marcado(c.n) ? ' selected' : '') + '>' + esc(c.n) + ' (' + c.zona + ')</option>').join('') +
+      '<option value="__excel__"' + (ya && !candidatos.some(c => normMatch(c.n) === normMatch(ya)) ? ' selected' : '') + '>Usar nombre del Excel</option>' +
       '<option value="__nuevo__">Crear nuevo' + (i.destino === 'barra' || i.destino === 'cocina' ? ' (receta)' : '') + '</option>';
     return '<select class="select-match-import" data-item="' + esc(i.nombre) + '" onchange="onMatchSelectChange(this)">' +
-      '<option value="">— Emparejar —</option>' + opts + '</select>' +
+      (ya ? '' : '<option value="">— Emparejar —</option>') + opts + '</select>' +
       '<input class="input-match-nuevo" data-item="' + esc(i.nombre) + '" placeholder="Nombre nuevo..." style="display:none;margin-top:0.3rem;padding:0.3rem;border:1px solid #ccc;border-radius:4px;width:90%;">';
   };
   const almacen = (i) => {
@@ -962,7 +968,18 @@ function candidatosTodos(nombre, destino) {
   } else {
     (ctx.stockNombres || []).forEach(n => { if (!esBasura(n)) pool.push({ n, zona: 'STOCKS' }); });
   }
+  // KOMBUCHA → KEFIR: a veces los meseros anotan KOMBUCHA de un sabor cuando en realidad vendieron
+  // un KEFIR del mismo sabor. Garantizamos que los KEFIRs aparezcan como opción para emparejarlos
+  // manualmente (flexibilidad en VENTAS al importar el Excel).
+  const esKombucha = /KOMBUCHA/i.test(String(nombre || ''));
+  if (esKombucha) {
+    (ctx.stockNombres || []).forEach(n => { if (/KEFIR/i.test(n) && !pool.some(p => p.n === n)) pool.push({ n, zona: 'STOCKS' }); });
+  }
   const scored = pool.map(p => ({ p, s: similitud(nombre, p.n) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 15).map(x => x.p);
+  if (esKombucha) {
+    // Asegurar que los 3 KEFIRs queden en la lista aunque su similitud no entre al top
+    (ctx.stockNombres || []).forEach(n => { if (/KEFIR/i.test(n) && !scored.some(x => x.n === n)) scored.push({ n, zona: 'STOCKS' }); });
+  }
   return scored;
 }
 
