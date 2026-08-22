@@ -6354,18 +6354,24 @@ function renderComprasAlmacenes(lista) {
 function actualizarAlmacenesCompra(nombre) {
   const q = (nombre || '').trim().toLowerCase().replace(/\s+/g, '');
   const { ini: fecha } = getFechasCompras();
+  // Respaldo: lista base de almacenes ya cargada (siempre disponible).
+  const base = () => (comprasAlmacenes || []).map(a => ({ id: Number(a.id), nombre: a.nombre, cantidad: null, nuevo: !!q }));
   getInventario(fecha).then(inv => {
-    const list = [];
-    (inv || []).forEach(a => {
+    try {
       // Mostrar SIEMPRE todos los almacenes de STOCKS: si el item ya existe en el almacén se
-      // muestra su cantidad, y si NO existe igual se muestra para poder tickearlo y crear el
-      // item al guardar la compra (INGRESO a un almacén que aún no tenía ese item).
-      let item = null;
-      if (q) item = (a.items || []).find(i => String(i.nombre || '').toLowerCase().replace(/\s+/g, '').includes(q));
-      list.push({ id: a.id, nombre: a.nombre, cantidad: item ? (item.stock_cierre !== undefined ? item.stock_cierre : item.stock_apertura) : null, nuevo: q ? !item : false });
-    });
-    renderComprasAlmacenes(list);
-  }).catch(() => {});
+      // muestra su cantidad, y si NO existe igual se muestra (nuevo) para poder tickearlo y
+      // crear el item al guardar la compra (INGRESO a un almacén que aún no tenía ese item).
+      const list = (inv || []).map(a => {
+        let item = null;
+        if (q) item = (a.items || []).find(i => String(i.nombre || '').toLowerCase().replace(/\s+/g, '').includes(q));
+        return { id: a.id, nombre: a.nombre, cantidad: item ? (item.stock_cierre !== undefined ? item.stock_cierre : item.stock_apertura) : null, nuevo: q ? !item : false };
+      });
+      renderComprasAlmacenes(list);
+    } catch (e) {
+      console.error('actualizarAlmacenesCompra:', e);
+      renderComprasAlmacenes(base());
+    }
+  }).catch(() => renderComprasAlmacenes(base()));
 }
 
 function getFechasCompras() {
@@ -6796,6 +6802,8 @@ function agregarCompra() {
     document.getElementById('nueva-compra-cant').value = '';
     document.getElementById('nueva-compra-precio-uni').value = '';
     document.getElementById('nueva-compra-precio-total').value = '';
+    // Resetear la lista de almacenes (todos visibles, sin marcar) para el siguiente item.
+    if (typeof actualizarAlmacenesCompra === 'function') actualizarAlmacenesCompra('');
     cargarComprasDetalle();
     _invCache = { fecha: null, data: null, pending: null };
     actualizarContadoresMenu();
