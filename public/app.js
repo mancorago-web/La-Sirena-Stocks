@@ -6333,7 +6333,7 @@ function onBuscarItemCompra(valor) {
 function renderComprasAlmacenes(lista) {
   const cont = document.getElementById('compras-almacenes-lista');
   if (!cont) return;
-  const chk = (x) => '<label style="font-size:0.82rem;display:flex;align-items:center;gap:0.25rem;padding:0.18rem 0;"><input type="checkbox" class="compra-almacen" value="' + Number(x.id) + '"> ' + esc(x.nombre) + (x.cantidad !== null && x.cantidad !== undefined ? ' <span style="color:#c62828;font-weight:700;">(' + x.cantidad + ')</span>' : '') + '</label>';
+  const chk = (x) => '<label style="font-size:0.82rem;display:flex;align-items:center;gap:0.25rem;padding:0.18rem 0;"><input type="checkbox" class="compra-almacen" value="' + Number(x.id) + '"> ' + esc(x.nombre) + (x.nuevo ? ' <span style="color:#1565c0;font-weight:700;">(nuevo)</span>' : (x.cantidad !== null && x.cantidad !== undefined ? ' <span style="color:#c62828;font-weight:700;">(' + x.cantidad + ')</span>' : '')) + '</label>';
   const izquierda = lista.filter(x => !/ARRIBA/i.test(x.nombre));
   const derecha = lista.filter(x => /ARRIBA/i.test(x.nombre));
   cont.innerHTML =
@@ -6357,10 +6357,12 @@ function actualizarAlmacenesCompra(nombre) {
   getInventario(fecha).then(inv => {
     const list = [];
     (inv || []).forEach(a => {
+      // Mostrar SIEMPRE todos los almacenes de STOCKS: si el item ya existe en el almacén se
+      // muestra su cantidad, y si NO existe igual se muestra para poder tickearlo y crear el
+      // item al guardar la compra (INGRESO a un almacén que aún no tenía ese item).
       let item = null;
       if (q) item = (a.items || []).find(i => String(i.nombre || '').toLowerCase().replace(/\s+/g, '').includes(q));
-      if (!q) list.push({ id: a.id, nombre: a.nombre, cantidad: null });
-      else if (item) list.push({ id: a.id, nombre: a.nombre, cantidad: item.stock_cierre !== undefined ? item.stock_cierre : item.stock_apertura });
+      list.push({ id: a.id, nombre: a.nombre, cantidad: item ? (item.stock_cierre !== undefined ? item.stock_cierre : item.stock_apertura) : null, nuevo: q ? !item : false });
     });
     renderComprasAlmacenes(list);
   }).catch(() => {});
