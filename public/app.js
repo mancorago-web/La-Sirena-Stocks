@@ -130,7 +130,7 @@ function toggleVerCero() {
     btn.title = _ocultarCero ? 'Mostrar items con stock 0' : 'Ocultar items con stock 0';
   }
   const fecha = document.getElementById('fecha-almacenes')?.value;
-  cargarAlmacenes(fecha);
+  cargarAlmacenes(fecha, true);
 }
 function dibujarFlujoMenu() {
   const cont = document.getElementById('menu-flow-container');
@@ -479,7 +479,7 @@ let _aperturaEditable = false;
 function setAperturaEditable(val) {
   _aperturaEditable = !!val;
   const fecha = document.getElementById('fecha-almacenes')?.value;
-  if (fecha) cargarAlmacenes(fecha);
+  if (fecha) cargarAlmacenes(fecha, true);
   const btn = document.getElementById('btn-toggle-apertura');
   if (btn) {
     btn.textContent = _aperturaEditable ? '🔒 BLOQUEAR APERTURA' : '✏️ EDITAR APERTURA (conteo)';
@@ -539,6 +539,17 @@ function normalizeUnit(u) {
 }
 function recargarTodo(fecha) {
   _invCache = { fecha: null, data: null, pending: null };
+  // Recargar SOLO la vista actual (evita ~5 refetch del inventario por cada guardado → GUARDAR más rápido).
+  const v = window.__vista || {};
+  if (v.cat === 'stocks') {
+    const loaders = {
+      almacenes: cargarAlmacenes, ingresos: cargarIngresos, salidas: cargarSalidas,
+      ventas: cargarVentas, bajas: cargarBajas, stocks: cargarStocks,
+      reportes: cargarReportes, precios: cargarBaseDatosStocks
+    };
+    if (loaders[v.tab]) { try { loaders[v.tab](fecha); } catch (e) { console.error('recargarTodo:', e); } return; }
+  }
+  // Fallback (vista desconocida o no-STOCKS): recargar todo para no perder consistencia.
   cargarAlmacenes(fecha);
   cargarIngresos(fecha);
   cargarSalidas(fecha);
@@ -1349,32 +1360,35 @@ function guardarDiaAlmacenes({ fecha, registros, selectorBtn, textoBtn, textoOk,
 }
 
 let _almacenesRenderFecha = null; // fecha actualmente renderizada en el DOM de ALMACENES
-function cargarAlmacenes(fecha) {
+function cargarAlmacenes(fecha, preservar) {
   const openIds = [];
   document.querySelectorAll('.accordion-item .accordion-body.open').forEach(body => {
     const item = body.closest('.accordion-item');
     if (item) openIds.push(item.dataset.almacenId);
   });
-  // Preservar los valores ya escritos en los inputs (para no perder datos al re-renderizar al buscar).
-  // Solo se restauran si se re-renderiza la MISMA fecha (buscar/ver-cero/recargar). Si cambió la
-  // fecha, los valores del DOM corresponden al día anterior y NO deben pegarse sobre el día nuevo.
+  // Preservar los valores ya escritos en los inputs SOLO cuando se re-renderiza en el MISMO lugar
+  // (búsqueda, ver-cero, editar apertura). Al cambiar de pestaña, guardar o refrescar NO se
+  // restauran, para no pegar valores viejos sobre los datos frescos del servidor (ej. tras una
+  // SALIDA, la apertura se veía como el cierre hasta recargar).
   const fechaRenderizada = _almacenesRenderFecha;
   const valores = {};
-  document.querySelectorAll('#accordion-almacenes tr[data-item-id]').forEach(tr => {
-    const key = tr.dataset.almacenId + '_' + tr.dataset.itemId;
-    const obj = {};
-    tr.querySelectorAll('input').forEach(inp => {
-      const cls = (inp.className || '').split(' ').find(c => c.startsWith('input-'));
-      if (cls) obj[cls] = inp.value;
+  if (preservar === true) {
+    document.querySelectorAll('#accordion-almacenes tr[data-item-id]').forEach(tr => {
+      const key = tr.dataset.almacenId + '_' + tr.dataset.itemId;
+      const obj = {};
+      tr.querySelectorAll('input').forEach(inp => {
+        const cls = (inp.className || '').split(' ').find(c => c.startsWith('input-'));
+        if (cls) obj[cls] = inp.value;
+      });
+      valores[key] = obj;
     });
-    valores[key] = obj;
-  });
+  }
   if (!fecha) fecha = document.getElementById('fecha-almacenes').value;
   getInventario(fecha).then(data => {
     // Si hay una busqueda activa, NO ocultar los items con stock 0 (para encontrarlos y evitar duplicados)
     const buscarTerm = (document.getElementById('buscar-item')?.value || '').trim();
     if (_ocultarCero && !buscarTerm) {
-      data.forEach(a => { a.items = (a.items || []).filter(i => (i.stock_apertura || 0) !== 0 || (i.stock_cierre || 0) !== 0); });
+      data = (data || []).map(a => ({ ...a, items: (a.items || []).filter(i => (i.stock_apertura || 0) !== 0 || (i.stock_cierre || 0) !== 0) }));
     }
     const categoriasPorAlmacen = {
       1: [
@@ -1486,9 +1500,9 @@ function cargarAlmacenes(fecha) {
       }
     });
     _almacenesRenderFecha = fecha;
-    // Restaurar los valores editados SOLO si se mantiene la misma fecha (re-render por búsqueda).
-    // Si cambió la fecha, los valores capturados son del día anterior y no deben sobrescribir el nuevo.
-    if (fechaRenderizada === fecha) {
+    // Restaurar los valores editados SOLO si se re-renderiza en el mismo lugar y con la misma fecha
+    // (búsqueda/ver-cero/editar apertura). Si cambió de pestaña/fecha o se guardó, no se restauran.
+    if (preservar === true && fechaRenderizada === fecha) {
       Object.entries(valores).forEach(([key, obj]) => {
         const [al, item] = key.split('_');
         const tr = container.querySelector(`tr[data-item-id="${item}"][data-almacen-id="${al}"]`);
@@ -1509,7 +1523,7 @@ function buscarItemAlmacen(value) {
   const term = (value || '').trim();
   const cambioEstado = (_buscarAlmacenTerm === '') !== (term === '');
   _buscarAlmacenTerm = term;
-  if (cambioEstado) cargarAlmacenes();
+  if (cambioEstado) cargarAlmacenes(undefined, true);
   else buscarEnTabla(term, 'accordion-almacenes');
 }
 
@@ -1602,14 +1616,10 @@ function eliminarItemAlmacen(itemId, almacenId) {
 function cargarSalidas(fecha) {
   if (!fecha) fecha = document.getElementById('fecha-salidas').value;
   if (!fecha) return;
-  _invCache = { fecha: null, data: null, pending: null };
   getInventario(fecha).then(data => {
-    const todosAlmacenes = data.map(al => ({ id: al.id, nombre: al.nombre }));
-    // Solo mostrar items con salida registrada en esta fecha (todos los almacenes)
-    data = data.filter(a => {
-      a.items = (a.items || []).filter(i => (i.salida_almacen || 0) > 0);
-      return a.items.length > 0;
-    });
+    const todosAlmacenes = (data || []).map(al => ({ id: al.id, nombre: al.nombre }));
+    // Solo mostrar items con salida registrada en esta fecha (COPIA: no muta el caché compartido)
+    data = (data || []).map(a => ({ ...a, items: (a.items || []).filter(i => (i.salida_almacen || 0) > 0) })).filter(a => a.items.length > 0);
     const categoriasPorAlmacen = {};
     const defaultCategorias = [
       { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS|TONIC WATER BRITVIC/i.test(i.nombre) },
@@ -2003,14 +2013,10 @@ function verDetallesBajas() {
 
 function cargarVentas(fecha) {
   if (!fecha) fecha = document.getElementById('fecha-ventas').value;
-  _invCache = { fecha: null, data: null, pending: null };
   getInventario(fecha).then(data => {
-    data = data.filter(a => a.id !== 3 && a.id !== 9 && a.id !== 16);
-    // Solo mostrar items que se vendieron en esta fecha
-    data = data.filter(a => {
-      a.items = (a.items || []).filter(i => (i.total_ventas || 0) > 0);
-      return a.items.length > 0;
-    });
+    data = (data || []).filter(a => a.id !== 3 && a.id !== 9 && a.id !== 16);
+    // Solo mostrar items que se vendieron en esta fecha (COPIA: no muta el caché compartido)
+    data = data.map(a => ({ ...a, items: (a.items || []).filter(i => (i.total_ventas || 0) > 0) })).filter(a => a.items.length > 0);
     const categoriasPorAlmacen = {};
     const defaultCategorias = [
       { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS|TONIC WATER BRITVIC/i.test(i.nombre) },
@@ -2320,16 +2326,12 @@ function mostrarBotonNota(inputEl) {
 
 function cargarIngresos(fecha) {
   if (!fecha) fecha = document.getElementById('fecha-ingresos').value;
-  _invCache = { fecha: null, data: null, pending: null };
   getInventario(fecha).then(data => {
     const alNombres = {};
-    data.forEach(al => { alNombres[al.id] = al.nombre; });
-    data = data.filter(a => a.id !== 3 && a.id !== 9 && a.id !== 16);
-    // Solo mostrar items con ingreso registrado en esta fecha
-    data = data.filter(a => {
-      a.items = (a.items || []).filter(i => (i.stock_ingreso || 0) > 0);
-      return a.items.length > 0;
-    });
+    (data || []).forEach(al => { alNombres[al.id] = al.nombre; });
+    data = (data || []).filter(a => a.id !== 3 && a.id !== 9 && a.id !== 16);
+    // Solo mostrar items con ingreso registrado en esta fecha (COPIA: no muta el caché compartido)
+    data = data.map(a => ({ ...a, items: (a.items || []).filter(i => (i.stock_ingreso || 0) > 0) })).filter(a => a.items.length > 0);
     const defaultCategorias = [
       { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS|TONIC WATER BRITVIC/i.test(i.nombre) },
       { label: 'GASEOSAS', test: i => /COCA|INKA|MR\. PERKINS GINGER BEER|MR\. PERKINS TONIC WATER|PINK SODA MR PERKINS|GINGER MR PERKINS/i.test(i.nombre) },
