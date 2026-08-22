@@ -741,26 +741,45 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
   try {
     if (changedKeys.size) {
       const keysArr = Array.from(changedKeys);
-      // Generar la secuencia de días hábiles (hasta 14; la API resuelve los días sin doc con el
-      // cierre del día hábil anterior, así que alcanza y el guardado es mucho más rápido).
-      const HORIZONTE = 14;
+      // Generar la secuencia de días hábiles (hasta 7; la API resuelve los días sin doc con el
+      // cierre del día hábil anterior, así que alcanza y reduce el consumo de CPU).
+      const HORIZONTE = 7;
       const diasFuturos = [];
       let srcFecha = fecha;
       for (let i = 0; i < HORIZONTE; i++) {
         srcFecha = getNextWorkingDay(srcFecha);
         diasFuturos.push(srcFecha);
       }
-      // Leer los docs de CADA día de una sola vez (1 query por día, en paralelo) en vez de
-      // 2 gets × 30 días × N items (~21.000 lecturas). Ahora son ~15 queries por guardado.
-      const diasLectura = [fecha, ...diasFuturos];
-      const dayResults = await Promise.all(diasLectura.map(async (f) => {
-        const snap = await col('inventario_diario').where('fecha', '==', f).get();
-        const map = {};
-        snap.docs.forEach(d => { const dd = d.data(); map[dd.almacen_id + '_' + dd.item_id] = { ref: d.ref, data: dd }; });
-        return { f, map };
-      }));
       const docsByDay = {};
-      dayResults.forEach(r => { docsByDay[r.f] = r.map; });
+      // Leer el día guardado (origen de la cadena) de una sola vez
+      const snapFecha = await col('inventario_diario').where('fecha', '==', fecha).get();
+      docsByDay[fecha] = {};
+      snapFecha.docs.forEach(d => { const dd = d.data(); docsByDay[fecha][dd.almacen_id + '_' + dd.item_id] = { ref: d.ref, data: dd }; });
+
+      // Leer los días futuros: si son POCOS items, lectura individual por key (mucho más barata
+      // que traer todo el día); si son muchos, 1 query por día. Así se reduce el CPU.
+      if (keysArr.length <= 20) {
+        const reads = [];
+        const idxMap = [];
+        diasFuturos.forEach((fd, si) => {
+          keysArr.forEach(key => {
+            const [al, item] = key.split('_');
+            idxMap.push({ si, key, id: docId('invdiario', fd, Number(al), Number(item)) });
+            reads.push(col('inventario_diario').doc(idxMap[idxMap.length - 1].id).get());
+          });
+        });
+        const results = await Promise.all(reads);
+        diasFuturos.forEach(fd => { docsByDay[fd] = {}; });
+        idxMap.forEach((m, i) => { const d = results[i]; if (d.exists) docsByDay[diasFuturos[m.si]][m.key] = { ref: d.ref, data: d.data() }; });
+      } else {
+        const dayResults = await Promise.all(diasFuturos.map(async (f) => {
+          const snap = await col('inventario_diario').where('fecha', '==', f).get();
+          const map = {};
+          snap.docs.forEach(d => { const dd = d.data(); map[dd.almacen_id + '_' + dd.item_id] = { ref: d.ref, data: dd }; });
+          return { f, map };
+        }));
+        dayResults.forEach(r => { docsByDay[r.f] = r.map; });
+      }
 
       // Calcular la cadena en memoria (el cierre de un día alimenta la apertura del siguiente)
       // REGLA CADENA SIEMPRE: apertura día N = cierre día N-1, salvo aperturas manuales
