@@ -432,13 +432,12 @@ app.get('/api/resumen/items', async (req, res) => {
 async function guardarDiaInterno(fecha, registros, savedBy) {
   if (!fecha || !registros) throw new Error('fecha y registros requeridos');
 
-  // Read existing docs for all records to merge partial updates
+  // Leer TODOS los docs del día de UNA sola vez (1 query) en vez de un get por registro.
+  // Evita ~N lecturas individuales (una por item guardado) y sirve también para las transferencias.
+  const allDaySnap = await col('inventario_diario').where('fecha', '==', fecha).get();
+  const dayDocs = {};
   const existentes = {};
-  await Promise.all(registros.map(async r => {
-    const id = docId('invdiario', fecha, r.almacen_id, r.item_id);
-    const snap = await col('inventario_diario').doc(id).get();
-    existentes[id] = snap.exists ? snap.data() : {};
-  }));
+  allDaySnap.docs.forEach(d => { dayDocs[d.id] = d.data(); existentes[d.id] = d.data(); });
 
   const batch = db.batch();
   const changedKeys = new Set();
@@ -450,9 +449,6 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
   // --- Transferencias STOCKS del día ---
   // La fuente de verdad es el destino_salida='stocks' + transferencias guardados en inventario_diario.
   // Se recalcula en cada guardado (idempotente) para no duplicar ingresos al volver a guardar.
-  const allDaySnap = await col('inventario_diario').where('fecha', '==', fecha).get();
-  const dayDocs = {};
-  allDaySnap.docs.forEach(d => { dayDocs[d.id] = d.data(); });
   const savedValues = {}; // diaId -> valores finales calculados en ESTE guardado (para no sobrescribirlos)
   const transferMap = {}; // destAl_nombreUpper -> { [almacen_origen]: cantidad }
   const destKeys = new Set(); // destAl_nombreUpper que tienen transferencias hoy (para resetear si se eliminan)
@@ -581,13 +577,20 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
       if (nBar && nBar.nombre) barraStockAjustes.push({ nombre: nBar.nombre, delta: barraNet, unidad: 'unidad' });
     }
 
-    // Solo se propagan los items cuyo cierre/apertura realmente cambió.
-    // Endurecido: cualquier guardado de movimientos también propaga (aunque el cierre no cambie
-    // numéricamente), para que la apertura del día siguiente SIEMPRE quede = cierre de hoy.
-    const cierreCambio = (prev.stock_apertura || 0) !== apertura || (prev.stock_cierre || 0) !== cierreR;
-    const esMovimiento = r.total_ventas !== undefined || r.salida_almacen !== undefined ||
-      r.stock_ingreso !== undefined || r.falta_almacen !== undefined || r.stock_baja !== undefined;
-    if (cierreCambio || esMovimiento) {
+    // Solo se propagan los items cuyos valores CAMBIARON realmente (comparando con lo ya guardado).
+    // Así un re-guardado sin cambios no recorre toda la cadena y el GUARDAR es mucho más rápido.
+    // La regla apertura día N+1 = cierre día N se mantiene: los items sin cambios ya quedaron
+    // propagados en su guardado anterior, y los que sí cambiaron se propagan aquí.
+    const cambioReal =
+      (prev.stock_apertura || 0) !== apertura ||
+      (prev.stock_ingreso || 0) !== ingreso ||
+      (prev.salida_almacen || 0) !== salida ||
+      (prev.total_ventas || 0) !== ventas ||
+      (prev.falta_almacen || 0) !== falta ||
+      (prev.stock_baja || 0) !== baja ||
+      (prev.stock_cierre || 0) !== cierreR ||
+      (!!prev.apertura_manual) !== (!!r.apertura_manual);
+    if (cambioReal) {
       changedKeys.add(Number(r.almacen_id) + '_' + Number(r.item_id));
     }
 
@@ -718,72 +721,58 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
   delete _cache['inv_diario_' + fecha];
   delete _cache['con_inv_' + fecha];
 
-  // Propagation: cadena hacia adelante SOLO de los items cuyo cierre/apertura cambió
+  // Propagation: cadena hacia adelante SOLO de los items que realmente cambiaron
   const propErrors = [];
   try {
     if (changedKeys.size) {
       const keysArr = Array.from(changedKeys);
-      // Generar la secuencia de días hábiles (hasta 30)
-      const secuencia = [];
+      // Generar la secuencia de días hábiles (hasta 14; la API resuelve los días sin doc con el
+      // cierre del día hábil anterior, así que alcanza y el guardado es mucho más rápido).
+      const HORIZONTE = 14;
+      const diasFuturos = [];
       let srcFecha = fecha;
-      for (let i = 0; i < 30; i++) {
-        const targetDay = getNextWorkingDay(srcFecha);
-        secuencia.push({ src: srcFecha, tgt: targetDay });
-        srcFecha = targetDay;
+      for (let i = 0; i < HORIZONTE; i++) {
+        srcFecha = getNextWorkingDay(srcFecha);
+        diasFuturos.push(srcFecha);
       }
-      // Leer TODOS los docs (origen+destino de cada día) en PARALELO
-      const reads = [];
-      const idxMap = [];
-      secuencia.forEach(({ src, tgt }, si) => {
-        keysArr.forEach(key => {
-          const [al, item] = key.split('_');
-          idxMap.push({ si, key, tipo: 'src', id: docId('invdiario', src, Number(al), Number(item)) });
-          idxMap.push({ si, key, tipo: 'tgt', id: docId('invdiario', tgt, Number(al), Number(item)) });
-          reads.push(col('inventario_diario').doc(idxMap[idxMap.length - 2].id).get());
-          reads.push(col('inventario_diario').doc(idxMap[idxMap.length - 1].id).get());
-        });
-      });
-      const results = await Promise.all(reads);
-      const srcData = {};
-      const tgtData = {};
-      idxMap.forEach((m, i) => {
-        const d = results[i];
-        if (m.tipo === 'src') {
-          if (d.exists) { if (!srcData[m.si]) srcData[m.si] = {}; srcData[m.si][m.key] = d.data(); }
-        } else {
-          if (!tgtData[m.si]) tgtData[m.si] = {};
-          tgtData[m.si][m.key] = d.exists ? d.data() : null;
-        }
-      });
+      // Leer los docs de CADA día de una sola vez (1 query por día, en paralelo) en vez de
+      // 2 gets × 30 días × N items (~21.000 lecturas). Ahora son ~15 queries por guardado.
+      const diasLectura = [fecha, ...diasFuturos];
+      const dayResults = await Promise.all(diasLectura.map(async (f) => {
+        const snap = await col('inventario_diario').where('fecha', '==', f).get();
+        const map = {};
+        snap.docs.forEach(d => { const dd = d.data(); map[dd.almacen_id + '_' + dd.item_id] = { ref: d.ref, data: dd }; });
+        return { f, map };
+      }));
+      const docsByDay = {};
+      dayResults.forEach(r => { docsByDay[r.f] = r.map; });
+
       // Calcular la cadena en memoria (el cierre de un día alimenta la apertura del siguiente)
-      // REGLA ANTI-ROTURA: si el día siguiente YA tiene una apertura que fue contada físicamente
-      // (es decir, su stock_apertura no coincide con el cierre que se propagaría del día anterior),
-      // entonces ese día ya se contó a mano y NO debe sobrescribirse, ni se sigue propagando
-      // hacia adelante para ese item (para no pisar conteos reales de días posteriores).
+      // REGLA CADENA SIEMPRE: apertura día N = cierre día N-1, salvo aperturas manuales
+      // (apertura_manual = true), que detienen la propagación para ese item.
       const prevCierre = {};
       const perDayWrites = {};
       const detenidos = {}; // key -> true (deja de propagar ese item porque encontró una apertura manual)
-      for (let si = 0; si < secuencia.length; si++) {
-        const srcs = srcData[si] || {};
-        const tgts = tgtData[si] || {};
-        if (!Object.keys(srcs).length) break;
-        const tgt = secuencia[si].tgt;
-        for (const key of Object.keys(srcs)) {
-          if (detenidos[key]) continue; // ya se topó con un conteo manual; no seguir
-          const d = srcs[key];
-          const existing = tgts[key];
+      for (let si = 0; si < diasFuturos.length; si++) {
+        const srcFechaDia = si === 0 ? fecha : diasFuturos[si - 1];
+        const tgt = diasFuturos[si];
+        const srcs = docsByDay[srcFechaDia] || {};
+        const tgts = docsByDay[tgt] || {};
+        let haySrc = false;
+        for (const key of keysArr) {
+          const s = srcs[key];
+          if (!s) continue;
+          haySrc = true;
+          if (detenidos[key]) continue;
+          const d = s.data;
+          const existing = tgts[key] ? tgts[key].data : null;
           const apertura = prevCierre[key] !== undefined ? prevCierre[key] : (d.stock_cierre ?? 0);
           const nextId = docId('invdiario', tgt, d.almacen_id, d.item_id);
           if (existing) {
-            // REGLA CADENA SIEMPRE: la apertura de un día SIEMPRE = cierre del día anterior,
-            // en cadena continua (apertura día N = cierre día N-1).
-            // SOLO se respeta una apertura cuando el usuario la fijó manualmente con
-            // EDITAR APERTURA (apertura_manual = true). No depende de la fecha.
             if (existing.apertura_manual === true) {
               detenidos[key] = true;
               continue;
             }
-            // Apertura automática: actualizar con el cierre propagado del día anterior.
             const ingreso = existing.stock_ingreso ?? 0;
             const salida = existing.salida_almacen ?? 0;
             const ventas = existing.total_ventas ?? 0;
@@ -808,6 +797,7 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
             } });
           }
         }
+        if (!haySrc) break; // ningún doc fuente para este paso → no hay más cadena
       }
       // Escribir por día (un batch por día, en paralelo) — evita superar el límite de 500 por batch
       const commits = Object.keys(perDayWrites).map(si => {
