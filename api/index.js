@@ -297,7 +297,9 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
     const result = await cached('con_inv_' + fecha, 0, async () => {
       const [almsSnap, allItemsSnap] = await Promise.all([
         col('almacenes').orderBy('orden').get(),
-        col('inventario').get(),
+        // Caché corto (2s) de la colección inventario: reduce lecturas/CPU al navegar.
+        // Se invalida tras cada escritura a inventario (guardar día, compras, ventas, items, precios).
+        cached('inventario_snap', 2000, () => col('inventario').get()),
       ]);
       const itemsByAl = {};
       allItemsSnap.docs.forEach(d => {
@@ -735,15 +737,16 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
   await batch.commit();
   delete _cache['inv_diario_' + fecha];
   delete _cache['con_inv_' + fecha];
+  delete _cache['inventario_snap']; // el guardado pudo crear items o cambiar stock_apertura
 
   // Propagation: cadena hacia adelante SOLO de los items que realmente cambiaron
   const propErrors = [];
   try {
     if (changedKeys.size) {
       const keysArr = Array.from(changedKeys);
-      // Generar la secuencia de días hábiles (hasta 7; la API resuelve los días sin doc con el
+      // Generar la secuencia de días hábiles (hasta 3; la API resuelve los días sin doc con el
       // cierre del día hábil anterior, así que alcanza y reduce el consumo de CPU).
-      const HORIZONTE = 7;
+      const HORIZONTE = 3;
       const diasFuturos = [];
       let srcFecha = fecha;
       for (let i = 0; i < HORIZONTE; i++) {
@@ -2100,6 +2103,7 @@ app.put('/api/inventario/minimos', async (req, res) => {
       }
     }
     await batch.commit();
+    delete _cache['inventario_snap'];
     res.json({ ok: true });
   } catch (e) {
     console.error('Error en minimos:', e.message);
@@ -2156,6 +2160,7 @@ app.put('/api/precios', async (req, res) => {
     batch.set(ref, { precio: parseFloat(p.precio) || 0 }, { merge: true });
   }
   await batch.commit();
+  delete _cache['inventario_snap'];
   res.json({ ok: true });
 });
 
@@ -4894,6 +4899,7 @@ app.post('/api/inventario/agregar-item', authMiddleware, async (req, res) => {
       });
     }
     delete _cache['con_inv_' + fecha];
+    delete _cache['inventario_snap'];
 
     res.json({ ok: true, item_id, nombre, almacen_id });
   } catch (e) {    res.status(500).json({ error: e.message });
@@ -4917,6 +4923,7 @@ app.put('/api/inventario/:item_id/:almacen_id', authMiddleware, async (req, res)
     const batch = db.batch();
     diaSnap.docs.forEach(d => batch.update(d.ref, { nombre, updated_at: new Date().toISOString() }));
     if (diaSnap.docs.length > 0) await batch.commit();
+    delete _cache['inventario_snap'];
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -4938,6 +4945,7 @@ app.delete('/api/inventario/:item_id/:almacen_id', authMiddleware, async (req, r
     if (diaSnap.docs.length > 0) await batch.commit();
     const hoy = new Date().toISOString().split('T')[0];
     delete _cache['con_inv_' + hoy];
+    delete _cache['inventario_snap'];
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
