@@ -1290,10 +1290,11 @@ function guardarDia() {
   // Intenta el guardado con reintentos ante fallas de red/tiempo.
   const MAX_INTENTOS = 3;
   const enviar = (intento) => {
-    api('POST', '/api/almacenes/guardar-dia', { fecha, registros, saved_by: currentUserName }).then(() => {
+    api('POST', '/api/almacenes/guardar-dia', { fecha, registros, saved_by: currentUserName }).then(r => {
       window._guardandoDia = false;
       btn.disabled = false; btn.textContent = '💾 GUARDAR';
       showToast('Datos Guardados');
+      if (r && r.alerts && r.alerts.length) mostrarAlertaAperturas(r.alerts);
       recargarTodo(fecha);
     }).catch(err => {
       const nombre = err && err.name;
@@ -1317,6 +1318,27 @@ function guardarDia() {
   enviar(1);
 }
 
+// Alerta de blindaje: el servidor detectó que un guardado intentó modificar aperturas protegidas
+// (día de conteo físico de referencia). Se muestra para detectar el error a tiempo.
+function mostrarAlertaAperturas(alerts) {
+  if (!alerts || !alerts.length) return;
+  const lista = alerts.slice(0, 12).map(a =>
+    '<li>' + esc(a.nombre || ('item ' + a.item_id)) + ' (almacén ' + a.almacen_id + '): apertura ' + a.apertura + ' ≠ referencia ' + a.referencia + '</li>'
+  ).join('');
+  const restantes = alerts.length > 12 ? '<li>… y ' + (alerts.length - 12) + ' más</li>' : '';
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modal-body');
+  if (!modal || !body) return;
+  modal.style.display = 'block';
+  body.innerHTML = '<h3 style="color:#c62828;">⚠️ ALERTA: aperturas protegidas modificadas</h3>' +
+    '<p style="color:#666;margin-top:0.75rem;">Este guardado intentó cambiar el STOCK TOTAL APERTURA de estos items (día de conteo físico de referencia):</p>' +
+    '<ul style="margin:0.75rem 0;padding-left:1.2rem;color:#c62828;max-height:300px;overflow:auto;">' + lista + restantes + '</ul>' +
+    '<p style="color:#666;font-size:0.85rem;">Si NO fue intencional, corrige los montos de apertura al valor de referencia. La alerta quedó registrada en el historial.</p>' +
+    '<div style="margin-top:1.5rem;display:flex;gap:0.5rem;">' +
+    '<button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Entendido</button>' +
+    '</div>';
+}
+
 // Helper genérico de guardado de almacenes con protección anti conexión mala:
 // evita el doble-envío simultáneo, reintenta automáticamente ante fallas de red/timeout,
 // y da mensajes claros sobre si el guardado pudo o no haberse procesado.
@@ -1333,10 +1355,11 @@ function guardarDiaAlmacenes({ fecha, registros, selectorBtn, textoBtn, textoOk,
 
   const MAX_INTENTOS = 3;
   const enviar = (intento) => {
-    api('POST', '/api/almacenes/guardar-dia', { fecha, registros, saved_by: currentUserName }).then(() => {
+    api('POST', '/api/almacenes/guardar-dia', { fecha, registros, saved_by: currentUserName }).then(r => {
       window[f] = false;
       if (btn) { btn.disabled = false; btn.textContent = textoBtn || estadoInicial; }
       showToast(textoOk || 'Datos Guardados');
+      if (r && r.alerts && r.alerts.length) mostrarAlertaAperturas(r.alerts);
       recargarTodo(fecha);
       if (typeof onSuccess === 'function') onSuccess();
     }).catch(err => {

@@ -432,6 +432,11 @@ app.get('/api/resumen/items', async (req, res) => {
 async function guardarDiaInterno(fecha, registros, savedBy) {
   if (!fecha || !registros) throw new Error('fecha y registros requeridos');
 
+  // Referencia blindada: si este día tiene un conteo físico protegido (apertura_ref_<fecha> en config),
+  // detectamos cualquier intento de cambiar su STOCK TOTAL APERTURA y lo registramos como alerta.
+  const aperturaRef = await getAperturaRef(fecha);
+  const alerts = [];
+
   // Leer TODOS los docs del día de UNA sola vez (1 query) en vez de un get por registro.
   // Evita ~N lecturas individuales (una por item guardado) y sirve también para las transferencias.
   const allDaySnap = await col('inventario_diario').where('fecha', '==', fecha).get();
@@ -556,6 +561,15 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     savedValues[id] = { stock_apertura: apertura, stock_ingreso: ingreso, salida_almacen: salida, total_ventas: ventas, falta_almacen: falta, stock_baja: baja };
     const cierre = apertura + ingreso - salida - ventas - falta - baja;
     const cierreR = Math.round(cierre * 100) / 100;
+    // BLINDAJE de referencia: si este día tiene aperturas protegidas (conteo físico) y el guardado
+    // intenta cambiar alguna, se registra una alerta (no se bloquea) para detectar el error a tiempo.
+    if (aperturaRef && r.stock_apertura !== undefined) {
+      const refVal = aperturaRef[clave];
+      if (refVal !== undefined && Math.abs(apertura - refVal) > 0.001) {
+        const nInv = invDocMap[clave];
+        alerts.push({ fecha, almacen_id: Number(r.almacen_id), item_id: Number(r.item_id), nombre: nInv ? nInv.nombre : '', apertura: apertura, referencia: refVal });
+      }
+    }
     // SALIDA con destino COCINA/BARRA: ajuste de stock IDEMPOTENTE (revierte el destino anterior si cambió,
     // así cambiar COCINA->BARRA ya no deja rastro en COCINA ni duplica al re-guardar).
     const sumDest = (ds, tipo) => Array.isArray(ds) ? ds.filter(d => String(d.destino).toLowerCase() === tipo).reduce((s, d) => s + (Number(d.cantidad) || 0), 0) : 0;
@@ -816,7 +830,18 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     console.error('Propagation error:', e.message);
   }
 
-  return { ok: true, propagated: propErrors.length === 0 };
+  // Persistir alertas de blindaje (intentos de modificar aperturas protegidas)
+  if (alerts.length) {
+    try {
+      const ab = db.batch();
+      alerts.forEach(al => ab.set(col('alertas').doc(), { ...al, tipo: 'apertura_protegida', saved_by: savedBy, created_at: new Date().toISOString() }));
+      await ab.commit();
+    } catch (e) {
+      console.error('Error guardando alertas:', e.message);
+    }
+  }
+
+  return { ok: true, propagated: propErrors.length === 0, alerts };
 }
 
 app.post('/api/almacenes/guardar-dia', async (req, res) => {
@@ -824,6 +849,17 @@ app.post('/api/almacenes/guardar-dia', async (req, res) => {
     const savedBy = req.body.saved_by || (req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown');
     const result = await guardarDiaInterno(req.body.fecha, req.body.registros, savedBy);
     res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- ALERTAS: historial de intentos de modificar aperturas protegidas (blindaje) ---
+app.get('/api/alertas', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+    const snap = await col('alertas').orderBy('created_at', 'desc').limit(limit).get();
+    res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -840,6 +876,16 @@ function prevWorkingDay(fecha) {
   d.setDate(d.getDate() - 1);
   while (d.getDay() === 2) d.setDate(d.getDate() - 1);
   return d.toISOString().split('T')[0];
+}
+
+// Referencia blindada de aperturas (conteo físico protegido). Guardada en config/apertura_ref_<fecha>.
+async function getAperturaRef(fecha) {
+  try {
+    const snap = await col('config').doc('apertura_ref_' + fecha).get();
+    return snap.exists && snap.data().items ? snap.data().items : null;
+  } catch (e) {
+    return null;
+  }
 }
 
 // --- COMPRAS: consulta de destino de un item (almacenes de STOCKS + si es de BARRA) ---
