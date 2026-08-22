@@ -581,6 +581,7 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     // Así un re-guardado sin cambios no recorre toda la cadena y el GUARDAR es mucho más rápido.
     // La regla apertura día N+1 = cierre día N se mantiene: los items sin cambios ya quedaron
     // propagados en su guardado anterior, y los que sí cambiaron se propagan aquí.
+    const aperturaManualEfectiva = r.apertura_manual === true ? true : (!!prev.apertura_manual);
     const cambioReal =
       (prev.stock_apertura || 0) !== apertura ||
       (prev.stock_ingreso || 0) !== ingreso ||
@@ -589,7 +590,7 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
       (prev.falta_almacen || 0) !== falta ||
       (prev.stock_baja || 0) !== baja ||
       (prev.stock_cierre || 0) !== cierreR ||
-      (!!prev.apertura_manual) !== (!!r.apertura_manual);
+      (!!prev.apertura_manual) !== aperturaManualEfectiva;
     if (cambioReal) {
       changedKeys.add(Number(r.almacen_id) + '_' + Number(r.item_id));
     }

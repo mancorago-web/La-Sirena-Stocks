@@ -1269,7 +1269,10 @@ function guardarDia() {
         item_id: itemId,
         almacen_id: almacenId,
         stock_apertura: parseFloat(tr.querySelector('.input-apertura').value) || 0,
-        apertura_manual: _aperturaEditable,
+        // Solo se manda apertura_manual en modo EDITAR APERTURA. Si se guarda sin ese modo,
+        // NO se envía → el backend conserva la apertura_manual previa (no borra la protección
+        // de los conteos físicos ya registrados).
+        ...(_aperturaEditable ? { apertura_manual: true } : {}),
         stock_ingreso: parseFloat(tr.querySelector('.input-ingreso').value) || 0,
         salida_almacen: parseFloat(tr.querySelector('.input-salida').value) || 0,
         total_ventas: parseFloat(tr.querySelector('.input-ventas').value) || 0,
