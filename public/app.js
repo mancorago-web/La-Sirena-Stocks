@@ -3354,8 +3354,10 @@ function enviarFaltantesWhatsApp() {
       grupos[nombre].push({ nombre: r.nombre, falta: r.falta_almacen });
     });
     let msg = '';
+    const fechaTxt = ini === fin ? ini : (ini + ' a ' + fin);
     Object.keys(grupos).forEach(nombre => {
-      msg += 'ITEMS FALTANTES (' + nombre + ')\n\n';
+      msg += 'ITEMS FALTANTES - ' + fechaTxt + '\n';
+      msg += '(' + nombre + ')\n\n\n';
       grupos[nombre].forEach((it, idx) => { msg += (idx + 1) + '. ' + it.nombre + ' - ' + it.falta + '.\n'; });
       msg += '\n';
     });
