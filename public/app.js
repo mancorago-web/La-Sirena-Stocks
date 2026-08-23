@@ -4681,13 +4681,12 @@ function cargarRecetasCocina(openId) {
     let html = '';
     catsToRender.forEach(cat => {
       const recs = grupos[cat] || [];
-      if (!recs.length) return;
       html += `<div class="accordion-item">
         <div class="accordion-header" onclick="toggleAcordeon(this)">
           <span class="accordion-title">${cat} <span style="font-weight:400;font-size:0.85rem;color:#777;">— ${recs.length} receta(s)</span></span>
           <span class="accordion-arrow">▶</span>
         </div>
-        <div class="accordion-body">${recs.map(renderRecetaCocina).join('')}</div>
+        <div class="accordion-body">${recs.length ? recs.map(renderRecetaCocina).join('') : '<p style="padding:0.75rem;color:#999;">Sin recetas en este grupo.</p>'}</div>
       </div>`;
     });
     container.innerHTML = html;
