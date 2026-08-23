@@ -453,6 +453,17 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
   const invDocMap = {};
   invSnap.docs.forEach(d => { invDocMap[Number(d.data().almacen_id) + '_' + Number(d.data().item_id)] = d.data(); });
 
+  // Cierres del día hábil ANTERIOR (para la REGLA DE CADENA: una apertura NO manual debe ser =
+  // cierre del día anterior). Evita que un error del frontend persista aperturas corruptas.
+  const prevCierres = {};
+  try {
+    const prevDiaStr = prevWorkingDay(fecha);
+    if (prevDiaStr !== fecha) {
+      const prevSnap = await col('inventario_diario').where('fecha', '==', prevDiaStr).get();
+      prevSnap.docs.forEach(d => { const dd = d.data(); prevCierres[dd.almacen_id + '_' + dd.item_id] = dd.stock_cierre ?? 0; });
+    }
+  } catch (e) { console.error('prevCierres:', e.message); }
+
   // --- Transferencias STOCKS del día ---
   // La fuente de verdad es el destino_salida='stocks' + transferencias guardados en inventario_diario.
   // Se recalcula en cada guardado (idempotente) para no duplicar ingresos al volver a guardar.
@@ -548,7 +559,7 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     const prev = existentes[id] || {};
 
     // Merge incoming with existing — only override fields that were actually sent
-    const apertura = r.stock_apertura !== undefined ? (parseFloat(r.stock_apertura) || 0) : (prev.stock_apertura || 0);
+    let apertura = r.stock_apertura !== undefined ? (parseFloat(r.stock_apertura) || 0) : (prev.stock_apertura || 0);
     let ingreso = r.stock_ingreso !== undefined ? (parseFloat(r.stock_ingreso) || 0) : (prev.stock_ingreso || 0);
     let salida = r.salida_almacen !== undefined ? (parseFloat(r.salida_almacen) || 0) : (prev.salida_almacen || 0);
     const ventas = r.total_ventas !== undefined ? (parseFloat(r.total_ventas) || 0) : (prev.total_ventas || 0);
@@ -556,6 +567,17 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     const baja = r.stock_baja !== undefined ? (parseFloat(r.stock_baja) || 0) : (prev.stock_baja || 0);
     const notaBaja = r.nota_baja !== undefined ? (r.nota_baja || '') : (prev.nota_baja || '');
     const clave = Number(r.almacen_id) + '_' + Number(r.item_id);
+    // REGLA DE CADENA: la apertura NO manual debe ser = cierre del día hábil anterior.
+    // Si el guardado manda una apertura distinta (por un error visual), se CORRIGE aquí,
+    // evitando que se persistan montos imposibles (ej. negativos). Las aperturas MANUALES
+    // (conteos físicos con EDITAR APERTURA) se respetan.
+    const aperturaManualEfectiva = r.apertura_manual === true ? true : (!!prev.apertura_manual);
+    if (!aperturaManualEfectiva && r.stock_apertura !== undefined) {
+      const pc = prevCierres[Number(r.almacen_id) + '_' + Number(r.item_id)];
+      if (pc !== undefined && Math.abs(apertura - pc) > 0.001) {
+        apertura = pc;
+      }
+    }
     // Ajustes por auto-apertura de botella (copa recibe ingreso, botella registra salida)
     if (ajusteCopa[clave]) ingreso += ajusteCopa[clave];
     if (ajusteBotella[clave]) salida += ajusteBotella[clave];
@@ -597,7 +619,6 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     // Así un re-guardado sin cambios no recorre toda la cadena y el GUARDAR es mucho más rápido.
     // La regla apertura día N+1 = cierre día N se mantiene: los items sin cambios ya quedaron
     // propagados en su guardado anterior, y los que sí cambiaron se propagan aquí.
-    const aperturaManualEfectiva = r.apertura_manual === true ? true : (!!prev.apertura_manual);
     const cambioReal =
       (prev.stock_apertura || 0) !== apertura ||
       (prev.stock_ingreso || 0) !== ingreso ||
