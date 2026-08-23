@@ -4728,13 +4728,24 @@ function editarRecetaCocina(id) {
       const dl = document.getElementById('recetas-base-datalist');
       if (dl) {
         const vistos = new Set();
-        dl.innerHTML = (uni || []).map(p => {
+        const opciones = [];
+        (uni || []).forEach(p => {
           const n = String(p.nombre || '').trim();
           const k = n.toUpperCase();
-          if (!n || vistos.has(k)) return '';
+          if (!n || vistos.has(k)) return;
           vistos.add(k);
-          return `<option value="${esc(n)}">`;
-        }).join('');
+          opciones.push(`<option value="${esc(n)}">`);
+        });
+        // Sugerir también TODAS las RECETAS BASE (para usarlas como ingrediente dentro de
+        // ENTRADAS/FONDOS/POSTRES/PLATOS, además de los items de stock ya sugeridos).
+        (recetas || []).filter(x => String(x.categoria || '') === 'RECETAS BASE').forEach(x => {
+          const n = String(x.nombre || '').trim();
+          const k = n.toUpperCase();
+          if (!n || vistos.has(k)) return;
+          vistos.add(k);
+          opciones.push(`<option value="${esc(n)}">`);
+        });
+        dl.innerHTML = opciones.join('');
       }
       const cats = ['RECETAS BASE', 'ENTRADAS', 'FONDOS', 'POSTRES', 'PLATOS'];
       document.getElementById('modal-body').innerHTML = `
