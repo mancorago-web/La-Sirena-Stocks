@@ -219,6 +219,7 @@
           <label>Desde: <input type="date" id="reporte-fecha-ini" onchange="cargarReporteDiferencias()"></label>
           <label>Hasta: <input type="date" id="reporte-fecha-fin" onchange="cargarReporteDiferencias()"></label>
           <button onclick="exportarDiferencias()">Exportar</button>
+          <button onclick="enviarFaltantesWhatsApp()" style="background:#25d366;color:#fff;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;font-weight:700;">📲 WhatsApp Faltantes</button>
           <button onclick="exportarVinos()" style="background:#4a148c;color:#fff;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;">Exportar Vinos</button>
           <button class="btn-detalles" onclick="abrirAccionesReportes()" title="Acciones para items con FALTA (ej: convertir a SALIDA A COCINA)">⚡ ACCIONES</button>
           <button class="btn-detalles" onclick="abrirCuarentena()" title="Items en observación/cuarentena">🔒 CUARENTENA</button>

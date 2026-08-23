@@ -3336,6 +3336,34 @@ function cargarReporteDiferencias() {
   });
 }
 
+// Envía por WHATSAPP la lista de PRODUCTOS CON FALTA del rango, agrupada por almacén:
+//   ITEMS FALTANTES (ALMACÉN)
+//   1. ITEM - CANTIDAD.
+//   2. ITEM - CANTIDAD.
+function enviarFaltantesWhatsApp() {
+  const ini = document.getElementById('reporte-fecha-ini')?.value;
+  const fin = document.getElementById('reporte-fecha-fin')?.value;
+  if (!ini || !fin) { alert('Selecciona el rango de fechas del reporte.'); return; }
+  api('GET', '/api/reportes/diferencias?fecha_inicio=' + ini + '&fecha_fin=' + fin).then(data => {
+    const conFalta = (data || []).filter(r => (r.falta_almacen || 0) > 0);
+    if (!conFalta.length) { alert('No hay productos con FALTA en este rango.'); return; }
+    const grupos = {};
+    conFalta.forEach(r => {
+      const nombre = r.almacen_nombre || ('Almacén ' + r.almacen_id);
+      if (!grupos[nombre]) grupos[nombre] = [];
+      grupos[nombre].push({ nombre: r.nombre, falta: r.falta_almacen });
+    });
+    let msg = '';
+    Object.keys(grupos).forEach(nombre => {
+      msg += 'ITEMS FALTANTES (' + nombre + ')\n\n';
+      grupos[nombre].forEach((it, idx) => { msg += (idx + 1) + '. ' + it.nombre + ' - ' + it.falta + '.\n'; });
+      msg += '\n';
+    });
+    const url = 'https://wa.me/?text=' + encodeURIComponent(msg.trim());
+    window.open(url, '_blank');
+  }).catch(() => alert('Error al cargar los faltantes'));
+}
+
 function normalizarBusquedaStock(el) {
   const v = el.value;
   if (v.includes(' — ')) el.value = v.split(' — ')[0].trim();
