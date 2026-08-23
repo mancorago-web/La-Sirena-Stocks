@@ -2845,26 +2845,49 @@ async function ajustarCocinaStock(ajustes) {
 async function ajustarBarraStock(ajustes) {
   const bs = await col('barra_stock').get();
   let maxId = bs.docs.length > 0 ? Math.max(...bs.docs.map(d => Number(d.id) || 0)) : 0;
-  const byName = {};
-  bs.docs.forEach(d => { byName[String(d.data().ingrediente || '').toUpperCase()] = d; });
+  // Índice por (nombre → { grupo → doc })
+  const byNameGrupo = {};
+  bs.docs.forEach(d => {
+    const data = d.data();
+    const k = String(data.ingrediente || '').toUpperCase();
+    if (!byNameGrupo[k]) byNameGrupo[k] = {};
+    byNameGrupo[k][String(data.grupo || '').toUpperCase()] = d;
+  });
   const batch = db.batch();
   const now = new Date().toISOString();
   for (const aj of ajustes) {
     const key = String(aj.nombre || '').toUpperCase();
     if (!key || !aj.delta) continue;
-    const existente = byName[key];
-    if (existente) {
-      const nueva = Math.max(0, (parseFloat(existente.data().cantidad) || 0) + aj.delta);
-      if (nueva === 0 && aj.delta < 0) {
-        batch.delete(existente.ref);
-      } else {
-        batch.update(existente.ref, { cantidad: nueva, updated_at: now });
+    const grupo = aj.grupo ? String(aj.grupo).toUpperCase() : null;
+    if (grupo) {
+      // Grupo específico: buscar el item SOLO en ese grupo, o crearlo ahí (aunque exista en otro mueble).
+      // Así el → BARRA siempre deja el item en el mueble pedido (ej. MUEBLE DE ABAJO).
+      const existente = (byNameGrupo[key] || {})[grupo];
+      if (existente) {
+        const nueva = Math.max(0, (parseFloat(existente.data().cantidad) || 0) + aj.delta);
+        if (nueva === 0 && aj.delta < 0) batch.delete(existente.ref);
+        else batch.update(existente.ref, { cantidad: nueva, updated_at: now });
+      } else if (aj.delta > 0) {
+        maxId++;
+        const ref = col('barra_stock').doc(String(maxId));
+        batch.set(ref, { id: maxId, ingrediente: aj.nombre, cantidad: aj.delta, unidad: aj.unidad || 'unidad', grupo: aj.grupo, created_at: now, updated_at: now });
+        if (!byNameGrupo[key]) byNameGrupo[key] = {};
+        byNameGrupo[key][grupo] = { ref, data: { cantidad: aj.delta, grupo: aj.grupo } };
       }
-    } else if (aj.delta > 0) {
-      maxId++;
-      const ref = col('barra_stock').doc(String(maxId));
-      batch.set(ref, { id: maxId, ingrediente: aj.nombre, cantidad: aj.delta, unidad: aj.unidad || 'unidad', grupo: aj.grupo || 'MUEBLE DE APOYO', created_at: now, updated_at: now });
-      byName[key] = { ref, data: { cantidad: aj.delta } };
+    } else {
+      // Comportamiento por defecto: buscar por nombre (cualquier mueble), o crear en MUEBLE DE APOYO.
+      const existente = byNameGrupo[key] ? Object.values(byNameGrupo[key])[0] : null;
+      if (existente) {
+        const nueva = Math.max(0, (parseFloat(existente.data().cantidad) || 0) + aj.delta);
+        if (nueva === 0 && aj.delta < 0) batch.delete(existente.ref);
+        else batch.update(existente.ref, { cantidad: nueva, updated_at: now });
+      } else if (aj.delta > 0) {
+        maxId++;
+        const ref = col('barra_stock').doc(String(maxId));
+        batch.set(ref, { id: maxId, ingrediente: aj.nombre, cantidad: aj.delta, unidad: aj.unidad || 'unidad', grupo: 'MUEBLE DE APOYO', created_at: now, updated_at: now });
+        if (!byNameGrupo[key]) byNameGrupo[key] = {};
+        byNameGrupo[key]['MUEBLE DE APOYO'] = { ref, data: { cantidad: aj.delta, grupo: 'MUEBLE DE APOYO' } };
+      }
     }
   }
   await batch.commit();
