@@ -3023,6 +3023,13 @@ function abrirAccionesReportes() {
   }).catch(() => alert('Error al cargar los faltantes'));
 }
 
+// Re-renderiza el modal de ACCIONES SIN cerrarlo (para poder seguir haciendo acciones),
+// y actualiza el reporte de diferencias que está detrás.
+function refrescarAcciones() {
+  cargarReporteDiferencias();
+  if (typeof abrirAccionesReportes === 'function') abrirAccionesReportes();
+}
+
 function darDeBajaFalta(btn) {
   const tr = btn.closest('tr');
   const item_id = parseInt(tr.dataset.accionItem);
@@ -3035,8 +3042,7 @@ function darDeBajaFalta(btn) {
     fecha, item_id, almacen_id, cantidad, saved_by: currentUserName
   }).then(() => {
     showToast('Registrado en STOCK/BAJAS');
-    cerrarModal();
-    cargarReporteDiferencias();
+    refrescarAcciones();
   }).catch(() => { btn.disabled = false; btn.textContent = 'BAJA'; alert('Error al dar de baja'); });
 }
 
@@ -3052,8 +3058,7 @@ function observarFalta(btn) {
     fecha, item_id, almacen_id, cantidad, saved_by: currentUserName
   }).then(() => {
     showToast('Item en OBSERVACIÓN');
-    cerrarModal();
-    cargarReporteDiferencias();
+    refrescarAcciones();
   }).catch(() => { btn.disabled = false; btn.textContent = 'OBSERVAR'; alert('Error al marcar en observación'); });
 }
 
@@ -3106,8 +3111,7 @@ function confirmarIntercambio() {
     fecha: ctx.fecha, almacen_id: ctx.almacen_id, item_falta: ctx.item_falta, item_ingreso, cantidad, saved_by: currentUserName
   }).then(() => {
     showToast('Intercambio corregido');
-    cerrarModal();
-    cargarReporteDiferencias();
+    refrescarAcciones();
   }).catch(() => alert('Error al corregir intercambio'));
 }
 
@@ -3125,8 +3129,7 @@ function convertirFaltaACocina(btn) {
     fecha_falta, fecha_salida, item_id, almacen_id, cantidad, saved_by: currentUserName
   }).then(() => {
     showToast('Convertido a SALIDA A COCINA');
-    cerrarModal();
-    cargarReporteDiferencias();
+    refrescarAcciones();
   }).catch(() => {
     btn.disabled = false; btn.textContent = '→ COCINA';
     alert('Error al convertir');
@@ -3148,8 +3151,7 @@ function convertirFaltaABarra(btn) {
     fecha_falta, fecha_salida, item_id, almacen_id, cantidad, saved_by: currentUserName
   }).then(() => {
     showToast('Convertido a SALIDA A BARRA/STOCK');
-    cerrarModal();
-    cargarReporteDiferencias();
+    refrescarAcciones();
   }).catch(() => {
     btn.disabled = false; btn.textContent = '→ BARRA';
     alert('Error al convertir');
