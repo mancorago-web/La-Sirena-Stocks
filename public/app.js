@@ -3964,15 +3964,14 @@ function cambiarSubTab(nombre, prefix) {
   const tabId = prefix === 'ventas' ? 'tab-ventas-central' : 'tab-' + prefix;
   document.querySelectorAll('#' + tabId + ' .sub-tab-content').forEach(tc => tc.classList.remove('active'));
   document.getElementById('sub-' + prefix + '-' + nombre).classList.add('active');
-  // Lazy load barra movement tabs
+  // Lazy load barra movement tabs: se recargan SIEMPRE al entrar (los movimientos cambian:
+  // ingresos/ventas/bajas registrados por otros o en otro momento deben verse al volver).
   if (prefix === 'barra' && ['ingresos','ventas','bajas'].includes(nombre)) {
-    const key = 'barra_' + nombre;
-    if (!_loaded[key]) { _loaded[key] = true; cargarBarraMovimientos(nombre); }
+    cargarBarraMovimientos(nombre);
   }
-  // Lazy load cocina movement tabs
+  // Lazy load cocina movement tabs (mismo criterio: siempre frescos)
   if (prefix === 'cocina' && ['ingresos','salidas','ventas'].includes(nombre)) {
-    const key = 'cocina_' + nombre;
-    if (!_loaded[key]) { _loaded[key] = true; cargarCocinaMovimientos(nombre); }
+    cargarCocinaMovimientos(nombre);
   }
   // Lazy load cocina porcionamiento
   if (prefix === 'cocina' && nombre === 'porcionamiento') {
