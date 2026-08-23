@@ -431,7 +431,7 @@ app.get('/api/resumen/items', async (req, res) => {
 });
 
 // --- GUARDAR DÍA ---
-async function guardarDiaInterno(fecha, registros, savedBy) {
+async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
   if (!fecha || !registros) throw new Error('fecha y registros requeridos');
 
   // Referencia blindada: si este día tiene un conteo físico protegido (apertura_ref_<fecha> en config),
@@ -612,7 +612,7 @@ async function guardarDiaInterno(fecha, registros, savedBy) {
     const barraNet = nuevoBar - montoDest(prev, 'barra');
     if (barraNet !== 0) {
       const nBar = invDocMap[Number(r.almacen_id) + '_' + Number(r.item_id)];
-      if (nBar && nBar.nombre) barraStockAjustes.push({ nombre: nBar.nombre, delta: barraNet, unidad: 'unidad' });
+      if (nBar && nBar.nombre) barraStockAjustes.push({ nombre: nBar.nombre, delta: barraNet, unidad: 'unidad', grupo: opts && opts.barraGrupoNuevo });
     }
 
     // Solo se propagan los items cuyos valores CAMBIARON realmente (comparando con lo ya guardado).
@@ -2863,7 +2863,7 @@ async function ajustarBarraStock(ajustes) {
     } else if (aj.delta > 0) {
       maxId++;
       const ref = col('barra_stock').doc(String(maxId));
-      batch.set(ref, { id: maxId, ingrediente: aj.nombre, cantidad: aj.delta, unidad: aj.unidad || 'unidad', grupo: 'MUEBLE DE APOYO', created_at: now, updated_at: now });
+      batch.set(ref, { id: maxId, ingrediente: aj.nombre, cantidad: aj.delta, unidad: aj.unidad || 'unidad', grupo: aj.grupo || 'MUEBLE DE APOYO', created_at: now, updated_at: now });
       byName[key] = { ref, data: { cantidad: aj.delta } };
     }
   }
@@ -4014,6 +4014,66 @@ app.post('/api/reportes/accion/salida-cocina', async (req, res) => {
     };
     if (stockApertura !== null) regSalida.stock_apertura = stockApertura;
     await guardarDiaInterno(fecha_salida, [regSalida], savedBy);
+
+    // 2) Quitar la falta del día donde se detectó
+    await guardarDiaInterno(fecha_falta, [{
+      item_id: item, almacen_id: al,
+      falta_almacen: redondear(curFalta - aMover),
+    }], savedBy);
+
+    res.json({ ok: true, movido: aMover, nueva_falta: redondear(curFalta - aMover) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- ACCION en REPORTES: convertir FALTA en SALIDA A BARRA/STOCK (MUEBLE DE ABAJO) ---
+app.post('/api/reportes/accion/salida-barra', async (req, res) => {
+  try {
+    const { fecha_falta, fecha_salida, item_id, almacen_id, cantidad, saved_by } = req.body;
+    if (!fecha_falta || !fecha_salida || !item_id || !almacen_id || !(Number(cantidad) > 0)) {
+      return res.status(400).json({ error: 'fecha_falta, fecha_salida, item_id, almacen_id y cantidad son requeridos' });
+    }
+    const savedBy = saved_by || (req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown');
+    const al = Number(almacen_id);
+    const item = Number(item_id);
+    const redondear = n => Math.round(n * 100) / 100;
+
+    const diaSalidaId = docId('invdiario', fecha_salida, al, item);
+    const diaFaltaId = docId('invdiario', fecha_falta, al, item);
+    const [diaSalidaSnap, diaFaltaSnap] = await Promise.all([
+      col('inventario_diario').doc(diaSalidaId).get(),
+      col('inventario_diario').doc(diaFaltaId).get(),
+    ]);
+    const curSalida = diaSalidaSnap.exists ? (diaSalidaSnap.data().salida_almacen || 0) : 0;
+    const curFalta = diaFaltaSnap.exists ? (diaFaltaSnap.data().falta_almacen || 0) : 0;
+    const aMover = redondear(Math.min(Number(cantidad), curFalta));
+    if (aMover <= 0) return res.status(400).json({ error: 'El item no tiene falta en la fecha indicada' });
+
+    // Apertura para el día real de salida si aún no tiene registro diario
+    let stockApertura = null;
+    if (!diaSalidaSnap.exists) {
+      let prevF = prevWorkingDay(fecha_salida);
+      for (let i = 0; i < 8; i++) {
+        const p = await col('inventario_diario').doc(docId('invdiario', prevF, al, item)).get();
+        if (p.exists) { stockApertura = p.data().stock_cierre ?? 0; break; }
+        prevF = prevWorkingDay(prevF);
+      }
+      if (stockApertura === null) {
+        const invSnap = await col('inventario').get();
+        const inv = invSnap.docs.find(d => Number(d.data().item_id) === item && Number(d.data().almacen_id) === al);
+        stockApertura = inv ? (inv.data().stock_apertura || 0) : 0;
+      }
+    }
+
+    // 1) Registrar la salida a BARRA en el día real (los items nuevos van a MUEBLE DE ABAJO)
+    const regSalida = {
+      item_id: item, almacen_id: al,
+      salida_almacen: redondear(curSalida + aMover),
+      destino_salida: 'barra',
+    };
+    if (stockApertura !== null) regSalida.stock_apertura = stockApertura;
+    await guardarDiaInterno(fecha_salida, [regSalida], savedBy, { barraGrupoNuevo: 'MUEBLE DE ABAJO' });
 
     // 2) Quitar la falta del día donde se detectó
     await guardarDiaInterno(fecha_falta, [{

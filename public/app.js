@@ -2999,8 +2999,8 @@ function abrirAccionesReportes() {
       return;
     }
     let html = '<h3>ACCIONES — Items con FALTA</h3>';
-    html += '<p style="font-size:0.8rem;color:#888;margin-bottom:0.6rem;">Elige la acción para cada faltante: <strong>→ COCINA</strong> (salida a cocina el día real), <strong>BAJA</strong> (registra en STOCK/BAJAS), <strong>OBSERVAR</strong> (cuarentena) o <strong>INTERCAMBIO</strong> (los meseros registraron un producto por otro: corrige la falta, el ingreso y las ventas).</p>';
-    html += '<div class="table-wrap"><table><thead><tr><th>Fecha Falta</th><th>Item</th><th>Almacén</th><th>Falta</th><th>Fecha Real Salida</th><th>→ COCINA</th><th>BAJA</th><th>OBSERVAR</th><th>INTERCAMBIO</th></tr></thead><tbody>';
+    html += '<p style="font-size:0.8rem;color:#888;margin-bottom:0.6rem;">Elige la acción para cada faltante: <strong>→ COCINA</strong> (salida a COCINA/STOCK), <strong>→ BARRA</strong> (salida a BARRA/STOCK, mueble ABAJO), <strong>BAJA</strong> (registra en STOCK/BAJAS), <strong>OBSERVAR</strong> (cuarentena) o <strong>INTERCAMBIO</strong> (los meseros registraron un producto por otro: corrige la falta, el ingreso y las ventas).</p>';
+    html += '<div class="table-wrap"><table><thead><tr><th>Fecha Falta</th><th>Item</th><th>Almacén</th><th>Falta</th><th>Fecha Real Salida</th><th>→ COCINA</th><th>→ BARRA</th><th>BAJA</th><th>OBSERVAR</th><th>INTERCAMBIO</th></tr></thead><tbody>';
     faltantes.forEach(f => {
       html += `<tr data-accion-item="${f.item_id}" data-accion-al="${f.almacen_id}" data-accion-falta="${f.falta}" data-accion-fecha="${f.fecha}">
         <td>${f.fecha}</td>
@@ -3009,6 +3009,7 @@ function abrirAccionesReportes() {
         <td style="color:red;font-weight:700;">${f.falta}</td>
         <td><input type="date" class="input-fecha-salida" value="${prevWorkingDayStr(f.fecha)}"></td>
         <td><button class="btn-detalles" onclick="convertirFaltaACocina(this)" style="background:#2e7d32;color:#fff;">→ COCINA</button></td>
+        <td><button class="btn-detalles" onclick="convertirFaltaABarra(this)" style="background:#00695c;color:#fff;">→ BARRA</button></td>
         <td><button class="btn-detalles" onclick="darDeBajaFalta(this)" style="background:#b71c1c;color:#fff;">BAJA</button></td>
         <td><button class="btn-detalles" onclick="observarFalta(this)" style="background:#e65100;color:#fff;">OBSERVAR</button></td>
         <td><button class="btn-detalles" onclick="intercambiarFalta(this)" style="background:#6a1b9a;color:#fff;">INTERCAMBIO</button></td>
@@ -3128,6 +3129,29 @@ function convertirFaltaACocina(btn) {
     cargarReporteDiferencias();
   }).catch(() => {
     btn.disabled = false; btn.textContent = '→ COCINA';
+    alert('Error al convertir');
+  });
+}
+
+// Convierte la falta en una SALIDA A BARRA/STOCK (los items nuevos van al MUEBLE DE ABAJO)
+function convertirFaltaABarra(btn) {
+  const tr = btn.closest('tr');
+  const item_id = parseInt(tr.dataset.accionItem);
+  const almacen_id = parseInt(tr.dataset.accionAl);
+  const cantidad = parseFloat(tr.dataset.accionFalta);
+  const fecha_falta = tr.dataset.accionFecha;
+  const fecha_salida = tr.querySelector('.input-fecha-salida').value;
+  if (!fecha_salida) { alert('Indica la fecha real en que salió el item'); return; }
+  if (!confirm('¿Convertir la falta de ' + cantidad + ' en SALIDA A BARRA/STOCK (mueble ABAJO) el ' + fecha_salida + '?')) return;
+  btn.disabled = true; btn.textContent = 'Procesando...';
+  api('POST', '/api/reportes/accion/salida-barra', {
+    fecha_falta, fecha_salida, item_id, almacen_id, cantidad, saved_by: currentUserName
+  }).then(() => {
+    showToast('Convertido a SALIDA A BARRA/STOCK');
+    cerrarModal();
+    cargarReporteDiferencias();
+  }).catch(() => {
+    btn.disabled = false; btn.textContent = '→ BARRA';
     alert('Error al convertir');
   });
 }
