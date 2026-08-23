@@ -6185,6 +6185,9 @@ function cargarBarraMovimientos(tipo) {
       if (esRango) container.querySelectorAll('.select-origen-ingreso').forEach(sl => sl.setAttribute('disabled', ''));
       const bp = document.getElementById('buscar-barra-' + tipo);
       if (bp && bp.value) buscarEnTabla(bp.value, accId);
+    }).catch(err => {
+      const c = document.getElementById(accId);
+      if (c) c.innerHTML = '<p style="color:#c62828;">Error al cargar los movimientos' + (err && err.message ? ': ' + esc(err.message) : '') + '. Intenta de nuevo.</p>';
     });
   }
 }

@@ -3535,7 +3535,10 @@ app.get('/api/barra/movimientos', authMiddleware, async (req, res) => {
     let snap;
     if (fecha_inicio && fecha_fin) {
       if (fecha_inicio > fecha_fin) [fecha_inicio, fecha_fin] = [fecha_fin, fecha_inicio];
-      snap = await col('barra_movimientos').where('fecha', '>=', fecha_inicio).where('fecha', '<=', fecha_fin).where('tipo', '==', tipo).get();
+      // Evita el query compuesto (fecha rango + tipo) que requería un índice inexistente.
+      // Consulta solo por fecha y filtra tipo en memoria.
+      const r = await col('barra_movimientos').where('fecha', '>=', fecha_inicio).where('fecha', '<=', fecha_fin).get();
+      snap = { docs: r.docs.filter(d => d.data().tipo === tipo) };
     } else if (fecha) {
       snap = await col('barra_movimientos').where('fecha', '==', fecha).where('tipo', '==', tipo).get();
     } else {
