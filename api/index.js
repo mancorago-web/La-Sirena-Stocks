@@ -519,7 +519,11 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
 
   // --- Auto-apertura de botellas para cubrir ventas de COPAS ---
   // Si se venden copas de un item "X - COPA" y el stock de copas no alcanza, se abre
-  // automáticamente una botella del item "X - BOTELLA" del mismo almacén (1 botella = 5 copas).
+  // automáticamente una botella del item "X - BOTELLA" (1 botella = 5 copas). La búsqueda de
+  // la botella prioriza: 1) mismo almacén, 2) otros almacenes REFRIGERADOR, 3) ALMACÉN GENERAL (ABAJO).
+  const almsSnap = await col('almacenes').get();
+  const alNombres = {};
+  almsSnap.docs.forEach(d => { alNombres[Number(d.id)] = d.data().nombre; });
   const COPAS_POR_BOTELLA = 5;
   const ajusteCopa = {};    // al_item -> copas extra (ingreso de la copa)
   const ajusteBotella = {}; // al_item -> botellas abiertas (salida de la botella)
@@ -538,17 +542,30 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
     if (faltante <= 0) continue;
     const base = String(invCopa.nombre).replace(/ - COPA$/i, '');
     const botNombre = base + ' - BOTELLA';
-    const botInv = invSnap.docs.find(d => Number(d.data().almacen_id) === Number(r.almacen_id) && String(d.data().nombre || '').trim().toUpperCase() === botNombre.trim().toUpperCase());
-    if (!botInv) continue;
-    const botKey = Number(r.almacen_id) + '_' + Number(botInv.data().item_id);
-    const botId = docId('invdiario', fecha, Number(r.almacen_id), Number(botInv.data().item_id));
-    const dbot = dayDocs[botId] || {};
-    const dispBot = (dbot.stock_apertura || 0) + (dbot.stock_ingreso || 0) - (dbot.salida_almacen || 0) - (dbot.total_ventas || 0) - (dbot.falta_almacen || 0) - (dbot.stock_baja || 0) - (ajusteBotella[botKey] || 0);
-    const necesarias = Math.ceil(faltante / COPAS_POR_BOTELLA);
-    const aAbrir = Math.min(necesarias, Math.max(0, dispBot));
-    if (aAbrir > 0) {
-      ajusteCopa[copaKey] = (ajusteCopa[copaKey] || 0) + aAbrir * COPAS_POR_BOTELLA;
-      ajusteBotella[botKey] = (ajusteBotella[botKey] || 0) + aAbrir;
+    // Buscar BOTELLAS disponibles con prioridad: mismo almacén → REFRIGERADOR → ALMACÉN GENERAL (ABAJO).
+    const cands = invSnap.docs.filter(d => String(d.data().nombre || '').trim().toUpperCase() === botNombre.trim().toUpperCase());
+    const scoreAl = (alId) => {
+      if (Number(alId) === Number(r.almacen_id)) return 0;
+      const nm = String(alNombres[alId] || '').toUpperCase();
+      if (nm.includes('REFRIGERADOR')) return 1;
+      if (nm === 'ALMACEN GENERAL (ABAJO)') return 2;
+      return 3;
+    };
+    cands.sort((a, b) => scoreAl(Number(a.data().almacen_id)) - scoreAl(Number(b.data().almacen_id)));
+    for (const cand of cands) {
+      const botAl = Number(cand.data().almacen_id);
+      const botItem = Number(cand.data().item_id);
+      const botKey = botAl + '_' + botItem;
+      const botId = docId('invdiario', fecha, botAl, botItem);
+      const dbot = dayDocs[botId] || {};
+      const dispBot = (dbot.stock_apertura || 0) + (dbot.stock_ingreso || 0) - (dbot.salida_almacen || 0) - (dbot.total_ventas || 0) - (dbot.falta_almacen || 0) - (dbot.stock_baja || 0) - (ajusteBotella[botKey] || 0);
+      const necesarias = Math.ceil(faltante / COPAS_POR_BOTELLA);
+      const aAbrir = Math.min(necesarias, Math.max(0, dispBot));
+      if (aAbrir > 0) {
+        ajusteCopa[copaKey] = (ajusteCopa[copaKey] || 0) + aAbrir * COPAS_POR_BOTELLA;
+        ajusteBotella[botKey] = (ajusteBotella[botKey] || 0) + aAbrir;
+        break; // se abrió una botella para cubrir el faltante
+      }
     }
   }
 
@@ -722,14 +739,16 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
     changedKeys.add(destAl + '_' + destItemId);
   }
 
-  // Botellas abiertas que NO vienen en los registros del guardado: escribirlas directamente
+  // Botellas abiertas que NO vienen en los registros del guardado: escribirlas directamente.
+  // Si la botella SÍ viene en los registros, el loop ya la procesó y aquí no se duplica.
+  const regKeys = new Set(registros.map(r => Number(r.almacen_id) + '_' + Number(r.item_id)));
   for (const [botKey, abertura] of Object.entries(ajusteBotella)) {
     if (!abertura || abertura <= 0) continue;
     const us = botKey.indexOf('_');
     const alBot = Number(botKey.slice(0, us));
     const botItem = Number(botKey.slice(us + 1));
+    if (regKeys.has(alBot + '_' + botItem)) continue; // ya lo procesó el loop
     const botId = docId('invdiario', fecha, alBot, botItem);
-    if (existentes[botId]) continue; // ya lo procesó el loop
     const dbot = dayDocs[botId] || {};
     const nuevaSalida = Math.round(((dbot.salida_almacen || 0) + abertura) * 100) / 100;
     const cierreBot = Math.round(((dbot.stock_apertura || 0) + (dbot.stock_ingreso || 0) - nuevaSalida - (dbot.total_ventas || 0) - (dbot.falta_almacen || 0) - (dbot.stock_baja || 0)) * 100) / 100;
