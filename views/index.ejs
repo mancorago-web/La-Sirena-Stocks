@@ -507,6 +507,16 @@
           </select>
           <button class="btn-detalles" id="btn-agregar-compra" onclick="agregarCompra()">➕ AGREGAR</button>
         </div>
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem;">
+          <select id="nueva-compra-documento" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-weight:600;color:#1a237e;">
+            <option value="">Documento...</option>
+            <option value="FACTURA">FACTURA</option>
+            <option value="BOLETA">BOLETA</option>
+            <option value="NOTA DE VENTA">NOTA DE VENTA</option>
+          </select>
+          <input type="text" id="nueva-compra-proveedor" placeholder="Proveedor (ej. COCA COLA)..." list="sugerencia-proveedores" autocomplete="off" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:180px;">
+          <datalist id="sugerencia-proveedores"></datalist>
+        </div>
         <div id="compras-almacenes" style="display:none;margin-top:0.75rem;padding:0.75rem;background:#e8f0fe;border-radius:8px;">
           <strong style="font-size:0.85rem;color:#1a237e;">Elige los almacenes donde ingresa esta compra (STOCKS):</strong>
           <div id="compras-almacenes-lista" style="display:flex;flex-wrap:wrap;gap:0.6rem 1rem;margin-top:0.4rem;"></div>

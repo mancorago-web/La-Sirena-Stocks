@@ -6559,11 +6559,25 @@ function cargarComprasDetalle(ini, fin) {
       const t = r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
       const precioUni = parseFloat(r.precio) || 0;
       const precioTot = parseFloat(r.precio_total) || (precioUni * (r.cantidad || 0));
-      return `<tr><td>${r.fecha || '—'}</td><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${precioUni > 0 ? 'S/ ' + precioUni.toFixed(2) : '—'}</td><td>${precioTot > 0 ? 'S/ ' + precioTot.toFixed(2) : '—'}</td><td>${esc(det)}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td><button class="danger" onclick="confirmarEliminarCompra('${r.id}')">✕</button></td></tr>`;
+      return `<tr><td>${r.fecha || '—'}</td><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${precioUni > 0 ? 'S/ ' + precioUni.toFixed(2) : '—'}</td><td>${precioTot > 0 ? 'S/ ' + precioTot.toFixed(2) : '—'}</td><td>${esc(det)}</td><td>${esc(r.documento || '—')}</td><td>${esc(r.proveedor || '—')}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td><button class="danger" onclick="confirmarEliminarCompra('${r.id}')">✕</button></td></tr>`;
     }).join('');
     const totalCompra = (list || []).reduce((s, r) => s + (parseFloat(r.precio_total) || ((parseFloat(r.precio) || 0) * (r.cantidad || 0))), 0);
+    const provDl = document.getElementById('sugerencia-proveedores');
+    if (provDl) {
+      const seenP = new Set();
+      let htmlP = '';
+      (list || []).forEach(r => {
+        const p = (r.proveedor || '').trim();
+        if (!p) return;
+        const k = p.toUpperCase();
+        if (seenP.has(k)) return;
+        seenP.add(k);
+        htmlP += '<option value="' + p.replace(/"/g, '&quot;') + '"></option>';
+      });
+      provDl.innerHTML = htmlP;
+    }
     c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE COMPRAS/INGRESOS (' + fechaIni + ' a ' + fechaFin + ')</h3>' +
-      '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Item</th><th>Cantidad</th><th>Precio Unidad</th><th>Precio Total</th><th>Destino</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
+      '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Item</th><th>Cantidad</th><th>Precio Unidad</th><th>Precio Total</th><th>Destino</th><th>Documento</th><th>Proveedor</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
       filas + '</tbody></table></div>' +
       (totalCompra > 0 ? '<p style="font-weight:700;color:#0f3460;margin-top:0.5rem;">TOTAL COMPRAS: S/ ' + totalCompra.toFixed(2) + '</p>' : '');
   }).catch(() => { const ai = document.getElementById('fecha-compras-ini')?.value || todayStr(); const af = document.getElementById('fecha-compras-fin')?.value || todayStr(); if (ai === fechaIni && af === fechaFin) c.innerHTML = '<p style="color:#888;">DETALLE DE COMPRAS/INGRESOS</p>'; });
@@ -6865,6 +6879,8 @@ function agregarCompra() {
   let precioUni = uniEl ? (parseFloat(uniEl.value) || 0) : 0;
   let precioTotal = totEl ? (parseFloat(totEl.value) || 0) : 0;
   const destino = document.getElementById('nueva-compra-destino').value;
+  const documento = document.getElementById('nueva-compra-documento')?.value || '';
+  const proveedor = document.getElementById('nueva-compra-proveedor')?.value.trim() || '';
   if (!nombre || isNaN(cantidad) || cantidad <= 0) { alert('Ingresa un item y una cantidad'); return; }
   // Auto-cálculo: si solo hay TOTAL y cantidad, dividir para el precio por unidad
   if (precioTotal > 0 && precioUni === 0) precioUni = Math.round((precioTotal / cantidad) * 100) / 100;
@@ -6887,7 +6903,7 @@ function agregarCompra() {
   if (btn) btn.disabled = true;
   // Esta operación SUMA al valor actual (cur + cantidad), así que ante un timeout NO se
   // reintenta automáticamente (evita duplicar la compra). Solo se advierte con claridad.
-  api('POST', '/api/compras/guardar', { fecha, items: [{ nombre, cantidad, unidad: 'unidad', destino, almacenes, muebles, precio: precioUni, precio_total: precioTotal }] }).then(r => {
+  api('POST', '/api/compras/guardar', { fecha, items: [{ nombre, cantidad, unidad: 'unidad', destino, almacenes, muebles, precio: precioUni, precio_total: precioTotal, documento, proveedor }] }).then(r => {
     window._guardandoCompraAgregar = false;
     if (btn) btn.disabled = false;
     const res = r.resumen || {};
