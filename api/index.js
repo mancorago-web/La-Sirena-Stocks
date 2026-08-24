@@ -3237,6 +3237,15 @@ app.put('/api/cocina/precios/:id', async (req, res) => {
     if (ingrediente !== undefined) upd.ingrediente = String(ingrediente).trim();
     if (unidad !== undefined) upd.unidad = normalizeUnit(unidad);
     await col('cocina_precios').doc(req.params.id).update(upd);
+    // Sincronizar con la BASE DE DATOS UNIFICADA (todas las zonas donde exista este item)
+    const docCocina = await col('cocina_precios').doc(req.params.id).get();
+    const nombreSyncC = String(upd.ingrediente !== undefined ? upd.ingrediente : (docCocina.data()?.ingrediente || ''));
+    if (nombreSyncC) await syncPreciosEnZonas(nombreSyncC, {
+      unidad_compra: req.body.unidad_compra,
+      precio_compra: req.body.precio_compra,
+      unidad_venta: upd.unidad !== undefined ? upd.unidad : undefined,
+      precio_venta: req.body.precio,
+    });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -3298,6 +3307,15 @@ app.put('/api/stock/precios/:id', async (req, res) => {
     if (unidad_venta !== undefined) upd.unidad_venta = String(unidad_venta || 'unidad');
     if (precio_venta !== undefined) upd.precio_venta = parseFloat(precio_venta) || 0;
     await col('stock_precios').doc(req.params.id).update(upd);
+    // Sincronizar con la BASE DE DATOS UNIFICADA (todas las zonas donde exista este item)
+    const docStock = await col('stock_precios').doc(req.params.id).get();
+    const nombreSyncS = String(upd.nombre !== undefined ? upd.nombre : (docStock.data()?.nombre || ''));
+    if (nombreSyncS) await syncPreciosEnZonas(nombreSyncS, {
+      unidad_compra: req.body.unidad,
+      precio_compra: req.body.precio,
+      unidad_venta: req.body.unidad_venta,
+      precio_venta: req.body.precio_venta,
+    });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -3402,6 +3420,15 @@ app.put('/api/basedatos/items/:id', async (req, res) => {
     if (unidad_venta !== undefined) upd.unidad_venta = String(unidad_venta);
     if (precio_venta !== undefined) upd.precio_venta = parseFloat(precio_venta) || 0;
     await col('base_unificada').doc(String(req.params.id)).update(upd);
+    // Sincronizar con todas las zonas donde exista este item
+    const docUnif = await col('base_unificada').doc(String(req.params.id)).get();
+    const nombreSyncU = String(upd.nombre !== undefined ? upd.nombre : (docUnif.data()?.nombre || ''));
+    if (nombreSyncU) await syncPreciosEnZonas(nombreSyncU, {
+      unidad_compra: upd.unidad_compra,
+      precio_compra: upd.precio_compra,
+      unidad_venta: upd.unidad_venta,
+      precio_venta: upd.precio_venta,
+    });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -3442,6 +3469,40 @@ async function renombrarEnTodaLaApp(anterior, nuevo) {
     if (ops) await batch.commit();
   }
   return docs;
+}
+
+// --- BASE DE DATOS UNIFICADA (BASE MAESTRA): sincroniza precios/unidades de un item
+// en TODAS las zonas donde exista (STOCKS, BARRA, COCINA, BASE), para que la UNIFICADA
+// y las bases por zona estén siempre actualizadas entre sí. Solo actualiza los campos
+// provistos (undefined = no tocar). No crea documentos nuevos. ---
+async function syncPreciosEnZonas(nombre, campos) {
+  const key = normNombre(nombre);
+  if (!key) return;
+  const map = {
+    stock_precios: { nombre: 'nombre', unidad_compra: 'unidad', precio_compra: 'precio', unidad_venta: 'unidad_venta', precio_venta: 'precio_venta' },
+    barra_precios: { nombre: 'ingrediente', unidad_compra: 'unidad_compra', precio_compra: 'precio_compra', unidad_venta: 'unidad', precio_venta: 'precio' },
+    cocina_precios: { nombre: 'ingrediente', unidad_compra: 'unidad_compra', precio_compra: 'precio_compra', unidad_venta: 'unidad', precio_venta: 'precio' },
+    base_unificada: { nombre: 'nombre', unidad_compra: 'unidad_compra', precio_compra: 'precio_compra', unidad_venta: 'unidad_venta', precio_venta: 'precio_venta' },
+  };
+  const { unidad_compra, precio_compra, unidad_venta, precio_venta } = campos;
+  let batch = db.batch();
+  let ops = 0;
+  for (const [coll, m] of Object.entries(map)) {
+    const snap = await col(coll).get();
+    for (const d of snap.docs) {
+      const v = String(d.data()[m.nombre] || '');
+      if (normNombre(v) !== key) continue;
+      const upd = { updated_at: new Date().toISOString() };
+      if (unidad_compra !== undefined) upd[m.unidad_compra] = String(unidad_compra);
+      if (precio_compra !== undefined) upd[m.precio_compra] = parseFloat(precio_compra) || 0;
+      if (unidad_venta !== undefined) upd[m.unidad_venta] = String(unidad_venta);
+      if (precio_venta !== undefined) upd[m.precio_venta] = parseFloat(precio_venta) || 0;
+      batch.update(d.ref, upd);
+      ops++;
+      if (ops >= 400) { await batch.commit(); batch = db.batch(); ops = 0; }
+    }
+  }
+  if (ops) await batch.commit();
 }
 
 app.post('/api/basedatos/renombrar', async (req, res) => {
@@ -3499,6 +3560,9 @@ app.post('/api/basedatos/renombrar', async (req, res) => {
       if (cambio) await col('config').doc('ventas_import_match').set({ match, updated_at: now });
     }
 
+    // 4) Sincronizar precios/unidades en TODAS las zonas donde exista el item (BASE MAESTRA)
+    if (nuevo) await syncPreciosEnZonas(nuevo, { unidad_compra, precio_compra, unidad_venta, precio_venta });
+
     res.json({ ok: true, renombrados });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -3546,6 +3610,15 @@ app.put('/api/barra/precios/:id', async (req, res) => {
     updateData.equiv_gr = 0;
   }
   await col('barra_precios').doc(req.params.id).update(updateData);
+  // Sincronizar con la BASE DE DATOS UNIFICADA (todas las zonas donde exista este item)
+  const docBarra = await col('barra_precios').doc(req.params.id).get();
+  const nombreSyncB = String(updateData.ingrediente !== undefined ? updateData.ingrediente : (docBarra.data()?.ingrediente || ''));
+  if (nombreSyncB) await syncPreciosEnZonas(nombreSyncB, {
+    unidad_compra: req.body.unidad_compra,
+    precio_compra: req.body.precio_compra,
+    unidad_venta: updateData.unidad !== undefined ? updateData.unidad : undefined,
+    precio_venta: req.body.precio,
+  });
   res.json({ ok: true });
 });
 
