@@ -1023,6 +1023,7 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       const precio = parseFloat(it.precio) || 0;
       const precioTotal = parseFloat(it.precio_total) || 0;
       const documento = String(it.documento || '').trim().toUpperCase();
+      const numero = String(it.numero || '').trim();
       const proveedor = String(it.proveedor || '').trim();
       const key = nombre.toUpperCase();
       const destino = String(it.destino || 'stocks').toLowerCase();
@@ -1053,14 +1054,14 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
           registrosStocks.push({ almacen_id: match.almacen_id, item_id: match.item_id, stock_ingreso: nuevoTotal });
           almacenes.push(match.almacen_id);
         }
-        if (almacenes.length) resumen.stocks.push({ nombre, cantidad, almacenes, precio, precio_total: precioTotal, documento, proveedor });
+        if (almacenes.length) resumen.stocks.push({ nombre, cantidad, almacenes, precio, precio_total: precioTotal, documento, numero, proveedor });
         else resumen.noEncontrados.push({ nombre, cantidad, destino: 'stocks', msg: 'sin almacenes seleccionados' });
       } else if (destino === 'barra') {
-        movsBarra.push({ ingrediente: nombre, cantidad, unidad: it.unidad || 'unidad', muebles: Array.isArray(it.muebles) ? it.muebles : [], precio, precio_total: precioTotal, documento, proveedor });
-        resumen.barra.push({ nombre, cantidad, unidad: it.unidad || 'unidad', muebles: Array.isArray(it.muebles) ? it.muebles : [], precio, precio_total: precioTotal, documento, proveedor });
+        movsBarra.push({ ingrediente: nombre, cantidad, unidad: it.unidad || 'unidad', muebles: Array.isArray(it.muebles) ? it.muebles : [], precio, precio_total: precioTotal, documento, numero, proveedor });
+        resumen.barra.push({ nombre, cantidad, unidad: it.unidad || 'unidad', muebles: Array.isArray(it.muebles) ? it.muebles : [], precio, precio_total: precioTotal, documento, numero, proveedor });
       } else if (destino === 'cocina') {
-        cocinaCompras.push({ nombre, cantidad, unidad: it.unidad || 'unidad', precio, precio_total: precioTotal, documento, proveedor });
-        resumen.cocina.push({ nombre, cantidad, unidad: it.unidad || 'unidad', precio, precio_total: precioTotal, documento, proveedor });
+        cocinaCompras.push({ nombre, cantidad, unidad: it.unidad || 'unidad', precio, precio_total: precioTotal, documento, numero, proveedor });
+        resumen.cocina.push({ nombre, cantidad, unidad: it.unidad || 'unidad', precio, precio_total: precioTotal, documento, numero, proveedor });
       } else {
         resumen.noEncontrados.push({ nombre, cantidad, destino });
       }
@@ -1209,21 +1210,21 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
         logBatch.set(col('compras').doc(), {
           fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: 'unidad', destino: 'stocks',
           almacenes: r.almacenes || [], precio: r.precio || 0, precio_total: r.precio_total || 0,
-          documento: r.documento || '', proveedor: r.proveedor || '', saved_by: savedBy, created_at: new Date().toISOString()
+          documento: r.documento || '', numero: r.numero || '', proveedor: r.proveedor || '', saved_by: savedBy, created_at: new Date().toISOString()
         });
       });
       resumen.barra.forEach(r => {
         logBatch.set(col('compras').doc(), {
           fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: r.unidad || 'unidad', destino: 'barra',
           muebles: r.muebles || [], precio: r.precio || 0, precio_total: r.precio_total || 0,
-          documento: r.documento || '', proveedor: r.proveedor || '', saved_by: savedBy, created_at: new Date().toISOString()
+          documento: r.documento || '', numero: r.numero || '', proveedor: r.proveedor || '', saved_by: savedBy, created_at: new Date().toISOString()
         });
       });
       resumen.cocina.forEach(r => {
         logBatch.set(col('compras').doc(), {
           fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: r.unidad || 'unidad', destino: 'cocina',
           precio: r.precio || 0, precio_total: r.precio_total || 0,
-          documento: r.documento || '', proveedor: r.proveedor || '', saved_by: savedBy, created_at: new Date().toISOString()
+          documento: r.documento || '', numero: r.numero || '', proveedor: r.proveedor || '', saved_by: savedBy, created_at: new Date().toISOString()
         });
       });
       await logBatch.commit();
@@ -1259,10 +1260,12 @@ app.get('/api/compras/detalle', async (req, res) => {
       if (parseFloat(x.precio) > 0) precioByNombre[k] = parseFloat(x.precio);
       if (parseFloat(x.precio_total) > 0) precioTotalByNombre[k] = parseFloat(x.precio_total);
       const doc = String(x.documento || '').trim();
+      const num = String(x.numero || '').trim();
       const prov = String(x.proveedor || '').trim();
-      if (doc || prov) {
+      if (doc || num || prov) {
         if (!metaByNombre[k]) metaByNombre[k] = {};
         if (doc) metaByNombre[k].documento = doc;
+        if (num) metaByNombre[k].numero = num;
         if (prov) metaByNombre[k].proveedor = prov;
       }
     });
@@ -1293,6 +1296,7 @@ app.get('/api/compras/detalle', async (req, res) => {
         precio: precioByNombre[String(nombre).trim().toUpperCase()] || 0,
         precio_total: precioTotalByNombre[String(nombre).trim().toUpperCase()] || Math.round((precioByNombre[String(nombre).trim().toUpperCase()] || 0) * ing * 100) / 100,
         documento: meta.documento || '',
+        numero: meta.numero || '',
         proveedor: meta.proveedor || '',
         saved_by: a.saved_by || '-',
         created_at: a.updated_at || new Date().toISOString()
