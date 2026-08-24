@@ -1400,7 +1400,7 @@ app.delete('/api/compras/:id', authMiddleware, async (req, res) => {
 });
 
 // --- VENTAS: helpers de stock de barra (descontar / sumar consumo de recetas) ---
-async function descontarStockBarra(consumos) {
+async function descontarStockBarra(consumos, fecha, savedBy) {
   const stockSnap = await col('barra_stock').get();
   const allStock = stockSnap.docs.map(d => ({ ref: d.ref, id: Number(d.id) || 0, data: d.data() }));
   const byNombre = {};
@@ -1412,8 +1412,16 @@ async function descontarStockBarra(consumos) {
   const batch = db.batch();
   let ajustados = 0;
   for (const c of consumos) {
-    const key = String(c.ingrediente || '').trim().toUpperCase();
-    const deltaOz = aOnzas(c.cantidad, c.unidad, c.ingrediente);
+    const nombre = String(c.ingrediente || '').trim();
+    // Items "- COPA": el stock se jala de los STOCKS (almacenes), con conversión BOTELLA->COPA.
+    // (La venta central de recetas de barra también debe descontar copas de STOCKS, no solo barra_stock.)
+    if (/ - COPA$/i.test(nombre)) {
+      const copas = parseFloat(c.cantidad) || 0;
+      if (copas > 0 && fecha) await consumirCopaDesdeStocks(fecha, nombre, copas, savedBy || 'unknown', '');
+      continue;
+    }
+    const key = nombre.toUpperCase();
+    const deltaOz = aOnzas(c.cantidad, c.unidad, nombre);
     if (deltaOz === null || isNaN(deltaOz)) continue;
     let matches = byNombre[key] || [];
     if (!matches.length) matches = matchStockFuzzy(c.ingrediente, allStock);
@@ -1581,7 +1589,7 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         }
       }
       await batch.commit();
-      await descontarStockBarra(consumos);
+      await descontarStockBarra(consumos, fecha, savedBy);
     }
 
     // Aplicar a COCINA
