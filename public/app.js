@@ -3406,6 +3406,63 @@ function renderReporteNegativos(items, fecha) {
   </div>`;
 }
 
+// --- VENTA HELADERAS: convierte FALTANTES en VENTAS cuando coinciden con el CIERRE NEGATIVO ---
+let _ventaHeladerasAcciones = [];
+
+function abrirVentaHeladeras() {
+  const fin = document.getElementById('reporte-fecha-fin')?.value || todayStr();
+  api('GET', '/api/reportes/venta-heladeras?fecha=' + encodeURIComponent(fin)).then(data => {
+    const body = document.getElementById('modal-body');
+    const c = data.coinciden || [];
+    const nc = data.noCoinciden || [];
+    if (!c.length && !nc.length) {
+      body.innerHTML = '<h3>🧊 VENTA HELADERAS</h3><p style="margin-top:0.75rem;color:#666;">No hay items con cierre negativo en la fecha <b>' + fin + '</b>.</p><div style="margin-top:1.5rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
+      document.getElementById('modal').style.display = 'block';
+      return;
+    }
+    _ventaHeladerasAcciones = c;
+    let html = '<h3>🧊 VENTA HELADERAS — ' + fin + '</h3>';
+    html += '<p style="font-size:0.8rem;color:#666;margin:0.4rem 0;">Los <b>FALTANTES</b> que coinciden con el <b>CIERRE NEGATIVO</b> del mismo item se convierten en <b>VENTAS</b> el día del negativo, en el almacén correcto (la venta salió de esas heladeras).</p>';
+    if (c.length) {
+      html += '<div class="table-wrap"><table><thead><tr><th></th><th>Item</th><th>Almacén Negativo</th><th>Día Negativo</th><th>Monto Negativo</th><th>Faltas (almacén: cantidad)</th></tr></thead><tbody>';
+      c.forEach((it, idx) => {
+        const fal = it.faltas.map(f => esc(f.almacen_nombre) + ': ' + f.cantidad).join(', ');
+        html += '<tr><td><input type="checkbox" class="vh-check" data-idx="' + idx + '" checked></td><td>' + esc(it.nombre) + '</td><td>' + esc(it.almacen_negativo_nombre) + '</td><td>' + it.dia_negativo + '</td><td style="color:#c62828;font-weight:700;">' + it.monto_negativo + '</td><td>' + fal + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+    if (nc.length) {
+      html += '<div style="margin-top:1rem;padding:0.75rem;background:#fff3e0;border-radius:8px;"><strong style="color:#e65100;">⚠ No coinciden (no se procesan):</strong>';
+      html += '<ul style="margin:0.4rem 0 0 1.2rem;font-size:0.82rem;">';
+      nc.forEach(it => html += '<li><b>' + esc(it.nombre) + '</b> — negativo: ' + it.monto_negativo + ' · faltas: ' + it.total_faltas + ' (' + esc(it.nota) + ')</li>');
+      html += '</ul></div>';
+    }
+    html += '<div style="margin-top:1rem;display:flex;gap:0.5rem;">'
+      + (c.length ? '<button onclick="aplicarVentaHeladeras()" style="flex:1;padding:0.5rem;background:#c62828;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700;">APLICAR VENTA HELADERAS</button>' : '')
+      + '<button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button>'
+      + '</div>';
+    body.innerHTML = html;
+    document.getElementById('modal').style.display = 'block';
+  }).catch(() => alert('Error al detectar los items'));
+}
+
+function aplicarVentaHeladeras() {
+  const checks = Array.from(document.querySelectorAll('.vh-check:checked')).map(cb => Number(cb.dataset.idx));
+  const acciones = checks.map(i => _ventaHeladerasAcciones[i]).filter(Boolean);
+  if (!acciones.length) { alert('Selecciona al menos un item.'); return; }
+  if (!confirm('¿Aplicar VENTA HELADERAS a ' + acciones.length + ' item(s)? Se convertirán las faltas en ventas y se corregirá la cadena.')) return;
+  const fin = document.getElementById('reporte-fecha-fin')?.value || todayStr();
+  api('POST', '/api/reportes/venta-heladeras/aplicar', { fecha: fin, acciones }).then(() => {
+    cerrarModal();
+    showToast('Venta heladeras aplicada');
+    _invCache = { fecha: null, data: null, pending: null };
+    cargarReporteDiferencias();
+    if (typeof cargarStocks === 'function') cargarStocks();
+    if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fin);
+    actualizarContadoresMenu();
+  }).catch(e => alert('Error al aplicar: ' + (e && e.message ? e.message : 'desconocido')));
+}
+
 // Envía por WHATSAPP la lista de PRODUCTOS CON FALTA del rango, agrupada por almacén:
 //   ITEMS FALTANTES (ALMACÉN)
 //   1. ITEM - CANTIDAD.

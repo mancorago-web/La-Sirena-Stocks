@@ -4122,6 +4122,180 @@ app.get('/api/reportes/negativos', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- VENTA HELADERAS: detectar items con CIERRE NEGATIVO + FALTANTES del mismo item ---
+// Cuando una venta se registró contra un almacén sin stock (CIERRE NEGATIVO) pero físicamente
+// salió de otras heladeras (FALTAS detectadas en el conteo), esta función permite convertir
+// las FALTAS en VENTAS el día del negativo en el almacén correcto. Solo procesa cuando el
+// monto negativo coincide EXACTO con el total de faltas; si no, lo reporta para revisión.
+const cierreDe = d => Math.round(((d.stock_apertura ?? 0) + (d.stock_ingreso ?? 0) - (d.salida_almacen ?? 0) - (d.total_ventas ?? 0) - (d.falta_almacen ?? 0) - (d.stock_baja ?? 0)) * 100) / 100;
+
+app.get('/api/reportes/venta-heladeras', async (req, res) => {
+  try {
+    const fecha = String(req.query.fecha || '').trim();
+    if (!fecha) return res.json({ coinciden: [], noCoinciden: [] });
+    const ini = new Date(fecha + 'T12:00:00');
+    ini.setDate(ini.getDate() - 21);
+    const iniStr = ini.toISOString().split('T')[0];
+    const [almsSnap, allInvSnap, diasSnap] = await Promise.all([
+      col('almacenes').orderBy('orden').get(),
+      col('inventario').get(),
+      col('inventario_diario').where('fecha', '>=', iniStr).where('fecha', '<=', fecha).get(),
+    ]);
+    const alById = {};
+    almsSnap.docs.forEach(d => { alById[Number(d.id)] = d.data().nombre; });
+    const nombreByKey = {};
+    allInvSnap.docs.forEach(d => { const a = d.data(); nombreByKey[a.almacen_id + '_' + a.item_id] = String(a.nombre || ''); });
+    const docs = diasSnap.docs.map(d => d.data()).filter(d => d.stock_apertura !== undefined);
+    const porKey = {};
+    const porNombre = {};
+    docs.forEach(d => {
+      const key = d.almacen_id + '_' + d.item_id;
+      if (!porKey[key]) porKey[key] = [];
+      porKey[key].push(d);
+      const n = nombreByKey[key];
+      if (n) { if (!porNombre[n]) porNombre[n] = new Set(); porNombre[n].add(key); }
+    });
+    Object.values(porKey).forEach(arr => arr.sort((a, b) => String(a.fecha).localeCompare(String(b.fecha))));
+
+    const coinciden = [];
+    const noCoinciden = [];
+    for (const [nombre, keys] of Object.entries(porNombre)) {
+      for (const key of keys) {
+        const [alStr, itStr] = key.split('_');
+        const alId = Number(alStr);
+        const arr = porKey[key];
+        const hoy = arr.find(d => d.fecha === fecha);
+        if (!hoy || cierreDe(hoy) >= 0) continue;
+        const negativos = arr.filter(d => cierreDe(d) < 0);
+        if (!negativos.length) continue;
+        const origen = negativos.find(d => (d.total_ventas || 0) > 0) || negativos[0];
+        const monto = Math.abs(cierreDe(origen));
+        // Faltas del MISMO item en OTROS almacenes (en la fecha actual)
+        const faltas = [];
+        let totalFaltas = 0;
+        for (const k2 of keys) {
+          const [al2Str, it2Str] = k2.split('_');
+          const al2 = Number(al2Str);
+          if (al2 === alId) continue;
+          const hoy2 = porKey[k2].find(d => d.fecha === fecha);
+          const f = hoy2 ? (hoy2.falta_almacen || 0) : 0;
+          if (f > 0) { faltas.push({ almacen_id: al2, item_id: Number(it2Str), almacen_nombre: alById[al2] || ('Almacén ' + al2), cantidad: f }); totalFaltas += f; }
+        }
+        const item = { nombre, almacen_negativo: alId, almacen_negativo_nombre: alById[alId] || ('Almacén ' + alId), item_negativo: Number(itStr), dia_negativo: origen.fecha, monto_negativo: monto, faltas };
+        if (totalFaltas > 0 && Math.abs(monto - totalFaltas) < 0.001) coinciden.push(item);
+        else noCoinciden.push({ ...item, total_faltas: totalFaltas, nota: totalFaltas === 0 ? 'Sin faltas de este item en otros almacenes' : ('Monto negativo (' + monto + ') no coincide con faltas (' + totalFaltas + ')') });
+      }
+    }
+    res.json({ coinciden, noCoinciden });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+async function aperturaPara(dia, alB, itemId) {
+  const d = new Date(dia + 'T12:00:00');
+  for (let i = 0; i < 10; i++) {
+    d.setDate(d.getDate() - 1);
+    const prevStr = d.toISOString().split('T')[0];
+    const s = await col('inventario_diario').doc(docId('invdiario', prevStr, alB, itemId)).get();
+    if (s.exists) return (s.data().stock_cierre ?? 0);
+  }
+  const inv = await col('inventario').doc(docId('inventario', itemId, alB)).get();
+  return inv.exists ? (inv.data().stock_apertura || 0) : 0;
+}
+
+async function rebuildCadenaDesde(affectedKeys, desdeFecha) {
+  const dias = await col('inventario_diario').where('fecha', '>=', desdeFecha).get();
+  const docs = dias.docs.map(d => ({ ref: d.ref, ...d.data() }));
+  const porKey = {};
+  docs.forEach(d => {
+    const key = d.almacen_id + '_' + d.item_id;
+    if (!affectedKeys.has(String(key))) return;
+    if (!porKey[key]) porKey[key] = [];
+    porKey[key].push(d);
+  });
+  Object.values(porKey).forEach(arr => arr.sort((a, b) => String(a.fecha).localeCompare(String(b.fecha))));
+  let batch = db.batch();
+  let ops = 0;
+  for (const arr of Object.values(porKey)) {
+    let prevCierre = null;
+    for (const d of arr) {
+      const manual = d.apertura_manual === true;
+      let nuevaAp;
+      if (manual || prevCierre === null) nuevaAp = Number(d.stock_apertura) || 0;
+      else nuevaAp = prevCierre;
+      const cierre = Math.round((nuevaAp + (d.stock_ingreso || 0) - (d.salida_almacen || 0) - (d.total_ventas || 0) - (d.falta_almacen || 0) - (d.stock_baja || 0)) * 100) / 100;
+      if (Math.abs(nuevaAp - (Number(d.stock_apertura) || 0)) > 0.001 || Math.abs(cierre - (Number(d.stock_cierre) || 0)) > 0.001) {
+        batch.update(d.ref, { stock_apertura: nuevaAp, stock_cierre: cierre, updated_at: new Date().toISOString() });
+        ops++;
+        if (ops >= 400) { await batch.commit(); batch = db.batch(); ops = 0; }
+      }
+      prevCierre = cierre;
+    }
+  }
+  if (ops) await batch.commit();
+}
+
+app.post('/api/reportes/venta-heladeras/aplicar', async (req, res) => {
+  try {
+    const { fecha, acciones } = req.body;
+    if (!fecha || !Array.isArray(acciones) || !acciones.length) return res.status(400).json({ error: 'fecha y acciones requeridos' });
+    const now = new Date().toISOString();
+    const batch = db.batch();
+    const affectedKeys = new Set();
+
+    for (const acc of acciones) {
+      const total = (acc.faltas || []).reduce((s, f) => s + (Number(f.cantidad) || 0), 0);
+      if (total <= 0) continue;
+      const negAl = Number(acc.almacen_negativo);
+      const itemNeg = Number(acc.item_negativo);
+      const dia = String(acc.dia_negativo || '');
+      if (!itemNeg || !dia) continue;
+      affectedKeys.add(negAl + '_' + itemNeg);
+      // 1) Reducir las ventas del almacén negativo el día origen (las que salieron de las heladeras)
+      const negDoc = await col('inventario_diario').doc(docId('invdiario', dia, negAl, itemNeg)).get();
+      if (negDoc.exists) {
+        const nd = negDoc.data();
+        const ven = Math.max(0, (nd.total_ventas || 0) - total);
+        batch.update(negDoc.ref, {
+          total_ventas: ven,
+          stock_cierre: cierreDe({ ...nd, total_ventas: ven }),
+          updated_at: now
+        });
+      }
+      // 2) Convertir cada FALTA en VENTA el día origen en el almacén correcto + quitar la falta de hoy
+      for (const f of (acc.faltas || [])) {
+        const alB = Number(f.almacen_id);
+        const itemB = Number(f.item_id);
+        const cant = Number(f.cantidad) || 0;
+        if (cant <= 0 || !itemB) continue;
+        affectedKeys.add(alB + '_' + itemB);
+        const bDocId = docId('invdiario', dia, alB, itemB);
+        const bDoc = await col('inventario_diario').doc(bDocId).get();
+        if (bDoc.exists) {
+          const bd = bDoc.data();
+          const ven = (bd.total_ventas || 0) + cant;
+          batch.update(bDoc.ref, { total_ventas: ven, stock_cierre: cierreDe({ ...bd, total_ventas: ven }), updated_at: now });
+        } else {
+          const ap = await aperturaPara(dia, alB, itemB);
+          batch.set(col('inventario_diario').doc(bDocId), {
+            fecha: dia, item_id: itemB, almacen_id: alB, stock_apertura: ap,
+            stock_ingreso: 0, salida_almacen: 0, total_ventas: cant, falta_almacen: 0,
+            stock_baja: 0, stock_cierre: Math.round((ap - cant) * 100) / 100, updated_at: now
+          });
+        }
+        const hoyDoc = await col('inventario_diario').doc(docId('invdiario', fecha, alB, itemB)).get();
+        if (hoyDoc.exists && (hoyDoc.data().falta_almacen || 0) > 0) {
+          const hd = hoyDoc.data();
+          batch.update(hoyDoc.ref, { falta_almacen: 0, stock_cierre: cierreDe({ ...hd, falta_almacen: 0 }), updated_at: now });
+        }
+      }
+    }
+    await batch.commit();
+    // 3) Re-propagar la cadena desde el día origen para los items afectados
+    await rebuildCadenaDesde(affectedKeys, acciones.reduce((min, a) => (!min || String(a.dia_negativo) < min ? String(a.dia_negativo) : min), null));
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- ACCIONES en REPORTES: items con FALTA por día (para poder convertirlos) ---
 app.get('/api/reportes/faltantes', async (req, res) => {
   try {
