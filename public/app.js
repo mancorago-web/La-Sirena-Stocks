@@ -3810,7 +3810,8 @@ function renderReceta(r) {
   const costoTotal = r.costoTotal || 0;
   const esBase = r.categoria === 'RECETAS BASE';
   const pv = parseFloat(r.precio_venta) || 0;
-  const margen = pv > 0 ? (((pv - costoTotal) / pv) * 100) : null;
+  const costoConPerdida = costoTotal * 1.10;
+  const ganancia = pv > 0 ? (pv - costoConPerdida) : null;
   return `<div class="accordion-item" data-receta-id="${r.id}"${esBase ? ' style="background:#e3f2fd;"' : ''}>
     <div class="accordion-header" onclick="toggleAcordeon(this)">
       <span class="accordion-title">${r.nombre}${costoTotal > 0 ? ` <span style="font-weight:400;font-size:0.85rem;color:#555">— COSTO: S/${costoTotal.toFixed(2)}</span>` : ''}</span>
@@ -3854,8 +3855,8 @@ function renderReceta(r) {
             <td></td>
           </tr>
           <tr style="font-weight:700;background:#e8f5e9;color:#2e7d32;">
-            <td colspan="4">MARGEN GANANCIA</td>
-            <td id="margen-${r.id}">${margen !== null ? margen.toFixed(1) + '%' : '—'}</td>
+            <td colspan="4">GANANCIA APROX.</td>
+            <td id="margen-${r.id}">${ganancia !== null ? 'S/' + ganancia.toFixed(2) : '—'}</td>
             <td></td>
           </tr>` : ''}
         </tbody>
@@ -3870,9 +3871,9 @@ function actualizarMargenVivo(id, costoTotal) {
   if (!el || !cell) return;
   const pv = parseFloat(el.value) || 0;
   if (pv > 0) {
-    const margen = ((pv - costoTotal) / pv) * 100;
-    cell.innerHTML = margen.toFixed(1) + '%';
-    cell.style.color = margen < 0 ? '#c62828' : '#2e7d32';
+    const ganancia = pv - costoTotal * 1.10;
+    cell.innerHTML = 'S/' + ganancia.toFixed(2);
+    cell.style.color = ganancia < 0 ? '#c62828' : '#2e7d32';
   } else {
     cell.innerHTML = '—';
     cell.style.color = '#2e7d32';
