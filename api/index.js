@@ -2285,11 +2285,12 @@ app.post('/api/recetas', async (req, res) => {
 });
 
 app.put('/api/recetas/:id', async (req, res) => {
-  const { nombre, categoria } = req.body;
-  await col('recetas').doc(req.params.id).update({
-    nombre, categoria: categoria || 'Clásicos',
-    updated_at: new Date().toISOString()
-  });
+  const { nombre, categoria, precio_venta } = req.body;
+  const upd = { updated_at: new Date().toISOString() };
+  if (nombre !== undefined) upd.nombre = nombre;
+  if (categoria !== undefined) upd.categoria = categoria || 'Clásicos';
+  if (precio_venta !== undefined) upd.precio_venta = parseFloat(precio_venta) || 0;
+  await col('recetas').doc(req.params.id).update(upd);
   res.json({ ok: true });
 });
 
@@ -2330,11 +2331,11 @@ app.delete('/api/receta-ingredientes/:id', async (req, res) => {
 });
 
 app.put('/api/recetas/:id/with-ingredientes', async (req, res) => {
-  const { nombre, categoria, ingredientes } = req.body;
+  const { nombre, categoria, ingredientes, precio_venta } = req.body;
   const id = req.params.id;
-  await col('recetas').doc(id).update({
-    nombre, categoria: categoria || 'Clásicos', updated_at: new Date().toISOString()
-  });
+  const upd = { nombre, categoria: categoria || 'Clásicos', updated_at: new Date().toISOString() };
+  if (precio_venta !== undefined) upd.precio_venta = parseFloat(precio_venta) || 0;
+  await col('recetas').doc(id).update(upd);
   const oldSnap = await col('receta_ingredientes').where('receta_id', '==', Number(id)).get();
   const batch = db.batch();
   oldSnap.docs.forEach(d => batch.delete(d.ref));

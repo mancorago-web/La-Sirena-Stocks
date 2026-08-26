@@ -3809,6 +3809,8 @@ window.addEventListener('click', e => { if (e.target === document.getElementById
 function renderReceta(r) {
   const costoTotal = r.costoTotal || 0;
   const esBase = r.categoria === 'RECETAS BASE';
+  const pv = parseFloat(r.precio_venta) || 0;
+  const margen = pv > 0 ? (((pv - costoTotal) / pv) * 100) : null;
   return `<div class="accordion-item" data-receta-id="${r.id}"${esBase ? ' style="background:#e3f2fd;"' : ''}>
     <div class="accordion-header" onclick="toggleAcordeon(this)">
       <span class="accordion-title">${r.nombre}${costoTotal > 0 ? ` <span style="font-weight:400;font-size:0.85rem;color:#555">— COSTO: S/${costoTotal.toFixed(2)}</span>` : ''}</span>
@@ -3845,11 +3847,46 @@ function renderReceta(r) {
             <td colspan="4">COSTO + 10% PÉRDIDA</td>
             <td>S/${(costoTotal * 1.10).toFixed(2)}</td>
             <td></td>
+          </tr>
+          <tr style="font-weight:700;background:#e8f5e9;">
+            <td colspan="4">PRECIO DE VENTA (S/)</td>
+            <td><input id="pv-${r.id}" type="number" step="0.01" min="0" value="${pv ? pv : ''}" style="width:90px;padding:0.25rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarMargenVivo(${r.id}, ${costoTotal})" onchange="guardarPrecioVenta(${r.id})"></td>
+            <td></td>
+          </tr>
+          <tr style="font-weight:700;background:#e8f5e9;color:#2e7d32;">
+            <td colspan="4">MARGEN GANANCIA</td>
+            <td id="margen-${r.id}">${margen !== null ? margen.toFixed(1) + '%' : '—'}</td>
+            <td></td>
           </tr>` : ''}
         </tbody>
       </table>
     </div>
   </div>`;
+}
+
+function actualizarMargenVivo(id, costoTotal) {
+  const el = document.getElementById('pv-' + id);
+  const cell = document.getElementById('margen-' + id);
+  if (!el || !cell) return;
+  const pv = parseFloat(el.value) || 0;
+  if (pv > 0) {
+    const margen = ((pv - costoTotal) / pv) * 100;
+    cell.innerHTML = margen.toFixed(1) + '%';
+    cell.style.color = margen < 0 ? '#c62828' : '#2e7d32';
+  } else {
+    cell.innerHTML = '—';
+    cell.style.color = '#2e7d32';
+  }
+}
+
+function guardarPrecioVenta(id) {
+  const el = document.getElementById('pv-' + id);
+  if (!el) return;
+  const precio = parseFloat(el.value) || 0;
+  api('PUT', '/api/recetas/' + id, { precio_venta: precio }).then(() => {
+    showToast('Precio de venta guardado');
+    cargarRecetas(id);
+  }).catch(() => alert('Error al guardar'));
 }
 
 function cargarRecetas(openId) {
