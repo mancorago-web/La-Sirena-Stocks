@@ -2825,7 +2825,7 @@ function verReporteStocksBajos() {
 
 function enviarAvisoStockWhatsApp() {
   if (!_stocksBajosData || !_stocksBajosData.lista.length) return;
-  const lines = ['AVISO DE STOCK BAJO - ' + _stocksBajosData.fecha, ''];
+  const lines = ['STOCKS BAJOS - ' + _stocksBajosData.fecha, ''];
   _stocksBajosData.lista.forEach((i, idx) => {
     lines.push((idx + 1) + '. ' + i.nombre + ' - ' + i.total);
   });
