@@ -2777,20 +2777,40 @@ function verReporteStocksBajos() {
       const totalBajo = g.min > 0 && g.total < g.min;
       if (algunAlmacenBajo || totalBajo) bajos.push(g);
     });
-    bajos.sort((x, y) => x.total - y.total);
+    // Prioridad de grupos: CERVEZAS → AGUAS → LÁCTEOS → COCINA → SERVICIO → resto
+    const gruposPrioridad = [
+      { label: 'CERVEZAS', re: /CUSQUEÑA|PILSEN|CORONA|BUDWEISER|CRISTAL|BRAHMA|CUZQUEÑA|CERVEZA|HEINEKEN/i },
+      { label: 'AGUAS', re: /^AGUA\b|AGUA CON GAS|AGUA MINERAL|SAN LUIS|SAN MATEO|SAN CARLOS|CIELO|EVERVESS|GASEOSA|COCA COLA|INCA KOLA|SPRITE|FANTA|TONIC|BRITVIC/i },
+      { label: 'LÁCTEOS', re: /LECHE|GLORIA|YOGURT|YOGHURT|QUESO|MANTEQUILLA|CREMA DE LECHE/i },
+      { label: 'COCINA', re: /AZUCAR|SAL |ARROZ|ACEITE|HARINA|AJI|LIMON|CEBOLLA|TOMATE|PAPA |HUEVO|VERDURA|KION|JENGIBRE|HIERBA|ESPECIA/i },
+      { label: 'SERVICIO', re: /SERVICIO|VASO|SERVILLETA|PAJILLA|SORBETE|BOLSA/i },
+    ];
+    const prioridad = nombre => {
+      const n = String(nombre || '').toUpperCase();
+      for (let i = 0; i < gruposPrioridad.length; i++) if (gruposPrioridad[i].re.test(n)) return i;
+      return gruposPrioridad.length;
+    };
+    bajos.sort((x, y) => {
+      const px = prioridad(x.nombre), py = prioridad(y.nombre);
+      if (px !== py) return px - py;
+      return x.total - y.total;
+    });
     let html = '<h3>Productos con Stock Bajo — ' + fecha + ' (todos los almacenes)</h3>';
     if (!bajos.length) {
       html += '<p>No hay productos con stock bajo.</p>';
     } else {
-      html += '<p style="font-size:0.8rem;color:#666;">Stock TOTAL de los ALMACENES GENERALES (Abajo + Arriba) por debajo de la cantidad mínima.</p>';
-      html += '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Stock Total</th><th>Cant. Mínima</th><th>Por almacén</th></tr></thead><tbody>';
+      html += '<p style="font-size:0.8rem;color:#666;">Stock TOTAL de los ALMACENES GENERALES (Abajo + Arriba) por debajo de la cantidad mínima. Orden: prioridad de grupos (CERVEZAS, AGUAS, LÁCTEOS, COCINA, SERVICIO).</p>';
+      html += '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Grupo</th><th>Stock Total</th><th>Cant. Mínima</th><th>Por almacén</th></tr></thead><tbody>';
       bajos.forEach(g => {
+        const pr = prioridad(g.nombre);
+        const label = pr < gruposPrioridad.length ? gruposPrioridad[pr].label : '';
+        const badge = label ? '<span style="display:inline-block;font-size:0.68rem;font-weight:700;background:#0f3460;color:#fff;border-radius:3px;padding:0.1rem 0.4rem;margin-left:0.4rem;">' + label + '</span>' : '';
         const detalle = g.detalles.map(d => {
           const bajo = d.min > 0 && d.cantidad < d.min;
           const txt = d.min > 0 ? (d.almacen + ': ' + d.cantidad + ' <span style="color:#888;">(min ' + d.min + ')</span>') : (d.almacen + ': ' + d.cantidad);
           return bajo ? '<span style="color:#c62828;font-weight:700;">' + txt + '</span>' : txt;
         }).join(', ');
-        html += '<tr class="stock-bajo"><td>' + g.nombre + '</td><td>' + g.total + '</td><td>' + g.min + '</td><td style="font-size:0.8rem;">' + detalle + '</td></tr>';
+        html += '<tr class="stock-bajo"><td>' + g.nombre + badge + '</td><td style="font-size:0.78rem;color:#888;">' + label + '</td><td>' + g.total + '</td><td>' + g.min + '</td><td style="font-size:0.8rem;">' + detalle + '</td></tr>';
       });
       html += '</tbody></table></div>';
       html = '<div style="margin-bottom:0.75rem;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">'
