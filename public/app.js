@@ -3348,18 +3348,50 @@ function cargarReporteDiferencias() {
   const ini = document.getElementById('reporte-fecha-ini')?.value;
   const fin = document.getElementById('reporte-fecha-fin')?.value;
   if (!ini || !fin) return;
+  const wrap = document.getElementById('reporte-diferencias');
   const url = '/api/reportes/diferencias?fecha_inicio=' + ini + '&fecha_fin=' + fin;
   api('GET', url).then(data => {
-    if (data.length === 0) {
-      document.getElementById('reporte-diferencias').innerHTML = '<p>Sin diferencias en este rango.</p>';
-      return;
-    }
-    const conFalta = data.filter(r => (r.falta_almacen || 0) > 0);
+    const conFalta = (data || []).filter(r => (r.falta_almacen || 0) > 0);
     let html = '<p style="margin-bottom:0.5rem;color:#666;">Rango: <strong>' + ini + '</strong> → <strong>' + fin + '</strong></p>';
     html += renderReporteTabla(conFalta, 'PRODUCTOS CON FALTA');
-    if (!html) html = '<p>Sin diferencias en este rango.</p>';
-    document.getElementById('reporte-diferencias').innerHTML = html;
+    // Sección de STOCK TOTAL DE CIERRE NEGATIVO (día fin): base para la función de regularización.
+    api('GET', '/api/reportes/negativos?fecha=' + encodeURIComponent(fin)).then(neg => {
+      html += renderReporteNegativos(neg || [], fin);
+      wrap.innerHTML = html || '<p>Sin diferencias en este rango.</p>';
+    }).catch(() => {
+      wrap.innerHTML = html || '<p>Sin diferencias en este rango.</p>';
+    });
+  }).catch(() => {
+    wrap.innerHTML = '<p style="color:#c62828;">No se pudo cargar el reporte.</p>';
   });
+}
+
+function renderReporteNegativos(items, fecha) {
+  if (!items || !items.length) return '';
+  const rows = items.map(r => `
+    <tr>
+      <td>${esc(r.nombre)}</td>
+      <td>${esc(r.almacen_nombre)}</td>
+      <td>${r.stock_apertura}</td>
+      <td>${r.stock_ingreso || 0}</td>
+      <td>${r.salida_almacen || 0}</td>
+      <td>${r.total_ventas || 0}</td>
+      <td>${r.falta_almacen || 0}</td>
+      <td>${r.stock_baja || 0}</td>
+      <td style="color:#c62828;font-weight:700;">${r.stock_cierre}</td>
+    </tr>`).join('');
+  return `<div class="diff-almacen" style="border-left:4px solid #c62828;margin-top:1rem;">
+    <div class="diff-header" onclick="toggleAcordeon(this)">
+      <span class="accordion-title">STOCK TOTAL DE CIERRE NEGATIVO (${fecha}) <span style="font-weight:400;font-size:0.85rem;color:#c62828;">— ${items.length} item(s)</span></span>
+      <span class="accordion-arrow">▶</span>
+    </div>
+    <div class="accordion-body open">
+      <div class="table-wrap">
+        <table><thead><tr><th>Item</th><th>Almacén</th><th>Apertura</th><th>Ingreso</th><th>Salidas</th><th>Ventas</th><th>Falta</th><th>Baja</th><th style="color:#c62828;">Cierre</th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+      <p style="font-size:0.8rem;color:#666;margin-top:0.4rem;">Estos items quedaron con cantidad negativa en STOCK TOTAL DE CIERRE del ${fecha}. Usa la acción correspondiente para regularizar (compra, ingreso, transferencia o ajuste).</p>
+    </div>
+  </div>`;
 }
 
 // Envía por WHATSAPP la lista de PRODUCTOS CON FALTA del rango, agrupada por almacén:

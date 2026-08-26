@@ -4074,6 +4074,54 @@ app.get('/api/reportes/diferencias', async (req, res) => {
   res.json(result);
 });
 
+// --- REPORTE: items con STOCK TOTAL DE CIERRE NEGATIVO en una fecha ---
+app.get('/api/reportes/negativos', async (req, res) => {
+  try {
+    const fecha = String(req.query.fecha || '').trim();
+    if (!fecha) return res.json([]);
+    const [almsSnap, allInvSnap, diaSnap] = await Promise.all([
+      col('almacenes').orderBy('orden').get(),
+      col('inventario').get(),
+      col('inventario_diario').where('fecha', '==', fecha).get(),
+    ]);
+    const invByAl = {};
+    allInvSnap.docs.forEach(d => {
+      const inv = d.data();
+      if (!invByAl[inv.almacen_id]) invByAl[inv.almacen_id] = [];
+      invByAl[inv.almacen_id].push(inv);
+    });
+    const diaByAl = {};
+    diaSnap.docs.forEach(d => {
+      const dd = d.data();
+      if (!diaByAl[dd.almacen_id]) diaByAl[dd.almacen_id] = {};
+      diaByAl[dd.almacen_id][dd.item_id] = dd;
+    });
+    const result = [];
+    for (const alDoc of almsSnap.docs) {
+      const alId = Number(alDoc.id);
+      for (const inv of (invByAl[alId] || [])) {
+        const dia = (diaByAl[alId] || {})[inv.item_id];
+        if (!dia) continue;
+        const apertura = dia.stock_apertura ?? 0;
+        const ingreso = dia.stock_ingreso ?? 0;
+        const salida = dia.salida_almacen ?? 0;
+        const ventas = dia.total_ventas ?? 0;
+        const falta = dia.falta_almacen ?? 0;
+        const baja = dia.stock_baja ?? 0;
+        const cierre = Math.round((apertura + ingreso - salida - ventas - falta - baja) * 100) / 100;
+        if (cierre >= 0) continue;
+        result.push({
+          fecha, nombre: inv.nombre, almacen_id: alId, almacen_nombre: alDoc.data().nombre,
+          stock_apertura: apertura, stock_ingreso: ingreso, salida_almacen: salida,
+          total_ventas: ventas, falta_almacen: falta, stock_baja: baja, stock_cierre: cierre,
+        });
+      }
+    }
+    result.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)) || String(a.almacen_nombre).localeCompare(String(b.almacen_nombre)));
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- ACCIONES en REPORTES: items con FALTA por día (para poder convertirlos) ---
 app.get('/api/reportes/faltantes', async (req, res) => {
   try {
