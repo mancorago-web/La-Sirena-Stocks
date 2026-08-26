@@ -3989,8 +3989,24 @@ function editarReceta(id) {
     if (!r) { alert('Receta no encontrada'); return; }
     const dl = document.getElementById('recetas-base-datalist');
     if (dl) {
-      // Only show items currently in barra_precios (BASE DE DATOS)
-      dl.innerHTML = precios.map(p => `<option value="${p.ingrediente}">`).join('');
+      // Sugerencias = BASE DE DATOS (barra_precios) + TODAS las RECETAS BASE (para usarlas
+      // como ingrediente dentro de otra receta). Se reconstruye en cada apertura del modal,
+      // así si se agrega/renombra una RECETA BASE, aparece actualizada al instante.
+      const seen = new Set();
+      let opt = '';
+      precios.forEach(p => {
+        const n = String(p.ingrediente || '').trim();
+        if (!n || seen.has(n.toUpperCase())) return;
+        seen.add(n.toUpperCase());
+        opt += '<option value="' + n.replace(/"/g, '&quot;') + '">';
+      });
+      recetas.filter(x => String(x.categoria || '') === 'RECETAS BASE').forEach(x => {
+        const n = String(x.nombre || '').trim();
+        if (!n || seen.has(n.toUpperCase())) return;
+        seen.add(n.toUpperCase());
+        opt += '<option value="' + n.replace(/"/g, '&quot;') + '">';
+      });
+      dl.innerHTML = opt;
     }
     let html = `
       <h3 style="margin-top:0">EDITAR RECETA</h3>
