@@ -3816,6 +3816,7 @@ function renderReceta(r) {
     <div class="accordion-header" onclick="toggleAcordeon(this)">
       <span class="accordion-title">${r.nombre}${costoTotal > 0 ? ` <span style="font-weight:400;font-size:0.85rem;color:#555">— COSTO: S/${costoTotal.toFixed(2)}</span>` : ''}</span>
       <span class="accordion-actions" onclick="event.stopPropagation()">
+        <label style="font-weight:700;color:#2e7d32;font-size:0.82rem;margin-right:0.4rem;white-space:nowrap;">PV S/ <input id="pv-${r.id}" type="number" step="0.01" min="0" value="${pv ? pv : ''}" placeholder="0.00" style="width:70px;padding:0.25rem;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;" oninput="actualizarMargenVivo(${r.id}, ${costoTotal})" onchange="guardarPrecioVenta(${r.id})"></label>
         <button onclick="editarReceta(${r.id})" style="margin-right:0.3rem">EDITAR</button>
         <button class="danger" onclick="eliminarReceta(${r.id})">ELIMINAR</button>
       </span>
@@ -3847,11 +3848,6 @@ function renderReceta(r) {
           <tr style="font-weight:700;background:#fdecea;color:#c62828">
             <td colspan="4">COSTO + 10% PÉRDIDA</td>
             <td>S/${(costoTotal * 1.10).toFixed(2)}</td>
-            <td></td>
-          </tr>
-          <tr style="font-weight:700;background:#e8f5e9;">
-            <td colspan="4">PRECIO DE VENTA (S/)</td>
-            <td><input id="pv-${r.id}" type="number" step="0.01" min="0" value="${pv ? pv : ''}" style="width:90px;padding:0.25rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarMargenVivo(${r.id}, ${costoTotal})" onchange="guardarPrecioVenta(${r.id})"></td>
             <td></td>
           </tr>
           <tr style="font-weight:700;background:#e8f5e9;color:#2e7d32;">
