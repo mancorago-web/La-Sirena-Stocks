@@ -2764,11 +2764,17 @@ function verReporteStocksBajos() {
         const g = porNombre.get(k);
         g.total += (i.stock_cierre || 0);
         g.min = Math.max(g.min, i.cantidad_minima || 0);
-        g.detalles.push({ almacen: a.nombre, cantidad: i.stock_cierre || 0 });
+        g.detalles.push({ almacen: a.nombre, cantidad: i.stock_cierre || 0, min: i.cantidad_minima || 0 });
       });
     });
     const bajos = [];
-    porNombre.forEach(g => { if (g.min > 0 && g.total < g.min) bajos.push(g); });
+    porNombre.forEach(g => {
+      // Aparece si el stock TOTAL del restaurante < mínima, O si ALGÚN almacén quedó por debajo
+      // de su propia cantidad mínima (aunque el total parezca OK por otros almacenes).
+      const algunAlmacenBajo = g.detalles.some(d => d.min > 0 && d.cantidad < d.min);
+      const totalBajo = g.min > 0 && g.total < g.min;
+      if (algunAlmacenBajo || totalBajo) bajos.push(g);
+    });
     bajos.sort((x, y) => x.total - y.total);
     let html = '<h3>Productos con Stock Bajo — ' + fecha + ' (todos los almacenes)</h3>';
     if (!bajos.length) {
@@ -2777,7 +2783,11 @@ function verReporteStocksBajos() {
       html += '<p style="font-size:0.8rem;color:#666;">Stock TOTAL del restaurante (suma de todos los almacenes) por debajo de la cantidad mínima.</p>';
       html += '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Stock Total</th><th>Cant. Mínima</th><th>Por almacén</th></tr></thead><tbody>';
       bajos.forEach(g => {
-        const detalle = g.detalles.filter(d => (d.cantidad || 0) > 0).map(d => d.almacen + ': ' + d.cantidad).join(', ') || '—';
+        const detalle = g.detalles.map(d => {
+          const bajo = d.min > 0 && d.cantidad < d.min;
+          const txt = d.min > 0 ? (d.almacen + ': ' + d.cantidad + ' <span style="color:#888;">(min ' + d.min + ')</span>') : (d.almacen + ': ' + d.cantidad);
+          return bajo ? '<span style="color:#c62828;font-weight:700;">' + txt + '</span>' : txt;
+        }).join(', ');
         html += '<tr class="stock-bajo"><td>' + g.nombre + '</td><td>' + g.total + '</td><td>' + g.min + '</td><td style="font-size:0.8rem;">' + detalle + '</td></tr>';
       });
       html += '</tbody></table></div>';
