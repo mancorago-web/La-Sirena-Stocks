@@ -2754,7 +2754,9 @@ function verReporteStocksBajos() {
   const fecha = document.getElementById('fecha-stocks').value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
   getInventario(fecha).then(data => {
-    // Agregar por NOMBRE de item en TODOS los almacenes (stock total del restaurante)
+    // Solo se consideran los ALMACENES GENERALES (Abajo = 4, Arriba = 8), igual que la vista STOCKS/STOCKS.
+    data = data.filter(a => a.id === 4 || a.id === 8);
+    // Agregar por NOMBRE de item en los almacenes considerados (stock total del restaurante)
     const porNombre = new Map();
     (data || []).forEach(a => {
       (a.items || []).forEach(i => {
@@ -2780,7 +2782,7 @@ function verReporteStocksBajos() {
     if (!bajos.length) {
       html += '<p>No hay productos con stock bajo.</p>';
     } else {
-      html += '<p style="font-size:0.8rem;color:#666;">Stock TOTAL del restaurante (suma de todos los almacenes) por debajo de la cantidad mínima.</p>';
+      html += '<p style="font-size:0.8rem;color:#666;">Stock TOTAL de los ALMACENES GENERALES (Abajo + Arriba) por debajo de la cantidad mínima.</p>';
       html += '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Stock Total</th><th>Cant. Mínima</th><th>Por almacén</th></tr></thead><tbody>';
       bajos.forEach(g => {
         const detalle = g.detalles.map(d => {
