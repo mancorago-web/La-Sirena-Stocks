@@ -2492,12 +2492,15 @@ function formatOrigenIngreso(i, alNombres) {
   if (!ors.length) return '—';
   return ors.map(o => {
     const cant = o.cantidad != null ? ' (' + o.cantidad + ')' : '';
-    if (o.tipo === 'stocks') {
+if (o.tipo === 'stocks') {
       const nm = o.almacen_id ? (alNombres[o.almacen_id] || 'Almacén ' + o.almacen_id) : 'STOCKS';
       return 'STOCK → ' + nm + cant;
     }
     if (o.tipo === 'conversion') {
-      return 'CONVERSIÓN' + cant;
+      return 'CONVERSION' + cant;
+    }
+    if (o.tipo === 'baja') {
+      return 'REGULARIZACIÓN (BAJA)' + cant;
     }
     return 'PROVEEDOR' + cant;
   }).join(' + ');
@@ -3090,7 +3093,7 @@ function darDeBajaFalta(btn) {
   const fecha = tr.dataset.accionFecha;
   const tipo = tr.dataset.accionTipo || 'falta';
   if (tipo === 'negativo') {
-    if (!confirm('¿Dar de BAJA ' + cantidad + ' de este item por CIERRE NEGATIVO? Se registrará la pérdida en STOCK/BAJAS el ' + fecha + '.')) return;
+    if (!confirm('¿Dar de BAJA ' + cantidad + ' de este item por CIERRE NEGATIVO? El cierre negativo volverá a 0 (se registra como regularización) el ' + fecha + '.')) return;
   } else {
     if (!confirm('¿Dar de BAJA ' + cantidad + ' de este item por FALTA? Se registrará en STOCK/BAJAS el ' + fecha + '.')) return;
   }

@@ -4537,14 +4537,16 @@ app.post('/api/reportes/accion/baja', async (req, res) => {
     const curFalta = x.falta_almacen || 0;
     const aMover = redondear(Math.min(Number(cantidad), curFalta));
     if (aMover <= 0) {
-      // Sin falta: si el item tiene CIERRE NEGATIVO, permitir dar de baja la pérdida
+      // Sin falta: si el item tiene CIERRE NEGATIVO, la BAJA lo LLEVA A 0 compensando con ingreso
+      // (el negativo desaparece y queda registrado como regularización).
       const cierreActual = cierreDe(x);
       if (cierreActual < 0) {
         const aBajar = redondear(Math.min(Number(cantidad), Math.abs(cierreActual)));
         if (aBajar <= 0) return res.status(400).json({ error: 'El item no tiene falta ni cierre negativo en la fecha indicada' });
         const reg = {
           item_id: item, almacen_id: al,
-          stock_baja: redondear((x.stock_baja || 0) + aBajar),
+          stock_ingreso: redondear((x.stock_ingreso || 0) + aBajar),
+          ingreso_origen: [{ tipo: 'baja', cantidad: aBajar }],
           nota_baja: x.nota_baja ? (x.nota_baja + '; BAJA POR CIERRE NEGATIVO') : 'BAJA POR CIERRE NEGATIVO',
         };
         await guardarDiaInterno(fecha, [reg], savedBy);
