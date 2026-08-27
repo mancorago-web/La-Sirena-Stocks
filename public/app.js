@@ -3386,16 +3386,51 @@ function cargarReporteDiferencias() {
     const conFalta = (data || []).filter(r => (r.falta_almacen || 0) > 0);
     let html = '<p style="margin-bottom:0.5rem;color:#666;">Rango: <strong>' + ini + '</strong> → <strong>' + fin + '</strong></p>';
     html += renderReporteTabla(conFalta, 'PRODUCTOS CON FALTA');
-    // Sección de STOCK TOTAL DE CIERRE NEGATIVO (día fin): base para la función de regularización.
-    api('GET', '/api/reportes/negativos?fecha=' + encodeURIComponent(fin)).then(neg => {
+    const terminar = () => { wrap.innerHTML = html || '<p>Sin diferencias en este rango.</p>'; };
+    Promise.all([
+      // STOCK TOTAL DE CIERRE NEGATIVO (día fin): base para la función de regularización.
+      api('GET', '/api/reportes/negativos?fecha=' + encodeURIComponent(fin)).catch(() => []),
+      // INGRESOS del día fin (STOCKS/INGRESOS) para ver el panorama completo.
+      getInventario(fin).then(inv => {
+        const alNombres = {};
+        (inv || []).forEach(al => { alNombres[al.id] = al.nombre; });
+        const ingresos = [];
+        (inv || []).forEach(al => (al.items || []).forEach(i => {
+          if ((i.stock_ingreso || 0) > 0) ingresos.push({ nombre: i.nombre, almacen: al.nombre, cantidad: i.stock_ingreso, ingreso_origen: i.ingreso_origen || [], alNombres });
+        }));
+        return ingresos;
+      }).catch(() => [])
+    ]).then(([neg, ingresos]) => {
       html += renderReporteNegativos(neg || [], fin);
-      wrap.innerHTML = html || '<p>Sin diferencias en este rango.</p>';
-    }).catch(() => {
-      wrap.innerHTML = html || '<p>Sin diferencias en este rango.</p>';
-    });
+      html += renderReporteIngresos(ingresos || [], fin);
+      terminar();
+    }).catch(() => terminar());
   }).catch(() => {
     wrap.innerHTML = '<p style="color:#c62828;">No se pudo cargar el reporte.</p>';
   });
+}
+
+function renderReporteIngresos(items, fecha) {
+  if (!items || !items.length) return '';
+  const rows = items.map(r => `
+    <tr>
+      <td>${esc(r.nombre)}</td>
+      <td>${esc(r.almacen)}</td>
+      <td style="font-weight:700;color:#2e7d32;">+${r.cantidad}</td>
+      <td style="font-size:0.8rem;color:#666;">${formatOrigenIngreso(r, r.alNombres || {})}</td>
+    </tr>`).join('');
+  return `<div class="diff-almacen" style="border-left:4px solid #2e7d32;margin-top:1rem;">
+    <div class="diff-header" onclick="toggleAcordeon(this)">
+      <span class="accordion-title">INGRESOS (${fecha}) <span style="font-weight:400;font-size:0.85rem;color:#2e7d32;">— ${items.length} item(s)</span></span>
+      <span class="accordion-arrow">▶</span>
+    </div>
+    <div class="accordion-body open">
+      <div class="table-wrap">
+        <table><thead><tr><th>Item</th><th>Almacén</th><th>Ingreso</th><th>Origen</th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+      <p style="font-size:0.8rem;color:#666;margin-top:0.4rem;">Items con INGRESO registrado en STOCKS/INGRESOS el ${fecha}.</p>
+    </div>
+  </div>`;
 }
 
 function renderReporteNegativos(items, fecha) {
