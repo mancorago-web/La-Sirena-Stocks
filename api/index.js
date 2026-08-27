@@ -3588,6 +3588,27 @@ app.post('/api/basedatos/renombrar', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- BASE DE DATOS UNIFICADA: eliminar duplicados VACÍOS de un nombre (conserva los con precio) ---
+// Tras unificar, pueden quedar varios docs con el mismo nombre (uno con precio y otros sin).
+// Este endpoint deja SOLO los que tienen precio y elimina los vacíos (precio 0 y pc 0).
+app.post('/api/basedatos/limpiar-duplicados', async (req, res) => {
+  try {
+    const nombre = String(req.body.nombre || '').trim();
+    if (!nombre) return res.status(400).json({ error: 'nombre requerido' });
+    const key = normNombre(nombre);
+    const snap = await col('barra_precios').get();
+    const matches = snap.docs.filter(d => normNombre(String(d.data().ingrediente || '')) === key);
+    if (matches.length <= 1) return res.json({ ok: true, eliminados: 0 });
+    const conPrecio = matches.filter(d => (parseFloat(d.data().precio) > 0 || parseFloat(d.data().precio_compra) > 0));
+    if (!conPrecio.length) return res.json({ ok: true, eliminados: 0, msg: 'ninguno con precio, no se elimina' });
+    const aEliminar = matches.filter(d => !(parseFloat(d.data().precio) > 0 || parseFloat(d.data().precio_compra) > 0));
+    const batch = db.batch();
+    aEliminar.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+    res.json({ ok: true, eliminados: aEliminar.length, conservados: conPrecio.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 
 // --- BARRA PRECIOS ---
 app.get('/api/barra/precios', async (req, res) => {

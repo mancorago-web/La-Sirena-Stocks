@@ -374,6 +374,9 @@ function unificarItemsBaseDatos() {
   });
   if (!ops.length) { alert('Nada que unificar (ya tienen el mismo nombre).'); return; }
   Promise.all(ops).then(() => {
+    // Tras unificar, eliminar duplicados VACÍOS del mismo nombre para que quede SOLO el item con precio.
+    return api('POST', '/api/basedatos/limpiar-duplicados', { nombre: nombreFinal }).catch(() => null);
+  }).then(() => {
     showToast('Unificado como "' + nombreFinal + '" (con precios)');
     cargarBaseDatosUnificada();
   }).catch(() => alert('Error al unificar'));
