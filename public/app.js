@@ -4084,29 +4084,27 @@ function eliminarReceta(id) {
 function editarReceta(id) {
   Promise.all([
     api('GET', '/api/recetas'),
-    api('GET', '/api/barra/precios')
-  ]).then(([recetas, precios]) => {
+    api('GET', '/api/barra/precios'),
+    api('GET', '/api/basedatos/unificada')
+  ]).then(([recetas, precios, unificada]) => {
     const r = recetas.find(rec => rec.id === id);
     if (!r) { alert('Receta no encontrada'); return; }
     const dl = document.getElementById('recetas-base-datalist');
     if (dl) {
-      // Sugerencias = BASE DE DATOS (barra_precios) + TODAS las RECETAS BASE (para usarlas
-      // como ingrediente dentro de otra receta). Se reconstruye en cada apertura del modal,
-      // así si se agrega/renombra una RECETA BASE, aparece actualizada al instante.
+      // Sugerencias = BASE DE DATOS UNIFICADA (barra + cocina + stock + base) + RECETAS BASE.
+      // Así cualquier item de la base unificada se puede usar como ingrediente. Se reconstruye
+      // en cada apertura, por lo que siempre está actualizado.
       const seen = new Set();
       let opt = '';
-      precios.forEach(p => {
-        const n = String(p.ingrediente || '').trim();
-        if (!n || seen.has(n.toUpperCase())) return;
-        seen.add(n.toUpperCase());
-        opt += '<option value="' + n.replace(/"/g, '&quot;') + '">';
-      });
-      recetas.filter(x => String(x.categoria || '') === 'RECETAS BASE').forEach(x => {
-        const n = String(x.nombre || '').trim();
-        if (!n || seen.has(n.toUpperCase())) return;
-        seen.add(n.toUpperCase());
-        opt += '<option value="' + n.replace(/"/g, '&quot;') + '">';
-      });
+      const add = n => {
+        const t = String(n || '').trim();
+        if (!t || seen.has(t.toUpperCase())) return;
+        seen.add(t.toUpperCase());
+        opt += '<option value="' + t.replace(/"/g, '&quot;') + '">';
+      };
+      precios.forEach(p => add(p.ingrediente));
+      (unificada || []).forEach(x => add(x.nombre));
+      recetas.filter(x => String(x.categoria || '') === 'RECETAS BASE').forEach(x => add(x.nombre));
       dl.innerHTML = opt;
     }
     let html = `
