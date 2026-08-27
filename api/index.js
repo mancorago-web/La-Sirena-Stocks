@@ -4130,6 +4130,25 @@ app.get('/api/reportes/negativos', async (req, res) => {
 // monto negativo coincide EXACTO con el total de faltas; si no, lo reporta para revisión.
 const cierreDe = d => Math.round(((d.stock_apertura ?? 0) + (d.stock_ingreso ?? 0) - (d.salida_almacen ?? 0) - (d.total_ventas ?? 0) - (d.falta_almacen ?? 0) - (d.stock_baja ?? 0)) * 100) / 100;
 
+// Subconjuntos de faltas cuya suma = monto negativo (emparejamiento por combinación).
+// Permite que la venta de heladera se aplique aunque el TOTAL de faltas no coincida,
+// siempre que una combinación de faltas (1 solo almacén o varios) sí coincida.
+function encontrarCombinaciones(faltas, monto) {
+  const combos = [];
+  const n = faltas.length;
+  const buscar = (i, suma, elegidos) => {
+    if (Math.abs(suma - monto) < 0.001) { combos.push(elegidos.slice()); return; }
+    if (i >= n || suma > monto + 0.001) return;
+    elegidos.push(i);
+    buscar(i + 1, suma + (Number(faltas[i].cantidad) || 0), elegidos);
+    elegidos.pop();
+    buscar(i + 1, suma, elegidos);
+  };
+  buscar(0, 0, []);
+  combos.sort((a, b) => a.length - b.length);
+  return combos;
+}
+
 app.get('/api/reportes/venta-heladeras', async (req, res) => {
   try {
     const fecha = String(req.query.fecha || '').trim();
@@ -4183,8 +4202,13 @@ app.get('/api/reportes/venta-heladeras', async (req, res) => {
           if (f > 0) { faltas.push({ almacen_id: al2, item_id: Number(it2Str), almacen_nombre: alById[al2] || ('Almacén ' + al2), cantidad: f }); totalFaltas += f; }
         }
         const item = { nombre, almacen_negativo: alId, almacen_negativo_nombre: alById[alId] || ('Almacén ' + alId), item_negativo: Number(itStr), dia_negativo: origen.fecha, monto_negativo: monto, faltas };
-        if (totalFaltas > 0 && Math.abs(monto - totalFaltas) < 0.001) coinciden.push(item);
-        else noCoinciden.push({ ...item, total_faltas: totalFaltas, nota: totalFaltas === 0 ? 'Sin faltas de este item en otros almacenes' : ('Monto negativo (' + monto + ') no coincide con faltas (' + totalFaltas + ')') });
+        if (!faltas.length) {
+          noCoinciden.push({ ...item, total_faltas: 0, nota: 'Sin faltas de este item en otros almacenes' });
+          continue;
+        }
+        const combinaciones = encontrarCombinaciones(faltas, monto);
+        if (combinaciones.length) coinciden.push({ ...item, combinaciones });
+        else noCoinciden.push({ ...item, total_faltas: totalFaltas, nota: 'Ninguna combinación de faltas (' + faltas.map(f => f.almacen_nombre + ': ' + f.cantidad).join(', ') + ') suma el monto negativo (' + monto + ')' });
       }
     }
     res.json({ coinciden, noCoinciden });

@@ -3442,12 +3442,16 @@ function abrirVentaHeladeras() {
     }
     _ventaHeladerasAcciones = c;
     let html = '<h3>🧊 VENTA HELADERAS — ' + fin + '</h3>';
-    html += '<p style="font-size:0.8rem;color:#666;margin:0.4rem 0;">Los <b>FALTANTES</b> que coinciden con el <b>CIERRE NEGATIVO</b> del mismo item se convierten en <b>VENTAS</b> el día del negativo, en el almacén correcto (la venta salió de esas heladeras).</p>';
+    html += '<p style="font-size:0.8rem;color:#666;margin:0.4rem 0;">Marca las <b>faltas</b> cuya suma coincida con el <b>CIERRE NEGATIVO</b> del item (puede ser 1 solo almacén o varios). Se convierten en <b>VENTAS</b> el día del negativo; las no marcadas siguen como faltantes.</p>';
     if (c.length) {
-      html += '<div class="table-wrap"><table><thead><tr><th></th><th>Item</th><th>Almacén Negativo</th><th>Día Negativo</th><th>Monto Negativo</th><th>Faltas (almacén: cantidad)</th></tr></thead><tbody>';
+      html += '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Almacén Negativo</th><th>Día</th><th>Monto (-)</th><th>Faltas (marca las que suman el monto)</th><th>Suma</th></tr></thead><tbody>';
       c.forEach((it, idx) => {
-        const fal = it.faltas.map(f => esc(f.almacen_nombre) + ': ' + f.cantidad).join(', ');
-        html += '<tr><td><input type="checkbox" class="vh-check" data-idx="' + idx + '" checked></td><td>' + esc(it.nombre) + '</td><td>' + esc(it.almacen_negativo_nombre) + '</td><td>' + it.dia_negativo + '</td><td style="color:#c62828;font-weight:700;">' + it.monto_negativo + '</td><td>' + fal + '</td></tr>';
+        const defaultCombo = (it.combinaciones && it.combinaciones[0]) || [];
+        const faltasHtml = it.faltas.map((f, fi) => {
+          const checked = defaultCombo.includes(fi) ? 'checked' : '';
+          return '<label style="display:inline-flex;align-items:center;gap:0.2rem;margin-right:0.6rem;font-size:0.82rem;white-space:nowrap;"><input type="checkbox" class="vh-falta" data-item="' + idx + '" data-falta="' + fi + '" ' + checked + ' onchange="actualizarEstadoVH(' + idx + ')"> ' + esc(f.almacen_nombre) + ': ' + f.cantidad + '</label>';
+        }).join('');
+        html += '<tr><td>' + esc(it.nombre) + '</td><td>' + esc(it.almacen_negativo_nombre) + '</td><td>' + it.dia_negativo + '</td><td style="color:#c62828;font-weight:700;">' + it.monto_negativo + '</td><td>' + faltasHtml + '</td><td id="vh-estado-' + idx + '"></td></tr>';
       });
       html += '</tbody></table></div>';
     }
@@ -3462,15 +3466,39 @@ function abrirVentaHeladeras() {
       + '<button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button>'
       + '</div>';
     body.innerHTML = html;
+    c.forEach((it, idx) => actualizarEstadoVH(idx));
     document.getElementById('modal').style.display = 'block';
   }).catch(() => alert('Error al detectar los items'));
 }
 
+function actualizarEstadoVH(idx) {
+  const it = _ventaHeladerasAcciones[idx];
+  const cell = document.getElementById('vh-estado-' + idx);
+  if (!it || !cell) return;
+  const checks = Array.from(document.querySelectorAll('.vh-falta[data-item="' + idx + '"]:checked')).map(cb => Number(cb.dataset.falta));
+  const suma = checks.reduce((s, fi) => s + (Number(it.faltas[fi].cantidad) || 0), 0);
+  if (!checks.length) { cell.innerHTML = '<span style="color:#888;">—</span>'; return; }
+  if (Math.abs(suma - it.monto_negativo) < 0.001) cell.innerHTML = '<span style="color:#2e7d32;font-weight:700;">✓ ' + suma + '/' + it.monto_negativo + '</span>';
+  else cell.innerHTML = '<span style="color:#c62828;font-weight:700;">✗ ' + suma + '/' + it.monto_negativo + '</span>';
+}
+
 function aplicarVentaHeladeras() {
-  const checks = Array.from(document.querySelectorAll('.vh-check:checked')).map(cb => Number(cb.dataset.idx));
-  const acciones = checks.map(i => _ventaHeladerasAcciones[i]).filter(Boolean);
-  if (!acciones.length) { alert('Selecciona al menos un item.'); return; }
-  if (!confirm('¿Aplicar VENTA HELADERAS a ' + acciones.length + ' item(s)? Se convertirán las faltas en ventas y se corregirá la cadena.')) return;
+  const acciones = [];
+  const invalidos = [];
+  _ventaHeladerasAcciones.forEach((it, idx) => {
+    const checks = Array.from(document.querySelectorAll('.vh-falta[data-item="' + idx + '"]:checked')).map(cb => Number(cb.dataset.falta));
+    if (!checks.length) return;
+    const faltasSel = checks.map(fi => it.faltas[fi]);
+    const suma = faltasSel.reduce((s, f) => s + (Number(f.cantidad) || 0), 0);
+    if (Math.abs(suma - it.monto_negativo) < 0.001) acciones.push({ ...it, faltas: faltasSel });
+    else invalidos.push(it.nombre + ' (' + suma + '/' + it.monto_negativo + ')');
+  });
+  if (invalidos.length) {
+    alert('No se puede aplicar:\n- ' + invalidos.join('\n- ') + '\n\nAjusta la selección para que la suma de las faltas marcadas coincida con el monto negativo.');
+    return;
+  }
+  if (!acciones.length) { alert('Marca al menos una falta cuya suma coincida con el monto negativo.'); return; }
+  if (!confirm('¿Aplicar VENTA HELADERAS a ' + acciones.length + ' item(s)?')) return;
   const fin = document.getElementById('reporte-fecha-fin')?.value || todayStr();
   api('POST', '/api/reportes/venta-heladeras/aplicar', { fecha: fin, acciones }).then(() => {
     cerrarModal();
