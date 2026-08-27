@@ -349,9 +349,16 @@ function renderBaseDatosUnificada() {
 function unificarItemsBaseDatos() {
   const nombres = Array.from(document.querySelectorAll('.chk-bd-unificar:checked')).map(cb => cb.dataset.nombre);
   if (nombres.length < 2) { alert('Selecciona al menos 2 items que sean el mismo producto.'); return; }
-  const canonico = prompt('Nombre unificado para estos items (se usará en toda la app):', nombres[0]);
+  // PRIORIDAD: conservar el item que tiene PRECIOS establecidos (para que las recetas/la app
+  // sigan usando el precio). El nombre canónico se pre-rellena con ese item.
+  const chequeados = nombres.map(n => _bdUnificada.find(x => String(x.nombre || '').trim().toUpperCase() === String(n || '').trim().toUpperCase())).filter(Boolean);
+  const conPrecio = chequeados.find(x => (parseFloat(x.precio_compra) > 0 || parseFloat(x.precio_venta) > 0));
+  const defaultNombre = conPrecio ? conPrecio.nombre : nombres[0];
+  const canonico = prompt('Nombre unificado para estos items (se conserva el que tiene precios):', defaultNombre);
   if (!canonico || !canonico.trim()) return;
   const nombreFinal = canonico.trim();
+  // Precios de referencia (del item con precio) para propagarlos a todos al unificar
+  const ref = conPrecio || chequeados[0] || {};
   const ops = [];
   const vistos = new Set();
   nombres.forEach(n => {
@@ -359,11 +366,15 @@ function unificarItemsBaseDatos() {
     if (nk === nombreFinal.trim().toUpperCase() || vistos.has(nk)) return;
     vistos.add(nk);
     const item = _bdUnificada.find(x => x.nombre.trim().toUpperCase() === nk);
-    if (item) ops.push(api('POST', '/api/basedatos/renombrar', { origen: item.origen, id: item.id, nombre_anterior: item.nombre, nombre_nuevo: nombreFinal }));
+    if (item) ops.push(api('POST', '/api/basedatos/renombrar', {
+      origen: item.origen, id: item.id, nombre_anterior: item.nombre, nombre_nuevo: nombreFinal,
+      unidad_compra: ref.unidad_compra, precio_compra: ref.precio_compra,
+      unidad_venta: ref.unidad_venta, precio_venta: ref.precio_venta
+    }));
   });
   if (!ops.length) { alert('Nada que unificar (ya tienen el mismo nombre).'); return; }
   Promise.all(ops).then(() => {
-    showToast('Unificado como "' + nombreFinal + '"');
+    showToast('Unificado como "' + nombreFinal + '" (con precios)');
     cargarBaseDatosUnificada();
   }).catch(() => alert('Error al unificar'));
 }
