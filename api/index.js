@@ -4360,6 +4360,46 @@ app.get('/api/reportes/faltantes', async (req, res) => {
   }
 });
 
+// --- REPORTES: items con CIERRE NEGATIVO por día (para ACCIONES: dar de baja) ---
+app.get('/api/reportes/negativos-dia', async (req, res) => {
+  try {
+    let fechaInicio = req.query.fecha_inicio;
+    let fechaFin = req.query.fecha_fin;
+    if (!fechaInicio || !fechaFin) return res.json([]);
+    if (fechaInicio > fechaFin) [fechaInicio, fechaFin] = [fechaFin, fechaInicio];
+    const [almsSnap, invSnap, diasSnap] = await Promise.all([
+      col('almacenes').get(),
+      col('inventario').get(),
+      col('inventario_diario').where('fecha', '>=', fechaInicio).where('fecha', '<=', fechaFin).get(),
+    ]);
+    const alNombre = {};
+    almsSnap.docs.forEach(d => { alNombre[Number(d.id)] = d.data().nombre; });
+    const invByKey = {};
+    invSnap.docs.forEach(d => { const a = d.data(); invByKey[Number(a.almacen_id) + '_' + Number(a.item_id)] = a; });
+    const out = [];
+    diasSnap.docs.forEach(d => {
+      const a = d.data();
+      if (String(a.fecha) !== fechaFin) return; // solo el estado actual (día fin)
+      const cierre = cierreDe(a);
+      if (cierre < 0) {
+        const inv = invByKey[Number(a.almacen_id) + '_' + Number(a.item_id)];
+        out.push({
+          fecha: a.fecha,
+          almacen_id: Number(a.almacen_id),
+          almacen_nombre: alNombre[Number(a.almacen_id)] || 'Almacén ' + a.almacen_id,
+          item_id: Number(a.item_id),
+          nombre: inv ? inv.nombre : String(a.item_id),
+          cierre: Math.abs(cierre),
+        });
+      }
+    });
+    out.sort((x, y) => String(x.nombre).localeCompare(String(y.nombre)) || String(x.almacen_nombre).localeCompare(String(y.almacen_nombre)));
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- ACCION en REPORTES: convertir FALTA en SALIDA A COCINA (registrada el dia real) ---
 app.post('/api/reportes/accion/salida-cocina', async (req, res) => {
   try {
@@ -4496,7 +4536,22 @@ app.post('/api/reportes/accion/baja', async (req, res) => {
     const x = diaSnap.exists ? diaSnap.data() : {};
     const curFalta = x.falta_almacen || 0;
     const aMover = redondear(Math.min(Number(cantidad), curFalta));
-    if (aMover <= 0) return res.status(400).json({ error: 'El item no tiene falta en la fecha indicada' });
+    if (aMover <= 0) {
+      // Sin falta: si el item tiene CIERRE NEGATIVO, permitir dar de baja la pérdida
+      const cierreActual = cierreDe(x);
+      if (cierreActual < 0) {
+        const aBajar = redondear(Math.min(Number(cantidad), Math.abs(cierreActual)));
+        if (aBajar <= 0) return res.status(400).json({ error: 'El item no tiene falta ni cierre negativo en la fecha indicada' });
+        const reg = {
+          item_id: item, almacen_id: al,
+          stock_baja: redondear((x.stock_baja || 0) + aBajar),
+          nota_baja: x.nota_baja ? (x.nota_baja + '; BAJA POR CIERRE NEGATIVO') : 'BAJA POR CIERRE NEGATIVO',
+        };
+        await guardarDiaInterno(fecha, [reg], savedBy);
+        return res.json({ ok: true, movido: aBajar, nueva_falta: curFalta, tipo: 'baja_negativo' });
+      }
+      return res.status(400).json({ error: 'El item no tiene falta en la fecha indicada' });
+    }
     const reg = {
       item_id: item, almacen_id: al,
       stock_baja: redondear((x.stock_baja || 0) + aMover),

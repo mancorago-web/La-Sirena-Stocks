@@ -3023,36 +3023,56 @@ function abrirAccionesReportes() {
   const ini = document.getElementById('reporte-fecha-ini')?.value;
   const fin = document.getElementById('reporte-fecha-fin')?.value;
   if (!ini || !fin) { alert('Selecciona el rango de fechas del reporte (Desde/Hasta)'); return; }
-  api('GET', '/api/reportes/faltantes?fecha_inicio=' + ini + '&fecha_fin=' + fin).then(faltantes => {
+  Promise.all([
+    api('GET', '/api/reportes/faltantes?fecha_inicio=' + ini + '&fecha_fin=' + fin),
+    api('GET', '/api/reportes/negativos-dia?fecha_inicio=' + ini + '&fecha_fin=' + fin)
+  ]).then(([faltantes, negativos]) => {
     const body = document.getElementById('modal-body');
-    if (!faltantes.length) {
-      body.innerHTML = '<h3>ACCIONES</h3><p>No hay items con FALTA en el rango seleccionado.</p>';
+    if (!faltantes.length && !negativos.length) {
+      body.innerHTML = '<h3>ACCIONES</h3><p>No hay items con FALTA ni con CIERRE NEGATIVO en el rango seleccionado.</p>';
       document.getElementById('modal').style.display = 'block';
       return;
     }
-    let html = '<h3>ACCIONES — Items con FALTA</h3>';
-    html += '<p style="font-size:0.8rem;color:#888;margin-bottom:0.6rem;">Elige la acción para cada faltante: <strong>→ COCINA</strong> (salida a COCINA/STOCK), <strong>→ BARRA</strong> (salida a BARRA/STOCK, mueble ABAJO), <strong>BAJA</strong> (registra en STOCK/BAJAS), <strong>OBSERVAR</strong> (cuarentena) o <strong>INTERCAMBIO</strong> (los meseros registraron un producto por otro: corrige la falta, el ingreso y las ventas).</p>';
-    html += '<div class="table-wrap"><table><thead><tr><th>Fecha Falta</th><th>Item</th><th>Almacén</th><th>Falta</th><th>Fecha Real Salida</th><th>→ COCINA</th><th>→ BARRA</th><th>BAJA</th><th>OBSERVAR</th><th>INTERCAMBIO</th></tr></thead><tbody>';
-    faltantes.forEach(f => {
-      html += `<tr data-accion-item="${f.item_id}" data-accion-al="${f.almacen_id}" data-accion-falta="${f.falta}" data-accion-fecha="${f.fecha}">
-        <td>${f.fecha}</td>
-        <td>${esc(f.nombre)}</td>
-        <td>${esc(f.almacen_nombre)}</td>
-        <td style="color:red;font-weight:700;">${f.falta}</td>
-        <td><input type="date" class="input-fecha-salida" value="${prevWorkingDayStr(f.fecha)}"></td>
-        <td><button class="btn-detalles" onclick="convertirFaltaACocina(this)" style="background:#2e7d32;color:#fff;">→ COCINA</button></td>
-        <td><button class="btn-detalles" onclick="convertirFaltaABarra(this)" style="background:#00695c;color:#fff;">→ BARRA</button></td>
-        <td><button class="btn-detalles" onclick="darDeBajaFalta(this)" style="background:#b71c1c;color:#fff;">BAJA</button></td>
-        <td><button class="btn-detalles" onclick="observarFalta(this)" style="background:#e65100;color:#fff;">OBSERVAR</button></td>
-        <td><button class="btn-detalles" onclick="intercambiarFalta(this)" style="background:#6a1b9a;color:#fff;">INTERCAMBIO</button></td>
-      </tr>`;
-    });
-    html += '</tbody></table></div>';
+    let html = '<h3>ACCIONES</h3>';
+    html += '<p style="font-size:0.8rem;color:#888;margin-bottom:0.6rem;">Para cada faltante: <strong>→ COCINA</strong>, <strong>→ BARRA</strong>, <strong>BAJA</strong>, <strong>OBSERVAR</strong> o <strong>INTERCAMBIO</strong>. Para cada cierre negativo: <strong>BAJA</strong> (registra la pérdida en STOCK/BAJAS).</p>';
+    if (faltantes.length) {
+      html += '<div style="font-weight:700;color:#c62828;margin:0.6rem 0 0.3rem;">ITEMS CON FALTA</div>';
+      html += '<div class="table-wrap"><table><thead><tr><th>Fecha Falta</th><th>Item</th><th>Almacén</th><th>Falta</th><th>Fecha Real Salida</th><th>→ COCINA</th><th>→ BARRA</th><th>BAJA</th><th>OBSERVAR</th><th>INTERCAMBIO</th></tr></thead><tbody>';
+      faltantes.forEach(f => {
+        html += `<tr data-accion-item="${f.item_id}" data-accion-al="${f.almacen_id}" data-accion-falta="${f.falta}" data-accion-fecha="${f.fecha}">
+          <td>${f.fecha}</td>
+          <td>${esc(f.nombre)}</td>
+          <td>${esc(f.almacen_nombre)}</td>
+          <td style="color:red;font-weight:700;">${f.falta}</td>
+          <td><input type="date" class="input-fecha-salida" value="${prevWorkingDayStr(f.fecha)}"></td>
+          <td><button class="btn-detalles" onclick="convertirFaltaACocina(this)" style="background:#2e7d32;color:#fff;">→ COCINA</button></td>
+          <td><button class="btn-detalles" onclick="convertirFaltaABarra(this)" style="background:#00695c;color:#fff;">→ BARRA</button></td>
+          <td><button class="btn-detalles" onclick="darDeBajaFalta(this)" style="background:#b71c1c;color:#fff;">BAJA</button></td>
+          <td><button class="btn-detalles" onclick="observarFalta(this)" style="background:#e65100;color:#fff;">OBSERVAR</button></td>
+          <td><button class="btn-detalles" onclick="intercambiarFalta(this)" style="background:#6a1b9a;color:#fff;">INTERCAMBIO</button></td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+    }
+    if (negativos.length) {
+      html += '<div style="font-weight:700;color:#b71c1c;margin:0.6rem 0 0.3rem;">ITEMS CON CIERRE NEGATIVO (BAJA)</div>';
+      html += '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Item</th><th>Almacén</th><th>Cierre (-)</th><th>BAJA</th></tr></thead><tbody>';
+      negativos.forEach(n => {
+        html += `<tr data-accion-item="${n.item_id}" data-accion-al="${n.almacen_id}" data-accion-falta="${n.cierre}" data-accion-fecha="${n.fecha}" data-accion-tipo="negativo">
+          <td>${n.fecha}</td>
+          <td>${esc(n.nombre)}</td>
+          <td>${esc(n.almacen_nombre)}</td>
+          <td style="color:red;font-weight:700;">-${n.cierre}</td>
+          <td><button class="btn-detalles" onclick="darDeBajaFalta(this)" style="background:#b71c1c;color:#fff;">BAJA</button></td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+    }
     body.innerHTML = html;
     const mc = document.querySelector('.modal-content');
     if (mc) mc.classList.add('modal-wide');
     document.getElementById('modal').style.display = 'block';
-  }).catch(() => alert('Error al cargar los faltantes'));
+  }).catch(() => alert('Error al cargar las acciones'));
 }
 
 // Re-renderiza el modal de ACCIONES SIN cerrarlo (para poder seguir haciendo acciones),
@@ -3068,7 +3088,12 @@ function darDeBajaFalta(btn) {
   const almacen_id = parseInt(tr.dataset.accionAl);
   const cantidad = parseFloat(tr.dataset.accionFalta);
   const fecha = tr.dataset.accionFecha;
-  if (!confirm('¿Dar de BAJA ' + cantidad + ' de este item por FALTA? Se registrará en STOCK/BAJAS el ' + fecha + '.')) return;
+  const tipo = tr.dataset.accionTipo || 'falta';
+  if (tipo === 'negativo') {
+    if (!confirm('¿Dar de BAJA ' + cantidad + ' de este item por CIERRE NEGATIVO? Se registrará la pérdida en STOCK/BAJAS el ' + fecha + '.')) return;
+  } else {
+    if (!confirm('¿Dar de BAJA ' + cantidad + ' de este item por FALTA? Se registrará en STOCK/BAJAS el ' + fecha + '.')) return;
+  }
   btn.disabled = true; btn.textContent = '...';
   api('POST', '/api/reportes/accion/baja', {
     fecha, item_id, almacen_id, cantidad, saved_by: currentUserName
