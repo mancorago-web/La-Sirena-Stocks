@@ -589,7 +589,10 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
     // evitando que se persistan montos imposibles (ej. negativos). Las aperturas MANUALES
     // (conteos físicos con EDITAR APERTURA) se respetan.
     const aperturaManualEfectiva = r.apertura_manual === true ? true : (!!prev.apertura_manual);
-    if (!aperturaManualEfectiva && r.stock_apertura !== undefined) {
+    // REGLA DE CADENA SIEMPRE (aunque el guardado NO envíe stock_apertura, ej. INGRESOS/SALIDAS):
+    // la apertura de un día NO manual debe ser = cierre del día hábil anterior. Si el doc ya tenía
+    // una apertura vieja/incorrecta, se corrige aquí (el cierre se recalcula con la apertura corregida).
+    if (!aperturaManualEfectiva) {
       const pc = prevCierres[Number(r.almacen_id) + '_' + Number(r.item_id)];
       if (pc !== undefined && Math.abs(apertura - pc) > 0.001) {
         apertura = pc;
