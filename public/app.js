@@ -4490,17 +4490,19 @@ function verStockBajoBarra() {
       const onz = formatoOnzas(calcularOnzas(s));
       const cero = (parseFloat(s.cantidad) || 0) <= 0;
       return `<tr${cero ? ' style="background:#fff3e0;"' : ''}>
-        <td>${esc(s.ingrediente)}</td>
-        <td>${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
-        <td style="font-weight:700;color:${cero ? '#c62828' : '#e65100'};">${s.cantidad}</td>
-        <td>${s.unidad}</td>
-        <td>${onz}</td>
+        <td style="white-space:normal;min-width:0;">${esc(s.ingrediente)}</td>
+        <td style="white-space:nowrap;">${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
+        <td style="font-weight:700;color:${cero ? '#c62828' : '#e65100'};white-space:nowrap;">${s.cantidad}</td>
+        <td style="white-space:nowrap;">${s.unidad}</td>
+        <td style="white-space:nowrap;">${onz}</td>
       </tr>`;
     }).join('');
     body.innerHTML = '<h3>📉 STOCK BAJO — BARRA (' + fecha + ') <span style="font-weight:400;font-size:0.85rem;color:#e65100;">— ' + bajos.length + ' botella(s)</span></h3>'
       + '<p style="font-size:0.8rem;color:#666;margin:0.4rem 0;">Botellas con cantidad ≤ 0.2 (menos de una botella). Ordenadas de menor a mayor.</p>'
-      + '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Mueble</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th></tr></thead><tbody>' + filas + '</tbody></table></div>'
+      + '<div class="table-wrap" style="overflow-x:visible;margin-top:0.5rem;"><table style="width:100%;font-size:0.85rem;table-layout:fixed;"><colgroup><col style="width:55%"><col style="width:15%"><col style="width:10%"><col style="width:10%"><col style="width:10%"></colgroup><thead><tr><th>Item</th><th>Mueble</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th></tr></thead><tbody>' + filas + '</tbody></table></div>'
       + '<div style="margin-top:1rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
+    const mc = document.querySelector('.modal-content');
+    if (mc) mc.classList.add('modal-wide');
     document.getElementById('modal').style.display = 'block';
   }).catch(() => alert('Error al cargar el stock'));
 }
