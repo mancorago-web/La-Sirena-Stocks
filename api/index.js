@@ -1025,6 +1025,7 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       const documento = String(it.documento || '').trim().toUpperCase();
       const numero = String(it.numero || '').trim();
       const proveedor = String(it.proveedor || '').trim();
+      const categoria = String(it.categoria || '').trim().toUpperCase();
       const key = nombre.toUpperCase();
       const destino = String(it.destino || 'stocks').toLowerCase();
       if (destino === 'stocks') {
@@ -1042,7 +1043,7 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
           if (!match) {
             // Crear el item en ese almacén si no existe
             maxItemId += 1;
-            const nuevoItem = { item_id: maxItemId, almacen_id: alId, nombre, categoria: '', stock_apertura: 0, cantidad_minima: 0 };
+            const nuevoItem = { item_id: maxItemId, almacen_id: alId, nombre, categoria, stock_apertura: 0, cantidad_minima: 0 };
             await col('inventario').doc(docId('inventario', maxItemId, alId)).set(nuevoItem);
             match = { item_id: maxItemId, almacen_id: alId };
           }
