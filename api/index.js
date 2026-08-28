@@ -4742,17 +4742,18 @@ app.post('/api/reportes/accion/sacar-cuarentena', async (req, res) => {
 // y el producto equivocado (con INGRESO) quita la venta incorrecta y el ingreso sobrante.
 app.post('/api/reportes/accion/intercambio', async (req, res) => {
   try {
-    const { fecha, almacen_id, item_falta, item_ingreso, almacen_ingreso, cantidad, saved_by } = req.body;
+    const { fecha, almacen_id, item_falta, item_ingreso, almacen_ingreso, tipo, cantidad, saved_by } = req.body;
     if (!fecha || !almacen_id || !item_falta || !item_ingreso || !(Number(cantidad) > 0)) {
       return res.status(400).json({ error: 'fecha, almacen_id, item_falta, item_ingreso y cantidad son requeridos' });
     }
     const savedBy = saved_by || (req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown');
     const al = Number(almacen_id);
-    // El producto con INGRESO puede estar en OTRO almacén (ej. error de meseros entre heladeras)
+    // El producto equivocado puede estar en OTRO almacén (ej. error de meseros entre heladeras)
     const alB = almacen_ingreso !== undefined && almacen_ingreso !== null && almacen_ingreso !== '' ? Number(almacen_ingreso) : al;
     const itemA = Number(item_falta);
     const itemB = Number(item_ingreso);
     const cant = Math.round(Number(cantidad) * 100) / 100;
+    const tipoB = String(tipo || 'ingreso').toLowerCase();
 
     const [diaA, diaB] = await Promise.all([
       col('inventario_diario').doc(docId('invdiario', fecha, al, itemA)).get(),
@@ -4771,18 +4772,39 @@ app.post('/api/reportes/accion/intercambio', async (req, res) => {
     await guardarDiaInterno(fecha, [regA], savedBy);
 
     // B = producto equivocado (tenía INGRESO): quitar la venta incorrecta y el ingreso sobrante
-    const nuevoIngB = Math.max(0, Math.round(((b.stock_ingreso || 0) - cant) * 100) / 100);
-    const regB = {
-      item_id: itemB, almacen_id: alB,
-      total_ventas: Math.max(0, Math.round(((b.total_ventas || 0) - cant) * 100) / 100),
-      stock_ingreso: nuevoIngB,
-    };
-    if (b.stock_apertura !== undefined) regB.stock_apertura = b.stock_apertura;
-    if (nuevoIngB === 0) {
-      regB.ingreso_origen = [];
-      regB.ingreso_transferencia = 0;
+    if (tipoB === 'negativo') {
+      // B está en CIERRE NEGATIVO (se vendió un item que no había en el sistema): quitar las
+      // ventas incorrectas donde se registraron, caminando hacia atrás hasta cubrir la cantidad.
+      let restante = cant;
+      const d = new Date(fecha + 'T12:00:00');
+      for (let i = 0; i < 10 && restante > 0; i++) {
+        const f = d.toISOString().split('T')[0];
+        const bSnap = await col('inventario_diario').doc(docId('invdiario', f, alB, itemB)).get();
+        if (bSnap.exists) {
+          const bd = bSnap.data();
+          const ven = bd.total_ventas || 0;
+          if (ven > 0) {
+            const restar = Math.min(restante, ven);
+            await guardarDiaInterno(f, [{ item_id: itemB, almacen_id: alB, total_ventas: Math.round((ven - restar) * 100) / 100 }], savedBy);
+            restante = Math.round((restante - restar) * 100) / 100;
+          }
+        }
+        d.setDate(d.getDate() - 1);
+      }
+    } else {
+      const nuevoIngB = Math.max(0, Math.round(((b.stock_ingreso || 0) - cant) * 100) / 100);
+      const regB = {
+        item_id: itemB, almacen_id: alB,
+        total_ventas: Math.max(0, Math.round(((b.total_ventas || 0) - cant) * 100) / 100),
+        stock_ingreso: nuevoIngB,
+      };
+      if (b.stock_apertura !== undefined) regB.stock_apertura = b.stock_apertura;
+      if (nuevoIngB === 0) {
+        regB.ingreso_origen = [];
+        regB.ingreso_transferencia = 0;
+      }
+      await guardarDiaInterno(fecha, [regB], savedBy);
     }
-    await guardarDiaInterno(fecha, [regB], savedBy);
 
     res.json({ ok: true });
   } catch (e) {

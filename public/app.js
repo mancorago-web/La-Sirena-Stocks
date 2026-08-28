@@ -3145,29 +3145,41 @@ function intercambiarFalta(btn) {
   const nombreItem = tr.querySelector('td:nth-child(2)').textContent.trim();
   const body = document.getElementById('modal-body');
   body.innerHTML = '<h3>INTERCAMBIO DE PRODUCTO</h3>'
-    + '<p style="font-size:0.85rem;color:#666;" id="intercambio-info">Cargando productos con INGRESO...</p>';
+    + '<p style="font-size:0.85rem;color:#666;" id="intercambio-info">Cargando productos con INGRESO o en CIERRE NEGATIVO...</p>';
   getInventario(fecha).then(data => {
     const al = (data || []).find(a => a.id === almacen_id);
-    // Productos con INGRESO en CUALQUIER almacén (sobrantes por errores de los meseros).
-    const conIngreso = [];
+    // Productos para emparejar el error de meseros: con INGRESO (sobrante) o en CIERRE NEGATIVO
+    // (se vendió un item que no había en el sistema). En CUALQUIER almacén.
+    const opciones = [];
+    const vistos = new Set();
     (data || []).forEach(a => {
       (a.items || []).forEach(i => {
-        if ((i.stock_ingreso || 0) > 0 && i.id !== item_id) {
-          conIngreso.push({ id: i.id, nombre: i.nombre, cantidad: i.stock_ingreso, almacen_id: a.id, almacen_nombre: a.nombre });
-        }
+        if (i.id === item_id) return;
+        const k = i.id + '_' + a.id;
+        if (vistos.has(k)) return;
+        const ing = (i.stock_ingreso || 0) > 0;
+        const neg = (i.stock_cierre || 0) < 0;
+        if (!ing && !neg) return;
+        vistos.add(k);
+        opciones.push({
+          id: i.id, nombre: i.nombre,
+          cantidad: ing ? i.stock_ingreso : Math.abs(i.stock_cierre || 0),
+          almacen_id: a.id, almacen_nombre: a.nombre,
+          tipo: ing ? 'ingreso' : 'negativo'
+        });
       });
     });
-    if (!conIngreso.length) {
+    if (!opciones.length) {
       body.innerHTML = '<h3>INTERCAMBIO DE PRODUCTO</h3>'
-        + '<p style="color:#c62828;">No hay productos con INGRESO el ' + fecha + ' para emparejar el intercambio. ¿Tal vez el ingreso sobrante se marcó como otro tipo de ajuste?</p>'
+        + '<p style="color:#c62828;">No hay productos con INGRESO ni en CIERRE NEGATIVO el ' + fecha + ' para emparejar el intercambio.</p>'
         + '<button onclick="cerrarModal()" style="margin-top:0.5rem;">CERRAR</button>';
       return;
     }
     body.innerHTML = '<h3>INTERCAMBIO DE PRODUCTO</h3>'
-      + '<p style="font-size:0.85rem;color:#666;margin-bottom:0.6rem;">El faltante es de <b>' + esc(nombreItem) + '</b> (' + cantidad + ') el ' + fecha + ' en <b>' + esc(al ? al.nombre : 'almacén ' + almacen_id) + '</b>. Se registrará la venta del producto correcto y se quitará la del equivocado (corrige falta, ingreso y ventas).</p>'
-      + '<label style="display:block;font-weight:600;margin-bottom:0.3rem;">Producto registrado por error (el que tiene el INGRESO):</label>'
+      + '<p style="font-size:0.85rem;color:#666;margin-bottom:0.6rem;">El faltante es de <b>' + esc(nombreItem) + '</b> (' + cantidad + ') el ' + fecha + ' en <b>' + esc(al ? al.nombre : 'almacén ' + almacen_id) + '</b>. Se registrará la venta del producto correcto y se quitará la del equivocado (corrige falta, negativo y ventas).</p>'
+      + '<label style="display:block;font-weight:600;margin-bottom:0.3rem;">Producto registrado por error (INGRESO sobrante o CIERRE NEGATIVO):</label>'
       + '<select id="intercambio-producto" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;margin-bottom:0.6rem;">'
-      + conIngreso.map(i => `<option value="${i.id}" data-almacen="${i.almacen_id}" data-nombre="${esc(i.nombre)}">${esc(i.nombre)} (ingreso ${i.cantidad} — ${esc(i.almacen_nombre)})</option>`).join('')
+      + opciones.map(i => `<option value="${i.id}" data-almacen="${i.almacen_id}" data-tipo="${i.tipo}" data-nombre="${esc(i.nombre)}">${esc(i.nombre)} (${i.tipo === 'ingreso' ? 'ingreso ' + i.cantidad : 'negativo -' + i.cantidad} — ${esc(i.almacen_nombre)})</option>`).join('')
       + '</select>'
       + '<label style="display:block;font-weight:600;margin-bottom:0.3rem;">Cantidad a intercambiar:</label>'
       + '<input id="intercambio-cant" type="number" step="0.01" min="0" value="' + cantidad + '" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;margin-bottom:0.8rem;">'
@@ -3188,11 +3200,12 @@ function confirmarIntercambio() {
   const optSel = sel.options[sel.selectedIndex];
   const nomIng = optSel ? optSel.dataset.nombre : '';
   const almacen_ingreso = optSel ? parseInt(optSel.dataset.almacen) : null;
+  const tipo = optSel ? (optSel.dataset.tipo || 'ingreso') : 'ingreso';
   const cantidad = parseFloat(document.getElementById('intercambio-cant').value) || 0;
   if (!item_ingreso || cantidad <= 0) { alert('Selecciona el producto y la cantidad'); return; }
-  if (!confirm('¿Corregir el intercambio? Se registrará la venta real de ' + cantidad + ' ' + (nomIng ? 'del producto faltante' : '') + ', se quitará la venta de ' + nomIng + ' y se ajustarán la falta y el ingreso.')) return;
+  if (!confirm('¿Corregir el intercambio? Se registrará la venta real de ' + cantidad + ' ' + (nomIng ? 'del producto faltante' : '') + ', se quitará la venta de ' + nomIng + (tipo === 'negativo' ? ' (cierre negativo)' : '') + ' y se ajustarán la falta, el negativo y el ingreso.')) return;
   api('POST', '/api/reportes/accion/intercambio', {
-    fecha: ctx.fecha, almacen_id: ctx.almacen_id, item_falta: ctx.item_falta, item_ingreso, almacen_ingreso, cantidad, saved_by: currentUserName
+    fecha: ctx.fecha, almacen_id: ctx.almacen_id, item_falta: ctx.item_falta, item_ingreso, almacen_ingreso, tipo, cantidad, saved_by: currentUserName
   }).then(() => {
     showToast('Intercambio corregido');
     refrescarAcciones();
