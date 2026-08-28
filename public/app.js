@@ -422,8 +422,11 @@ function irACategoria(cat) {
     // Siempre recargar COMPRAS y VENTAS para no perder datos ni mostrar datos viejos
     if (cat === 'compras') { cargarCompras(); }
     if (cat === 'ventas') { cargarVentasCentral(); }
-    // Activate first sub-tab for the category
-    const firstSub = tabsEl ? tabsEl.querySelector('.sub-tab') : null;
+    // Activate sub-tab (BARRA inicia en STOCK para mejor UX del usuario)
+    const preferida = cat === 'barra' ? '[data-subtab="stock"]' : null;
+    const firstSub = preferida
+      ? tabsEl.querySelector(preferida)
+      : (tabsEl ? tabsEl.querySelector('.sub-tab') : null);
     if (firstSub) cambiarSubTab(firstSub.dataset.subtab, cat);
   }
 }
