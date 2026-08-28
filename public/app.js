@@ -23,14 +23,17 @@ function showToast(msg) {
 }
 
 // Shared cache for con-inventario data (reused across tabs)
-let _invCache = { fecha: null, data: null, pending: null };
+// TTL corto (3s): si la fecha es la misma pero los datos ya llevan >3s, se vuelven a pedir al
+// servidor. Así nunca se muestran STOCK TOTAL APERTURA/CIERRE viejos (ej. tras corregir datos).
+let _invCache = { fecha: null, data: null, pending: null, ts: 0 };
 function getInventario(fecha) {
-  if (_invCache.fecha === fecha && _invCache.data) return Promise.resolve(_invCache.data);
+  const now = Date.now();
+  if (_invCache.fecha === fecha && _invCache.data && (now - _invCache.ts) < 3000) return Promise.resolve(_invCache.data);
   if (_invCache.fecha === fecha && _invCache.pending) return _invCache.pending;
   const p = api('GET', '/api/almacenes/con-inventario?fecha=' + fecha).then(data => {
-    _invCache = { fecha, data, pending: null };
+    _invCache = { fecha, data, pending: null, ts: Date.now() };
     return data;
-  }).catch(err => { _invCache = { fecha: null, data: null, pending: null }; throw err; });
+  }).catch(err => { _invCache = { fecha: null, data: null, pending: null, ts: 0 }; throw err; });
   _invCache.pending = p;
   return p;
 }
@@ -465,6 +468,7 @@ function api(method, url, data) {
     const timer = soportaAbort ? setTimeout(() => controller.abort(), 45000) : null;
     return fetch(url, {
       method,
+      cache: 'no-store',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
       body: data ? JSON.stringify(data) : undefined,
       signal: controller ? controller.signal : undefined
