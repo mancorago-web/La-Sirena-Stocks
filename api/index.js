@@ -4762,19 +4762,10 @@ app.post('/api/reportes/accion/intercambio', async (req, res) => {
     const a = diaA.exists ? diaA.data() : {};
     const b = diaB.exists ? diaB.data() : {};
 
-    // A = producto real vendido (tenía FALTA): registrar la venta real y quitar la falta
-    const regA = {
-      item_id: itemA, almacen_id: al,
-      total_ventas: Math.round(((a.total_ventas || 0) + cant) * 100) / 100,
-      falta_almacen: Math.max(0, Math.round(((a.falta_almacen || 0) - cant) * 100) / 100),
-    };
-    if (a.stock_apertura !== undefined) regA.stock_apertura = a.stock_apertura;
-    await guardarDiaInterno(fecha, [regA], savedBy);
-
-    // B = producto equivocado (tenía INGRESO): quitar la venta incorrecta y el ingreso sobrante
+    // A = producto real vendido (tenía FALTA): registrar la venta real y quitar la falta.
+    // En el caso NEGATIVO, la venta correcta se registra en el MISMO día donde el item
+    // equivocado (B) se vendió (se mantiene la fecha real de la venta), no en la fecha de la falta.
     if (tipoB === 'negativo') {
-      // B está en CIERRE NEGATIVO (se vendió un item que no había en el sistema): quitar las
-      // ventas incorrectas donde se registraron, caminando hacia atrás hasta cubrir la cantidad.
       let restante = cant;
       const d = new Date(fecha + 'T12:00:00');
       for (let i = 0; i < 10 && restante > 0; i++) {
@@ -4785,13 +4776,35 @@ app.post('/api/reportes/accion/intercambio', async (req, res) => {
           const ven = bd.total_ventas || 0;
           if (ven > 0) {
             const restar = Math.min(restante, ven);
+            // quitar la venta incorrecta de B en ese día
             await guardarDiaInterno(f, [{ item_id: itemB, almacen_id: alB, total_ventas: Math.round((ven - restar) * 100) / 100 }], savedBy);
+            // registrar la venta CORRECTA de A en el mismo día (fecha real de la venta)
+            const aDocF = await col('inventario_diario').doc(docId('invdiario', f, al, itemA)).get();
+            const adF = aDocF.exists ? aDocF.data() : {};
+            const regAVenta = { item_id: itemA, almacen_id: al, total_ventas: Math.round(((adF.total_ventas || 0) + restar) * 100) / 100 };
+            if (adF.stock_apertura !== undefined) regAVenta.stock_apertura = adF.stock_apertura;
+            await guardarDiaInterno(f, [regAVenta], savedBy);
             restante = Math.round((restante - restar) * 100) / 100;
           }
         }
         d.setDate(d.getDate() - 1);
       }
+      const movido = Math.round((cant - restante) * 100) / 100;
+      if (movido > 0) {
+        // quitar la falta de A registrada el día de la falta (ya explicada por la venta real)
+        await guardarDiaInterno(fecha, [{ item_id: itemA, almacen_id: al, falta_almacen: Math.max(0, Math.round(((a.falta_almacen || 0) - movido) * 100) / 100) }], savedBy);
+      }
     } else {
+      // caso INGRESO: A se registra el día de la falta (como antes)
+      const regA = {
+        item_id: itemA, almacen_id: al,
+        total_ventas: Math.round(((a.total_ventas || 0) + cant) * 100) / 100,
+        falta_almacen: Math.max(0, Math.round(((a.falta_almacen || 0) - cant) * 100) / 100),
+      };
+      if (a.stock_apertura !== undefined) regA.stock_apertura = a.stock_apertura;
+      await guardarDiaInterno(fecha, [regA], savedBy);
+
+      // B = producto equivocado (tenía INGRESO): quitar la venta incorrecta y el ingreso sobrante
       const nuevoIngB = Math.max(0, Math.round(((b.stock_ingreso || 0) - cant) * 100) / 100);
       const regB = {
         item_id: itemB, almacen_id: alB,
