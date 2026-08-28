@@ -422,8 +422,8 @@ function irACategoria(cat) {
     // Siempre recargar COMPRAS y VENTAS para no perder datos ni mostrar datos viejos
     if (cat === 'compras') { cargarCompras(); }
     if (cat === 'ventas') { cargarVentasCentral(); }
-    // Activate sub-tab (BARRA inicia en STOCK para mejor UX del usuario)
-    const preferida = cat === 'barra' ? '[data-subtab="stock"]' : null;
+    // Activate sub-tab (BARRA y COCINA inician en STOCK para mejor UX del usuario)
+    const preferida = (cat === 'barra' || cat === 'cocina') ? '[data-subtab="stock"]' : null;
     const firstSub = preferida
       ? tabsEl.querySelector(preferida)
       : (tabsEl ? tabsEl.querySelector('.sub-tab') : null);
