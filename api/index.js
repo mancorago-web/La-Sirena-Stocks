@@ -653,7 +653,10 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
     }
 
     const data = { fecha, item_id: Number(r.item_id), almacen_id: Number(r.almacen_id) };
-    if (r.stock_apertura !== undefined) data.stock_apertura = apertura;
+    // Siempre persistir la apertura calculada (con la REGLA DE CADENA aplicada). Así los items
+    // nuevos (ej. COMPRA/INGRESO sin apertura enviada) quedan con stock_apertura=0 explícito y
+    // no quedan con el campo ausente ni con valores viejos de la base.
+    data.stock_apertura = apertura;
     if (r.apertura_manual !== undefined) data.apertura_manual = !!r.apertura_manual;
     if (r.stock_ingreso !== undefined) data.stock_ingreso = ingreso;
     if (r.salida_almacen !== undefined) data.salida_almacen = salida;
