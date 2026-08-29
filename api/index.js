@@ -1254,7 +1254,9 @@ app.get('/api/compras/detalle', async (req, res) => {
     } else {
       logSnap = await col('compras').where('fecha', '>=', fechaIni).where('fecha', '<=', fechaFin).get();
     }
-    const lista = logSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.destino !== 'stocks');
+    const lista = logSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const logStockNombres = new Set();
+    logSnap.docs.forEach(d => { const x = d.data(); if (x.destino === 'stocks') logStockNombres.add(String(x.nombre || '').trim().toUpperCase()); });
     const precioByNombre = {};
     const precioTotalByNombre = {};
     const metaByNombre = {};
@@ -1288,6 +1290,10 @@ app.get('/api/compras/detalle', async (req, res) => {
       if (ing <= 0) return;
       const nombre = nombres[a.almacen_id + ':' + a.item_id];
       if (!nombre) return;
+      // Items comprados ya aparecen como LÍNEAS del log (detalle por entrada, ej. 6 y 48 del mismo
+      // producto). No duplicar con la fila agregada del inventario. Solo se deriva el ingreso
+      // manual (STOCKS/INGRESOS) que NO tiene línea de compra.
+      if (logStockNombres.has(String(nombre).trim().toUpperCase())) return;
       const meta = metaByNombre[String(nombre).trim().toUpperCase()] || {};
       lista.push({
         id: 'inv:' + a.almacen_id + ':' + a.item_id,
