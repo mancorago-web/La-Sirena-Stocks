@@ -3374,13 +3374,16 @@ function agregarItemBaseDatos() {
   const body = document.getElementById('modal-body');
   const cats = _BD_CATEGORIAS.map(c => c.label);
   body.innerHTML = '<h3>AGREGAR ITEM A LA BASE DE DATOS</h3>'
-    + '<label style="display:block;margin-bottom:0.4rem;">Nombre: <input id="bd-add-nombre" placeholder="Nombre del item" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;"></label>'
+    + '<datalist id="bd-add-nombres">' + _bdUnificada.map(i => '<option value="' + esc(i.nombre) + '"></option>').join('') + '</datalist>'
+    + '<datalist id="bd-add-uc-list">' + ['KILOS','GRAMOS','LITRO','LITROS','ML','ONZAS','UNIDAD','BOTELLA','GALON','HOJAS'].map(u => '<option value="' + u + '"></option>').join('') + '</datalist>'
+    + '<datalist id="bd-add-uv-list">' + ['unidad','onzas','gramos','ml','kg','lt','hojas','gotas','rodajas'].map(u => '<option value="' + u + '"></option>').join('') + '</datalist>'
+    + '<label style="display:block;margin-bottom:0.4rem;">Nombre: <input id="bd-add-nombre" list="bd-add-nombres" placeholder="Nombre del item" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;"></label>'
     + '<label style="display:block;margin-bottom:0.4rem;">Categoría: <select id="bd-add-categoria" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;">'
     + cats.map(c => '<option value="' + c + '">' + c + '</option>').join('')
     + '<option value="COCINA">COCINA</option></select></label>'
-    + '<label style="display:block;margin-bottom:0.4rem;">Unidad Compra: <input id="bd-add-uc" value="unidad" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;"></label>'
+    + '<label style="display:block;margin-bottom:0.4rem;">Unidad Compra: <input id="bd-add-uc" list="bd-add-uc-list" value="unidad" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;"></label>'
     + '<label style="display:block;margin-bottom:0.4rem;">Precio Compra: <input id="bd-add-pc" type="number" step="0.01" min="0" value="0" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;"></label>'
-    + '<label style="display:block;margin-bottom:0.4rem;">Unidad Venta: <input id="bd-add-uv" value="unidad" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;"></label>'
+    + '<label style="display:block;margin-bottom:0.4rem;">Unidad Venta: <input id="bd-add-uv" list="bd-add-uv-list" value="unidad" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;"></label>'
     + '<label style="display:block;margin-bottom:0.4rem;">Precio Venta: <input id="bd-add-pv" type="number" step="0.01" min="0" value="0" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;"></label>'
     + '<div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap;">'
     + '<button onclick="guardarNuevoItemBaseDatos()" style="flex:1;min-width:120px;">AGREGAR</button>'
@@ -3420,11 +3423,14 @@ function editarItemBaseDatos(origen, id) {
       + '</select></label>';
   }
   body.innerHTML = '<h3>EDITAR ITEM (' + x.zona + ')</h3>'
-    + '<label>Nombre: <input id="bd-edit-nombre" value="' + esc(x.nombre) + '"></label>'
+    + '<datalist id="bd-edit-nombres">' + _bdUnificada.map(i => '<option value="' + esc(i.nombre) + '"></option>').join('') + '</datalist>'
+    + '<datalist id="bd-edit-uc-list">' + ['KILOS','GRAMOS','LITRO','LITROS','ML','ONZAS','UNIDAD','BOTELLA','GALON','HOJAS'].map(u => '<option value="' + u + '"></option>').join('') + '</datalist>'
+    + '<datalist id="bd-edit-uv-list">' + ['unidad','onzas','gramos','ml','kg','lt','hojas','gotas','rodajas'].map(u => '<option value="' + u + '"></option>').join('') + '</datalist>'
+    + '<label>Nombre: <input id="bd-edit-nombre" list="bd-edit-nombres" value="' + esc(x.nombre) + '"></label>'
     + categoriaHtml
-    + '<label>Unidad Compra: <input id="bd-edit-uc" value="' + esc(x.unidad_compra || '') + '"></label>'
+    + '<label>Unidad Compra: <input id="bd-edit-uc" list="bd-edit-uc-list" value="' + esc(x.unidad_compra || '') + '"></label>'
     + '<label>Precio Compra: <input id="bd-edit-pc" type="number" step="0.01" min="0" value="' + (x.precio_compra || 0) + '"></label>'
-    + '<label>Unidad Venta: <input id="bd-edit-uv" value="' + esc(x.unidad_venta || '') + '"></label>'
+    + '<label>Unidad Venta: <input id="bd-edit-uv" list="bd-edit-uv-list" value="' + esc(x.unidad_venta || '') + '"></label>'
     + '<label>Precio Venta: <input id="bd-edit-pv" type="number" step="0.01" min="0" value="' + (x.precio_venta || 0) + '"></label>'
     + '<div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap;">'
     + '<button onclick="guardarItemBaseDatos()" style="flex:1;min-width:120px;">Guardar</button>'
