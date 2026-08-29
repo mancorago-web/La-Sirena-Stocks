@@ -1607,7 +1607,7 @@ function editarItemAlmacen(itemId, almacenId) {
     while (prev) {
       if (prev.classList.contains('section-header')) {
         const label = prev.querySelector('td')?.textContent?.replace(/[—\s]/g, '') || '';
-        const cats = ['VINOS','AGUAS','GASEOSAS','CERVEZAS','KOMBUCHAS','LECHES'];
+        const cats = _CATEGORIAS_ITEM;
         const found = cats.find(c => label.toUpperCase().includes(c));
         if (found) { categoria = found; break; }
       }
@@ -1634,6 +1634,7 @@ async function guardarItemAlmacen() {
     return;
   }
   cerrarModal();
+  showToast('✓ Item agregado');
   _invCache = { fecha: null, data: null, pending: null };
   cargarAlmacenes();
   cargarReportes();
@@ -1645,6 +1646,7 @@ function guardarEdicionItem(itemId, almacenId) {
   if (!nombre) { alert('Ingresa el nombre del item'); return; }
   api('PUT', '/api/inventario/' + itemId + '/' + almacenId, { nombre, categoria }).then(() => {
     cerrarModal();
+    showToast('✓ Item actualizado');
     _invCache = { fecha: null, data: null, pending: null };
     cargarAlmacenes();
     cargarReportes();
