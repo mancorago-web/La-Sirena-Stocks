@@ -1237,11 +1237,39 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       await logBatch.commit();
     }
 
+    // Registrar el ÚLTIMO PRECIO DE COMPRA por item (para BASE DE DATOS UNIFICADA y VARIACION DE PRECIOS).
+    // El precio anterior queda guardado para detectar incrementos/disminuciones en la próxima compra.
+    const comprasConPrecio = [];
+    resumen.stocks.forEach(r => comprasConPrecio.push({ nombre: r.nombre, precio: r.precio, destino: 'stocks' }));
+    resumen.barra.forEach(r => comprasConPrecio.push({ nombre: r.nombre, precio: r.precio, destino: 'barra' }));
+    resumen.cocina.forEach(r => comprasConPrecio.push({ nombre: r.nombre, precio: r.precio, destino: 'cocina' }));
+    await Promise.all(comprasConPrecio.map(c => registrarUltimoPrecioCompra(c.nombre, c.precio, c.destino)));
+
     res.json({ ok: true, resumen });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
+
+// --- BASE DE DATOS UNIFICADA: último precio de compra por item ---
+// Al registrar una compra CON precio, se guarda el precio como "ultimo_precio_compra" y el precio
+// anterior en "precio_anterior_compra" (para detectar VARIACION DE PRECIOS en la próxima compra).
+async function registrarUltimoPrecioCompra(nombre, precio, destino) {
+  const precioVal = Math.round((parseFloat(precio) || 0) * 100) / 100;
+  if (precioVal <= 0) return;
+  const coll = destino === 'stocks' ? 'stock_precios' : (destino === 'cocina' ? 'cocina_precios' : 'barra_precios');
+  const campo = coll === 'stock_precios' ? 'nombre' : 'ingrediente';
+  const snap = await col(coll).get();
+  const doc = snap.docs.find(d => String(d.data()[campo] || '').toLowerCase().trim() === String(nombre || '').toLowerCase().trim());
+  if (!doc) return;
+  const cur = doc.data();
+  const anterior = parseFloat(cur.ultimo_precio_compra) || 0;
+  await doc.ref.update({
+    ultimo_precio_compra: precioVal,
+    precio_anterior_compra: anterior,
+    updated_at: new Date().toISOString()
+  });
+}
 
 // --- COMPRAS: detalle de compras/ingresos registrados por fecha o rango de fechas ---
 app.get('/api/compras/detalle', async (req, res) => {
@@ -3378,6 +3406,7 @@ app.get('/api/basedatos/unificada', async (req, res) => {
         nombre: String(x.nombre || '').trim().toUpperCase(), categoria: '',
         unidad_compra: x.unidad || '', precio_compra: x.precio || 0,
         unidad_venta: x.unidad_venta || '', precio_venta: x.precio_venta || 0,
+        ultimo_precio_compra: x.ultimo_precio_compra || 0, precio_anterior_compra: x.precio_anterior_compra || 0,
       });
     });
     barra.docs.forEach(d => {
@@ -3387,6 +3416,7 @@ app.get('/api/basedatos/unificada', async (req, res) => {
         nombre: String(x.ingrediente || '').trim().toUpperCase(), categoria: '',
         unidad_compra: x.unidad_compra || '', precio_compra: x.precio_compra || 0,
         unidad_venta: x.unidad || '', precio_venta: x.precio || 0,
+        ultimo_precio_compra: x.ultimo_precio_compra || 0, precio_anterior_compra: x.precio_anterior_compra || 0,
       });
     });
     cocina.docs.forEach(d => {
@@ -3396,6 +3426,7 @@ app.get('/api/basedatos/unificada', async (req, res) => {
         nombre: String(x.ingrediente || '').trim().toUpperCase(), categoria: '',
         unidad_compra: x.unidad_compra || '', precio_compra: x.precio_compra || 0,
         unidad_venta: x.unidad || '', precio_venta: x.precio || 0,
+        ultimo_precio_compra: x.ultimo_precio_compra || 0, precio_anterior_compra: x.precio_anterior_compra || 0,
       });
     });
     unificada.docs.forEach(d => {
@@ -3406,6 +3437,7 @@ app.get('/api/basedatos/unificada', async (req, res) => {
         categoria: String(x.categoria || '').trim().toUpperCase(),
         unidad_compra: x.unidad_compra || '', precio_compra: x.precio_compra || 0,
         unidad_venta: x.unidad_venta || '', precio_venta: x.precio_venta || 0,
+        ultimo_precio_compra: x.ultimo_precio_compra || 0, precio_anterior_compra: x.precio_anterior_compra || 0,
       });
     });
     out.sort((a, b) => a.nombre.localeCompare(b.nombre));

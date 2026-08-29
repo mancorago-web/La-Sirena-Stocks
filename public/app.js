@@ -323,13 +323,19 @@ function renderBaseDatosUnificada() {
   porCategoria.forEach((ks, label) => {
     html += '<div class="diff-almacen">';
     html += '<div class="diff-header" onclick="toggleAcordeon(this)"><span class="accordion-title">' + label + ' <span style="font-weight:400;font-size:0.85rem;color:#777;">(' + ks.length + ')</span></span><span class="accordion-arrow">▶</span></div>';
-    html += '<div class="accordion-body open"><div class="table-wrap"><table><thead><tr><th></th><th>Item</th><th>Zonas</th><th>Unidad Compra</th><th>Precio Compra</th><th>Unidad Venta</th><th>Precio Venta</th><th></th></tr></thead><tbody>';
+    html += '<div class="accordion-body open"><div class="table-wrap"><table><thead><tr><th></th><th>Item</th><th>Zonas</th><th>Unidad Compra</th><th>Precio Compra</th><th>Unidad Venta</th><th>Precio Venta</th><th>Últ. Precio Compra</th><th>Var.</th><th></th></tr></thead><tbody>';
     ks.forEach(k => {
       const g = grupos.get(k);
       const zonas = [...new Set(g.items.map(x => x.zona))].join(' · ');
       const dup = esDup.has(k);
       // Al unificar, se prioriza mostrar los datos del item de BARRA (luego COCINA, luego STOCKS)
       const primero = g.items.find(x => x.zona === 'BARRA') || g.items.find(x => x.zona === 'COCINA') || g.items[0];
+      const ult = parseFloat(primero.ultimo_precio_compra) || 0;
+      const ant = parseFloat(primero.precio_anterior_compra) || 0;
+      const variacion = ant > 0 && Math.abs(ult - ant) > 0.001;
+      const varHtml = variacion
+        ? (ult > ant ? '<span style="color:#2e7d32;font-weight:700;">▲ +' + (ult - ant).toFixed(2) + '</span>' : '<span style="color:#c62828;font-weight:700;">▼ ' + (ult - ant).toFixed(2) + '</span>')
+        : (ult > 0 ? '<span style="color:#888;">—</span>' : '');
       html += `<tr style="${dup ? 'background:#fff9c4;' : ''}">
         <td><input type="checkbox" class="chk-bd-unificar" data-nombre="${esc(g.nombre)}" title="Marcar para unificar"></td>
         <td>${esc(g.nombre)}${dup ? ' <span class="badge-observacion" style="background:#f57f17;">DUP</span>' : ''}</td>
@@ -338,6 +344,8 @@ function renderBaseDatosUnificada() {
         <td>${primero.precio_compra || 0}</td>
         <td>${esc(primero.unidad_venta || '—')}</td>
         <td>${primero.precio_venta || 0}</td>
+        <td>${ult > 0 ? 'S/' + ult.toFixed(2) : '—'}</td>
+        <td>${varHtml}</td>
         <td style="white-space:nowrap;">
           <button onclick="editarItemBaseDatos('${primero.origen}', ${primero.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.75rem;">EDITAR</button>
         </td>
@@ -383,6 +391,45 @@ function unificarItemsBaseDatos() {
     showToast('Unificado como "' + nombreFinal + '" (con precios)');
     cargarBaseDatosUnificada();
   }).catch(() => alert('Error al unificar'));
+}
+
+function verVariacionPrecios() {
+  const conVariacion = (_bdUnificada || []).filter(x => {
+    const ult = parseFloat(x.ultimo_precio_compra) || 0;
+    const ant = parseFloat(x.precio_anterior_compra) || 0;
+    return ant > 0 && ult > 0 && Math.abs(ult - ant) > 0.001;
+  });
+  const body = document.getElementById('modal-body');
+  if (!conVariacion.length) {
+    body.innerHTML = '<h3>📈 VARIACIÓN DE PRECIOS</h3><p style="margin-top:0.75rem;color:#666;">No hay items con variación de precio desde la última compra.</p><div style="margin-top:1.5rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
+    document.getElementById('modal').style.display = 'block';
+    return;
+  }
+  conVariacion.sort((a, b) => {
+    const ra = (parseFloat(a.ultimo_precio_compra) / (parseFloat(a.precio_anterior_compra) || 1));
+    const rb = (parseFloat(b.ultimo_precio_compra) / (parseFloat(b.precio_anterior_compra) || 1));
+    return rb - ra;
+  });
+  const filas = conVariacion.map(x => {
+    const ult = parseFloat(x.ultimo_precio_compra) || 0;
+    const ant = parseFloat(x.precio_anterior_compra) || 0;
+    const dif = ult - ant;
+    const pct = (dif / ant) * 100;
+    const up = dif > 0;
+    return `<tr>
+      <td>${esc(x.nombre)}</td>
+      <td style="color:#888;">S/${ant.toFixed(2)}</td>
+      <td style="font-weight:700;">S/${ult.toFixed(2)}</td>
+      <td style="color:${up ? '#2e7d32' : '#c62828'};font-weight:700;">${up ? '▲ +' : '▼ '}S/${Math.abs(dif).toFixed(2)} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%)</td>
+    </tr>`;
+  }).join('');
+  body.innerHTML = '<h3>📈 VARIACIÓN DE PRECIOS</h3>'
+    + '<p style="font-size:0.8rem;color:#666;margin:0.4rem 0;">Items cuyo último precio de compra varió respecto a la compra anterior (' + conVariacion.length + ').</p>'
+    + '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Precio anterior</th><th>Último precio</th><th>Variación</th></tr></thead><tbody>' + filas + '</tbody></table></div>'
+    + '<div style="margin-top:1rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
+  const mc = document.querySelector('.modal-content');
+  if (mc) mc.classList.add('modal-wide');
+  document.getElementById('modal').style.display = 'block';
 }
 
 function irACategoria(cat) {
