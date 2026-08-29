@@ -1254,6 +1254,30 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
 // --- BASE DE DATOS UNIFICADA: último precio de compra por item ---
 // Al registrar una compra CON precio, se guarda el precio como "ultimo_precio_compra" y el precio
 // anterior en "precio_anterior_compra" (para detectar VARIACION DE PRECIOS en la próxima compra).
+// También se auto-actualiza el PRECIO VENTA a partir del ULT. PRECIO COMPRA (para que las recetas
+// usen el costo real de compra en tiempo real).
+//
+// Lógica del PRECIO VENTA:
+//  - Si UNIDAD VENTA = UNIDAD -> precio venta = ultimo precio compra (precio unitario).
+//  - Si UNIDAD VENTA = gramos/ml/onzas/etc -> se lee la cantidad total del nombre ("X 280 GR",
+//    "X 750 ML") y precio venta = ultimo precio compra / cantidad (convertida a la unidad de venta).
+function calcularPrecioVenta(nombre, ultimoPrecioCompra, unidadVenta) {
+  const precioVal = parseFloat(ultimoPrecioCompra) || 0;
+  const uv = normalizeUnit(unidadVenta || 'unidad');
+  if (precioVal <= 0) return null;
+  if (uv === 'unidad') return precioVal;
+  const equiv = parseEquivFromName(nombre);
+  if (equiv.equiv_ml) {
+    const ventaMl = getUnitToMl(uv);
+    if (ventaMl > 0) return Math.round(precioVal / (equiv.equiv_ml / ventaMl) * 100000) / 100000;
+  }
+  if (equiv.equiv_gr) {
+    const ventaGr = getUnitToGr(uv);
+    if (ventaGr > 0) return Math.round(precioVal / (equiv.equiv_gr / ventaGr) * 100000) / 100000;
+  }
+  return null;
+}
+
 async function registrarUltimoPrecioCompra(nombre, precio, destino) {
   const precioVal = Math.round((parseFloat(precio) || 0) * 100) / 100;
   if (precioVal <= 0) return;
@@ -1278,11 +1302,19 @@ async function registrarUltimoPrecioCompra(nombre, precio, destino) {
     for (const d of candidates) {
       const cur = d.data();
       const anterior = parseFloat(cur.ultimo_precio_compra) || 0;
-      batch.update(d.ref, {
+      const upd = {
         ultimo_precio_compra: precioVal,
         precio_anterior_compra: anterior,
         updated_at: new Date().toISOString()
-      });
+      };
+      // Auto-actualizar PRECIO VENTA según ULT. PRECIO COMPRA (unidad de venta del item)
+      const ventaUnidad = coll === 'stock_precios' ? cur.unidad_venta : cur.unidad;
+      const nuevoVenta = calcularPrecioVenta(nombre, precioVal, ventaUnidad);
+      if (nuevoVenta !== null) {
+        if (coll === 'stock_precios') upd.precio_venta = nuevoVenta;
+        else upd.precio = nuevoVenta;
+      }
+      batch.update(d.ref, upd);
     }
   }
   await batch.commit();
