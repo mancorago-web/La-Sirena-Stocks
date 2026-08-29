@@ -1257,18 +1257,35 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
 async function registrarUltimoPrecioCompra(nombre, precio, destino) {
   const precioVal = Math.round((parseFloat(precio) || 0) * 100) / 100;
   if (precioVal <= 0) return;
-  const coll = destino === 'stocks' ? 'stock_precios' : (destino === 'cocina' ? 'cocina_precios' : 'barra_precios');
-  const campo = coll === 'stock_precios' ? 'nombre' : 'ingrediente';
-  const snap = await col(coll).get();
-  const doc = snap.docs.find(d => String(d.data()[campo] || '').toLowerCase().trim() === String(nombre || '').toLowerCase().trim());
-  if (!doc) return;
-  const cur = doc.data();
-  const anterior = parseFloat(cur.ultimo_precio_compra) || 0;
-  await doc.ref.update({
-    ultimo_precio_compra: precioVal,
-    precio_anterior_compra: anterior,
-    updated_at: new Date().toISOString()
-  });
+  const key = normNombre(nombre);
+  if (!key) return;
+  // Actualiza TODAS las colecciones donde exista el item (stock/barra/cocina/base), para que
+  // la BASE DE DATOS UNIFICADA muestre el último precio de compra sin importar qué zona use.
+  const map = { stock_precios: 'nombre', barra_precios: 'ingrediente', cocina_precios: 'ingrediente', base_unificada: 'nombre' };
+  const batch = db.batch();
+  for (const [coll, campo] of Object.entries(map)) {
+    const snap = await col(coll).get();
+    let candidates = snap.docs.filter(d => normNombre(String(d.data()[campo] || '')) === key);
+    // Fallback seguro: si no hay match exacto y hay UN SOLO candidato cuyo nombre contiene el
+    // buscado (o viceversa), se usa (ej. compra "VODKA SMIRNOFF 700 ML" vs item "VODKA SMIRNOFF X 700ML").
+    if (!candidates.length) {
+      const contains = snap.docs.filter(d => {
+        const v = normNombre(String(d.data()[campo] || ''));
+        return v.length >= 5 && (v.includes(key) || key.includes(v));
+      });
+      if (contains.length === 1) candidates = contains;
+    }
+    for (const d of candidates) {
+      const cur = d.data();
+      const anterior = parseFloat(cur.ultimo_precio_compra) || 0;
+      batch.update(d.ref, {
+        ultimo_precio_compra: precioVal,
+        precio_anterior_compra: anterior,
+        updated_at: new Date().toISOString()
+      });
+    }
+  }
+  await batch.commit();
 }
 
 // --- COMPRAS: detalle de compras/ingresos registrados por fecha o rango de fechas ---
