@@ -1407,6 +1407,40 @@ function guardarDiaAlmacenes({ fecha, registros, selectorBtn, textoBtn, textoOk,
 }
 
 let _almacenesRenderFecha = null; // fecha actualmente renderizada en el DOM de ALMACENES
+// Reubica items por su categoria explicita (tiene prioridad sobre la inferida por nombre).
+// Si la categoria no es una seccion definida (ej. COCINA), el item va a "otros" (que se muestra
+// como COCINA en los almacenes no-1).
+function agruparPorCategoria(secciones, a, usado, sortField = 'stock_apertura') {
+  const sinSeccion = [];
+  secciones.forEach(s => {
+    s.items = s.items.filter(i => {
+      if (i.categoria) {
+        const target = secciones.find(ss => ss.label.toUpperCase() === String(i.categoria).toUpperCase());
+        if (target) { if (target !== s) target.items.push(i); return target === s; }
+        sinSeccion.push(i);
+        return false;
+      }
+      return true;
+    });
+  });
+  const orden = (x, y) => {
+    const xg = (x[sortField] || 0) > 0 ? 0 : 1;
+    const yg = (y[sortField] || 0) > 0 ? 0 : 1;
+    return xg - yg || String(x.nombre || '').localeCompare(String(y.nombre || ''));
+  };
+  let otros = a.items.filter(i => !usado.has(i.id)).sort(orden);
+  otros = otros.filter(i => {
+    if (i.categoria) {
+      const cat = secciones.find(s => s.label.toUpperCase() === i.categoria.toUpperCase());
+      if (cat) { cat.items.push(i); return false; }
+    }
+    return true;
+  });
+  sinSeccion.forEach(i => { if (!otros.includes(i)) otros.push(i); });
+  otros.sort(orden);
+  return otros;
+}
+
 function cargarAlmacenes(fecha, preservar) {
   const openIds = [];
   document.querySelectorAll('.accordion-item .accordion-body.open').forEach(body => {
@@ -1475,29 +1509,8 @@ function cargarAlmacenes(fecha, preservar) {
         return { ...cat, items };
       });
       // La categoria explicita del item tiene prioridad sobre la seccion inferida por nombre
-      secciones.forEach(s => {
-        s.items = s.items.filter(i => {
-          if (i.categoria) {
-            const target = secciones.find(ss => ss.label.toUpperCase() === String(i.categoria).toUpperCase());
-            if (target && target !== s) { target.items.push(i); return false; }
-          }
-          return true;
-        });
-      });
-      let otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
-        const xg = (x.stock_apertura || 0) > 0 ? 0 : 1;
-        const yg = (y.stock_apertura || 0) > 0 ? 0 : 1;
-        return xg - yg || x.nombre.localeCompare(y.nombre);
-      });
-      if (otros.length) {
-        otros = otros.filter(i => {
-          if (i.categoria) {
-            const cat = secciones.find(s => s.label.toUpperCase() === i.categoria.toUpperCase());
-            if (cat) { cat.items.push(i); return false; }
-          }
-          return true;
-        });
-      }
+      // (COCINA y otras sin seccion propia van a "otros").
+      let otros = agruparPorCategoria(secciones, a, usado);
       return { ...a, secciones, otros };
     });
     const container = document.getElementById('accordion-almacenes');
@@ -2902,29 +2915,8 @@ function cargarStocks() {
         return { ...cat, items };
       });
       // La categoria explicita del item tiene prioridad sobre la seccion inferida por nombre
-      secciones.forEach(s => {
-        s.items = s.items.filter(i => {
-          if (i.categoria) {
-            const target = secciones.find(ss => ss.label.toUpperCase() === String(i.categoria).toUpperCase());
-            if (target && target !== s) { target.items.push(i); return false; }
-          }
-          return true;
-        });
-      });
-      let otros = a.items.filter(i => !usado.has(i.id)).sort((x, y) => {
-        const xg = (x.stock_cierre || 0) > 0 ? 0 : 1;
-        const yg = (y.stock_cierre || 0) > 0 ? 0 : 1;
-        return xg - yg || x.nombre.localeCompare(y.nombre);
-      });
-      if (otros.length) {
-        otros = otros.filter(i => {
-          if (i.categoria) {
-            const cat = secciones.find(s => s.label.toUpperCase() === i.categoria.toUpperCase());
-            if (cat) { cat.items.push(i); return false; }
-          }
-          return true;
-        });
-      }
+      // (COCINA y otras sin seccion propia van a "otros").
+      let otros = agruparPorCategoria(secciones, a, usado, 'stock_cierre');
       return { ...a, secciones, otros };
     });
     const container = document.getElementById('accordion-stocks');
