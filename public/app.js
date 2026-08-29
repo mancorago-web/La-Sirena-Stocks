@@ -3446,6 +3446,31 @@ function eliminarDupBaseDatos() {
   renderBaseDatosUnificada();
 }
 
+// Recalcula PRECIO VENTA a partir del ÚLT. PRECIO COMPRA y la UNIDAD VENTA (misma lógica que el backend):
+// - unidad -> precio venta = último precio compra (unitario).
+// - sub-unidad (gramos/ml/onzas) -> se lee la cantidad del nombre ("X 280 GR", "X 700ML") y se divide.
+function calcularPrecioVentaClient(nombre, ultimoPrecioCompra, unidadVenta) {
+  const precioVal = parseFloat(ultimoPrecioCompra) || 0;
+  const uv = normalizeUnit(unidadVenta || 'unidad');
+  if (precioVal <= 0) return null;
+  if (uv === 'unidad') return precioVal;
+  const m = String(nombre || '').match(/x\s*(\d+(?:\.\d+)?)\s*(L|LT|LTS|ML|KG|GR|G|OZ|ONZAS?|LITRO|LITROS|KILO|KILOS|GRAMO|GRAMOS)\b/i);
+  if (!m) return null;
+  const qty = parseFloat(m[1]);
+  const u = m[2].toLowerCase();
+  let equiv = null;
+  if (['l','lt','lts','litro','litros'].includes(u)) equiv = { ml: qty * 1000 };
+  else if (['ml'].includes(u)) equiv = { ml: qty };
+  else if (['kg','kilo','kilos'].includes(u)) equiv = { gr: qty * 1000 };
+  else if (['gr','g','gramo','gramos'].includes(u)) equiv = { gr: qty };
+  else if (['oz','onza','onzas'].includes(u)) equiv = { ml: qty * 29.5735 };
+  const toMl = { 'ml': 1, 'lt': 1000, 'onzas': 29.5735, 'gotas': 0.05 };
+  const toGr = { 'gramos': 1, 'kg': 1000, 'onzas': 28.3495 };
+  if (equiv && equiv.ml) { const vm = toMl[uv] || 0; if (vm > 0) return Math.round(precioVal / (equiv.ml / vm) * 100000) / 100000; }
+  if (equiv && equiv.gr) { const vg = toGr[uv] || 0; if (vg > 0) return Math.round(precioVal / (equiv.gr / vg) * 100000) / 100000; }
+  return null;
+}
+
 function guardarItemBaseDatos() {
   if (!_bdEditando) return;
   const nombre = document.getElementById('bd-edit-nombre').value.trim();
@@ -3453,7 +3478,14 @@ function guardarItemBaseDatos() {
   const uc = document.getElementById('bd-edit-uc').value.trim();
   const pc = parseFloat(document.getElementById('bd-edit-pc').value) || 0;
   const uv = document.getElementById('bd-edit-uv').value.trim();
-  const pv = parseFloat(document.getElementById('bd-edit-pv').value) || 0;
+  let pv = parseFloat(document.getElementById('bd-edit-pv').value) || 0;
+  // Auto-recálculo: si cambió la UNIDAD VENTA y el item tiene ÚLT. PRECIO COMPRA, se recalcula el
+  // PRECIO VENTA con la nueva unidad (ej. VODKA SMIRNOFF X 700ML: unidad -> onzas => 25.88/23.67).
+  const ultimo = parseFloat(_bdEditando.ultimo_precio_compra) || 0;
+  if (ultimo > 0 && String(uv || '') !== String(_bdEditando.unidad_venta || '')) {
+    const nuevo = calcularPrecioVentaClient(_bdEditando.nombre, ultimo, uv);
+    if (nuevo !== null) pv = nuevo;
+  }
   const o = _bdEditando.origen;
   const id = _bdEditando.id;
   // Si cambió el nombre, renombrar y propagar por toda la app (STOCKS/BARRA/COCINA + emparejamiento EXCEL)
