@@ -2634,6 +2634,19 @@ function cargarReportes() {
 // Grupos internos disponibles para los items de STOCKS (mismos que usa la vista STOCKS).
 const _CATEGORIAS_ITEM = ['VINOS', 'AGUAS', 'GASEOSAS', 'CERVEZAS', 'KOMBUCHAS', 'LECHES', 'LACTEOS', 'BARRA', 'SERVICIO', 'DELIVERY', 'COCINA'];
 
+// Unidades de compra y de venta (desplegables con TODAS las opciones visibles).
+const _UNIDADES_COMPRA = ['KILOS', 'GRAMOS', 'LITRO', 'LITROS', 'ML', 'ONZAS', 'UNIDAD', 'BOTELLA', 'GALON', 'HOJAS'];
+const _UNIDADES_VENTA = ['unidad', 'onzas', 'gramos', 'ml', 'kg', 'lt', 'hojas', 'gotas', 'rodajas'];
+function selectUnidades(id, valor, opciones) {
+  const v = String(valor || '');
+  let opts = '';
+  if (v && !opciones.some(o => String(o).toLowerCase() === v.toLowerCase())) {
+    opts += '<option value="' + esc(v) + '">' + esc(v) + '</option>';
+  }
+  opts += opciones.map(u => '<option value="' + esc(u) + '" ' + (String(u).toLowerCase() === v.toLowerCase() ? 'selected' : '') + '>' + esc(u) + '</option>').join('');
+  return '<select id="' + id + '" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">' + opts + '</select>';
+}
+
 function showModal(tipo, data) {
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
@@ -3381,9 +3394,9 @@ function agregarItemBaseDatos() {
     + '<label style="display:block;margin-bottom:0.4rem;">Categoría: <select id="bd-add-categoria" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;">'
     + cats.map(c => '<option value="' + c + '">' + c + '</option>').join('')
     + '<option value="COCINA">COCINA</option></select></label>'
-    + '<label style="display:block;margin-bottom:0.4rem;">Unidad Compra: <input id="bd-add-uc" list="bd-add-uc-list" value="unidad" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;"></label>'
+    + '<label style="display:block;margin-bottom:0.4rem;">Unidad Compra: ' + selectUnidades('bd-add-uc', 'unidad', _UNIDADES_COMPRA) + '</label>'
     + '<label style="display:block;margin-bottom:0.4rem;">Precio Compra: <input id="bd-add-pc" type="number" step="0.01" min="0" value="0" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;"></label>'
-    + '<label style="display:block;margin-bottom:0.4rem;">Unidad Venta: <input id="bd-add-uv" list="bd-add-uv-list" value="unidad" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;"></label>'
+    + '<label style="display:block;margin-bottom:0.4rem;">Unidad Venta: ' + selectUnidades('bd-add-uv', 'unidad', _UNIDADES_VENTA) + '</label>'
     + '<label style="display:block;margin-bottom:0.4rem;">Precio Venta: <input id="bd-add-pv" type="number" step="0.01" min="0" value="0" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;"></label>'
     + '<div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap;">'
     + '<button onclick="guardarNuevoItemBaseDatos()" style="flex:1;min-width:120px;">AGREGAR</button>'
@@ -3428,9 +3441,9 @@ function editarItemBaseDatos(origen, id) {
     + '<datalist id="bd-edit-uv-list">' + ['unidad','onzas','gramos','ml','kg','lt','hojas','gotas','rodajas'].map(u => '<option value="' + u + '"></option>').join('') + '</datalist>'
     + '<label>Nombre: <input id="bd-edit-nombre" list="bd-edit-nombres" value="' + esc(x.nombre) + '"></label>'
     + categoriaHtml
-    + '<label>Unidad Compra: <input id="bd-edit-uc" list="bd-edit-uc-list" value="' + esc(x.unidad_compra || '') + '"></label>'
+    + '<label>Unidad Compra: ' + selectUnidades('bd-edit-uc', x.unidad_compra, _UNIDADES_COMPRA) + '</label>'
     + '<label>Precio Compra: <input id="bd-edit-pc" type="number" step="0.01" min="0" value="' + (x.precio_compra || 0) + '"></label>'
-    + '<label>Unidad Venta: <input id="bd-edit-uv" list="bd-edit-uv-list" value="' + esc(x.unidad_venta || '') + '"></label>'
+    + '<label>Unidad Venta: ' + selectUnidades('bd-edit-uv', x.unidad_venta, _UNIDADES_VENTA) + '</label>'
     + '<label>Precio Venta: <input id="bd-edit-pv" type="number" step="0.01" min="0" value="' + (x.precio_venta || 0) + '"></label>'
     + '<div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap;">'
     + '<button onclick="guardarItemBaseDatos()" style="flex:1;min-width:120px;">Guardar</button>'
