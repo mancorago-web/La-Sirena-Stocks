@@ -2569,6 +2569,9 @@ function cargarReportes() {
   }
 }
 
+// Grupos internos disponibles para los items de STOCKS (mismos que usa la vista STOCKS).
+const _CATEGORIAS_ITEM = ['VINOS', 'AGUAS', 'GASEOSAS', 'CERVEZAS', 'KOMBUCHAS', 'LECHES', 'LACTEOS', 'BARRA', 'SERVICIO', 'DELIVERY', 'COCINA'];
+
 function showModal(tipo, data) {
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
@@ -2595,12 +2598,7 @@ function showModal(tipo, data) {
         Título / Categoría
         <select id="f-categoria-item" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
           <option value="">Sin categoría</option>
-          <option value="VINOS">VINOS</option>
-          <option value="AGUAS">AGUAS</option>
-          <option value="GASEOSAS">GASEOSAS</option>
-          <option value="CERVEZAS">CERVEZAS</option>
-          <option value="KOMBUCHAS">KOMBUCHAS</option>
-          <option value="LECHES">LECHES</option>
+          ${_CATEGORIAS_ITEM.map(c => `<option value="${c}">${c}</option>`).join('')}
         </select>
       </label>
       <label style="display:block;margin-top:1rem;">
@@ -2626,7 +2624,7 @@ function showModal(tipo, data) {
         Título / Categoría
         <select id="f-editar-categoria" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
           <option value="">Sin categoría</option>
-          ${['VINOS','AGUAS','GASEOSAS','CERVEZAS','KOMBUCHAS','LECHES'].map(c =>
+          ${_CATEGORIAS_ITEM.map(c =>
             `<option value="${c}" ${data.categoria === c ? 'selected' : ''}>${c}</option>`
           ).join('')}
         </select>
