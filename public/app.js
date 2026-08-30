@@ -2636,7 +2636,7 @@ const _CATEGORIAS_ITEM = ['VINOS', 'AGUAS', 'GASEOSAS', 'CERVEZAS', 'KOMBUCHAS',
 
 // Unidades de compra y de venta (desplegables con TODAS las opciones visibles).
 const _UNIDADES_COMPRA = ['KILOS', 'GRAMOS', 'LITRO', 'LITROS', 'ML', 'ONZAS', 'UNIDAD', 'BOTELLA', 'GALON', 'HOJAS'];
-const _UNIDADES_VENTA = ['unidad', 'onzas', 'gramos', 'ml', 'kg', 'lt', 'hojas', 'gotas', 'rodajas'];
+const _UNIDADES_VENTA = ['unidad', 'onzas', 'gramos', 'ml', 'kg', 'lt', 'hojas', 'gotas', 'rodajas', 'copas'];
 function selectUnidades(id, valor, opciones) {
   const v = String(valor || '');
   let opts = '';
@@ -3389,7 +3389,7 @@ function agregarItemBaseDatos() {
   body.innerHTML = '<h3>AGREGAR ITEM A LA BASE DE DATOS</h3>'
     + '<datalist id="bd-add-nombres">' + _bdUnificada.map(i => '<option value="' + esc(i.nombre) + '"></option>').join('') + '</datalist>'
     + '<datalist id="bd-add-uc-list">' + ['KILOS','GRAMOS','LITRO','LITROS','ML','ONZAS','UNIDAD','BOTELLA','GALON','HOJAS'].map(u => '<option value="' + u + '"></option>').join('') + '</datalist>'
-    + '<datalist id="bd-add-uv-list">' + ['unidad','onzas','gramos','ml','kg','lt','hojas','gotas','rodajas'].map(u => '<option value="' + u + '"></option>').join('') + '</datalist>'
+    + '<datalist id="bd-add-uv-list">' + ['unidad','onzas','gramos','ml','kg','lt','hojas','gotas','rodajas','copas'].map(u => '<option value="' + u + '"></option>').join('') + '</datalist>'
     + '<label style="display:block;margin-bottom:0.4rem;">Nombre: <input id="bd-add-nombre" list="bd-add-nombres" placeholder="Nombre del item" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;"></label>'
     + '<label style="display:block;margin-bottom:0.4rem;">Categoría: <select id="bd-add-categoria" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;">'
     + cats.map(c => '<option value="' + c + '">' + c + '</option>').join('')
@@ -3438,7 +3438,7 @@ function editarItemBaseDatos(origen, id) {
   body.innerHTML = '<h3>EDITAR ITEM (' + x.zona + ')</h3>'
     + '<datalist id="bd-edit-nombres">' + _bdUnificada.map(i => '<option value="' + esc(i.nombre) + '"></option>').join('') + '</datalist>'
     + '<datalist id="bd-edit-uc-list">' + ['KILOS','GRAMOS','LITRO','LITROS','ML','ONZAS','UNIDAD','BOTELLA','GALON','HOJAS'].map(u => '<option value="' + u + '"></option>').join('') + '</datalist>'
-    + '<datalist id="bd-edit-uv-list">' + ['unidad','onzas','gramos','ml','kg','lt','hojas','gotas','rodajas'].map(u => '<option value="' + u + '"></option>').join('') + '</datalist>'
+    + '<datalist id="bd-edit-uv-list">' + ['unidad','onzas','gramos','ml','kg','lt','hojas','gotas','rodajas','copas'].map(u => '<option value="' + u + '"></option>').join('') + '</datalist>'
     + '<label>Nombre: <input id="bd-edit-nombre" list="bd-edit-nombres" value="' + esc(x.nombre) + '"></label>'
     + categoriaHtml
     + '<label>Unidad Compra: ' + selectUnidades('bd-edit-uc', x.unidad_compra, _UNIDADES_COMPRA) + '</label>'
@@ -4258,6 +4258,7 @@ function editarReceta(id) {
                 <option value="hojas" ${normalizeUnit(ing.unidad) === 'hojas' ? 'selected' : ''}>hojas</option>
                 <option value="gotas" ${normalizeUnit(ing.unidad) === 'gotas' ? 'selected' : ''}>gotas</option>
                 <option value="rodajas" ${normalizeUnit(ing.unidad) === 'rodajas' ? 'selected' : ''}>rodajas</option>
+                <option value="copas" ${normalizeUnit(ing.unidad) === 'copas' ? 'selected' : ''}>copas</option>
               </select></td>
               <td><button class="danger" onclick="this.closest('tr').remove()">✕</button></td>
             </tr>
@@ -4291,6 +4292,7 @@ function agregarFilaIngrediente() {
       <option value="hojas">hojas</option>
       <option value="gotas">gotas</option>
       <option value="rodajas">rodajas</option>
+      <option value="copas">copas</option>
     </select></td>
     <td><button class="danger" onclick="this.closest('tr').remove()">✕</button></td>
   `;
@@ -5187,6 +5189,7 @@ function editarRecetaCocina(id) {
                   <option value="lt" ${normalizeUnit(ing.unidad) === 'lt' ? 'selected' : ''}>lt</option>
                   <option value="ml" ${normalizeUnit(ing.unidad) === 'ml' ? 'selected' : ''}>ml</option>
                   <option value="onzas" ${normalizeUnit(ing.unidad) === 'onzas' ? 'selected' : ''}>onzas</option>
+                  <option value="copas" ${normalizeUnit(ing.unidad) === 'copas' ? 'selected' : ''}>copas</option>
                 </select></td>
                 <td><button class="danger" onclick="this.closest('tr').remove()">✕</button></td>
               </tr>`).join('')}
@@ -5217,6 +5220,7 @@ function agregarFilaIngredienteCocina() {
       <option value="lt">lt</option>
       <option value="ml">ml</option>
       <option value="onzas">onzas</option>
+      <option value="copas">copas</option>
     </select></td>
     <td><button class="danger" onclick="this.closest('tr').remove()">✕</button></td>
   `;
@@ -5810,6 +5814,7 @@ function mostrarModalAgregarItemCocina() {
         <option value="lt">lt</option>
         <option value="ml">ml</option>
         <option value="onzas">onzas</option>
+        <option value="copas">copas</option>
       </select>
     </label>
     <label style="display:block;margin-top:1rem;">
@@ -5892,7 +5897,7 @@ function editarPrecioCocina(id) {
       <label style="display:block;margin-top:1rem;">
         Unidad (receta):
         <select id="edit-cocina-precio-unidad" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
-          ${['unidad','kg','gramos','lt','ml','onzas'].map(u => `<option value="${u}" ${item.unidad === u ? 'selected' : ''}>${u}</option>`).join('')}
+          ${['unidad','kg','gramos','lt','ml','onzas','copas'].map(u => `<option value="${u}" ${item.unidad === u ? 'selected' : ''}>${u}</option>`).join('')}
         </select>
       </label>
       <label style="display:block;margin-top:1rem;">
@@ -6044,6 +6049,7 @@ function mostrarModalAgregarItem() {
         <option value="ml">ml</option>
         <option value="hojas">hojas</option>
         <option value="gotas">gotas</option>
+        <option value="copas">copas</option>
       </select>
     </label>
     <label style="display:block;margin-top:1rem;">
@@ -6138,7 +6144,7 @@ function editarPrecio(id) {
       <label style="display:block;margin-top:1rem;">
         Unidad (receta):
         <select id="edit-precio-unidad" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
-          ${['unidad','onzas','gramos','kg','lt','ml','hojas','gotas'].map(u =>
+          ${['unidad','onzas','gramos','kg','lt','ml','hojas','gotas','copas'].map(u =>
             `<option value="${u}" ${item.unidad === u ? 'selected' : ''}>${u}</option>`
           ).join('')}
         </select>
