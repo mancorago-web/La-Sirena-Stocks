@@ -2337,18 +2337,106 @@ app.get('/api/recetas', async (req, res) => {
     if (!ingByRec[rid]) ingByRec[rid] = [];
     ingByRec[rid].push(ing);
   });
+  const recetasById = {};
+  recSnap.docs.forEach(d => { recetasById[Number(d.id)] = { id: Number(d.id), ...d.data() }; });
+
+  // RECETAS BASE: cantidad de producción leída del nombre (ej. "R.B ESPUMA - 4 UNIDADES" -> 4 unidades).
+  // Al usar una receta base como ingrediente, su costo = (costo total + 10%) ÷ cantidad que produce.
+  const parseCantidadBase = nombre => {
+    const n = String(nombre || '');
+    const m = n.match(/(?:^|\s|\(|x\s|-\s)(\d+(?:\.\d+)?)\s*(UNIDADES?|UND|COCTELES|COCTEL|ONZAS?|ONZ|ML|LTS?|LITROS?|LITRO|GR|GRAMOS?|KG)\b/i);
+    if (m) return { cantidad: parseFloat(m[1]), unidad: m[2].toLowerCase() };
+    if (/x\s*und\b/i.test(n)) return { cantidad: 1, unidad: 'und' };
+    return null;
+  };
+  const recBaseInfo = {};
+  Object.values(recetasById).forEach(r => { if (String(r.categoria || '') === 'RECETAS BASE') { const p = parseCantidadBase(r.nombre); if (p) recBaseInfo[r.id] = p; } });
+  const recBaseByName = {};
+  Object.values(recetasById).forEach(r => { if (String(r.categoria || '') === 'RECETAS BASE') recBaseByName[normNombre(r.nombre)] = r.id; });
+
+  // Vincula un ingrediente con su RECETA BASE aunque el nombre no sea idéntico (ej. la receta usa
+  // "R.B ZUMO DE LIMON X UND" y la receta base se llama "R.B ZUMO DE LIMON - 1 ONZ"). Regla:
+  // prefijo común largo (>= 12 chars y >= 70% del nombre más corto) con UNA sola coincidencia.
+  const matchRecetaBase = ingrediente => {
+    const nk = normNombre(ingrediente);
+    if (recBaseByName[nk] !== undefined) return recBaseByName[nk];
+    let best = undefined, bestLen = 0, ties = false;
+    for (const [bn, bid] of Object.entries(recBaseByName)) {
+      let len = 0;
+      const min = Math.min(nk.length, bn.length);
+      while (len < min && nk[len] === bn[len]) len++;
+      if (len >= 12 && len >= 0.7 * min) {
+        if (len > bestLen) { best = bid; bestLen = len; ties = false; }
+        else if (len === bestLen) { ties = true; }
+      }
+    }
+    return ties ? undefined : best;
+  };
+
+  const prodParams = unidad => {
+    const u = normalizeUnit(unidad);
+    if (u === 'ml') return { unidadItem: 'ml', equivMl: 1, equivGr: 0 };
+    if (u === 'lt') return { unidadItem: 'lt', equivMl: 1000, equivGr: 0 };
+    if (u === 'onzas') return { unidadItem: 'onzas', equivMl: 29.5735, equivGr: 28.3495 };
+    if (u === 'gramos') return { unidadItem: 'gramos', equivMl: 0, equivGr: 1 };
+    if (u === 'kg') return { unidadItem: 'kg', equivMl: 0, equivGr: 1000 };
+    return { unidadItem: 'unidad', equivMl: 0, equivGr: 0 };
+  };
+
+  const memo = {};
+  const calculando = new Set();
+  function costoReceta(id) {
+    if (memo[id] !== undefined) return memo[id];
+    if (calculando.has(id)) return 0; // ciclo improbable: evita loop infinito
+    calculando.add(id);
+    const r = recetasById[id];
+    let total = 0;
+    if (r) { const ings = ingByRec[id] || []; for (const ing of ings) total += costoIngrediente(ing); }
+    calculando.delete(id);
+    memo[id] = total;
+    return total;
+  }
+  const costoIngrediente = ing => {
+    const baseId = matchRecetaBase(ing.ingrediente);
+    if (baseId !== undefined) {
+      const bi = recBaseInfo[baseId];
+      if (bi && bi.cantidad > 0) {
+        const costoBase = costoReceta(baseId); // costo bruto (sin 10%)
+        const perUnit = (costoBase * 1.10) / bi.cantidad; // +10% pérdida ÷ lo que produce
+        const pp = prodParams(bi.unidad);
+        const conv = calcularCosto(ing.cantidad, ing.unidad, perUnit, pp.unidadItem, pp.equivMl, pp.equivGr, ing.ingrediente);
+        return typeof conv === 'object' ? conv.costo : conv;
+      }
+    }
+    const match = precios.find(p => p.ingrediente && p.ingrediente.toLowerCase() === String(ing.ingrediente || '').trim().toLowerCase());
+    const precioUnidad = match ? (match.precio || 0) : 0;
+    const conv = match ? calcularCosto(ing.cantidad, ing.unidad, precioUnidad, match.unidad, match.equiv_ml, match.equiv_gr, match.ingrediente) : { costo: (ing.cantidad || 0) * precioUnidad, converted: false };
+    return typeof conv === 'object' ? conv.costo : conv;
+  };
+
   const result = recSnap.docs.map(d => {
     const r = { id: Number(d.id), ...d.data() };
     const ingredientes = ingByRec[r.id] || [];
     let costoTotal = 0;
     const ingredientesConPrecio = ingredientes.map(ing => {
-      const match = precios.find(p => p.ingrediente && p.ingrediente.toLowerCase() === ing.ingrediente.toLowerCase());
-      const precioUnidad = match ? (match.precio || 0) : 0;
-      const conv = match
-        ? calcularCosto(ing.cantidad, ing.unidad, precioUnidad, match.unidad, match.equiv_ml, match.equiv_gr, match.ingrediente)
-        : { costo: (ing.cantidad || 0) * precioUnidad, converted: false };
-      const costo = typeof conv === 'object' ? conv.costo : conv;
-      const converted = typeof conv === 'object' ? conv.converted : false;
+      const baseId = matchRecetaBase(ing.ingrediente);
+      let precioUnidad = 0, converted = false, costo = 0;
+      if (baseId !== undefined && recBaseInfo[baseId] && recBaseInfo[baseId].cantidad > 0) {
+        const bi = recBaseInfo[baseId];
+        const costoBase = costoReceta(baseId);
+        precioUnidad = (costoBase * 1.10) / bi.cantidad;
+        const pp = prodParams(bi.unidad);
+        const conv = calcularCosto(ing.cantidad, ing.unidad, precioUnidad, pp.unidadItem, pp.equivMl, pp.equivGr, ing.ingrediente);
+        costo = typeof conv === 'object' ? conv.costo : conv;
+        converted = typeof conv === 'object' ? conv.converted : false;
+        costoTotal += costo;
+        return { ...ing, precioUnidad, costo, converted, precioMatch: true, esRecetaBase: true };
+      }
+      const match = precios.find(p => p.ingrediente && p.ingrediente.toLowerCase() === String(ing.ingrediente || '').trim().toLowerCase());
+      precioUnidad = match ? (match.precio || 0) : 0;
+      const conv = match ? calcularCosto(ing.cantidad, ing.unidad, precioUnidad, match.unidad, match.equiv_ml, match.equiv_gr, match.ingrediente) : { costo: (ing.cantidad || 0) * precioUnidad, converted: false };
+      costo = typeof conv === 'object' ? conv.costo : conv;
+      converted = typeof conv === 'object' ? conv.converted : false;
       costoTotal += costo;
       return { ...ing, precioUnidad, costo, converted, precioMatch: !!match };
     });
