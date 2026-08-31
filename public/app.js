@@ -5518,7 +5518,10 @@ function actualizarTotalPorcionamiento() {
       ? ctx.item.precioKiloBase
       : 0;
     precioPorKiloBruto = precioKiloBase;
-    precioPorKiloFiletes = precioKiloBase;
+    const filetesKg = obtenerPesoSeccion('FILETE');
+    precioPorKiloFiletes = (precioKiloBase > 0 && bruto > 0 && filetesKg > 0)
+      ? (precioKiloBase * bruto) / filetesKg
+      : 0;
 
     document.querySelectorAll('#porcionamiento-secciones tr').forEach(tr => {
       const nom = (tr.querySelector('.input-porc-nombre')?.value || '').trim().toUpperCase();
@@ -5541,6 +5544,7 @@ function actualizarTotalPorcionamiento() {
     const sumO = Math.round(sumaOtros * 100) / 100;
     const diff = Math.round(faltante * 100) / 100;
     let html = 'Peso bruto: <b>' + bruto + '</b> kg · Precio/kg bruto: <b>S/ ' + (precioPorKiloBruto > 0 ? precioPorKiloBruto.toFixed(2) : '0') + '</b> · Suma porciones: <b>' + sumO + '</b>';
+    if (precioPorKiloFiletes > 0) html += ' · Precio/kg filete: <b>S/ ' + precioPorKiloFiletes.toFixed(2) + '</b>';
     if (diff > 0) html += ' · <span style="color:#c62828;font-weight:700;">FALTANTE: ' + diff + '</span>';
     else if (diff < 0) html += ' · <span style="color:#e65100;font-weight:700;">EXCESO: ' + Math.abs(diff) + '</span>';
     else html += ' · <span style="color:#2e7d32;font-weight:700;">OK ✓</span>';
