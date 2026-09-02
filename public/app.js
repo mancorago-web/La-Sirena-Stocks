@@ -610,26 +610,29 @@ function fmt3(n) {
   return String(parseFloat(v.toFixed(3)));
 }
 
-// Vista de rango (solo lectura) para INGRESOS/SALIDAS de varios días
+// Vista de rango (solo lectura) para INGRESOS/SALIDAS/VENTAS de varios días
 function renderRangoDetalle(container, data, tipo) {
   if (!container) return;
-  const colLabel = tipo === 'ingresos' ? 'Total Ingreso' : 'Total Salida';
-  const colKey = tipo === 'ingresos' ? 'stock_ingreso' : 'salida_almacen';
+  const conf = tipo === 'ingresos'
+    ? { colLabel: 'Total Ingreso', colKey: 'stock_ingreso', nom: 'ingresos' }
+    : (tipo === 'salidas'
+        ? { colLabel: 'Total Salida', colKey: 'salida_almacen', nom: 'salidas' }
+        : { colLabel: 'Total Ventas', colKey: 'total_ventas', nom: 'ventas' });
   const filas = [];
   (data || []).forEach(a => (a.items || []).forEach(i => {
-    const v = parseFloat(i[colKey]) || 0;
+    const v = parseFloat(i[conf.colKey]) || 0;
     if (v > 0) filas.push({ al: a.nombre, item: i.nombre, v });
   }));
   filas.sort((x, y) => String(x.al).localeCompare(String(y.al)) || String(x.item).localeCompare(String(y.item), 'es'));
   if (!filas.length) {
-    container.innerHTML = '<p style="color:#888;">No hay ' + (tipo === 'ingresos' ? 'ingresos' : 'salidas') + ' registrados en el rango seleccionado.</p>';
+    container.innerHTML = '<p style="color:#888;">No hay ' + conf.nom + ' registrados en el rango seleccionado.</p>';
     return;
   }
   const total = filas.reduce((s, f) => s + f.v, 0);
-  container.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Almacén</th><th>Item</th><th>' + colLabel + '</th></tr></thead><tbody>'
+  container.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Almacén</th><th>Item</th><th>' + conf.colLabel + '</th></tr></thead><tbody>'
     + filas.map(f => '<tr><td>' + esc(f.al) + '</td><td>' + esc(f.item) + '</td><td>' + fmt3(f.v) + '</td></tr>').join('')
     + '</tbody></table></div>'
-    + '<p style="font-weight:700;color:#0f3460;margin-top:0.5rem;">TOTAL ' + colLabel.toUpperCase() + ': <b>' + fmt3(total) + '</b></p>';
+    + '<p style="font-weight:700;color:#0f3460;margin-top:0.5rem;">TOTAL ' + conf.colLabel.toUpperCase() + ': <b>' + fmt3(total) + '</b></p>';
 }
 function recargarTodo(fecha) {
   _invCache = { fecha: null, data: null, pending: null };
@@ -2114,6 +2117,19 @@ function verDetallesSalidas() {
 function verDetallesVentas() {
   const fecha = document.getElementById('fecha-ventas').value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
+  const fin = document.getElementById('fecha-ventas-fin')?.value || fecha;
+  if (fin > fecha) {
+    api('GET', '/api/almacenes/con-inventario-rango?fecha_inicio=' + encodeURIComponent(fecha) + '&fecha_fin=' + encodeURIComponent(fin)).then(data => {
+      const body = document.getElementById('modal-body');
+      body.innerHTML = '<h3>Detalle de Ventas — ' + fecha + ' a ' + fin + '</h3>';
+      const wrap = document.createElement('div');
+      wrap.style.marginTop = '0.5rem';
+      renderRangoDetalle(wrap, data, 'ventas');
+      body.appendChild(wrap);
+      document.getElementById('modal').style.display = 'block';
+    });
+    return;
+  }
   getInventario(fecha).then(data => {
     data = data.filter(a => a.id !== 3 && a.id !== 9 && a.id !== 16);
     let html = '<h3>Detalle de Ventas — ' + fecha + '</h3>';
@@ -2170,9 +2186,21 @@ function verDetallesBajas() {
   });
 }
 
-function cargarVentas(fecha) {
-  if (!fecha) fecha = document.getElementById('fecha-ventas').value;
-  getInventario(fecha).then(data => {
+function cargarVentas(fechaIni, fechaFin) {
+  if (!fechaIni) fechaIni = document.getElementById('fecha-ventas').value;
+  if (!fechaFin) fechaFin = document.getElementById('fecha-ventas-fin')?.value || fechaIni;
+  if (!fechaIni) return;
+  const btnGuardar = document.getElementById('tab-ventas')?.querySelector('.btn-guardar-dia');
+  const container = document.getElementById('accordion-ventas');
+  if (fechaFin > fechaIni) {
+    if (btnGuardar) { btnGuardar.disabled = true; btnGuardar.textContent = '🔒 SOLO LECTURA (RANGO)'; }
+    api('GET', '/api/almacenes/con-inventario-rango?fecha_inicio=' + encodeURIComponent(fechaIni) + '&fecha_fin=' + encodeURIComponent(fechaFin)).then(data => {
+      renderRangoDetalle(container, data, 'ventas');
+    }).catch(e => console.error(e));
+    return;
+  }
+  if (btnGuardar) { btnGuardar.disabled = false; btnGuardar.textContent = '💾 GUARDAR VENTAS'; }
+  getInventario(fechaIni).then(data => {
     data = (data || []).filter(a => a.id !== 3 && a.id !== 9 && a.id !== 16);
     // Solo mostrar items que se vendieron en esta fecha (COPIA: no muta el caché compartido)
     data = data.map(a => ({ ...a, items: (a.items || []).filter(i => (i.total_ventas || 0) > 0) })).filter(a => a.items.length > 0);

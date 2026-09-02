@@ -179,7 +179,8 @@
       <div class="header-actions">
         <h2>Ventas</h2>
         <div class="controles-dia">
-          <label>Fecha: <input type="date" id="fecha-ventas" onchange="cargarVentas(this.value)"></label>
+          <label>Desde: <input type="date" id="fecha-ventas" onchange="cargarVentas()"></label>
+          <label>Hasta: <input type="date" id="fecha-ventas-fin" onchange="cargarVentas()"></label>
           <input type="text" id="buscar-venta" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-ventas')">
           <button class="btn-guardar-dia" onclick="guardarVentas()">💾 GUARDAR VENTAS</button>
           <button class="btn-detalles" onclick="verDetallesVentas()">📋 DETALLES</button>
