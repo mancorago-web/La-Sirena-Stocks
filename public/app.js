@@ -605,6 +605,10 @@ function normalizeUnit(u) {
   const map = { 'oz': 'onzas', 'onz': 'onzas', 'und': 'unidad', 'unidades': 'unidad', 'gr': 'gramos', 'gramo': 'gramos' };
   return map[u ? u.toLowerCase().trim() : ''] || (u ? u.trim().toLowerCase() : 'unidad');
 }
+function fmt3(n) {
+  const v = Number(n) || 0;
+  return String(parseFloat(v.toFixed(3)));
+}
 function recargarTodo(fecha) {
   _invCache = { fecha: null, data: null, pending: null };
   // Recargar SOLO la vista actual (evita ~5 refetch del inventario por cada guardado → GUARDAR más rápido).
@@ -4757,13 +4761,13 @@ function cargarStockCocina() {
     function fila(i) {
       return `<tr data-cocina-id="${i.id}" data-cantidad="${i.cantidad}" data-unidad="${esc(i.unidad)}" data-familia="${esc(i.familia)}">
         <td>${esc(i.nombre)}</td>
-        <td><input type="number" class="input-num input-apertura" value="${i.stock_apertura || 0}" step="0.01" oninput="calcCierre(this)"></td>
-        <td><input type="number" class="input-num input-ingreso" value="${i.stock_ingreso || 0}" step="0.01" oninput="calcCierre(this)"></td>
-        <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01" oninput="calcCierre(this)"></td>
-        <td><input type="number" class="input-num input-ventas" value="${i.total_ventas || 0}" step="0.01" oninput="calcCierre(this)"></td>
-        <td><input type="number" class="input-num input-falta" value="${i.falta_almacen || 0}" step="0.01" oninput="calcCierre(this)"></td>
-        <td><input type="hidden" class="input-baja" value="${i.stock_baja || 0}">
-        <td><input type="number" class="input-num input-cierre" value="${i.stock_cierre || 0}" step="0.01" readonly></td>
+        <td><input type="number" class="input-num input-apertura" value="${fmt3(i.stock_apertura)}" step="0.001" oninput="calcCierre(this)"></td>
+        <td><input type="number" class="input-num input-ingreso" value="${fmt3(i.stock_ingreso)}" step="0.001" oninput="calcCierre(this)"></td>
+        <td><input type="number" class="input-num input-salida" value="${fmt3(i.salida_almacen)}" step="0.001" oninput="calcCierre(this)"></td>
+        <td><input type="number" class="input-num input-ventas" value="${fmt3(i.total_ventas)}" step="0.001" oninput="calcCierre(this)"></td>
+        <td><input type="number" class="input-num input-falta" value="${fmt3(i.falta_almacen)}" step="0.001" oninput="calcCierre(this)"></td>
+        <td><input type="hidden" class="input-baja" value="${fmt3(i.stock_baja)}">
+        <td><input type="number" class="input-num input-cierre" value="${fmt3(i.stock_cierre)}" step="0.001" readonly></td>
         <td style="white-space:nowrap">
           <button onclick="editarStockCocina(${i.id})" style="background:#0f3460;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">EDITAR</button>
           <button onclick="eliminarStockCocina(${i.id})" style="background:#c62828;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">✕</button>
@@ -4994,7 +4998,7 @@ function cargarCocinaMovimientos(tipo) {
             const mov = movByIng[s.ingrediente] || {};
             return `<tr data-ing="${esc(s.ingrediente)}" data-uni="${esc(s.unidad || 'unidad')}">
               <td>${esc(s.ingrediente)}</td>
-              <td><input type="number" class="input-cocina-mov" value="${mov.cantidad || ''}" step="0.01" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
+              <td><input type="number" class="input-cocina-mov" value="${mov.cantidad ? fmt3(mov.cantidad) : ''}" step="0.001" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
               <td>${esc(s.unidad || 'unidad')}</td>
               ${cellOrigen(mov)}
             </tr>`;
