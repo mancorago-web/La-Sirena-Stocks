@@ -4812,10 +4812,11 @@ function verStockBarraGeneral() {
     return getInventario(fecha).then(invData => {
     const stock = data || [];
     const norm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-    // ALMACEN GENERAL ABAJO (grupo BARRA): también se contabiliza en la vista GENERAL
+    // ALMACEN GENERAL ABAJO: se contabilizan los items con categoria BARRA Y también los que
+    // pertenecen a las categorías de barra por su nombre (muchos quedaron sin categoria, ej. APEROL).
     const almacenGeneralAbajo = (invData || []).find(a => /GENERAL.*ABAJO|ABAJO.*GENERAL/i.test(a.nombre)) || (invData || []).find(a => Number(a.id) === 4);
     const itemsAbajoBarra = (almacenGeneralAbajo ? almacenGeneralAbajo.items : [])
-      .filter(it => String(it.categoria || '').toUpperCase() === 'BARRA')
+      .filter(it => String(it.categoria || '').toUpperCase() === 'BARRA' || CATEGORIAS.some(c => c.test(String(it.nombre || ''))))
       .map(it => ({ nombre: it.nombre, cantidad: (it.stock_cierre !== undefined && it.stock_cierre !== null) ? it.stock_cierre : (it.stock_apertura || 0) }))
       .filter(it => (parseFloat(it.cantidad) || 0) > 0);
     // Agregar cantidades por nombre (sumando todos los muebles + ALM. GENERAL ABAJO)
