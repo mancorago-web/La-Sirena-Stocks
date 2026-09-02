@@ -4879,6 +4879,66 @@ app.post('/api/reportes/accion/salida-barra', async (req, res) => {
   }
 });
 
+// --- ACCION en REPORTES: convertir FALTA en SALIDA con destino JUAN (el dueño se llevó el item) ---
+app.post('/api/reportes/accion/salida-juan', async (req, res) => {
+  try {
+    const { fecha_falta, fecha_salida, item_id, almacen_id, cantidad, saved_by } = req.body;
+    if (!fecha_falta || !fecha_salida || !item_id || !almacen_id || !(Number(cantidad) > 0)) {
+      return res.status(400).json({ error: 'fecha_falta, fecha_salida, item_id, almacen_id y cantidad son requeridos' });
+    }
+    const savedBy = saved_by || (req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown');
+    const al = Number(almacen_id);
+    const item = Number(item_id);
+    const redondear = n => Math.round(n * 100) / 100;
+
+    const diaSalidaId = docId('invdiario', fecha_salida, al, item);
+    const diaFaltaId = docId('invdiario', fecha_falta, al, item);
+    const [diaSalidaSnap, diaFaltaSnap] = await Promise.all([
+      col('inventario_diario').doc(diaSalidaId).get(),
+      col('inventario_diario').doc(diaFaltaId).get(),
+    ]);
+    const curSalida = diaSalidaSnap.exists ? (diaSalidaSnap.data().salida_almacen || 0) : 0;
+    const curFalta = diaFaltaSnap.exists ? (diaFaltaSnap.data().falta_almacen || 0) : 0;
+    const aMover = redondear(Math.min(Number(cantidad), curFalta));
+    if (aMover <= 0) return res.status(400).json({ error: 'El item no tiene falta en la fecha indicada' });
+
+    // Apertura para el día real de salida si aún no tiene registro diario
+    let stockApertura = null;
+    if (!diaSalidaSnap.exists) {
+      let prevF = prevWorkingDay(fecha_salida);
+      for (let i = 0; i < 8; i++) {
+        const p = await col('inventario_diario').doc(docId('invdiario', prevF, al, item)).get();
+        if (p.exists) { stockApertura = p.data().stock_cierre ?? 0; break; }
+        prevF = prevWorkingDay(prevF);
+      }
+      if (stockApertura === null) {
+        const invSnap = await col('inventario').get();
+        const inv = invSnap.docs.find(d => Number(d.data().item_id) === item && Number(d.data().almacen_id) === al);
+        stockApertura = inv ? (inv.data().stock_apertura || 0) : 0;
+      }
+    }
+
+    // 1) Registrar la salida con destino JUAN en el día real
+    const regSalida = {
+      item_id: item, almacen_id: al,
+      salida_almacen: redondear(curSalida + aMover),
+      destino_salida: 'juan',
+    };
+    if (stockApertura !== null) regSalida.stock_apertura = stockApertura;
+    await guardarDiaInterno(fecha_salida, [regSalida], savedBy);
+
+    // 2) Quitar la falta del día donde se detectó
+    await guardarDiaInterno(fecha_falta, [{
+      item_id: item, almacen_id: al,
+      falta_almacen: redondear(curFalta - aMover),
+    }], savedBy);
+
+    res.json({ ok: true, movido: aMover, nueva_falta: redondear(curFalta - aMover) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- ACCION en REPORTES: convertir FALTA en DAR DE BAJA (se registra en STOCK/BAJAS) ---
 app.post('/api/reportes/accion/baja', async (req, res) => {
   try {

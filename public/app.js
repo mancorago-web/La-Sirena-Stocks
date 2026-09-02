@@ -3110,10 +3110,10 @@ function abrirAccionesReportes() {
       return;
     }
     let html = '<h3>ACCIONES</h3>';
-    html += '<p style="font-size:0.8rem;color:#888;margin-bottom:0.6rem;">Para cada faltante: <strong>→ COCINA</strong>, <strong>→ BARRA</strong>, <strong>BAJA</strong>, <strong>OBSERVAR</strong> o <strong>INTERCAMBIO</strong>. Para cada cierre negativo: <strong>BAJA</strong> (registra la pérdida en STOCK/BAJAS).</p>';
+    html += '<p style="font-size:0.8rem;color:#888;margin-bottom:0.6rem;">Para cada faltante: <strong>→ COCINA</strong>, <strong>→ BARRA</strong>, <strong>JUAN</strong>, <strong>BAJA</strong>, <strong>OBSERVAR</strong> o <strong>INTERCAMBIO</strong>. Para cada cierre negativo: <strong>BAJA</strong> (registra la pérdida en STOCK/BAJAS).</p>';
     if (faltantes.length) {
       html += '<div style="font-weight:700;color:#c62828;margin:0.6rem 0 0.3rem;">ITEMS CON FALTA</div>';
-      html += '<div class="table-wrap"><table><thead><tr><th>Fecha Falta</th><th>Item</th><th>Almacén</th><th>Falta</th><th>Fecha Real Salida</th><th>→ COCINA</th><th>→ BARRA</th><th>BAJA</th><th>OBSERVAR</th><th>INTERCAMBIO</th></tr></thead><tbody>';
+      html += '<div class="table-wrap"><table><thead><tr><th>Fecha Falta</th><th>Item</th><th>Almacén</th><th>Falta</th><th>Fecha Real Salida</th><th>→ COCINA</th><th>→ BARRA</th><th>JUAN</th><th>BAJA</th><th>OBSERVAR</th><th>INTERCAMBIO</th></tr></thead><tbody>';
       faltantes.forEach(f => {
         html += `<tr data-accion-item="${f.item_id}" data-accion-al="${f.almacen_id}" data-accion-falta="${f.falta}" data-accion-fecha="${f.fecha}">
           <td>${f.fecha}</td>
@@ -3123,6 +3123,7 @@ function abrirAccionesReportes() {
           <td><input type="date" class="input-fecha-salida" value="${prevWorkingDayStr(f.fecha)}"></td>
           <td><button class="btn-detalles" onclick="convertirFaltaACocina(this)" style="background:#2e7d32;color:#fff;">→ COCINA</button></td>
           <td><button class="btn-detalles" onclick="convertirFaltaABarra(this)" style="background:#00695c;color:#fff;">→ BARRA</button></td>
+          <td><button class="btn-detalles" onclick="convertirFaltaAJuan(this)" style="background:#4e342e;color:#fff;">JUAN</button></td>
           <td><button class="btn-detalles" onclick="darDeBajaFalta(this)" style="background:#b71c1c;color:#fff;">BAJA</button></td>
           <td><button class="btn-detalles" onclick="observarFalta(this)" style="background:#e65100;color:#fff;">OBSERVAR</button></td>
           <td><button class="btn-detalles" onclick="intercambiarFalta(this)" style="background:#6a1b9a;color:#fff;">INTERCAMBIO</button></td>
@@ -3311,6 +3312,28 @@ function convertirFaltaABarra(btn) {
   }).catch(() => {
     btn.disabled = false; btn.textContent = '→ BARRA';
     alert('Error al convertir');
+  });
+}
+
+// Convierte la falta en una SALIDA con destino JUAN (el dueño se llevó el item)
+function convertirFaltaAJuan(btn) {
+  const tr = btn.closest('tr');
+  const item_id = parseInt(tr.dataset.accionItem);
+  const almacen_id = parseInt(tr.dataset.accionAl);
+  const cantidad = parseFloat(tr.dataset.accionFalta);
+  const fecha_falta = tr.dataset.accionFecha;
+  const fecha_salida = tr.querySelector('.input-fecha-salida').value;
+  if (!fecha_salida) { alert('Indica la fecha real en que se llevó el item'); return; }
+  if (!confirm('¿Registrar que JUAN se llevó ' + cantidad + ' de este item el ' + fecha_salida + '? Se registrará como SALIDA con destino JUAN (no entra a COCINA/BARRA).')) return;
+  btn.disabled = true; btn.textContent = 'Procesando...';
+  api('POST', '/api/reportes/accion/salida-juan', {
+    fecha_falta, fecha_salida, item_id, almacen_id, cantidad, saved_by: currentUserName
+  }).then(() => {
+    showToast('Registrado: SALIDA JUAN');
+    refrescarAcciones();
+  }).catch(() => {
+    btn.disabled = false; btn.textContent = 'JUAN';
+    alert('Error al registrar');
   });
 }
 
