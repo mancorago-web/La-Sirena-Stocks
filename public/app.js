@@ -4874,7 +4874,7 @@ function guardarEdicionStockCocina(id) {
   api('PUT', '/api/cocina/stock/' + id, { ingrediente: nombre, cantidad, unidad, familia }).then(() => {
     cerrarModal();
     showToast('Item actualizado');
-    cargarStockCocina([familia]);
+    cargarStockCocina();
   }).catch(() => alert('Error al actualizar'));
 }
 
