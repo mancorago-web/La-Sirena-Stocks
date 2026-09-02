@@ -4666,6 +4666,7 @@ function cargarStockBarra() {
   }
   const url = esHoy ? '/api/barra/stock' : '/api/barra/stock?fecha=' + fecha;
   api('GET', url).then(data => {
+    return getInventario(fecha).then(invData => {
     const container = document.getElementById('barra-stock-container');
     if (!data.length) {
       container.innerHTML = '<p>No hay ingredientes en stock' + (esHoy ? '. Agrega uno nuevo.' : ' para esta fecha.') + '</p>';
@@ -4679,16 +4680,38 @@ function cargarStockBarra() {
       const key = (s.grupo || '').toUpperCase();
       (groups[key] || groups['SIN CLASIFICAR']).push(s);
     });
+    // Cobertura: para cada item BAJO (muebles), ¿dónde hay más? (otro mueble/COMPRAS DIARIAS con
+    // stock, o ALMACEN GENERAL ABAJO grupo BARRA). Si está cubierto, no lleva etiqueta STOCK BAJO.
+    const conStock = data.filter(s => (parseFloat(s.cantidad) || 0) > 0.2);
+    const almacenGeneralAbajo = (invData || []).find(a => /GENERAL.*ABAJO|ABAJO.*GENERAL/i.test(a.nombre)) || (invData || []).find(a => Number(a.id) === 4);
+    const itemsAbajoBarra = (almacenGeneralAbajo ? almacenGeneralAbajo.items : [])
+      .filter(it => String(it.categoria || '').toUpperCase() === 'BARRA')
+      .map(it => ({ nombre: it.nombre, cantidad: (it.stock_cierre !== undefined && it.stock_cierre !== null) ? it.stock_cierre : (it.stock_apertura || 0) }));
+    const coverMap = {};
+    data.forEach(s => {
+      if (String(s.grupo || '').toUpperCase() === 'COMPRAS DIARIAS') return;
+      if ((parseFloat(s.cantidad) || 0) > 0.2) return;
+      const donde = [];
+      conStock.forEach(o => {
+        if (o.id !== s.id && comparteProductoBarra(s.ingrediente, o.ingrediente)) donde.push((o.grupo || 'SIN CLASIFICAR').toUpperCase());
+      });
+      const enAbajo = itemsAbajoBarra.find(it => comparteProductoBarra(s.ingrediente, it.nombre) && (parseFloat(it.cantidad) || 0) > 0);
+      if (enAbajo) donde.push('ALM. GENERAL ABAJO');
+      if (donde.length) coverMap[s.id] = [...new Set(donde)];
+    });
     function fila(s, sinOnzas) {
       const esCompras = sinOnzas === true;
       const onz = esCompras ? '' : formatoOnzas(calcularOnzas(s));
       const bajo = !esCompras && (parseFloat(s.cantidad) || 0) <= 0.2;
-      const badge = bajo ? ' <span class="badge-stock-bajo" title="Stock bajo">STOCK BAJO</span>' : '';
+      const cubierto = bajo ? (coverMap[s.id] || null) : null;
+      const badge = bajo && !cubierto ? ' <span class="badge-stock-bajo" title="Stock bajo">STOCK BAJO</span>' : '';
       const cls = bajo ? ' class="stock-bajo"' : '';
+      const nota = cubierto ? ' <span style="font-size:0.75rem;color:#0f3460;">(más en: ' + cubierto.join(', ') + ')</span>' : '';
+      const nombreConNota = esc(s.ingrediente) + badge + nota;
       const tdOnzas = esCompras ? '' : `<td class="onzas-stock">${onz}</td>`;
       if (!esHoy) {
         return `<tr data-stock-id="${s.id}"${cls}>
-          <td class="stock-nombre">${esc(s.ingrediente)}${badge}</td>
+          <td class="stock-nombre">${nombreConNota}</td>
           <td>${s.cantidad}</td>
           <td>${s.unidad}</td>
           ${tdOnzas}
@@ -4700,7 +4723,7 @@ function cargarStockBarra() {
       const uniList = UNIDADES_STOCK.includes(s.unidad) ? UNIDADES_STOCK : [...UNIDADES_STOCK, s.unidad];
       const uniOpts = uniList.map(u => `<option value="${u}" ${s.unidad === u ? 'selected' : ''}>${u}</option>`).join('');
       return `<tr data-stock-id="${s.id}" data-orig-cantidad="${s.cantidad}" data-orig-unidad="${s.unidad}" data-orig-grupo="${(s.grupo || '').toUpperCase()}"${cls}>
-        <td class="stock-nombre">${esc(s.ingrediente)}${badge}</td>
+        <td class="stock-nombre">${nombreConNota}</td>
         <td><input type="number" class="input-stock-cant" value="${s.cantidad}" step="0.01" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarOnzasFila(this); marcarStockDirty()"></td>
         <td><select class="select-stock-uni" onchange="onUnidadStockChange(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${uniOpts}</select></td>
         ${tdOnzas}
@@ -4748,6 +4771,7 @@ function cargarStockBarra() {
     if (b) { b.style.background = '#2e7d32'; b.textContent = '💾 GUARDAR STOCK'; }
     if (esHoy) guardarSnapshotStock();
     cargarConsumoNoRegistrado(fecha, container);
+    });
   }).catch(e => { console.error(e); });
 }
 
