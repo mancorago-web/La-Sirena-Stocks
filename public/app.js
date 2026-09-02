@@ -4751,38 +4751,74 @@ function cargarStockBarra() {
   }).catch(e => { console.error(e); });
 }
 
+function prodTokensBarra(nombre) {
+  return tokensDe(nombre).filter(t => !/^\d+$/.test(t));
+}
+function comparteProductoBarra(a, b) {
+  const ta = prodTokensBarra(a);
+  const tb = prodTokensBarra(b);
+  if (!ta.length || !tb.length) return false;
+  const set = new Set(ta);
+  return tb.some(t => set.has(t));
+}
+
 function verStockBajoBarra() {
   const fechaEl = document.getElementById('fecha-stock-barra');
   const fecha = fechaEl ? fechaEl.value : todayStr();
   api('GET', fecha === todayStr() ? '/api/barra/stock' : '/api/barra/stock?fecha=' + encodeURIComponent(fecha)).then(data => {
-    const bajos = (data || [])
-      .filter(s => String(s.grupo || '').toUpperCase() !== 'COMPRAS DIARIAS')
-      .filter(s => (parseFloat(s.cantidad) || 0) <= 0.2)
-      .sort((a, b) => (parseFloat(a.cantidad) || 0) - (parseFloat(b.cantidad) || 0));
-    const body = document.getElementById('modal-body');
-    if (!bajos.length) {
-      body.innerHTML = '<h3>📉 STOCK BAJO — BARRA</h3><p style="margin-top:0.75rem;color:#666;">No hay botellas con stock bajo (cantidad ≤ 0.2) el ' + fecha + '.</p><div style="margin-top:1.5rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
+    return getInventario(fecha).then(invData => {
+      const stock = data || [];
+      const almacenGeneralAbajo = (invData || []).find(a => /GENERAL.*ABAJO|ABAJO.*GENERAL/i.test(a.nombre)) || (invData || []).find(a => Number(a.id) === 4);
+      const itemsAbajoBarra = (almacenGeneralAbajo ? almacenGeneralAbajo.items : [])
+        .filter(it => String(it.categoria || '').toUpperCase() === 'BARRA')
+        .map(it => ({ nombre: it.nombre, cantidad: (it.stock_cierre !== undefined && it.stock_cierre !== null) ? it.stock_cierre : (it.stock_apertura || 0) }));
+      // Candidatos a STOCK BAJO: solo muebles (no COMPRAS DIARIAS), cantidad <= 0.2
+      const bajos = stock.filter(s => String(s.grupo || '').toUpperCase() !== 'COMPRAS DIARIAS' && (parseFloat(s.cantidad) || 0) <= 0.2);
+      const stockConStock = stock.filter(s => (parseFloat(s.cantidad) || 0) > 0.2);
+      const reponer = [];
+      const stockBajoFinal = [];
+      bajos.forEach(s => {
+        // 1) ¿Hay un item SIMILAR (mismo producto) en todo BARRA/STOCK con stock? -> no se marca
+        const cubierto = stockConStock.some(o => o.id !== s.id && comparteProductoBarra(s.ingrediente, o.ingrediente));
+        if (cubierto) return;
+        // 2) ¿Existe en ALMACEN GENERAL ABAJO (grupo BARRA)? -> recomendar REPONER
+        const enAbajo = itemsAbajoBarra.find(it => comparteProductoBarra(s.ingrediente, it.nombre) && (parseFloat(it.cantidad) || 0) > 0);
+        if (enAbajo) reponer.push({ item: s, enAbajo });
+        else stockBajoFinal.push(s);
+      });
+      stockBajoFinal.sort((a, b) => (parseFloat(a.cantidad) || 0) - (parseFloat(b.cantidad) || 0));
+      reponer.sort((a, b) => (parseFloat(a.item.cantidad) || 0) - (parseFloat(b.item.cantidad) || 0));
+      const body = document.getElementById('modal-body');
+      if (!reponer.length && !stockBajoFinal.length) {
+        body.innerHTML = '<h3>📉 STOCK BAJO — BARRA</h3><p style="margin-top:0.75rem;color:#666;">No hay botellas bajas sin cubrir el ' + fecha + ': las que estaban bajas tienen un similar en BARRA/STOCK o stock en ALMACÉN GENERAL ABAJO.</p><div style="margin-top:1.5rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
+        document.getElementById('modal').style.display = 'block';
+        return;
+      }
+      let html = '<h3>📉 STOCK BAJO — BARRA (' + fecha + ')</h3>';
+      if (reponer.length) {
+        html += '<p style="color:#1565c0;font-weight:700;margin:0.6rem 0 0.3rem;">🔄 REPONER desde ALMACÉN GENERAL ABAJO (' + reponer.length + ')</p>';
+        html += '<p style="font-size:0.8rem;color:#666;margin:0 0 0.3rem;">Estos items están bajos en BARRA/STOCK y hay stock del mismo producto en ALMACÉN GENERAL ABAJO (grupo BARRA).</p>';
+        html += '<div class="table-wrap"><table style="font-size:0.85rem;"><thead><tr><th>Item bajo en BARRA</th><th>Mueble</th><th>Cant.</th><th>Disponible en ABAJO</th></tr></thead><tbody>'
+          + reponer.map(x => '<tr><td>' + esc(x.item.ingrediente) + '</td><td>' + (x.item.grupo || '').toUpperCase() + '</td><td style="color:#e65100;font-weight:700;">' + x.item.cantidad + '</td><td>' + esc(x.enAbajo.nombre) + ' (' + x.enAbajo.cantidad + ')</td></tr>').join('')
+          + '</tbody></table></div>';
+      }
+      if (stockBajoFinal.length) {
+        html += '<p style="color:#e65100;font-weight:700;margin:0.75rem 0 0.3rem;">📉 STOCK BAJO real (' + stockBajoFinal.length + ')</p>';
+        html += '<p style="font-size:0.8rem;color:#666;margin:0 0 0.3rem;">Sin similar en BARRA/STOCK ni en ALMACÉN GENERAL ABAJO (grupo BARRA).</p>';
+        html += '<div class="table-wrap"><table style="font-size:0.85rem;"><thead><tr><th>Item</th><th>Mueble</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th></tr></thead><tbody>'
+          + stockBajoFinal.map(s => {
+            const onz = formatoOnzas(calcularOnzas(s));
+            const cero = (parseFloat(s.cantidad) || 0) <= 0;
+            return '<tr' + (cero ? ' style="background:#fff3e0;"' : '') + '><td>' + esc(s.ingrediente) + '</td><td>' + (s.grupo || '').toUpperCase() + '</td><td style="font-weight:700;color:' + (cero ? '#c62828' : '#e65100') + ';">' + s.cantidad + '</td><td>' + s.unidad + '</td><td>' + onz + '</td></tr>';
+          }).join('')
+          + '</tbody></table></div>';
+      }
+      html += '<div style="margin-top:1rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
+      body.innerHTML = html;
+      const mc = document.querySelector('.modal-content');
+      if (mc) mc.classList.add('modal-wide');
       document.getElementById('modal').style.display = 'block';
-      return;
-    }
-    const filas = bajos.map(s => {
-      const onz = formatoOnzas(calcularOnzas(s));
-      const cero = (parseFloat(s.cantidad) || 0) <= 0;
-      return `<tr${cero ? ' style="background:#fff3e0;"' : ''}>
-        <td style="white-space:normal;min-width:0;">${esc(s.ingrediente)}</td>
-        <td style="white-space:nowrap;">${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
-        <td style="font-weight:700;color:${cero ? '#c62828' : '#e65100'};white-space:nowrap;">${s.cantidad}</td>
-        <td style="white-space:nowrap;">${s.unidad}</td>
-        <td style="white-space:nowrap;">${onz}</td>
-      </tr>`;
-    }).join('');
-    body.innerHTML = '<h3>📉 STOCK BAJO — BARRA (' + fecha + ') <span style="font-weight:400;font-size:0.85rem;color:#e65100;">— ' + bajos.length + ' botella(s)</span></h3>'
-      + '<p style="font-size:0.8rem;color:#666;margin:0.4rem 0;">Botellas con cantidad ≤ 0.2 (menos de una botella). Ordenadas de menor a mayor.</p>'
-      + '<div class="table-wrap" style="overflow-x:visible;margin-top:0.5rem;"><table style="width:100%;font-size:0.85rem;table-layout:fixed;"><colgroup><col style="width:55%"><col style="width:15%"><col style="width:10%"><col style="width:10%"><col style="width:10%"></colgroup><thead><tr><th>Item</th><th>Mueble</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th></tr></thead><tbody>' + filas + '</tbody></table></div>'
-      + '<div style="margin-top:1rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
-    const mc = document.querySelector('.modal-content');
-    if (mc) mc.classList.add('modal-wide');
-    document.getElementById('modal').style.display = 'block';
+    });
   }).catch(() => alert('Error al cargar el stock'));
 }
 
