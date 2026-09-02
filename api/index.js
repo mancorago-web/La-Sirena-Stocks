@@ -2993,6 +2993,7 @@ app.get('/api/cocina/stock/con-inventario', async (req, res) => {
         stock_cierre: Math.round(cierre * 100) / 100,
       });
     });
+    Object.keys(groups).forEach(f => groups[f].sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es')));
     res.json(Object.keys(groups).map(f => ({ familia: f, items: groups[f] })));
   } catch (e) {
     res.status(500).json({ error: e.message });

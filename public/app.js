@@ -4742,10 +4742,16 @@ function eliminarStockBarra(id) {
 // --- COCINA: Stock con familias (flujo diario estilo ALMACENES) ---
 const FAMILIAS_COCINA = ['FRUTAS', 'VERDURAS', 'CARNE', 'PESCADO', 'POLLO', 'LACTEOS', 'VINOS', 'CERVEZAS', 'ABARROTES', 'LIMPIEZA'];
 
-function cargarStockCocina() {
+function cargarStockCocina(familiasAbrir) {
   const fechaEl = document.getElementById('fecha-cocina-stock');
   if (fechaEl && !fechaEl.value) fechaEl.value = todayStr();
   const fecha = fechaEl ? fechaEl.value : todayStr();
+  // Preservar las categorías (acordeones) abiertas para no perder el lugar al editar/guardar
+  const abiertas = new Set();
+  document.querySelectorAll('#cocina-stock-container .accordion-item').forEach(item => {
+    const body = item.querySelector('.accordion-body');
+    if (body && body.classList.contains('open') && item.dataset.familia) abiertas.add(item.dataset.familia);
+  });
   api('GET', '/api/cocina/stock/con-inventario?fecha=' + encodeURIComponent(fecha)).then(grupos => {
     const container = document.getElementById('cocina-stock-container');
     if (!container) return;
@@ -4758,6 +4764,8 @@ function cargarStockCocina() {
       const target = byFam[fam] || byFam['SIN CLASIFICAR'];
       (g.items || []).forEach(i => target.push(i));
     });
+    // Orden alfabético dentro de cada categoría
+    Object.keys(byFam).forEach(f => byFam[f].sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es')));
     function fila(i) {
       return `<tr data-cocina-id="${i.id}" data-cantidad="${i.cantidad}" data-unidad="${esc(i.unidad)}" data-familia="${esc(i.familia)}">
         <td>${esc(i.nombre)}</td>
@@ -4776,7 +4784,7 @@ function cargarStockCocina() {
     }
     function familiaAccordion(f, items, extraClass) {
       return `
-        <div class="accordion-item">
+        <div class="accordion-item" data-familia="${esc(f)}">
           <div class="accordion-header" onclick="toggleAcordeon(this)">
             <span class="accordion-title">${f} <span style="font-weight:400;font-size:0.85rem;color:#777;">— ${items.length} item(s)</span></span>
             <span class="accordion-arrow">▶</span>
@@ -4792,6 +4800,15 @@ function cargarStockCocina() {
     }
     container.innerHTML = FAMILIAS_COCINA.map(f => familiaAccordion(f, byFam[f])).join('') +
       (byFam['SIN CLASIFICAR'].length ? familiaAccordion('SIN CLASIFICAR', byFam['SIN CLASIFICAR'], 'c62828') : '');
+    // Reabrir las categorías que estaban abiertas + las pedidas al llamar (ej. la nueva del item editado)
+    (familiasAbrir || []).forEach(f => abiertas.add(f));
+    container.querySelectorAll('.accordion-item[data-familia]').forEach(item => {
+      if (abiertas.has(item.dataset.familia)) {
+        item.querySelector('.accordion-body').classList.add('open');
+        item.querySelector('.accordion-arrow').classList.add('open');
+        item.querySelector('.accordion-header').classList.add('active');
+      }
+    });
     container.querySelectorAll('tr[data-cocina-id]').forEach(tr => calcCierre(tr.querySelector('.input-apertura')));
   }).catch(e => console.error(e));
 }
@@ -4857,7 +4874,7 @@ function guardarEdicionStockCocina(id) {
   api('PUT', '/api/cocina/stock/' + id, { ingrediente: nombre, cantidad, unidad, familia }).then(() => {
     cerrarModal();
     showToast('Item actualizado');
-    cargarStockCocina();
+    cargarStockCocina([familia]);
   }).catch(() => alert('Error al actualizar'));
 }
 
