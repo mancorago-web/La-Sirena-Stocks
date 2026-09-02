@@ -351,7 +351,18 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
           const prevDia = prevMap[inv.item_id] || {};
           // If today's doc exists (from propagation or user-saved), use its apertura.
           // If not (new item or no data), fall back to prev day's cierre, then inventario base.
-          const apertura = (dia.stock_apertura ?? prevDia.stock_cierre ?? inv.stock_apertura ?? 0);
+          const manualCount = !!dia.apertura_manual;
+          let apertura;
+          if (manualCount) {
+            apertura = (dia.stock_apertura ?? prevDia.stock_cierre ?? inv.stock_apertura ?? 0);
+          } else if (prevDia && prevDia.stock_cierre !== undefined && prevDia.stock_cierre !== null) {
+            // REGLA DE CADENA: una apertura NO manual debe ser = cierre del día con data anterior.
+            // Si el doc de hoy quedó con un valor viejo/0 (guardado incompleto o día previo sin data
+            // en prevWorkingDay), se muestra el cierre real para no confundir el conteo.
+            apertura = prevDia.stock_cierre;
+          } else {
+            apertura = (dia.stock_apertura ?? inv.stock_apertura ?? 0);
+          }
           const ingreso = (dia.stock_ingreso ?? 0);
           const salida = (dia.salida_almacen ?? 0);
           const ventas = (dia.total_ventas ?? 0);
@@ -455,11 +466,22 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
 
   // Cierres del día hábil ANTERIOR (para la REGLA DE CADENA: una apertura NO manual debe ser =
   // cierre del día anterior). Evita que un error del frontend persista aperturas corruptas.
+  // Se camina hacia atrás hasta encontrar el día real con data (no solo prevWorkingDay), para
+  // que la corrección aplique aunque un día intermedio no tenga registros (cierre/feriado).
   const prevCierres = {};
   try {
-    const prevDiaStr = prevWorkingDay(fecha);
+    let prevDiaStr = prevWorkingDay(fecha);
     if (prevDiaStr !== fecha) {
-      const prevSnap = await col('inventario_diario').where('fecha', '==', prevDiaStr).get();
+      let prevSnap = await col('inventario_diario').where('fecha', '==', prevDiaStr).get();
+      if (prevSnap.empty) {
+        let prev = new Date(prevDiaStr + 'T12:00:00');
+        for (let tries = 0; tries < 10; tries++) {
+          prev.setDate(prev.getDate() - 1);
+          const prevStr = prev.toISOString().split('T')[0];
+          prevSnap = await col('inventario_diario').where('fecha', '==', prevStr).get();
+          if (!prevSnap.empty) break;
+        }
+      }
       prevSnap.docs.forEach(d => { const dd = d.data(); prevCierres[dd.almacen_id + '_' + dd.item_id] = dd.stock_cierre ?? 0; });
     }
   } catch (e) { console.error('prevCierres:', e.message); }
