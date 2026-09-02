@@ -4659,17 +4659,19 @@ function cargarStockBarra() {
       const key = (s.grupo || '').toUpperCase();
       (groups[key] || groups['SIN CLASIFICAR']).push(s);
     });
-    function fila(s) {
-      const onz = formatoOnzas(calcularOnzas(s));
-      const bajo = (parseFloat(s.cantidad) || 0) <= 0.2;
+    function fila(s, sinOnzas) {
+      const esCompras = sinOnzas === true;
+      const onz = esCompras ? '' : formatoOnzas(calcularOnzas(s));
+      const bajo = !esCompras && (parseFloat(s.cantidad) || 0) <= 0.2;
       const badge = bajo ? ' <span class="badge-stock-bajo" title="Stock bajo">STOCK BAJO</span>' : '';
       const cls = bajo ? ' class="stock-bajo"' : '';
+      const tdOnzas = esCompras ? '' : `<td class="onzas-stock">${onz}</td>`;
       if (!esHoy) {
         return `<tr data-stock-id="${s.id}"${cls}>
           <td class="stock-nombre">${esc(s.ingrediente)}${badge}</td>
           <td>${s.cantidad}</td>
           <td>${s.unidad}</td>
-          <td class="onzas-stock">${onz}</td>
+          ${tdOnzas}
           <td>${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
           <td></td>
         </tr>`;
@@ -4681,7 +4683,7 @@ function cargarStockBarra() {
         <td class="stock-nombre">${esc(s.ingrediente)}${badge}</td>
         <td><input type="number" class="input-stock-cant" value="${s.cantidad}" step="0.01" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarOnzasFila(this); marcarStockDirty()"></td>
         <td><select class="select-stock-uni" onchange="onUnidadStockChange(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${uniOpts}</select></td>
-        <td class="onzas-stock">${onz}</td>
+        ${tdOnzas}
         <td><select class="select-stock-grupo" onchange="marcarStockDirty()" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${opts}</select></td>
         <td>
           <button class="editar" onclick="editarItemStock(${s.id})" style="padding:0.3rem 0.6rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">EDITAR</button>
@@ -4691,7 +4693,10 @@ function cargarStockBarra() {
     }
     container.innerHTML = GRUPOS_BARRA_CON_COMPRAS.map(g => {
       const items = groups[g];
+      const esCompras = g === 'COMPRAS DIARIAS';
       const total = items.reduce((sum, i) => sum + (parseFloat(i.cantidad) || 0), 0);
+      const colOnzas = esCompras ? '' : '<th>Onzas</th>';
+      const colSpan = esCompras ? 5 : 6;
       return `
         <div class="accordion-item">
           <div class="accordion-header" onclick="toggleAcordeon(this)">
@@ -4700,8 +4705,8 @@ function cargarStockBarra() {
           </div>
           <div class="accordion-body">
             <div class="table-wrap"><table>
-              <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th><th>Mueble</th><th></th></tr></thead>
-              <tbody>${items.map(fila).join('') || '<tr><td colspan="6">Vacío.</td></tr>'}</tbody>
+              <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th>${colOnzas}<th>Mueble</th><th></th></tr></thead>
+              <tbody>${items.map(i => fila(i, esCompras)).join('') || '<tr><td colspan="' + colSpan + '">Vacío.</td></tr>'}</tbody>
             </table></div>
           </div>
         </div>`;
@@ -4731,6 +4736,7 @@ function verStockBajoBarra() {
   const fecha = fechaEl ? fechaEl.value : todayStr();
   api('GET', fecha === todayStr() ? '/api/barra/stock' : '/api/barra/stock?fecha=' + encodeURIComponent(fecha)).then(data => {
     const bajos = (data || [])
+      .filter(s => String(s.grupo || '').toUpperCase() !== 'COMPRAS DIARIAS')
       .filter(s => (parseFloat(s.cantidad) || 0) <= 0.2)
       .sort((a, b) => (parseFloat(a.cantidad) || 0) - (parseFloat(b.cantidad) || 0));
     const body = document.getElementById('modal-body');
