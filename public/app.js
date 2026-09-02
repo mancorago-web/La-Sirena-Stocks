@@ -4775,15 +4775,12 @@ function cargarStockBarra() {
   }).catch(e => { console.error(e); });
 }
 
-function prodTokensBarra(nombre) {
-  return tokensDe(nombre).filter(t => !/^\d+$/.test(t));
-}
 function comparteProductoBarra(a, b) {
-  const ta = prodTokensBarra(a);
-  const tb = prodTokensBarra(b);
-  if (!ta.length || !tb.length) return false;
-  const set = new Set(ta);
-  return tb.some(t => set.has(t));
+  // Mismo producto si la similitud de nombres es alta (>= 0.6). Esto evita que una MARCA compartida
+  // (ej. "barnidet/bardinet" en amaretto, cherry brandy, triple sec) cuente como "hay más" de un
+  // producto distinto. Con 0.6, "barnidet amaretto" NO se cubre con "bardinet cherry brandy" (0.5),
+  // pero sí con "AMARETTTO BARNIDET 70CL" (0.667) y con la misma botella en otro mueble (1.0).
+  return similitud(a, b) >= 0.6;
 }
 
 function verStockBajoBarra() {
