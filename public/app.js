@@ -4783,6 +4783,77 @@ function comparteProductoBarra(a, b) {
   return similitud(a, b) >= 0.6;
 }
 
+function verStockBarraGeneral() {
+  const fechaEl = document.getElementById('fecha-stock-barra');
+  const fecha = fechaEl ? fechaEl.value : todayStr();
+  const CATEGORIAS = [
+    { label: 'WHISKYS', test: n => /WHISKY|WISKY|JACK DANIEL|BLACK LABEL|RED LABEL|GOLD LABEL|OLD PARR|CHIVAS/i.test(n) },
+    { label: 'PISCOS', test: n => /PISCO/i.test(n) },
+    { label: 'TEKILAS', test: n => /TEQUILA|TEKILA/i.test(n) },
+    { label: 'RONES', test: n => /\bRON\b|RON |^RON|BACARDI|KINGSTON|ZAPACA|CAÑA ALTA|SALQA/i.test(n) },
+    { label: 'GINS', test: n => /\bGIN\b|GIN |^GIN|TANQUERAY|HENDRICKS|LONDON|TOURGEE/i.test(n) },
+    { label: 'VODKAS', test: n => /VODKA|SMIRNOFF|ABSOLUT|RUSS KAYA|RUSSKAYA|SKY/i.test(n) },
+    { label: 'LICORES', test: n => /LICOR|BARNIDET|BARDINET|AMARETTO|AMARETTTO|DISSARONO|DRAMBUIE|KAHLUA|KWAIFEH|GRAN KAFA|OURI|MOLINARI|FRANGELICO|BAILEYS|MALIBU|SAKE|SHO CHIKU BAI|CREMA DE COCO|MIEL DE ABEJA|GRANADINA|MATACUY/i.test(n) },
+    { label: 'VERMOUTHS Y APERITIVOS', test: n => /VERMOUTH|CINZANO|CAMPARI|APEROL|FERNET|BRANCA/i.test(n) },
+    { label: 'RECETAS BASE', test: n => /^R\.B/i.test(n) },
+    { label: 'AGUAS Y GASEOSAS', test: n => /AGUA|SODA|TONIC|GINGER|EVERVESS|KOMBUCHA|PINK SODA|COCA|INKA/i.test(n) },
+  ];
+  api('GET', fecha === todayStr() ? '/api/barra/stock' : '/api/barra/stock?fecha=' + encodeURIComponent(fecha)).then(data => {
+    const stock = data || [];
+    const norm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    // Agregar cantidades por nombre (sumando todos los muebles)
+    const porNombre = {};
+    stock.forEach(s => {
+      const k = norm(s.ingrediente);
+      if (!porNombre[k]) porNombre[k] = { nombre: s.ingrediente, unidad: s.unidad, total: 0, muebles: {} };
+      porNombre[k].total = Math.round(((porNombre[k].total || 0) + (parseFloat(s.cantidad) || 0)) * 100) / 100;
+      const g = (s.grupo || 'SIN CLASIFICAR').toUpperCase();
+      porNombre[k].muebles[g] = Math.round(((porNombre[k].muebles[g] || 0) + (parseFloat(s.cantidad) || 0)) * 100) / 100;
+      if (s.unidad && porNombre[k].unidad !== s.unidad) porNombre[k].unidad = s.unidad;
+    });
+    const items = Object.values(porNombre);
+    const cats = {};
+    CATEGORIAS.forEach(c => cats[c.label] = []);
+    cats['OTROS'] = [];
+    items.forEach(i => {
+      const cat = CATEGORIAS.find(c => c.test(i.nombre));
+      (cat ? cats[cat.label] : cats['OTROS']).push(i);
+    });
+    Object.keys(cats).forEach(k => cats[k].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')));
+    const body = document.getElementById('modal-body');
+    let html = '<h3>🎛️ BARRA — VISTA GENERAL (' + fecha + ')</h3>';
+    html += '<p style="font-size:0.8rem;color:#666;margin:0.4rem 0 0.6rem;">Todos los items de BARRA/STOCK sin diferenciar por muebles. Las cantidades son los totales en toda la barra.</p>';
+    CATEGORIAS.forEach(c => {
+      const lista = cats[c.label];
+      if (!lista.length) return;
+      const totalCat = lista.reduce((s, i) => s + i.total, 0);
+      html += '<div class="accordion-item"><div class="accordion-header" onclick="toggleAcordeon(this)"><span class="accordion-title">' + c.label + ' <span style="font-weight:400;font-size:0.85rem;color:#777;">— ' + lista.length + ' item(s) · <b>' + fmt3(totalCat) + '</b> und</span></span><span class="accordion-arrow">▶</span></div>';
+      html += '<div class="accordion-body open"><div class="table-wrap"><table style="font-size:0.85rem;"><thead><tr><th>Item</th><th>Total</th><th>Unidad</th><th>Distribución (por mueble)</th></tr></thead><tbody>';
+      html += lista.map(i => {
+        const dist = Object.entries(i.muebles).map(([g, c]) => g + ' ' + c).join(' · ');
+        return '<tr><td>' + esc(i.nombre) + '</td><td style="font-weight:700;color:#0f3460;">' + fmt3(i.total) + '</td><td>' + esc(i.unidad) + '</td><td style="font-size:0.78rem;color:#666;">' + esc(dist) + '</td></tr>';
+      }).join('');
+      html += '</tbody></table></div></div></div>';
+    });
+    const otros = cats['OTROS'];
+    if (otros.length) {
+      const totalOtros = otros.reduce((s, i) => s + i.total, 0);
+      html += '<div class="accordion-item"><div class="accordion-header" onclick="toggleAcordeon(this)"><span class="accordion-title">OTROS <span style="font-weight:400;font-size:0.85rem;color:#777;">— ' + otros.length + ' item(s) · <b>' + fmt3(totalOtros) + '</b> und</span></span><span class="accordion-arrow">▶</span></div>';
+      html += '<div class="accordion-body open"><div class="table-wrap"><table style="font-size:0.85rem;"><thead><tr><th>Item</th><th>Total</th><th>Unidad</th><th>Distribución (por mueble)</th></tr></thead><tbody>';
+      html += otros.map(i => {
+        const dist = Object.entries(i.muebles).map(([g, c]) => g + ' ' + c).join(' · ');
+        return '<tr><td>' + esc(i.nombre) + '</td><td style="font-weight:700;color:#0f3460;">' + fmt3(i.total) + '</td><td>' + esc(i.unidad) + '</td><td style="font-size:0.78rem;color:#666;">' + esc(dist) + '</td></tr>';
+      }).join('');
+      html += '</tbody></table></div></div></div>';
+    }
+    html += '<div style="margin-top:1rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
+    body.innerHTML = html;
+    const mc = document.querySelector('.modal-content');
+    if (mc) mc.classList.add('modal-wide');
+    document.getElementById('modal').style.display = 'block';
+  }).catch(() => alert('Error al cargar el stock'));
+}
+
 function verStockBajoBarra() {
   const fechaEl = document.getElementById('fecha-stock-barra');
   const fecha = fechaEl ? fechaEl.value : todayStr();

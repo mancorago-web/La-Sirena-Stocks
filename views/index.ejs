@@ -328,6 +328,7 @@
               <input type="date" id="fecha-stock-barra" onchange="cargarStockBarra()" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
             </label>
             <button onclick="exportarStockBarra()" style="padding:0.5rem 1rem;background:#2e7d32;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;">📊 EXPORTAR EXCEL</button>
+            <button onclick="verStockBarraGeneral()" style="padding:0.5rem 1rem;background:#0f3460;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;" title="Ver todos los items sin diferenciar por muebles, agrupados por categoría de licor">🎛️ GENERAL</button>
             <button onclick="verStockBajoBarra()" style="padding:0.5rem 1rem;background:#e65100;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;" title="Ver todas las botellas con stock bajo (cantidad <= 0.2)">📉 STOCK BAJO</button>
             <span id="barra-stock-add-form" style="display:inline-flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
               <input type="text" id="nuevo-stock-input" placeholder="Ingrediente" list="sugerencia-stock-input" autocomplete="off" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:170px;">
