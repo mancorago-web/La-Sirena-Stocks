@@ -193,7 +193,8 @@
       <div class="header-actions">
         <h2>Bajas</h2>
         <div class="controles-dia">
-          <label>Fecha: <input type="date" id="fecha-bajas" onchange="cargarBajas(this.value)"></label>
+          <label>Desde: <input type="date" id="fecha-bajas" onchange="cargarBajas()"></label>
+          <label>Hasta: <input type="date" id="fecha-bajas-fin" onchange="cargarBajas()"></label>
           <input type="text" id="buscar-baja" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-bajas')">
           <button class="btn-guardar-dia" onclick="guardarBajas()">💾 GUARDAR BAJAS</button>
           <button class="btn-detalles" onclick="verDetallesBajas()">📋 DETALLES</button>

@@ -610,14 +610,16 @@ function fmt3(n) {
   return String(parseFloat(v.toFixed(3)));
 }
 
-// Vista de rango (solo lectura) para INGRESOS/SALIDAS/VENTAS de varios días
+// Vista de rango (solo lectura) para INGRESOS/SALIDAS/VENTAS/BAJAS de varios días
 function renderRangoDetalle(container, data, tipo) {
   if (!container) return;
   const conf = tipo === 'ingresos'
     ? { colLabel: 'Total Ingreso', colKey: 'stock_ingreso', nom: 'ingresos' }
     : (tipo === 'salidas'
         ? { colLabel: 'Total Salida', colKey: 'salida_almacen', nom: 'salidas' }
-        : { colLabel: 'Total Ventas', colKey: 'total_ventas', nom: 'ventas' });
+        : (tipo === 'ventas'
+            ? { colLabel: 'Total Ventas', colKey: 'total_ventas', nom: 'ventas' }
+            : { colLabel: 'Total Baja', colKey: 'stock_baja', nom: 'bajas' }));
   const filas = [];
   (data || []).forEach(a => (a.items || []).forEach(i => {
     const v = parseFloat(i[conf.colKey]) || 0;
@@ -2160,6 +2162,19 @@ function verDetallesVentas() {
 function verDetallesBajas() {
   const fecha = document.getElementById('fecha-bajas').value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
+  const fin = document.getElementById('fecha-bajas-fin')?.value || fecha;
+  if (fin > fecha) {
+    api('GET', '/api/almacenes/con-inventario-rango?fecha_inicio=' + encodeURIComponent(fecha) + '&fecha_fin=' + encodeURIComponent(fin)).then(data => {
+      const body = document.getElementById('modal-body');
+      body.innerHTML = '<h3>Detalle de Bajas — ' + fecha + ' a ' + fin + '</h3>';
+      const wrap = document.createElement('div');
+      wrap.style.marginTop = '0.5rem';
+      renderRangoDetalle(wrap, data, 'bajas');
+      body.appendChild(wrap);
+      document.getElementById('modal').style.display = 'block';
+    });
+    return;
+  }
   getInventario(fecha).then(data => {
     let html = '<h3>Detalle de Bajas — ' + fecha + '</h3>';
     let totalItems = 0;
@@ -2331,9 +2346,21 @@ function guardarVentas() {
   });
 }
 
-function cargarBajas(fecha) {
-  if (!fecha) fecha = document.getElementById('fecha-bajas').value;
-  getInventario(fecha).then(data => {
+function cargarBajas(fechaIni, fechaFin) {
+  if (!fechaIni) fechaIni = document.getElementById('fecha-bajas').value;
+  if (!fechaFin) fechaFin = document.getElementById('fecha-bajas-fin')?.value || fechaIni;
+  if (!fechaIni) return;
+  const btnGuardar = document.getElementById('tab-bajas')?.querySelector('.btn-guardar-dia');
+  const container = document.getElementById('accordion-bajas');
+  if (fechaFin > fechaIni) {
+    if (btnGuardar) { btnGuardar.disabled = true; btnGuardar.textContent = '🔒 SOLO LECTURA (RANGO)'; }
+    api('GET', '/api/almacenes/con-inventario-rango?fecha_inicio=' + encodeURIComponent(fechaIni) + '&fecha_fin=' + encodeURIComponent(fechaFin)).then(data => {
+      renderRangoDetalle(container, data, 'bajas');
+    }).catch(e => console.error(e));
+    return;
+  }
+  if (btnGuardar) { btnGuardar.disabled = false; btnGuardar.textContent = '💾 GUARDAR BAJAS'; }
+  getInventario(fechaIni).then(data => {
     // Solo mostrar items con BAJA registrada en esta fecha
     data = data.map(al => ({ ...al, items: (al.items || []).filter(i => (i.stock_baja || 0) > 0) })).filter(al => al.items.length > 0);
     const categoriasPorAlmacen = {};
