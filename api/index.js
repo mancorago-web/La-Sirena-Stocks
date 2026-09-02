@@ -1694,36 +1694,69 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
   });
   const batch = db.batch();
   let ajustados = 0;
+  const noDescontados = [];
+  const COUNT_UNITS = new Set(['unidad', 'unidades', 'und', 'hojas', 'hoja', 'gotas', 'gota', 'copas', 'copa']);
   for (const c of consumos) {
     const nombre = String(c.ingrediente || '').trim();
+    if (!nombre) continue;
     // Items "- COPA": el stock se jala de los STOCKS (almacenes), con conversión BOTELLA->COPA.
-    // (La venta central de recetas de barra también debe descontar copas de STOCKS, no solo barra_stock.)
     if (/ - COPA$/i.test(nombre)) {
       const copas = parseFloat(c.cantidad) || 0;
       if (copas > 0 && fecha) await consumirCopaDesdeStocks(fecha, nombre, copas, savedBy || 'unknown', '');
       continue;
     }
     const key = nombre.toUpperCase();
-    const deltaOz = aOnzas(c.cantidad, c.unidad, nombre);
-    if (deltaOz === null || isNaN(deltaOz)) continue;
+    const uRec = normalizeUnit(c.unidad || 'unidad');
+    const cant = parseFloat(c.cantidad) || 0;
+    if (cant <= 0) continue;
     let matches = byNombre[key] || [];
     if (!matches.length) matches = matchStockFuzzy(c.ingrediente, allStock);
-    if (!matches.length) continue;
-    let restante = deltaOz;
+    if (!matches.length) {
+      noDescontados.push({ ingrediente: nombre, cantidad: Math.round(cant * 100) / 100, unidad: uRec, motivo: 'sin_stock' });
+      continue;
+    }
+    const esConteo = COUNT_UNITS.has(uRec);
+    // 1) Descuento DIRECTO 1:1 contra items con la MISMA unidad (o ambas de conteo).
+    //    Evita depender de la conversión a onzas (que falla en items "X KG"/"X UND").
+    let restante = cant;
     for (const m of matches) {
-      if (restante === 0) break;
+      if (restante <= 0.0001) break;
       const si = m.item || m;
-      const ozItem = aOnzas(si.data.cantidad, si.data.unidad, si.data.ingrediente);
-      if (ozItem === null || isNaN(ozItem)) continue;
-      const aDescontar = Math.min(ozItem, restante);
-      const nuevoOz = Math.max(0, ozItem - aDescontar);
-      const nueva = Math.round(desdeOnzas(nuevoOz, si.data.unidad, si.data.ingrediente) * 100) / 100;
-      batch.update(si.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
+      const uStock = normalizeUnit(si.data.unidad || 'unidad');
+      const mismaUnidad = (uStock === uRec);
+      const ambasConteo = esConteo && COUNT_UNITS.has(uStock);
+      if (!(mismaUnidad || ambasConteo)) continue;
+      const disp = parseFloat(si.data.cantidad) || 0;
+      const aDescontar = Math.min(disp, restante);
+      batch.update(si.ref, { cantidad: Math.round((disp - aDescontar) * 100) / 100, updated_at: new Date().toISOString() });
       restante -= aDescontar;
       ajustados++;
     }
+    // 2) Si sobra y se puede convertir, descontar por onzas contra los items restantes.
+    if (restante > 0.0001) {
+      const deltaOz = aOnzas(cant, c.unidad, nombre);
+      let restanteOz = (deltaOz === null || isNaN(deltaOz)) ? null : deltaOz;
+      if (restanteOz !== null) {
+        for (const m of matches) {
+          if (restanteOz <= 0.0001) break;
+          const si = m.item || m;
+          const ozItem = aOnzas(si.data.cantidad, si.data.unidad, si.data.ingrediente);
+          if (ozItem === null || isNaN(ozItem)) continue;
+          const aDescontar = Math.min(ozItem, restanteOz);
+          const nuevoOz = Math.max(0, ozItem - aDescontar);
+          const nueva = Math.round(desdeOnzas(nuevoOz, si.data.unidad, si.data.ingrediente) * 100) / 100;
+          batch.update(si.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
+          restanteOz -= aDescontar;
+          ajustados++;
+        }
+      }
+    }
+    if (restante > 0.0001) {
+      noDescontados.push({ ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: uRec, motivo: 'sin_conversion_o_insuficiente' });
+    }
   }
   if (ajustados) await batch.commit();
+  return noDescontados;
 }
 
 async function sumarStockBarra(consumos) {
@@ -1852,13 +1885,16 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       ingSnap.docs.forEach(d => { const a = d.data(); if (!ingByRec[a.receta_id]) ingByRec[a.receta_id] = []; ingByRec[a.receta_id].push(a); });
       const batch = db.batch();
       const consumos = [];
+      resumen.sinReceta = [];
       for (const v of ventasBarra) {
         const rec = recetasMap[String(v.nombre).trim().toUpperCase()];
         const recNombre = rec ? rec.nombre : v.nombre;
         const recId = rec ? rec.id : null;
+        // Paso 6: si no existe la receta, NO se registra como receta expandible (se avisa).
+        if (!rec) resumen.sinReceta.push({ nombre: v.nombre, cantidad: v.cantidad });
         batch.set(col('barra_movimientos').doc(), {
           fecha, tipo: 'ventas', ingrediente: recNombre, cantidad: v.cantidad, unidad: 'unidad',
-          es_receta: true, receta: recNombre, saved_by: savedBy, created_at: new Date().toISOString()
+          es_receta: !!rec, sin_receta: !rec, receta: recNombre, saved_by: savedBy, created_at: new Date().toISOString()
         });
         if (recId) {
           (ingByRec[recId] || []).forEach(ing => {
@@ -1872,7 +1908,7 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         }
       }
       await batch.commit();
-      await descontarStockBarra(consumos, fecha, savedBy);
+      resumen.noDescontados = await descontarStockBarra(consumos, fecha, savedBy);
     }
 
     // Aplicar a COCINA
