@@ -406,7 +406,60 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
   }
 });
 
-// --- RESUMEN: contadores de items para el menú principal ---
+// --- ALMACENES: inventario AGREGADO por rango de fechas (para INGRESOS/SALIDAS de varios días) ---
+app.get('/api/almacenes/con-inventario-rango', async (req, res) => {
+  try {
+    const ini = String(req.query.fecha_inicio || '').trim();
+    const fin = String(req.query.fecha_fin || '').trim();
+    if (!ini || !fin) return res.json([]);
+    const [almsSnap, allItemsSnap, diaSnap] = await Promise.all([
+      col('almacenes').orderBy('orden').get(),
+      col('inventario').get(),
+      col('inventario_diario').where('fecha', '>=', ini).where('fecha', '<=', fin).get(),
+    ]);
+    const invByAl = {};
+    allItemsSnap.docs.forEach(d => {
+      const a = d.data();
+      const al = Number(a.almacen_id);
+      if (!invByAl[al]) invByAl[al] = [];
+      invByAl[al].push(a);
+    });
+    const aggByAl = {};
+    diaSnap.docs.forEach(d => {
+      const a = d.data();
+      const al = Number(a.almacen_id);
+      const k = al + '_' + Number(a.item_id);
+      if (!aggByAl[al]) aggByAl[al] = {};
+      if (!aggByAl[al][k]) aggByAl[al][k] = { item_id: Number(a.item_id), stock_ingreso: 0, salida_almacen: 0, total_ventas: 0, falta_almacen: 0, stock_baja: 0 };
+      aggByAl[al][k].stock_ingreso += parseFloat(a.stock_ingreso) || 0;
+      aggByAl[al][k].salida_almacen += parseFloat(a.salida_almacen) || 0;
+      aggByAl[al][k].total_ventas += parseFloat(a.total_ventas) || 0;
+      aggByAl[al][k].falta_almacen += parseFloat(a.falta_almacen) || 0;
+      aggByAl[al][k].stock_baja += parseFloat(a.stock_baja) || 0;
+    });
+    const red = n => Math.round(n * 100) / 100;
+    return res.json(almsSnap.docs.map(alDoc => {
+      const alId = Number(alDoc.id);
+      const aggMap = aggByAl[alId] || {};
+      const items = (invByAl[alId] || []).map(inv => {
+        const agg = aggMap[alId + '_' + Number(inv.item_id)] || { stock_ingreso: 0, salida_almacen: 0, total_ventas: 0, falta_almacen: 0, stock_baja: 0 };
+        return {
+          id: Number(inv.item_id),
+          nombre: inv.nombre,
+          categoria: inv.categoria || '',
+          stock_ingreso: red(agg.stock_ingreso),
+          salida_almacen: red(agg.salida_almacen),
+          total_ventas: red(agg.total_ventas),
+          falta_almacen: red(agg.falta_almacen),
+          stock_baja: red(agg.stock_baja),
+        };
+      }).filter(i => i.stock_ingreso > 0 || i.salida_almacen > 0 || i.total_ventas > 0 || i.falta_almacen > 0);
+      return { id: alId, nombre: alDoc.data().nombre, items };
+    }).filter(a => a.items.length));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 app.get('/api/resumen/items', async (req, res) => {
   try {
     const fecha = String(req.query.fecha || '').trim();

@@ -151,7 +151,8 @@
       <div class="header-actions">
         <h2>Ingresos</h2>
         <div class="controles-dia">
-          <label>Fecha: <input type="date" id="fecha-ingresos" onchange="cargarIngresos(this.value)"></label>
+          <label>Desde: <input type="date" id="fecha-ingresos" onchange="cargarIngresos()"></label>
+          <label>Hasta: <input type="date" id="fecha-ingresos-fin" onchange="cargarIngresos()"></label>
           <input type="text" id="buscar-ingreso" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-ingresos')">
           <button class="btn-guardar-dia" onclick="guardarIngresos()">💾 GUARDAR INGRESOS</button>
           <button class="btn-detalles" onclick="verDetallesIngresos()">📋 DETALLES</button>
@@ -164,7 +165,8 @@
       <div class="header-actions">
         <h2>Salidas</h2>
         <div class="controles-dia">
-          <label>Fecha: <input type="date" id="fecha-salidas" onchange="cargarSalidas(this.value)"></label>
+          <label>Desde: <input type="date" id="fecha-salidas" onchange="cargarSalidas()"></label>
+          <label>Hasta: <input type="date" id="fecha-salidas-fin" onchange="cargarSalidas()"></label>
           <input type="text" id="buscar-salida" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-salidas')">
           <button class="btn-guardar-dia" onclick="guardarSalidas()">💾 GUARDAR SALIDAS</button>
           <button class="btn-detalles" onclick="verDetallesSalidas()">📋 DETALLES</button>
