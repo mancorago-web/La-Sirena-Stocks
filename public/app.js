@@ -4799,8 +4799,8 @@ function verStockBarraGeneral() {
   const CATEGORIAS = [
     { label: 'WHISKYS', test: n => /WHISKY|WISKY|JACK DANIEL|BLACK LABEL|RED LABEL|GOLD LABEL|OLD PARR|CHIVAS/i.test(n) },
     { label: 'PISCOS', test: n => /PISCO/i.test(n) },
-    { label: 'TEKILAS', test: n => /TEQUILA|TEKILA/i.test(n) },
-    { label: 'RONES', test: n => /\bRON\b|RON |^RON|BACARDI|KINGSTON|ZAPACA|CAÑA ALTA|SALQA/i.test(n) },
+    { label: 'TEKILAS', test: n => /TEQUILA|TEKILA|PATRON|PATRÓN/i.test(n) },
+    { label: 'RONES', test: n => /\bRON\b|BACARDI|KINGSTON|ZAPACA|CAÑA ALTA|SALQA/i.test(n) },
     { label: 'GINS', test: n => /\bGIN\b|GIN |^GIN|TANQUERAY|HENDRICKS|LONDON|TOURGEE/i.test(n) },
     { label: 'VODKAS', test: n => /VODKA|SMIRNOFF|ABSOLUT|RUSS KAYA|RUSSKAYA|SKY/i.test(n) },
     { label: 'LICORES', test: n => /LICOR|BARNIDET|BARDINET|AMARETTO|AMARETTTO|DISSARONO|DRAMBUIE|KAHLUA|KWAIFEH|GRAN KAFA|OURI|MOLINARI|FRANGELICO|BAILEYS|MALIBU|SAKE|SHO CHIKU BAI|CREMA DE COCO|MIEL DE ABEJA|GRANADINA|MATACUY/i.test(n) },
