@@ -6844,9 +6844,11 @@ function onCambiarDestinoCompra() {
   const alSel = document.getElementById('compras-almacenes');
   const muSel = document.getElementById('compras-muebles');
   const grSel = document.getElementById('compras-grupo');
+  const grcSel = document.getElementById('compras-grupo-cocina');
   if (alSel) alSel.style.display = destino === 'stocks' ? '' : 'none';
   if (muSel) muSel.style.display = destino === 'barra' ? '' : 'none';
   if (grSel) grSel.style.display = destino === 'stocks' ? '' : 'none';
+  if (grcSel) grcSel.style.display = destino === 'cocina' ? '' : 'none';
 }
 
 function onBuscarItemCompra(valor) {
@@ -7312,6 +7314,7 @@ function agregarCompra() {
   const numero = document.getElementById('nueva-compra-numero')?.value.trim() || '';
   const proveedor = document.getElementById('nueva-compra-proveedor')?.value.trim() || '';
   const categoria = (document.getElementById('nueva-compra-grupo')?.value || '').trim().toUpperCase();
+  const categoriaCocina = (document.getElementById('nueva-compra-grupo-cocina')?.value || '').trim().toUpperCase();
   if (!nombre || isNaN(cantidad) || cantidad <= 0) { alert('Ingresa un item y una cantidad'); return; }
   // Auto-cálculo: si solo hay TOTAL y cantidad, dividir para el precio por unidad
   if (precioTotal > 0 && precioUni === 0) precioUni = Math.round((precioTotal / cantidad) * 100) / 100;
@@ -7334,7 +7337,7 @@ function agregarCompra() {
   if (btn) btn.disabled = true;
   // Esta operación SUMA al valor actual (cur + cantidad), así que ante un timeout NO se
   // reintenta automáticamente (evita duplicar la compra). Solo se advierte con claridad.
-  api('POST', '/api/compras/guardar', { fecha, items: [{ nombre, cantidad, unidad: 'unidad', destino, almacenes, muebles, precio: precioUni, precio_total: precioTotal, documento, numero, proveedor, categoria }] }).then(r => {
+  api('POST', '/api/compras/guardar', { fecha, items: [{ nombre, cantidad, unidad: 'unidad', destino, almacenes, muebles, precio: precioUni, precio_total: precioTotal, documento, numero, proveedor, categoria: destino === 'cocina' ? categoriaCocina : categoria }] }).then(r => {
     window._guardandoCompraAgregar = false;
     if (btn) btn.disabled = false;
     const res = r.resumen || {};

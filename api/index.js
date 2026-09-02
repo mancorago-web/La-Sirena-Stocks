@@ -1067,8 +1067,8 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
         movsBarra.push({ ingrediente: nombre, cantidad, unidad: it.unidad || 'unidad', muebles: Array.isArray(it.muebles) ? it.muebles : [], precio, precio_total: precioTotal, documento, numero, proveedor });
         resumen.barra.push({ nombre, cantidad, unidad: it.unidad || 'unidad', muebles: Array.isArray(it.muebles) ? it.muebles : [], precio, precio_total: precioTotal, documento, numero, proveedor });
       } else if (destino === 'cocina') {
-        cocinaCompras.push({ nombre, cantidad, unidad: it.unidad || 'unidad', precio, precio_total: precioTotal, documento, numero, proveedor });
-        resumen.cocina.push({ nombre, cantidad, unidad: it.unidad || 'unidad', precio, precio_total: precioTotal, documento, numero, proveedor });
+        cocinaCompras.push({ nombre, cantidad, unidad: it.unidad || 'unidad', precio, precio_total: precioTotal, documento, numero, proveedor, categoria });
+        resumen.cocina.push({ nombre, cantidad, unidad: it.unidad || 'unidad', precio, precio_total: precioTotal, documento, numero, proveedor, categoria });
       } else {
         resumen.noEncontrados.push({ nombre, cantidad, destino });
       }
@@ -1183,12 +1183,12 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       for (const m of cocinaCompras) {
         batch.set(col('cocina_compras').doc(), {
           fecha, nombre: m.nombre, cantidad: m.cantidad, unidad: m.unidad, precio: m.precio || 0, precio_total: m.precio_total || 0,
-          saved_by: savedBy, created_at: new Date().toISOString()
+          categoria: m.categoria || '', saved_by: savedBy, created_at: new Date().toISOString()
         });
       }
       await batch.commit();
       // Sumar al COCINA/STOCK (si el item no existe, se crea)
-      await ajustarCocinaStock(cocinaCompras.map(m => ({ nombre: m.nombre, delta: m.cantidad, unidad: m.unidad })));
+      await ajustarCocinaStock(cocinaCompras.map(m => ({ nombre: m.nombre, delta: m.cantidad, unidad: m.unidad, familia: m.categoria })));
       // Asegurar que los items nuevos existan en cocina_precios (Base de Datos de COCINA)
       // para que aparezcan automáticamente en la BASE DE DATOS UNIFICADA.
       const cpSnap = await col('cocina_precios').get();
@@ -3052,15 +3052,17 @@ async function ajustarCocinaStock(ajustes) {
     const existente = byName[key];
     if (existente) {
       const nueva = Math.max(0, (parseFloat(existente.data().cantidad) || 0) + aj.delta);
+      const upd = { cantidad: nueva, updated_at: now };
+      if (aj.familia) upd.familia = String(aj.familia).toUpperCase();
       if (nueva === 0 && aj.delta < 0) {
         batch.delete(existente.ref);
       } else {
-        batch.update(existente.ref, { cantidad: nueva, updated_at: now });
+        batch.update(existente.ref, upd);
       }
     } else if (aj.delta > 0) {
       maxId++;
       const ref = col('cocina_stock').doc(String(maxId));
-      batch.set(ref, { id: maxId, ingrediente: aj.nombre, cantidad: aj.delta, unidad: aj.unidad || 'unidad', familia: 'SIN CLASIFICAR', created_at: now, updated_at: now });
+      batch.set(ref, { id: maxId, ingrediente: aj.nombre, cantidad: aj.delta, unidad: aj.unidad || 'unidad', familia: aj.familia ? String(aj.familia).toUpperCase() : 'SIN CLASIFICAR', created_at: now, updated_at: now });
       byName[key] = { ref, data: { cantidad: aj.delta } };
     }
   }
