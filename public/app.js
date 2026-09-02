@@ -3934,6 +3934,16 @@ function exportarStockBarra() {
   XLSX.writeFile(libro, `StockBarra_${fecha}.xlsx`);
 }
 
+function exportarStockBarraGeneral() {
+  const datos = window._stockBarraGeneral || { fecha: todayStr(), filas: [] };
+  const wsData = [['Categoría', 'Item', 'Total', 'Unidad', 'Distribución']];
+  datos.filas.forEach(f => wsData.push([f.categoria, f.nombre, f.total, f.unidad, f.dist]));
+  const libro = XLSX.utils.book_new();
+  const hoja = XLSX.utils.aoa_to_sheet(wsData);
+  XLSX.utils.book_append_sheet(libro, hoja, 'Stock Barra General');
+  XLSX.writeFile(libro, `StockBarra_General_${datos.fecha}.xlsx`);
+}
+
 function buscarReceta(q) {
   const term = (q || '').trim();
   const palabras = term.toLowerCase().split(/\s+/).filter(Boolean);
@@ -4820,8 +4830,21 @@ function verStockBarraGeneral() {
       (cat ? cats[cat.label] : cats['OTROS']).push(i);
     });
     Object.keys(cats).forEach(k => cats[k].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')));
+    // Guardar filas planas para poder exportarlas a Excel
+    const filasExport = [];
+    CATEGORIAS.forEach(c => {
+      cats[c.label].forEach(i => {
+        const dist = Object.entries(i.muebles).map(([g, cant]) => g + ' ' + cant).join(' · ');
+        filasExport.push({ categoria: c.label, nombre: i.nombre, total: i.total, unidad: i.unidad, dist });
+      });
+    });
+    cats['OTROS'].forEach(i => {
+      const dist = Object.entries(i.muebles).map(([g, cant]) => g + ' ' + cant).join(' · ');
+      filasExport.push({ categoria: 'OTROS', nombre: i.nombre, total: i.total, unidad: i.unidad, dist });
+    });
+    window._stockBarraGeneral = { fecha, filas: filasExport };
     const body = document.getElementById('modal-body');
-    let html = '<h3>🎛️ BARRA — VISTA GENERAL (' + fecha + ')</h3>';
+    let html = '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;"><h3 style="margin:0;">🎛️ BARRA — VISTA GENERAL (' + fecha + ')</h3><button onclick="exportarStockBarraGeneral()" style="padding:0.5rem 1rem;background:#2e7d32;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;">📊 EXPORTAR</button></div>';
     html += '<p style="font-size:0.8rem;color:#666;margin:0.4rem 0 0.6rem;">Todos los items de BARRA/STOCK sin diferenciar por muebles. Las cantidades son los totales en toda la barra.</p>';
     CATEGORIAS.forEach(c => {
       const lista = cats[c.label];
