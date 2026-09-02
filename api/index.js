@@ -1183,49 +1183,15 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
         });
       }
       await batch.commit();
-      // Sumar al stock de barra (barra_stock) según el mueble elegido, con conversión a onzas
-      const stockSnap = await col('barra_stock').get();
-      let maxBarraId = 0;
-      const stockByNameGrupo = {};
-      stockSnap.docs.forEach(d => {
-        const a = d.data();
-        const k = String(a.ingrediente || '').trim().toUpperCase();
-        const g = String(a.grupo || '').toUpperCase();
-        if (!stockByNameGrupo[k]) stockByNameGrupo[k] = {};
-        if (!stockByNameGrupo[k][g]) stockByNameGrupo[k][g] = { ref: d.ref, data: a };
-        if (Number(d.id) > maxBarraId) maxBarraId = Number(d.id);
-      });
-      const stockBatch = db.batch();
-      let ajustados = 0;
-      for (const m of movsBarra) {
-        const key = String(m.ingrediente || '').trim().toUpperCase();
-        const compraOz = aOnzas(m.cantidad, m.unidad, m.ingrediente);
-        if (compraOz === null || isNaN(compraOz)) continue;
-        const muebles = Array.isArray(m.muebles) && m.muebles.length ? m.muebles : GRUPOS_BARRA;
-        for (const mueble of muebles) {
-          const g = String(mueble || '').toUpperCase();
-          const existente = (stockByNameGrupo[key] || {})[g];
-          if (existente) {
-            const stockOz = aOnzas(existente.data.cantidad, existente.data.unidad, existente.data.ingrediente);
-            if (stockOz === null || isNaN(stockOz)) continue;
-            const nuevaOz = Math.max(0, stockOz + compraOz);
-            const nueva = Math.round(desdeOnzas(nuevaOz, existente.data.unidad, existente.data.ingrediente) * 100) / 100;
-            stockBatch.update(existente.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
-            ajustados++;
-          } else {
-            // Crear el item en ese mueble si no existe
-            maxBarraId += 1;
-            stockBatch.set(col('barra_stock').doc(String(maxBarraId)), {
-              id: maxBarraId, ingrediente: m.ingrediente, cantidad: m.cantidad,
-              unidad: m.unidad, grupo: g, updated_at: new Date().toISOString()
-            });
-            if (!stockByNameGrupo[key]) stockByNameGrupo[key] = {};
-            stockByNameGrupo[key][g] = { ref: null, data: { cantidad: m.cantidad, unidad: m.unidad, ingrediente: m.ingrediente } };
-            ajustados++;
-          }
-        }
-      }
-      if (ajustados) await stockBatch.commit();
+      // Sumar al stock de barra (barra_stock) en COMPRAS DIARIAS: las compras con destino BARRA
+      // son las compras del día. Suma directa de la cantidad (funciona para CUALQUIER unidad, no
+      // se saltan items como los "X KG"/"X UND" que no convierten a onzas — bug previo).
+      await ajustarBarraStock(movsBarra.map(m => ({
+        nombre: m.ingrediente,
+        delta: m.cantidad,
+        unidad: m.unidad || 'unidad',
+        grupo: 'COMPRAS DIARIAS'
+      })));
 
       // Asegurar que los items nuevos existan en barra_precios (Base de Datos de BARRA)
       // para que aparezcan automáticamente en la BASE DE DATOS UNIFICADA.
