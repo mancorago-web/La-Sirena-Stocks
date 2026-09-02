@@ -6838,6 +6838,7 @@ function eliminarCosto(id, tipo) {
 // --- COMPRAS: registro centralizado (reparte a STOCKS o BARRA) ---
 let comprasCart = [];
 let comprasAlmacenes = [];
+let _comprasListaEditable = [];
 
 function onCambiarDestinoCompra() {
   const destino = document.getElementById('nueva-compra-destino').value;
@@ -6976,8 +6977,10 @@ function cargarComprasDetalle(ini, fin) {
     if (actualIni !== fechaIni || actualFin !== fechaFin) return; // el rango cambió, ignorar respuesta vieja
     if (!list || !list.length) {
       c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE COMPRAS/INGRESOS</h3><p style="color:#888;">No hay compras registradas en el rango <b>' + fechaIni + ' a ' + fechaFin + '</b>.</p>';
+      _comprasListaEditable = [];
       return;
     }
+    _comprasListaEditable = list;
     const filas = list.map(r => {
       const alNombre = (id) => {
         const a = comprasAlmacenes.find(x => Number(x.id) === Number(id));
@@ -6990,7 +6993,7 @@ function cargarComprasDetalle(ini, fin) {
       const t = r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
       const precioUni = parseFloat(r.precio) || 0;
       const precioTot = parseFloat(r.precio_total) || (precioUni * (r.cantidad || 0));
-      return `<tr><td>${r.fecha || '—'}</td><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${precioUni > 0 ? 'S/ ' + precioUni.toFixed(2) : '—'}</td><td>${precioTot > 0 ? 'S/ ' + precioTot.toFixed(2) : '—'}</td><td>${esc(det)}</td><td>${esc(r.documento || '—')}${r.numero ? ' <span style="color:#555;">' + esc(r.numero) + '</span>' : ''}</td><td>${esc(r.proveedor || '—')}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td><button class="danger" onclick="confirmarEliminarCompra('${r.id}')">✕</button></td></tr>`;
+      return `<tr><td>${r.fecha || '—'}</td><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${precioUni > 0 ? 'S/ ' + precioUni.toFixed(2) : '—'}</td><td>${precioTot > 0 ? 'S/ ' + precioTot.toFixed(2) : '—'}</td><td>${esc(det)}</td><td>${esc(r.documento || '—')}${r.numero ? ' <span style="color:#555;">' + esc(r.numero) + '</span>' : ''}</td><td>${esc(r.proveedor || '—')}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td><button onclick="editarCompra('${r.id}')" style="background:#1565c0;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.75rem;margin-right:0.25rem;" title="Editar">✎</button><button class="danger" onclick="confirmarEliminarCompra('${r.id}')">✕</button></td></tr>`;
     }).join('');
     const totalCompra = (list || []).reduce((s, r) => s + (parseFloat(r.precio_total) || ((parseFloat(r.precio) || 0) * (r.cantidad || 0))), 0);
     const provDl = document.getElementById('sugerencia-proveedores');
@@ -7012,6 +7015,90 @@ function cargarComprasDetalle(ini, fin) {
       filas + '</tbody></table></div>' +
       (totalCompra > 0 ? '<p style="font-weight:700;color:#0f3460;margin-top:0.5rem;">TOTAL COMPRAS: S/ ' + totalCompra.toFixed(2) + '</p>' : '');
   }).catch(() => { const ai = document.getElementById('fecha-compras-ini')?.value || todayStr(); const af = document.getElementById('fecha-compras-fin')?.value || todayStr(); if (ai === fechaIni && af === fechaFin) c.innerHTML = '<p style="color:#888;">DETALLE DE COMPRAS/INGRESOS</p>'; });
+}
+
+function editarCompra(id) {
+  const r = _comprasListaEditable.find(x => String(x.id) === String(id));
+  if (!r) { alert('Registro no encontrado'); return; }
+  if (String(id).startsWith('inv:')) { alert('Este ingreso manual se edita desde STOCK/INGRESOS'); return; }
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modal-body');
+  const precioUni = parseFloat(r.precio) || 0;
+  const precioTot = parseFloat(r.precio_total) || (precioUni * (r.cantidad || 0));
+  const docOpts = ['FACTURA', 'BOLETA', 'NOTA DE VENTA'].map(d => '<option value="' + d + '" ' + (String(r.documento || '').toUpperCase() === d ? 'selected' : '') + '>' + d + '</option>').join('');
+  modal.style.display = 'block';
+  body.innerHTML = `
+    <h3>Editar Compra/Ingreso</h3>
+    <p style="color:#666;margin-top:0.5rem;font-size:0.85rem;"><b>${esc(r.nombre)}</b> · ${esc(r.destino || '').toUpperCase()} · Fecha ${r.fecha || '—'}</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-top:1rem;">
+      <label style="font-size:0.82rem;color:#555;">Cantidad
+        <input type="number" id="edit-compra-cant" step="0.01" min="0" value="${r.cantidad}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
+      </label>
+      <label style="font-size:0.82rem;color:#555;">Precio Unidad (S/)
+        <input type="number" id="edit-compra-precio-uni" step="0.01" min="0" value="${precioUni || ''}" oninput="onEditCompraPrecioUni()" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
+      </label>
+      <label style="font-size:0.82rem;color:#555;">Precio Total (S/)
+        <input type="number" id="edit-compra-precio-total" step="0.01" min="0" value="${precioTot || ''}" oninput="onEditCompraPrecioTotal()" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
+      </label>
+      <label style="font-size:0.82rem;color:#555;">Documento
+        <select id="edit-compra-documento" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
+          <option value="">Documento...</option>${docOpts}
+        </select>
+      </label>
+      <label style="font-size:0.82rem;color:#555;">N° de documento
+        <input type="text" id="edit-compra-numero" value="${esc(r.numero || '')}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
+      </label>
+      <label style="font-size:0.82rem;color:#555;">Proveedor
+        <input type="text" id="edit-compra-proveedor" value="${esc(r.proveedor || '')}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
+      </label>
+    </div>
+    <p style="font-size:0.75rem;color:#888;margin-top:0.75rem;">El item, destino y fecha no se cambian desde aquí. El stock se ajusta automáticamente (revierte el valor anterior y aplica el nuevo).</p>
+    <div style="margin-top:1.25rem;display:flex;gap:0.5rem;">
+      <button onclick="guardarEdicionCompra('${id}')" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar cambios</button>
+      <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
+    </div>
+  `;
+}
+
+function onEditCompraPrecioUni() {
+  const cant = parseFloat(document.getElementById('edit-compra-cant')?.value) || 0;
+  const pu = parseFloat(document.getElementById('edit-compra-precio-uni')?.value) || 0;
+  const tot = document.getElementById('edit-compra-precio-total');
+  if (tot) tot.value = pu > 0 ? Math.round(pu * cant * 100) / 100 : '';
+}
+
+function onEditCompraPrecioTotal() {
+  const cant = parseFloat(document.getElementById('edit-compra-cant')?.value) || 0;
+  const tot = parseFloat(document.getElementById('edit-compra-precio-total')?.value) || 0;
+  const pu = document.getElementById('edit-compra-precio-uni');
+  if (pu) pu.value = (tot > 0 && cant > 0) ? Math.round((tot / cant) * 100) / 100 : '';
+}
+
+function guardarEdicionCompra(id) {
+  const r = _comprasListaEditable.find(x => String(x.id) === String(id));
+  const fecha = (r && r.fecha) || todayStr();
+  const cantidad = parseFloat(document.getElementById('edit-compra-cant')?.value);
+  if (!cantidad || cantidad <= 0) { alert('Cantidad inválida'); return; }
+  const precioUni = parseFloat(document.getElementById('edit-compra-precio-uni')?.value) || 0;
+  const precioTotal = parseFloat(document.getElementById('edit-compra-precio-total')?.value) || 0;
+  const documento = document.getElementById('edit-compra-documento')?.value || '';
+  const numero = document.getElementById('edit-compra-numero')?.value.trim() || '';
+  const proveedor = document.getElementById('edit-compra-proveedor')?.value.trim() || '';
+  if (window._guardandoEdicionCompra) { showToast('Ya hay un registro en curso, espera...'); return; }
+  window._guardandoEdicionCompra = true;
+  api('PUT', '/api/compras/' + id, { fecha, cantidad, precio: precioUni, precio_total: precioTotal, documento, numero, proveedor }).then(() => {
+    window._guardandoEdicionCompra = false;
+    cerrarModal();
+    showToast('Compra/Ingreso actualizado');
+    cargarComprasDetalle();
+    _invCache = { fecha: null, data: null, pending: null };
+    actualizarContadoresMenu();
+    if (typeof cargarAlmacenes === 'function') cargarAlmacenes(fecha);
+  }).catch(e => {
+    window._guardandoEdicionCompra = false;
+    console.error(e);
+    alert('Error al actualizar: ' + (e && e.message ? e.message : 'desconocido'));
+  });
 }
 
 function confirmarEliminarCompra(id) {

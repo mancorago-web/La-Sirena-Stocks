@@ -1231,7 +1231,7 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
         logBatch.set(col('compras').doc(), {
           fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: r.unidad || 'unidad', destino: 'cocina',
           precio: r.precio || 0, precio_total: r.precio_total || 0,
-          documento: r.documento || '', numero: r.numero || '', proveedor: r.proveedor || '', saved_by: savedBy, created_at: new Date().toISOString()
+          documento: r.documento || '', numero: r.numero || '', proveedor: r.proveedor || '', categoria: r.categoria || '', saved_by: savedBy, created_at: new Date().toISOString()
         });
       });
       await logBatch.commit();
@@ -1503,6 +1503,138 @@ app.delete('/api/compras/:id', authMiddleware, async (req, res) => {
 
     // Eliminar el registro del log
     await logRef.delete();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- COMPRAS: editar una compra/ingreso registrada (revertir el efecto anterior y aplicar el nuevo) ---
+app.put('/api/compras/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { fecha, cantidad, precio, precio_total, documento, numero, proveedor, categoria } = req.body;
+    if (String(id).startsWith('inv:')) return res.status(400).json({ error: 'Los ingresos manuales se editan desde STOCK/INGRESOS' });
+    const logRef = col('compras').doc(id);
+    const logSnap = await logRef.get();
+    if (!logSnap.exists) return res.status(404).json({ error: 'Registro no encontrado' });
+    const log = logSnap.data();
+    const nombre = log.nombre;
+    const oldCantidad = parseFloat(log.cantidad) || 0;
+    const newCantidad = parseFloat(cantidad) || 0;
+    const savedBy = req.user?.name || req.user?.email || 'unknown';
+    if (newCantidad <= 0) return res.status(400).json({ error: 'Cantidad inválida' });
+    const fechaLog = log.fecha || fecha;
+    const now = new Date().toISOString();
+
+    if (log.destino === 'stocks') {
+      const invSnap = await col('inventario').get();
+      const stocksNorm = {};
+      invSnap.docs.forEach(d => {
+        const a = d.data();
+        const norm = String(a.nombre || '').trim().toUpperCase().replace(/\s+/g, '');
+        if (!norm) return;
+        if (!stocksNorm[norm]) stocksNorm[norm] = [];
+        stocksNorm[norm].push({ item_id: a.item_id, almacen_id: a.almacen_id });
+      });
+      const norm = String(nombre).trim().toUpperCase().replace(/\s+/g, '');
+      const cands = stocksNorm[norm] || [];
+      const almacenes = Array.isArray(log.almacenes) && log.almacenes.length ? log.almacenes.map(Number) : [];
+      const registros = [];
+      for (const alId of almacenes) {
+        const match = cands.find(c => Number(c.almacen_id) === alId);
+        if (!match) continue;
+        const diaId = docId('invdiario', fechaLog, match.almacen_id, match.item_id);
+        const diaSnap = await col('inventario_diario').doc(diaId).get();
+        const cur = diaSnap.exists ? (parseFloat(diaSnap.data().stock_ingreso) || 0) : 0;
+        const final = Math.max(0, cur - oldCantidad) + newCantidad;
+        registros.push({ almacen_id: match.almacen_id, item_id: match.item_id, stock_ingreso: final });
+      }
+      if (registros.length) await guardarDiaInterno(fechaLog, registros, savedBy);
+    } else if (log.destino === 'barra') {
+      const key = String(nombre).trim().toUpperCase();
+      const muebles = Array.isArray(log.muebles) && log.muebles.length ? log.muebles : GRUPOS_BARRA;
+      // Revertir el movimiento de ingreso anterior
+      const bm = await col('barra_movimientos').where('fecha', '==', fechaLog).where('tipo', '==', 'ingresos').get();
+      const batch = db.batch();
+      let borrado = false;
+      bm.docs.forEach(d => {
+        const a = d.data();
+        if (String(a.ingrediente || '').toUpperCase() === key &&
+            Math.abs((parseFloat(a.cantidad) || 0) - oldCantidad) < 0.001) {
+          batch.delete(d.ref);
+          borrado = true;
+        }
+      });
+      if (borrado) await batch.commit();
+      // Ajustar el stock de barra por la diferencia neta (nuevo - anterior)
+      const oldOz = aOnzas(oldCantidad, log.unidad || 'unidad', nombre);
+      const newOz = aOnzas(newCantidad, 'unidad', nombre);
+      const deltaOz = (newOz === null || isNaN(newOz) ? 0 : newOz) - (oldOz === null || isNaN(oldOz) ? 0 : oldOz);
+      if (deltaOz !== 0) {
+        const stockSnap = await col('barra_stock').get();
+        const stockBatch = db.batch();
+        let ajustados = 0;
+        stockSnap.docs.forEach(d => {
+          const a = d.data();
+          const g = String(a.grupo || '').toUpperCase();
+          if (String(a.ingrediente || '').trim().toUpperCase() === key && muebles.map(m => String(m).toUpperCase()).includes(g)) {
+            const stockOz = aOnzas(a.cantidad, a.unidad, a.ingrediente);
+            if (stockOz === null || isNaN(stockOz)) return;
+            const nuevaOz = Math.max(0, stockOz + deltaOz);
+            const nueva = Math.round(desdeOnzas(nuevaOz, a.unidad, a.ingrediente) * 100) / 100;
+            stockBatch.update(d.ref, { cantidad: nueva, updated_at: now });
+            ajustados++;
+          }
+        });
+        if (ajustados) await stockBatch.commit();
+      }
+      // Registrar el nuevo movimiento de ingreso
+      if (newCantidad > 0) {
+        await col('barra_movimientos').add({
+          fecha: fechaLog, tipo: 'ingresos', ingrediente: nombre, cantidad: newCantidad,
+          unidad: 'unidad', muebles: muebles, precio: parseFloat(precio) || 0, precio_total: parseFloat(precio_total) || 0, saved_by: savedBy, created_at: now
+        });
+      }
+    } else if (log.destino === 'cocina') {
+      // Revertir el ingreso de cocina anterior
+      const cc = await col('cocina_compras').where('fecha', '==', fechaLog).get();
+      const batch = db.batch();
+      let borrado = false;
+      cc.docs.forEach(d => {
+        const a = d.data();
+        if (String(a.nombre || '').toUpperCase() === String(nombre).toUpperCase() &&
+            Math.abs((parseFloat(a.cantidad) || 0) - oldCantidad) < 0.001) {
+          batch.delete(d.ref);
+          borrado = true;
+        }
+      });
+      if (borrado) await batch.commit();
+      // Ajustar el stock de cocina por la diferencia neta
+      const delta = newCantidad - oldCantidad;
+      if (delta !== 0) {
+        await ajustarCocinaStock([{ nombre, delta, unidad: 'unidad', familia: String(categoria || log.categoria || '').trim().toUpperCase() }]);
+      }
+      // Registrar el nuevo ingreso de cocina
+      if (newCantidad > 0) {
+        await col('cocina_compras').add({
+          fecha: fechaLog, nombre, cantidad: newCantidad, unidad: 'unidad', precio: parseFloat(precio) || 0, precio_total: parseFloat(precio_total) || 0,
+          categoria: String(categoria || log.categoria || '').trim().toUpperCase(), saved_by: savedBy, created_at: now
+        });
+      }
+    }
+
+    const upd = {
+      cantidad: newCantidad,
+      precio: parseFloat(precio) || 0,
+      precio_total: parseFloat(precio_total) || 0,
+      documento: String(documento || '').trim().toUpperCase(),
+      numero: String(numero || '').trim(),
+      proveedor: String(proveedor || '').trim(),
+      updated_at: now
+    };
+    if (categoria !== undefined) upd.categoria = String(categoria || '').trim().toUpperCase();
+    await logRef.update(upd);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
