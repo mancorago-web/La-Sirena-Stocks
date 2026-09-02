@@ -4740,7 +4740,7 @@ function eliminarStockBarra(id) {
 }
 
 // --- COCINA: Stock con familias (flujo diario estilo ALMACENES) ---
-const FAMILIAS_COCINA = ['FRUTAS', 'VERDURAS', 'CARNE', 'PESCADO', 'POLLO', 'LACTEOS', 'VINOS', 'CERVEZAS', 'ABARROTES', 'LIMPIEZA', 'RECETAS BASE'];
+const FAMILIAS_COCINA = ['FRUTAS', 'VERDURAS', 'CARNE', 'PESCADO', 'POLLO', 'LACTEOS', 'VINOS', 'CERVEZAS', 'ABARROTES', 'LIMPIEZA', 'RECETAS BASE', 'SEMILLAS', 'ACEITES'];
 
 function cargarStockCocina(familiasAbrir) {
   const fechaEl = document.getElementById('fecha-cocina-stock');
