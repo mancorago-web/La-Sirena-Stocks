@@ -4809,18 +4809,26 @@ function verStockBarraGeneral() {
     { label: 'AGUAS Y GASEOSAS', test: n => /AGUA|SODA|TONIC|GINGER|EVERVESS|KOMBUCHA|PINK SODA|COCA|INKA/i.test(n) },
   ];
   api('GET', fecha === todayStr() ? '/api/barra/stock' : '/api/barra/stock?fecha=' + encodeURIComponent(fecha)).then(data => {
+    return getInventario(fecha).then(invData => {
     const stock = data || [];
     const norm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-    // Agregar cantidades por nombre (sumando todos los muebles)
+    // ALMACEN GENERAL ABAJO (grupo BARRA): también se contabiliza en la vista GENERAL
+    const almacenGeneralAbajo = (invData || []).find(a => /GENERAL.*ABAJO|ABAJO.*GENERAL/i.test(a.nombre)) || (invData || []).find(a => Number(a.id) === 4);
+    const itemsAbajoBarra = (almacenGeneralAbajo ? almacenGeneralAbajo.items : [])
+      .filter(it => String(it.categoria || '').toUpperCase() === 'BARRA')
+      .map(it => ({ nombre: it.nombre, cantidad: (it.stock_cierre !== undefined && it.stock_cierre !== null) ? it.stock_cierre : (it.stock_apertura || 0) }))
+      .filter(it => (parseFloat(it.cantidad) || 0) > 0);
+    // Agregar cantidades por nombre (sumando todos los muebles + ALM. GENERAL ABAJO)
     const porNombre = {};
-    stock.forEach(s => {
-      const k = norm(s.ingrediente);
-      if (!porNombre[k]) porNombre[k] = { nombre: s.ingrediente, unidad: s.unidad, total: 0, muebles: {} };
-      porNombre[k].total = Math.round(((porNombre[k].total || 0) + (parseFloat(s.cantidad) || 0)) * 100) / 100;
-      const g = (s.grupo || 'SIN CLASIFICAR').toUpperCase();
-      porNombre[k].muebles[g] = Math.round(((porNombre[k].muebles[g] || 0) + (parseFloat(s.cantidad) || 0)) * 100) / 100;
-      if (s.unidad && porNombre[k].unidad !== s.unidad) porNombre[k].unidad = s.unidad;
-    });
+    const agregar = (nombre, cantidad, unidad, grupo) => {
+      const k = norm(nombre);
+      if (!porNombre[k]) porNombre[k] = { nombre, unidad, total: 0, muebles: {} };
+      porNombre[k].total = Math.round(((porNombre[k].total || 0) + cantidad) * 100) / 100;
+      porNombre[k].muebles[grupo] = Math.round(((porNombre[k].muebles[grupo] || 0) + cantidad) * 100) / 100;
+      if (unidad && porNombre[k].unidad !== unidad) porNombre[k].unidad = unidad;
+    };
+    stock.forEach(s => agregar(s.ingrediente, parseFloat(s.cantidad) || 0, s.unidad, (s.grupo || 'SIN CLASIFICAR').toUpperCase()));
+    itemsAbajoBarra.forEach(it => agregar(it.nombre, parseFloat(it.cantidad) || 0, 'unidad', 'ALM. GENERAL ABAJO'));
     const items = Object.values(porNombre);
     const cats = {};
     CATEGORIAS.forEach(c => cats[c.label] = []);
@@ -4845,7 +4853,7 @@ function verStockBarraGeneral() {
     window._stockBarraGeneral = { fecha, filas: filasExport };
     const body = document.getElementById('modal-body');
     let html = '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;"><h3 style="margin:0;">🎛️ BARRA — VISTA GENERAL (' + fecha + ')</h3><button onclick="exportarStockBarraGeneral()" style="padding:0.5rem 1rem;background:#2e7d32;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;">📊 EXPORTAR</button></div>';
-    html += '<p style="font-size:0.8rem;color:#666;margin:0.4rem 0 0.6rem;">Todos los items de BARRA/STOCK sin diferenciar por muebles. Las cantidades son los totales en toda la barra.</p>';
+    html += '<p style="font-size:0.8rem;color:#666;margin:0.4rem 0 0.6rem;">Todos los items de BARRA/STOCK (muebles + COMPRAS DIARIAS + ALMACÉN GENERAL ABAJO grupo BARRA). Las cantidades son los totales.</p>';
     CATEGORIAS.forEach(c => {
       const lista = cats[c.label];
       if (!lista.length) return;
@@ -4874,6 +4882,7 @@ function verStockBarraGeneral() {
     const mc = document.querySelector('.modal-content');
     if (mc) mc.classList.add('modal-wide');
     document.getElementById('modal').style.display = 'block';
+    });
   }).catch(() => alert('Error al cargar el stock'));
 }
 
