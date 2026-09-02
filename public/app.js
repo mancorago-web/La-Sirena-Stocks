@@ -2858,7 +2858,7 @@ function showModal(tipo, data) {
       <label style="display:block;margin-top:1rem;">
         Mueble
         <select id="f-stock-grupo" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
-          ${GRUPOS_BARRA.map(g => `<option value="${g}" ${data.grupo === g ? 'selected' : ''}>${g}</option>`).join('')}
+          ${GRUPOS_BARRA_CON_COMPRAS.map(g => `<option value="${g}" ${data.grupo === g ? 'selected' : ''}>${g}</option>`).join('')}
         </select>
       </label>
       <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
@@ -4540,6 +4540,7 @@ function cambiarSubTab(nombre, prefix) {
 
 // --- BARRA: Stock ---
 const GRUPOS_BARRA = ['MUEBLE DE ARRIBA', 'MUEBLE DE ABAJO', 'MUEBLE DE APOYO'];
+const GRUPOS_BARRA_CON_COMPRAS = [...GRUPOS_BARRA, 'COMPRAS DIARIAS'];
 const UNIDADES_STOCK = ['ml', 'unidad', 'onzas', 'gramos', 'kg', 'lt', 'hojas', 'gotas', 'rodajas'];
 let _stockDirty = false;
 
@@ -4652,7 +4653,7 @@ function cargarStockBarra() {
       return;
     }
     const groups = {};
-    GRUPOS_BARRA.forEach(g => { groups[g] = []; });
+    GRUPOS_BARRA_CON_COMPRAS.forEach(g => { groups[g] = []; });
     groups['SIN CLASIFICAR'] = [];
     data.forEach(s => {
       const key = (s.grupo || '').toUpperCase();
@@ -4673,7 +4674,7 @@ function cargarStockBarra() {
           <td></td>
         </tr>`;
       }
-      const opts = GRUPOS_BARRA.map(g => `<option value="${g}" ${((s.grupo || '').toUpperCase() === g) ? 'selected' : ''}>${g}</option>`).join('');
+      const opts = GRUPOS_BARRA_CON_COMPRAS.map(g => `<option value="${g}" ${((s.grupo || '').toUpperCase() === g) ? 'selected' : ''}>${g}</option>`).join('');
       const uniList = UNIDADES_STOCK.includes(s.unidad) ? UNIDADES_STOCK : [...UNIDADES_STOCK, s.unidad];
       const uniOpts = uniList.map(u => `<option value="${u}" ${s.unidad === u ? 'selected' : ''}>${u}</option>`).join('');
       return `<tr data-stock-id="${s.id}" data-orig-cantidad="${s.cantidad}" data-orig-unidad="${s.unidad}" data-orig-grupo="${(s.grupo || '').toUpperCase()}"${cls}>
@@ -4688,7 +4689,7 @@ function cargarStockBarra() {
         </td>
       </tr>`;
     }
-    container.innerHTML = GRUPOS_BARRA.map(g => {
+    container.innerHTML = GRUPOS_BARRA_CON_COMPRAS.map(g => {
       const items = groups[g];
       const total = items.reduce((sum, i) => sum + (parseFloat(i.cantidad) || 0), 0);
       return `
