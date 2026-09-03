@@ -4723,6 +4723,15 @@ function cargarSugerenciasStock() {
 }
 
 function cargarStockBarra() {
+  // Preservar las categorías abiertas (no colapsar al guardar/refrescar)
+  const abiertas = new Set();
+  document.querySelectorAll('#barra-stock-container .accordion-item').forEach(item => {
+    const body = item.querySelector('.accordion-body');
+    if (body && body.classList.contains('open')) {
+      const t = item.querySelector('.accordion-title');
+      if (t) abiertas.add(t.textContent.replace(/\s*—.*$/, '').trim());
+    }
+  });
   const fechaEl = document.getElementById('fecha-stock-barra');
   const fecha = fechaEl ? fechaEl.value : todayStr();
   const esHoy = fecha === todayStr();
@@ -4838,6 +4847,15 @@ function cargarStockBarra() {
             </table></div>
           </div>
         </div>` : '');
+    // Reabrir las categorías que estaban abiertas antes de re-renderizar
+    container.querySelectorAll('.accordion-item').forEach(item => {
+      const t = item.querySelector('.accordion-title');
+      if (t && abiertas.has(t.textContent.replace(/\s*—.*$/, '').trim())) {
+        item.querySelector('.accordion-body').classList.add('open');
+        item.querySelector('.accordion-arrow').classList.add('open');
+        item.querySelector('.accordion-header').classList.add('active');
+      }
+    });
     _stockDirty = false;
     const b = document.getElementById('btn-guardar-stock');
     if (b) { b.style.background = '#2e7d32'; b.textContent = '💾 GUARDAR STOCK'; }
