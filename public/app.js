@@ -880,6 +880,7 @@ function analizarVentas(esPrueba) {
       });
     });
     window._ventasImportStocks = stocksPorNombre;
+    window._ventasImportBarraRecetas = barraRec || [];
     const stockNombres = (stockItems || []).filter(n => !esBasura(n));
     const uniq = {};
     filas.forEach(r => {
@@ -971,7 +972,21 @@ function renderVentasAsignacion(items, containerId) {
       '<input class="input-match-nuevo" data-item="' + esc(i.nombre) + '" placeholder="Nombre nuevo..." style="display:none;margin-top:0.3rem;padding:0.3rem;border:1px solid #ccc;border-radius:4px;width:90%;">';
   };
   const almacen = (i) => {
-    if (i.destino !== 'stocks') return '<td style="color:#999;">—</td>';
+    if (i.destino !== 'stocks') {
+      // Recetas BARRA/COCINA: mostrar los ingredientes de la receta que son items de STOCKS/ALMACENES
+      // (ej. "corona X 330 ML" en MICHELADA CORONA, "pilsen x 305 ml" en MICHELADA PILSEN) para poder
+      // elegir desde qué almacén sale la venta.
+      const normM = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+      const rec = (i.destino === 'barra' ? (window._ventasImportBarraRecetas || []) : [])
+        .find(r => normM(r.nombre) === normM(i.matched || i.nombre));
+      const ingStocks = (rec && rec.ingredientes)
+        ? rec.ingredientes.filter(ing => (window._ventasImportStocks || {})[normM(ing.ingrediente)])
+        : [];
+      if (ingStocks.length) {
+        return '<td class="celda-almacen">' + ingStocks.map(ing => buildAlmacenSelectIng(ing.ingrediente, Math.round(((parseFloat(ing.cantidad) || 0) * (i.cantidad || 1)) * 100) / 100)).join('') + '</td>';
+      }
+      return '<td style="color:#999;">—</td>';
+    }
     const nombre = i.matched || i.nombre;
     return '<td class="celda-almacen">' + buildAlmacenSelect(nombre) + '</td>';
   };
@@ -1103,6 +1118,19 @@ function buildAlmacenSelect(nombre) {
     list.map(al => '<option value="' + al.almacen_id + '">' + esc(al.almacen_nombre) + ' (' + al.cantidad + ')</option>').join('') + '</select>';
 }
 
+// Selector de almacén para un INGREDIENTE de receta que es item de STOCKS (ej. CORONA X 330 ML)
+function buildAlmacenSelectIng(nombre, cant) {
+  const stocks = window._ventasImportStocks || {};
+  const norm = (s) => String(s || '').trim().toUpperCase().replace(/[\u2018\u2019\u201A\u201C\u201D\u00B4]/g, "'").replace(/\s+/g, ' ');
+  const list = stocks[norm(nombre)] || [];
+  if (!list.length) return '<div style="margin:0.15rem 0;"><span style="font-size:0.75rem;color:#c62828;">' + esc(nombre) + ': sin stock</span></div>';
+  return '<div style="margin:0.15rem 0;"><span style="font-size:0.75rem;color:#555;">' + esc(nombre) + ' (x' + cant + '):</span> ' +
+    '<select class="select-almacen-ing-import" data-ing="' + esc(nombre) + '" style="padding:0.25rem;border:1px solid #ccc;border-radius:4px;max-width:190px;">' +
+    '<option value="">— Elige almacén —</option>' +
+    list.map(al => '<option value="' + al.almacen_id + '">' + esc(al.almacen_nombre) + ' (' + al.cantidad + ')</option>').join('') +
+    '</select></div>';
+}
+
 function actualizarAlmacenImport(tr) {
   const cell = tr.querySelector('.celda-almacen');
   if (!cell) return;
@@ -1140,6 +1168,7 @@ function guardarVentasAsignadas(containerId, filas, onDone) {
   const match = {};
   const mapping = {};
   const almacenes = {};
+  const ingAlmacenes = {};
   const recetasNuevas = [];
   const recetasCreadas = new Set();
   const sinEmparejar = [];
@@ -1187,6 +1216,13 @@ function guardarVentasAsignadas(containerId, filas, onDone) {
     match[norm(itemNombre)] = matched;
     mapping[norm(itemNombre)] = destino;
     if (destino === 'stocks' && alSel && alSel.value) almacenes[norm(itemNombre)] = Number(alSel.value);
+    // Ingredientes de la receta que son items de STOCKS: leer el almacén elegido para cada uno
+    const ingAlm = tr.querySelectorAll('.select-almacen-ing-import');
+    if (ingAlm.length) {
+      const lista = [];
+      ingAlm.forEach(sel => { if (sel.value) lista.push({ nombre: sel.dataset.ing, almacenes: [Number(sel.value)] }); });
+      if (lista.length) ingAlmacenes[norm(itemNombre)] = lista;
+    }
   });
   if (sinEmparejar.length) {
     alert('Debes emparejar estos items antes de guardar (elige el item de la app):\n\n- ' + sinEmparejar.join('\n- '));
@@ -1198,6 +1234,7 @@ function guardarVentasAsignadas(containerId, filas, onDone) {
     if (mapping[k]) r.destino = mapping[k];
     if (match[k]) r.matched = match[k];
     if (almacenes[k]) r.almacenes = [almacenes[k]];
+    if (ingAlmacenes[k]) r.ingredientesStocks = ingAlmacenes[k];
   });
   const crearRecetas = recetasNuevas.map(rec => {
     return (rec.tipo === 'barra'
@@ -1323,7 +1360,7 @@ function registrarVentasFilas(filas, onDone) {
     const destino = r.destino || 'stocks';
     const key = fecha + '|' + destino;
     if (!grupos[key]) grupos[key] = [];
-    grupos[key].push({ nombre: r.matched || r.item, cantidad: r.cantidad, destino, almacenes: r.almacenes });
+    grupos[key].push({ nombre: r.matched || r.item, cantidad: r.cantidad, destino, almacenes: r.almacenes, ingredientesStocks: r.ingredientesStocks });
   });
   const keys = Object.keys(grupos);
   if (!keys.length) { if (onDone) onDone(); return; }

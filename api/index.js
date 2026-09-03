@@ -1751,7 +1751,7 @@ async function descontarStockCocina(consumos) {
   return noDescontados;
 }
 
-async function descontarStocksDesdeAlmacenes(consumos, fecha, savedBy) {
+async function descontarStocksDesdeAlmacenes(consumos, fecha, savedBy, seleccionPorNombre) {
   if (!consumos || !consumos.length) return [];
   const invSnap = await col('inventario').get();
   const almsSnap = await col('almacenes').get();
@@ -1769,11 +1769,14 @@ async function descontarStocksDesdeAlmacenes(consumos, fecha, savedBy) {
     const cant = parseFloat(c.cantidad) || 0;
     if (cant <= 0) continue;
     const k = norm(nombre);
-    const candidatos = invSnap.docs
+    let candidatos = invSnap.docs
       .map(d => d.data())
       .filter(a => norm(a.nombre) === k)
       .map(a => ({ item_id: Number(a.item_id), almacen_id: Number(a.almacen_id) }))
       .sort((a, b) => a.almacen_id - b.almacen_id);
+    // Si el usuario eligió almacenes en la importación, solo descontar de esos
+    const sel = (seleccionPorNombre || {})[k];
+    if (sel && sel.length) candidatos = candidatos.filter(ca => sel.includes(ca.almacen_id));
     if (!candidatos.length) continue;
     let restante = cant;
     const usados = [];
@@ -1896,7 +1899,7 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         if (almacenes.length) resumen.stocks.push({ nombre, cantidad, almacenes });
         else resumen.noEncontrados.push({ nombre, cantidad, destino: 'stocks' });
       } else if (destino === 'barra') {
-        ventasBarra.push({ nombre, cantidad });
+        ventasBarra.push({ nombre, cantidad, ingredientesStocks: it.ingredientesStocks });
         resumen.barra.push({ nombre, cantidad });
       } else if (destino === 'cocina') {
         cocinaVentas.push({ nombre, cantidad });
@@ -1950,7 +1953,17 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       // donde existen y se reporta dónde se descontó.
       const sinStockBarra = (resumen.noDescontados || []).filter(x => x.motivo === 'sin_stock');
       if (sinStockBarra.length) {
-        const deducidosAlm = await descontarStocksDesdeAlmacenes(sinStockBarra, fecha, savedBy);
+        // Almacenes elegidos por el usuario en la importación para cada ingrediente de receta
+        const seleccionStocks = {};
+        ventasBarra.forEach(v => {
+          if (Array.isArray(v.ingredientesStocks)) {
+            v.ingredientesStocks.forEach(is => {
+              const kk = String(is.nombre || '').trim().toUpperCase().replace(/\s+/g, '');
+              if (kk) seleccionStocks[kk] = (is.almacenes || []).map(Number);
+            });
+          }
+        });
+        const deducidosAlm = await descontarStocksDesdeAlmacenes(sinStockBarra, fecha, savedBy, seleccionStocks);
         if (deducidosAlm.length) {
           const set = new Set(deducidosAlm.map(d => String(d.ingrediente).trim().toUpperCase()));
           resumen.noDescontados = (resumen.noDescontados || []).filter(x => !set.has(String(x.ingrediente).trim().toUpperCase()));
