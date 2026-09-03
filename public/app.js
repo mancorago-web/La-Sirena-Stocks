@@ -5289,7 +5289,7 @@ function cargarCocinaMovimientos(tipo) {
           </div>
         </div>`;
       });
-      html += '<div id="items-salientes-cocina"><h3 style="margin:1rem 0 0.5rem 0;">ITEMS SALIENTES</h3>';
+      html += '<div id="items-salientes-cocina">';
       // Se calculan desde las RECETAS VENDIDAS (movimientos + ventas del apartado principal de VENTAS)
       // multiplicadas por sus ingredientes. Así funciona aunque la venta venga del EXCEL (que no
       // escribe cocina_movimientos de ingredientes).
@@ -5309,6 +5309,7 @@ function cargarCocinaMovimientos(tipo) {
         });
       });
       const keysS = Object.keys(salientes).sort();
+      html += '<div id="items-salientes-cocina" class="accordion-item"><div class="accordion-header" onclick="toggleAcordeon(this)"><span class="accordion-title">ITEMS SALIENTES <span style="font-weight:400;font-size:0.85rem;color:#777;">— ' + keysS.length + ' item(s)</span></span><span class="accordion-arrow">▶</span></div><div class="accordion-body">';
       if (keysS.length) {
         html += '<div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th>Cantidad Consumida</th><th>Unidad</th></tr></thead><tbody>';
         keysS.forEach(key => { html += `<tr><td>${key}</td><td>${fmt3(salientes[key])}</td><td>${units[key] || 'unidad'}</td></tr>`; });
@@ -5316,7 +5317,7 @@ function cargarCocinaMovimientos(tipo) {
       } else {
         html += '<p style="color:#888;">Calculado automáticamente al ingresar cantidades de recetas.</p>';
       }
-      html += '</div>';
+      html += '</div></div>';
       container.innerHTML = html;
       const bp = document.getElementById('buscar-cocina-ventas');
       if (bp && bp.value) buscarTablaBarra(bp.value, accId, 'tr[data-receta]');
