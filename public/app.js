@@ -1345,11 +1345,11 @@ function registrarVentasFilas(filas, onDone) {
         let html = '<h3>⚠ Ventas BARRA con avisos</h3>';
         if (sinRecetaTotales.length) {
           html += '<p style="color:#c62828;font-weight:600;margin-top:0.5rem;">Sin receta (no se expanden ingredientes):</p><ul style="margin:0.3rem 0 0.75rem 1.2rem;">'
-            + sinRecetaTotales.map(s => '<li>' + esc(s.nombre) + ' x' + s.cantidad + '</li>').join('') + '</ul>';
+            + sinRecetaTotales.map(s => '<li>' + esc(s.nombre) + ' x' + s.cantidad + (s.destino ? ' (' + esc(s.destino).toUpperCase() + ')' : '') + '</li>').join('') + '</ul>';
         }
         if (noDescontadosTotales.length) {
-          html += '<p style="color:#e65100;font-weight:600;margin-top:0.5rem;">Ingredientes que NO se descontaron de BARRA/STOCK:</p><ul style="margin:0.3rem 0 0.75rem 1.2rem;">'
-            + noDescontadosTotales.map(s => '<li>' + esc(s.ingrediente) + ' x' + s.cantidad + ' (' + s.unidad + ') — ' + (s.motivo === 'sin_stock' ? 'sin item en BARRA/STOCK' : (s.motivo === 'sin_conversion_o_insuficiente' ? 'sin conversión o stock insuficiente' : s.motivo)) + '</li>').join('') + '</ul>';
+          html += '<p style="color:#e65100;font-weight:600;margin-top:0.5rem;">Ingredientes que NO se descontaron de BARRA/COCINA STOCK:</p><ul style="margin:0.3rem 0 0.75rem 1.2rem;">'
+            + noDescontadosTotales.map(s => '<li>' + esc(s.ingrediente) + ' x' + s.cantidad + ' (' + s.unidad + ') — ' + (s.motivo === 'sin_stock' ? 'sin item en stock' : (s.motivo === 'sin_conversion_o_insuficiente' ? 'sin conversión o stock insuficiente' : s.motivo)) + (s.zona ? ' · ' + esc(s.zona).toUpperCase() : '') + '</li>').join('') + '</ul>';
         }
         html += '<button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button>';
         body.innerHTML = html;

@@ -1704,6 +1704,53 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
   return noDescontados;
 }
 
+async function descontarStockCocina(consumos) {
+  const stockSnap = await col('cocina_stock').get();
+  const allStock = stockSnap.docs.map(d => ({ ref: d.ref, key: d.id, data: d.data() }));
+  const byNombre = {};
+  allStock.forEach(s => {
+    const k = String(s.data.ingrediente || '').trim().toUpperCase();
+    if (!byNombre[k]) byNombre[k] = [];
+    byNombre[k].push(s);
+  });
+  const batch = db.batch();
+  let ajustados = 0;
+  const noDescontados = [];
+  for (const c of consumos) {
+    const nombre = String(c.ingrediente || '').trim();
+    if (!nombre) continue;
+    const key = nombre.toUpperCase();
+    const cant = parseFloat(c.cantidad) || 0;
+    if (cant <= 0) continue;
+    const uRec = normalizeUnit(c.unidad || 'unidad');
+    let matches = byNombre[key] || [];
+    if (!matches.length) matches = matchStockFuzzy(c.ingrediente, allStock);
+    if (!matches.length) {
+      noDescontados.push({ ingrediente: nombre, cantidad: Math.round(cant * 100) / 100, unidad: uRec, motivo: 'sin_stock', zona: 'cocina' });
+      continue;
+    }
+    let restante = cant;
+    for (const m of matches) {
+      if (restante <= 0.0001) break;
+      const uStock = normalizeUnit(m.data.unidad || 'unidad');
+      const conv = cocinaAjustar(restante, uRec, uStock);
+      if (conv === null || conv === undefined) continue;
+      const disp = parseFloat(m.data.cantidad) || 0;
+      const aDescontar = Math.min(disp, conv);
+      const nueva = Math.max(0, Math.round((disp - aDescontar) * 100) / 100);
+      batch.update(m.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
+      const consumidoRec = cocinaAjustar(aDescontar, uStock, uRec) || aDescontar;
+      restante = Math.max(0, Math.round((restante - consumidoRec) * 100) / 100);
+      ajustados++;
+    }
+    if (restante > 0.0001) {
+      noDescontados.push({ ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: uRec, motivo: 'sin_conversion_o_insuficiente', zona: 'cocina' });
+    }
+  }
+  if (ajustados) await batch.commit();
+  return noDescontados;
+}
+
 async function sumarStockBarra(consumos) {
   const stockSnap = await col('barra_stock').get();
   const allStock = stockSnap.docs.map(d => ({ ref: d.ref, id: Number(d.id) || 0, data: d.data() }));
@@ -1836,7 +1883,7 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         const recNombre = rec ? rec.nombre : v.nombre;
         const recId = rec ? rec.id : null;
         // Paso 6: si no existe la receta, NO se registra como receta expandible (se avisa).
-        if (!rec) resumen.sinReceta.push({ nombre: v.nombre, cantidad: v.cantidad });
+        if (!rec) resumen.sinReceta.push({ nombre: v.nombre, cantidad: v.cantidad, destino: 'barra' });
         batch.set(col('barra_movimientos').doc(), {
           fecha, tipo: 'ventas', ingrediente: recNombre, cantidad: v.cantidad, unidad: 'unidad',
           es_receta: !!rec, sin_receta: !rec, receta: recNombre, saved_by: savedBy, created_at: new Date().toISOString()
@@ -1856,11 +1903,36 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       resumen.noDescontados = await descontarStockBarra(consumos, fecha, savedBy);
     }
 
-    // Aplicar a COCINA
+    // Aplicar a COCINA (registro de ventas + expandir recetas + descontar COCINA/STOCK)
     if (cocinaVentas.length) {
+      const crecSnap = await col('cocina_recetas').get();
+      const cingSnap = await col('cocina_receta_ingredientes').get();
+      const crecetasMap = {};
+      crecSnap.docs.forEach(d => { const a = d.data(); crecetasMap[String(a.nombre).trim().toUpperCase()] = { id: d.id, nombre: a.nombre }; });
+      const cingByRec = {};
+      cingSnap.docs.forEach(d => { const a = d.data(); if (!cingByRec[a.receta_id]) cingByRec[a.receta_id] = []; cingByRec[a.receta_id].push(a); });
       const batch = db.batch();
-      cocinaVentas.forEach(v => batch.set(col('cocina_ventas').doc(), { fecha, nombre: v.nombre, cantidad: v.cantidad, unidad: 'unidad', saved_by: savedBy, created_at: new Date().toISOString() }));
+      const consumosCocina = [];
+      if (!resumen.sinReceta) resumen.sinReceta = [];
+      for (const v of cocinaVentas) {
+        const rec = crecetasMap[String(v.nombre).trim().toUpperCase()];
+        const recNombre = rec ? rec.nombre : v.nombre;
+        batch.set(col('cocina_ventas').doc(), { fecha, nombre: recNombre, cantidad: v.cantidad, unidad: 'unidad', saved_by: savedBy, created_at: new Date().toISOString() });
+        if (rec) {
+          (cingByRec[rec.id] || []).forEach(ing => {
+            const cant = Math.round(((parseFloat(ing.cantidad) || 0) * v.cantidad) * 100) / 100;
+            consumosCocina.push({ ingrediente: ing.ingrediente, cantidad: cant, unidad: ing.unidad || 'unidad' });
+          });
+        } else {
+          resumen.sinReceta.push({ nombre: v.nombre, cantidad: v.cantidad, destino: 'cocina' });
+        }
+      }
       await batch.commit();
+      const noDescCocina = await descontarStockCocina(consumosCocina);
+      if (noDescCocina.length) {
+        if (!Array.isArray(resumen.noDescontados)) resumen.noDescontados = [];
+        resumen.noDescontados.push(...noDescCocina);
+      }
     }
 
     // Log de ventas (detalle)
