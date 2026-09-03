@@ -7483,7 +7483,7 @@ function cargarComprasDetalle(ini, fin) {
       provDl.innerHTML = htmlP;
     }
     c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE COMPRAS (' + fechaIni + ' a ' + fechaFin + ')</h3>' +
-      '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Item</th><th>Cantidad</th><th>Precio Unidad</th><th>Precio Total</th><th>Destino</th><th>Documento</th><th>Proveedor</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
+      '<div class="table-wrap"><table style="white-space:nowrap;"><thead><tr><th>Fecha</th><th>Item</th><th>Cantidad</th><th>Precio Unidad</th><th>Precio Total</th><th>Destino</th><th>Documento</th><th>Proveedor</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
       filas + '</tbody></table></div>' +
       (totalCompra > 0 ? '<p style="font-weight:700;color:#0f3460;margin-top:0.5rem;">TOTAL COMPRAS: S/ ' + totalCompra.toFixed(2) + '</p>' : '');
   }).catch(() => { const ai = document.getElementById('fecha-compras-ini')?.value || todayStr(); const af = document.getElementById('fecha-compras-fin')?.value || todayStr(); if (ai === fechaIni && af === fechaFin) c.innerHTML = '<p style="color:#888;">DETALLE DE COMPRAS/INGRESOS</p>'; });
