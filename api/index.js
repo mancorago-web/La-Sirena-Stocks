@@ -1948,26 +1948,28 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       }
       await batch.commit();
       resumen.noDescontados = await descontarStockBarra(consumos, fecha, savedBy);
-      // Ingredientes de receta que son items de STOCKS/ALMACENES (ej. "corona X 330 ML" en
-      // MICHELADA CORONA, "pilsen x 305 ml" en MICHELADA PILSEN): se descuentan de los almacenes
-      // donde existen y se reporta dónde se descontó.
-      const sinStockBarra = (resumen.noDescontados || []).filter(x => x.motivo === 'sin_stock');
-      if (sinStockBarra.length) {
-        // Almacenes elegidos por el usuario en la importación para cada ingrediente de receta
-        const seleccionStocks = {};
-        ventasBarra.forEach(v => {
-          if (Array.isArray(v.ingredientesStocks)) {
-            v.ingredientesStocks.forEach(is => {
-              const kk = String(is.nombre || '').trim().toUpperCase().replace(/\s+/g, '');
-              if (kk) seleccionStocks[kk] = (is.almacenes || []).map(Number);
-            });
+      // Ingredientes de receta que son items de STOCKS/ALMACENES: SOLO se descuentan de los
+      // almacenes cuando el usuario eligió almacén para ese ingrediente en la importación
+      // (ej. CORONA X 330 ML / PILSEN X 305 ML de las MICHELADAS). El resto (ej. AGUA CON GAS que
+      // solo sale a BARRA) NO se descuenta de STOCKS como venta: queda reportado como no descontado.
+      const seleccionStocks = {};
+      ventasBarra.forEach(v => {
+        if (Array.isArray(v.ingredientesStocks)) {
+          v.ingredientesStocks.forEach(is => {
+            const kk = String(is.nombre || '').trim().toUpperCase().replace(/\s+/g, '');
+            if (kk && Array.isArray(is.almacenes) && is.almacenes.length) seleccionStocks[kk] = is.almacenes.map(Number);
+          });
+        }
+      });
+      if (Object.keys(seleccionStocks).length) {
+        const sinStockBarra = (resumen.noDescontados || []).filter(x => x.motivo === 'sin_stock' && seleccionStocks[String(x.ingrediente).trim().toUpperCase().replace(/\s+/g, '')]);
+        if (sinStockBarra.length) {
+          const deducidosAlm = await descontarStocksDesdeAlmacenes(sinStockBarra, fecha, savedBy, seleccionStocks);
+          if (deducidosAlm.length) {
+            const set = new Set(deducidosAlm.map(d => String(d.ingrediente).trim().toUpperCase()));
+            resumen.noDescontados = (resumen.noDescontados || []).filter(x => !set.has(String(x.ingrediente).trim().toUpperCase()));
+            resumen.deducidosDeAlmacenes = deducidosAlm;
           }
-        });
-        const deducidosAlm = await descontarStocksDesdeAlmacenes(sinStockBarra, fecha, savedBy, seleccionStocks);
-        if (deducidosAlm.length) {
-          const set = new Set(deducidosAlm.map(d => String(d.ingrediente).trim().toUpperCase()));
-          resumen.noDescontados = (resumen.noDescontados || []).filter(x => !set.has(String(x.ingrediente).trim().toUpperCase()));
-          resumen.deducidosDeAlmacenes = deducidosAlm;
         }
       }
     }
