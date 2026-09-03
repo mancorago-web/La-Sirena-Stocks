@@ -5279,6 +5279,31 @@ app.post('/api/reportes/accion/sacar-cuarentena', async (req, res) => {
   }
 });
 
+// --- ACCION en REPORTES: BAJA de un item en CUARENTENA (se elimina de observación SIN afectar
+// los registros de ALMACENES: no registra venta, no restaura falta, no registra baja en STOCK/BAJAS). ---
+app.post('/api/reportes/accion/baja-cuarentena', async (req, res) => {
+  try {
+    const { fecha, item_id, almacen_id, cantidad, saved_by } = req.body;
+    if (!fecha || !item_id || !almacen_id || !(Number(cantidad) > 0)) {
+      return res.status(400).json({ error: 'fecha, item_id, almacen_id y cantidad son requeridos' });
+    }
+    const savedBy = saved_by || (req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown');
+    const al = Number(almacen_id);
+    const item = Number(item_id);
+    const redondear = n => Math.round(n * 100) / 100;
+    const diaObsId = docId('invdiario', fecha, al, item);
+    const obsSnap = await col('inventario_diario').doc(diaObsId).get();
+    const curObs = obsSnap.exists ? (obsSnap.data().stock_observado || 0) : 0;
+    const aMover = redondear(Math.min(Number(cantidad), curObs));
+    if (aMover <= 0) return res.status(400).json({ error: 'El item no tiene stock en observación en la fecha indicada' });
+    // Solo se libera la observación (stock_observado no afecta ventas/faltas/bajas ni el cierre)
+    await guardarDiaInterno(fecha, [{ item_id: item, almacen_id: al, stock_observado: redondear(curObs - aMover) }], savedBy);
+    res.json({ ok: true, movido: aMover });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- ACCION en REPORTES: INTERCAMBIO de producto (los meseros registraron uno por otro) ---
 // Corrige la conciliación Y las ventas: el producto real (con FALTA) registra la venta que faltaba,
 // y el producto equivocado (con INGRESO) quita la venta incorrecta y el ingreso sobrante.

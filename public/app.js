@@ -3551,6 +3551,7 @@ function abrirCuarentena() {
         <td><input type="date" class="input-fecha-venta" value="${f.fecha}"></td>
         <td style="white-space:nowrap;">
           <button class="btn-detalles" onclick="usarObservacionComoVenta(this)" style="background:#0f3460;color:#fff;">USAR COMO VENTA</button>
+          <button class="btn-detalles" onclick="bajaDeCuarentena(this)" style="background:#b71c1c;color:#fff;">BAJA</button>
           <button class="btn-detalles" onclick="sacarDeCuarentena(this)" style="background:#c62828;color:#fff;">SACAR</button>
         </td>
       </tr>`;
@@ -3580,6 +3581,23 @@ function usarObservacionComoVenta(btn) {
     cerrarModal();
     cargarReporteDiferencias();
   }).catch(() => { btn.disabled = false; btn.textContent = 'USAR COMO VENTA'; alert('Error al usar como venta'); });
+}
+
+function bajaDeCuarentena(btn) {
+  const tr = btn.closest('tr');
+  const item_id = parseInt(tr.dataset.cuaItem);
+  const almacen_id = parseInt(tr.dataset.cuaAl);
+  const cantidad = parseFloat(tr.dataset.cuaCant);
+  const fecha = tr.dataset.cuaFecha;
+  if (!confirm('¿Dar de BAJA ' + cantidad + ' de este item en CUARENTENA? Se eliminará de cuarentena SIN afectar los registros de los almacenes (no se registra en STOCK/BAJAS).')) return;
+  btn.disabled = true; btn.textContent = 'Procesando...';
+  api('POST', '/api/reportes/accion/baja-cuarentena', {
+    fecha, item_id, almacen_id, cantidad, saved_by: currentUserName
+  }).then(() => {
+    showToast('Eliminado de cuarentena');
+    abrirCuarentena();
+    cargarReporteDiferencias();
+  }).catch(() => { btn.disabled = false; btn.textContent = 'BAJA'; alert('Error al dar de baja'); });
 }
 
 function sacarDeCuarentena(btn) {
