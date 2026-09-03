@@ -1332,6 +1332,7 @@ function registrarVentasFilas(filas, onDone) {
   let noEncontrados = 0;
   const noDescontadosTotales = [];
   const sinRecetaTotales = [];
+  const deducidosAlmTotales = [];
   function procesar() {
     if (idx >= keys.length) {
       showToast('Ventas registradas' + (noEncontrados ? ' (' + noEncontrados + ' no encontrados)' : ''));
@@ -1339,10 +1340,14 @@ function registrarVentasFilas(filas, onDone) {
       cargarVentasCentral();
       _invCache = { fecha: null, data: null, pending: null };
       actualizarContadoresMenu();
-      // Aviso de ventas BARRA que NO pudieron descontar stock o que no tienen receta
-      if (sinRecetaTotales.length || noDescontadosTotales.length) {
+      // Aviso de ventas que no pudieron descontar stock, sin receta, o descontadas de almacenes
+      if (sinRecetaTotales.length || noDescontadosTotales.length || deducidosAlmTotales.length) {
         const body = document.getElementById('modal-body');
-        let html = '<h3>⚠ Ventas BARRA con avisos</h3>';
+        let html = '<h3>⚠ Ventas con avisos</h3>';
+        if (deducidosAlmTotales.length) {
+          html += '<p style="color:#1565c0;font-weight:600;margin-top:0.5rem;">Descontados de ALMACENES (items de recetas de barra que están en STOCKS):</p><ul style="margin:0.3rem 0 0.75rem 1.2rem;">'
+            + deducidosAlmTotales.map(d => '<li>' + esc(d.ingrediente) + ' x' + d.cantidad + ' — descontado de: ' + esc(d.descontado_de.join(', ')) + '</li>').join('') + '</ul>';
+        }
         if (sinRecetaTotales.length) {
           html += '<p style="color:#c62828;font-weight:600;margin-top:0.5rem;">Sin receta (no se expanden ingredientes):</p><ul style="margin:0.3rem 0 0.75rem 1.2rem;">'
             + sinRecetaTotales.map(s => '<li>' + esc(s.nombre) + ' x' + s.cantidad + (s.destino ? ' (' + esc(s.destino).toUpperCase() + ')' : '') + '</li>').join('') + '</ul>';
@@ -1366,6 +1371,7 @@ function registrarVentasFilas(filas, onDone) {
       noEncontrados += (r.resumen && r.resumen.noEncontrados) ? r.resumen.noEncontrados.length : 0;
       if (r.resumen && Array.isArray(r.resumen.noDescontados)) noDescontadosTotales.push(...r.resumen.noDescontados);
       if (r.resumen && Array.isArray(r.resumen.sinReceta)) sinRecetaTotales.push(...r.resumen.sinReceta);
+      if (r.resumen && Array.isArray(r.resumen.deducidosDeAlmacenes)) deducidosAlmTotales.push(...r.resumen.deducidosDeAlmacenes);
       procesar();
     }).catch(() => {
       alert('Error registrando las ventas de ' + fecha);

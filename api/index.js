@@ -1751,6 +1751,50 @@ async function descontarStockCocina(consumos) {
   return noDescontados;
 }
 
+async function descontarStocksDesdeAlmacenes(consumos, fecha, savedBy) {
+  if (!consumos || !consumos.length) return [];
+  const invSnap = await col('inventario').get();
+  const almsSnap = await col('almacenes').get();
+  const alNombres = {};
+  almsSnap.docs.forEach(d => { alNombres[Number(d.id)] = d.data().nombre; });
+  const diaSnap = await col('inventario_diario').where('fecha', '==', fecha).get();
+  const dayDocs = {};
+  diaSnap.docs.forEach(d => { dayDocs[d.id] = d.data(); });
+  const norm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, '');
+  const deducidos = [];
+  const registros = [];
+  for (const c of consumos) {
+    const nombre = String(c.ingrediente || '').trim();
+    if (!nombre) continue;
+    const cant = parseFloat(c.cantidad) || 0;
+    if (cant <= 0) continue;
+    const k = norm(nombre);
+    const candidatos = invSnap.docs
+      .map(d => d.data())
+      .filter(a => norm(a.nombre) === k)
+      .map(a => ({ item_id: Number(a.item_id), almacen_id: Number(a.almacen_id) }))
+      .sort((a, b) => a.almacen_id - b.almacen_id);
+    if (!candidatos.length) continue;
+    let restante = cant;
+    const usados = [];
+    for (const cand of candidatos) {
+      if (restante <= 0.0001) break;
+      const d = dayDocs[fecha + '_' + cand.almacen_id + '_' + cand.item_id] || {};
+      const disp = (parseFloat(d.stock_apertura) || 0) + (parseFloat(d.stock_ingreso) || 0) - (parseFloat(d.salida_almacen) || 0) - (parseFloat(d.total_ventas) || 0) - (parseFloat(d.falta_almacen) || 0) - (parseFloat(d.stock_baja) || 0);
+      if (disp <= 0) continue;
+      const aDeducir = Math.min(disp, restante);
+      registros.push({ item_id: cand.item_id, almacen_id: cand.almacen_id, total_ventas: Math.round(((parseFloat(d.total_ventas) || 0) + aDeducir) * 100) / 100 });
+      usados.push(alNombres[cand.almacen_id] || ('Almacén ' + cand.almacen_id));
+      restante = Math.max(0, Math.round((restante - aDeducir) * 100) / 100);
+    }
+    if (usados.length) {
+      deducidos.push({ ingrediente: nombre, cantidad: Math.round(cant * 100) / 100, descontado_de: usados });
+    }
+  }
+  if (registros.length) await guardarDiaInterno(fecha, registros, savedBy);
+  return deducidos;
+}
+
 async function sumarStockBarra(consumos) {
   const stockSnap = await col('barra_stock').get();
   const allStock = stockSnap.docs.map(d => ({ ref: d.ref, id: Number(d.id) || 0, data: d.data() }));
@@ -1901,6 +1945,18 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       }
       await batch.commit();
       resumen.noDescontados = await descontarStockBarra(consumos, fecha, savedBy);
+      // Ingredientes de receta que son items de STOCKS/ALMACENES (ej. "corona X 330 ML" en
+      // MICHELADA CORONA, "pilsen x 305 ml" en MICHELADA PILSEN): se descuentan de los almacenes
+      // donde existen y se reporta dónde se descontó.
+      const sinStockBarra = (resumen.noDescontados || []).filter(x => x.motivo === 'sin_stock');
+      if (sinStockBarra.length) {
+        const deducidosAlm = await descontarStocksDesdeAlmacenes(sinStockBarra, fecha, savedBy);
+        if (deducidosAlm.length) {
+          const set = new Set(deducidosAlm.map(d => String(d.ingrediente).trim().toUpperCase()));
+          resumen.noDescontados = (resumen.noDescontados || []).filter(x => !set.has(String(x.ingrediente).trim().toUpperCase()));
+          resumen.deducidosDeAlmacenes = deducidosAlm;
+        }
+      }
     }
 
     // Aplicar a COCINA (registro de ventas + expandir recetas + descontar COCINA/STOCK)
