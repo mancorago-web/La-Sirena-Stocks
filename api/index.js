@@ -1376,63 +1376,8 @@ app.get('/api/compras/detalle', async (req, res) => {
       logSnap = await col('compras').where('fecha', '>=', fechaIni).where('fecha', '<=', fechaFin).get();
     }
     const lista = logSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    const logStockNombres = new Set();
-    logSnap.docs.forEach(d => { const x = d.data(); if (x.destino === 'stocks') logStockNombres.add(String(x.nombre || '').trim().toUpperCase()); });
-    const precioByNombre = {};
-    const precioTotalByNombre = {};
-    const metaByNombre = {};
-    logSnap.docs.forEach(d => {
-      const x = d.data();
-      const k = String(x.nombre || '').trim().toUpperCase();
-      if (parseFloat(x.precio) > 0) precioByNombre[k] = parseFloat(x.precio);
-      if (parseFloat(x.precio_total) > 0) precioTotalByNombre[k] = parseFloat(x.precio_total);
-      const doc = String(x.documento || '').trim();
-      const num = String(x.numero || '').trim();
-      const prov = String(x.proveedor || '').trim();
-      if (doc || num || prov) {
-        if (!metaByNombre[k]) metaByNombre[k] = {};
-        if (doc) metaByNombre[k].documento = doc;
-        if (num) metaByNombre[k].numero = num;
-        if (prov) metaByNombre[k].proveedor = prov;
-      }
-    });
-    const [invSnap, diaSnap] = await Promise.all([
-      col('inventario').get(),
-      fecha ? col('inventario_diario').where('fecha', '==', fecha).get() : col('inventario_diario').where('fecha', '>=', fechaIni).where('fecha', '<=', fechaFin).get()
-    ]);
-    const nombres = {};
-    invSnap.docs.forEach(d => {
-      const a = d.data();
-      if (a.almacen_id !== undefined && a.item_id !== undefined) nombres[a.almacen_id + ':' + a.item_id] = a.nombre;
-    });
-    diaSnap.docs.forEach(d => {
-      const a = d.data();
-      const ing = parseFloat(a.stock_ingreso) || 0;
-      if (ing <= 0) return;
-      const nombre = nombres[a.almacen_id + ':' + a.item_id];
-      if (!nombre) return;
-      // Items comprados ya aparecen como LÍNEAS del log (detalle por entrada, ej. 6 y 48 del mismo
-      // producto). No duplicar con la fila agregada del inventario. Solo se deriva el ingreso
-      // manual (STOCKS/INGRESOS) que NO tiene línea de compra.
-      if (logStockNombres.has(String(nombre).trim().toUpperCase())) return;
-      const meta = metaByNombre[String(nombre).trim().toUpperCase()] || {};
-      lista.push({
-        id: 'inv:' + a.almacen_id + ':' + a.item_id,
-        fecha: a.fecha || fecha,
-        nombre,
-        cantidad: ing,
-        unidad: 'unidad',
-        destino: 'stocks',
-        almacenes: [Number(a.almacen_id)],
-        precio: precioByNombre[String(nombre).trim().toUpperCase()] || 0,
-        precio_total: precioTotalByNombre[String(nombre).trim().toUpperCase()] || Math.round((precioByNombre[String(nombre).trim().toUpperCase()] || 0) * ing * 100) / 100,
-        documento: meta.documento || '',
-        numero: meta.numero || '',
-        proveedor: meta.proveedor || '',
-        saved_by: a.saved_by || '-',
-        created_at: a.updated_at || new Date().toISOString()
-      });
-    });
+    // Solo se muestran las COMPRAS (líneas del log). Los ingresos internos/manuales (STOCKS/INGRESOS
+    // y transferencias entre almacenes) se ven desde STOCKS/INGRESOS, no desde COMPRAS/INGRESOS.
     lista.sort((a, b) => String(a.fecha || '').localeCompare(String(b.fecha || '')) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
     res.json(lista);
   } catch (e) {
