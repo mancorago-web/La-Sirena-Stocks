@@ -7312,8 +7312,8 @@ function cargarCompras() {
     renderComprasAlmacenes(comprasAlmacenes.map(a => ({ id: Number(a.id), nombre: a.nombre, cantidad: null })));
     const muList = document.getElementById('compras-muebles-lista');
     if (muList) {
-      muList.innerHTML = GRUPOS_BARRA.map(g =>
-        '<label style="font-size:0.82rem;display:inline-flex;align-items:center;gap:0.25rem;"><input type="checkbox" class="compra-mueble" value="' + esc(g) + '" checked> ' + esc(g) + '</label>'
+      muList.innerHTML = GRUPOS_BARRA_CON_COMPRAS.map(g =>
+        '<label style="font-size:0.82rem;display:inline-flex;align-items:center;gap:0.25rem;"><input type="checkbox" class="compra-mueble" value="' + esc(g) + '"> ' + esc(g) + '</label>'
       ).join('');
     }
     onCambiarDestinoCompra();

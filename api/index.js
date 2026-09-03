@@ -1183,15 +1183,15 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
         });
       }
       await batch.commit();
-      // Sumar al stock de barra (barra_stock) en COMPRAS DIARIAS: las compras con destino BARRA
-      // son las compras del día. Suma directa de la cantidad (funciona para CUALQUIER unidad, no
+      // Sumar al stock de barra (barra_stock) en los MUEBLES marcados en COMPRAS (o COMPRAS DIARIAS
+      // si no se marcó ninguno). Suma directa de la cantidad (funciona para CUALQUIER unidad, no
       // se saltan items como los "X KG"/"X UND" que no convierten a onzas — bug previo).
-      await ajustarBarraStock(movsBarra.map(m => ({
-        nombre: m.ingrediente,
-        delta: m.cantidad,
-        unidad: m.unidad || 'unidad',
-        grupo: 'COMPRAS DIARIAS'
-      })));
+      const ajustesBarra = [];
+      for (const m of movsBarra) {
+        const grupos = (Array.isArray(m.muebles) && m.muebles.length) ? m.muebles.map(g => String(g).toUpperCase()) : ['COMPRAS DIARIAS'];
+        grupos.forEach(g => ajustesBarra.push({ nombre: m.ingrediente, delta: m.cantidad, unidad: m.unidad || 'unidad', grupo: g }));
+      }
+      await ajustarBarraStock(ajustesBarra);
 
       // Asegurar que los items nuevos existan en barra_precios (Base de Datos de BARRA)
       // para que aparezcan automáticamente en la BASE DE DATOS UNIFICADA.
