@@ -973,17 +973,18 @@ function renderVentasAsignacion(items, containerId) {
   };
   const almacen = (i) => {
     if (i.destino !== 'stocks') {
-      // Recetas BARRA/COCINA: mostrar los ingredientes de la receta que son items de STOCKS/ALMACENES
-      // (ej. "corona X 330 ML" en MICHELADA CORONA, "pilsen x 305 ml" en MICHELADA PILSEN) para poder
-      // elegir desde qué almacén sale la venta.
+      // SOLO las recetas MICHELADA PILSEN y MICHELADA CORONA muestran sus ingredientes de
+      // STOCKS/ALMACENES (ej. "corona X 330 ML", "pilsen x 305 ml") para elegir desde qué almacén
+      // sale la venta. Las demás recetas de barra mantienen "—" como antes.
       const normM = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+      const MICHELADAS = new Set(['MICHELADA PILSEN', 'MICHELADA CORONA']);
       const rec = (i.destino === 'barra' ? (window._ventasImportBarraRecetas || []) : [])
         .find(r => normM(r.nombre) === normM(i.matched || i.nombre));
-      const ingStocks = (rec && rec.ingredientes)
-        ? rec.ingredientes.filter(ing => (window._ventasImportStocks || {})[normM(ing.ingrediente)])
-        : [];
-      if (ingStocks.length) {
-        return '<td class="celda-almacen">' + ingStocks.map(ing => buildAlmacenSelectIng(ing.ingrediente, Math.round(((parseFloat(ing.cantidad) || 0) * (i.cantidad || 1)) * 100) / 100)).join('') + '</td>';
+      if (rec && MICHELADAS.has(normM(rec.nombre)) && rec.ingredientes) {
+        const ingStocks = rec.ingredientes.filter(ing => (window._ventasImportStocks || {})[normM(ing.ingrediente)]);
+        if (ingStocks.length) {
+          return '<td class="celda-almacen">' + ingStocks.map(ing => buildAlmacenSelectIng(ing.ingrediente, Math.round(((parseFloat(ing.cantidad) || 0) * (i.cantidad || 1)) * 100) / 100)).join('') + '</td>';
+        }
       }
       return '<td style="color:#999;">—</td>';
     }
