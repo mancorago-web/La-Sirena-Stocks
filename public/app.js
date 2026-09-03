@@ -7465,7 +7465,21 @@ function cargarComprasDetalle(ini, fin) {
       const t = r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
       const precioUni = parseFloat(r.precio) || 0;
       const precioTot = parseFloat(r.precio_total) || (precioUni * (r.cantidad || 0));
-      return `<tr><td>${r.fecha || '—'}</td><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${precioUni > 0 ? 'S/ ' + precioUni.toFixed(2) : '—'}</td><td>${precioTot > 0 ? 'S/ ' + precioTot.toFixed(2) : '—'}</td><td>${esc(det)}</td><td>${esc(r.documento || '—')}${r.numero ? ' <span style="color:#555;">' + esc(r.numero) + '</span>' : ''}</td><td>${esc(r.proveedor || '—')}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td><button onclick="editarCompra('${r.id}')" style="background:#1565c0;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.75rem;margin-right:0.25rem;" title="Editar">✎</button><button class="danger" onclick="confirmarEliminarCompra('${r.id}')">✕</button></td></tr>`;
+      // Celda en una sola línea con truncado (…) y tooltip con el texto completo
+      const celda = (display, raw) => '<td title="' + String(raw == null ? '' : raw).replace(/"/g, '&quot;') + '" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + display + '</td>';
+      return `<tr>
+        ${celda(r.fecha || '—', r.fecha || '—')}
+        ${celda(esc(r.nombre), r.nombre)}
+        ${celda(r.cantidad)}
+        ${celda(precioUni > 0 ? 'S/ ' + precioUni.toFixed(2) : '—')}
+        ${celda(precioTot > 0 ? 'S/ ' + precioTot.toFixed(2) : '—')}
+        ${celda(esc(det), det)}
+        ${celda(esc(r.documento || '—') + (r.numero ? ' ' + esc(r.numero) : ''), (r.documento || '') + (r.numero ? ' ' + r.numero : ''))}
+        ${celda(esc(r.proveedor || '—'), r.proveedor || '—')}
+        ${celda(t)}
+        ${celda(esc(r.saved_by || '-'), r.saved_by || '-')}
+        <td style="white-space:nowrap;width:70px;"><button onclick="editarCompra('${r.id}')" style="background:#1565c0;color:#fff;border:none;padding:0.25rem 0.45rem;border-radius:4px;cursor:pointer;font-size:0.72rem;margin-right:0.2rem;" title="Editar">✎</button><button class="danger" onclick="confirmarEliminarCompra('${r.id}')" style="padding:0.25rem 0.45rem;font-size:0.72rem;">✕</button></td>
+      </tr>`;
     }).join('');
     const totalCompra = (list || []).reduce((s, r) => s + (parseFloat(r.precio_total) || ((parseFloat(r.precio) || 0) * (r.cantidad || 0))), 0);
     const provDl = document.getElementById('sugerencia-proveedores');
@@ -7483,7 +7497,7 @@ function cargarComprasDetalle(ini, fin) {
       provDl.innerHTML = htmlP;
     }
     c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE COMPRAS (' + fechaIni + ' a ' + fechaFin + ')</h3>' +
-      '<div class="table-wrap"><table style="white-space:nowrap;"><thead><tr><th>Fecha</th><th>Item</th><th>Cantidad</th><th>Precio Unidad</th><th>Precio Total</th><th>Destino</th><th>Documento</th><th>Proveedor</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
+      '<div class="table-wrap" style="overflow-x:hidden;"><table style="width:100%;table-layout:fixed;font-size:0.78rem;"><colgroup><col style="width:8%"><col style="width:26%"><col style="width:7%"><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:11%"><col style="width:12%"><col style="width:6%"><col style="width:7%"><col style="width:70px"></colgroup><thead><tr><th>Fecha</th><th>Item</th><th>Cantidad</th><th>P. Unidad</th><th>P. Total</th><th>Destino</th><th>Documento</th><th>Proveedor</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
       filas + '</tbody></table></div>' +
       (totalCompra > 0 ? '<p style="font-weight:700;color:#0f3460;margin-top:0.5rem;">TOTAL COMPRAS: S/ ' + totalCompra.toFixed(2) + '</p>' : '');
   }).catch(() => { const ai = document.getElementById('fecha-compras-ini')?.value || todayStr(); const af = document.getElementById('fecha-compras-fin')?.value || todayStr(); if (ai === fechaIni && af === fechaFin) c.innerHTML = '<p style="color:#888;">DETALLE DE COMPRAS/INGRESOS</p>'; });
