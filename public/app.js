@@ -7288,6 +7288,7 @@ function eliminarCosto(id, tipo) {
 let comprasCart = [];
 let comprasAlmacenes = [];
 let _comprasListaEditable = [];
+let _cocinaStockItems = {};
 
 function onCambiarDestinoCompra() {
   const destino = document.getElementById('nueva-compra-destino').value;
@@ -7302,6 +7303,22 @@ function onCambiarDestinoCompra() {
 }
 
 function onBuscarItemCompra(valor) {
+  const v = (valor || '').trim();
+  // Auto-detectar items de COCINA/STOCK: si el nombre coincide con un item existente,
+  // se selecciona destino COCINA y su categoría automáticamente (evita errores).
+  if (v) {
+    const key = v.toUpperCase().replace(/\s+/g, ' ');
+    const fam = _cocinaStockItems[key];
+    if (fam) {
+      const dest = document.getElementById('nueva-compra-destino');
+      if (dest) dest.value = 'cocina';
+      const catSel = document.getElementById('nueva-compra-grupo-cocina');
+      if (catSel) catSel.value = fam.toUpperCase();
+      onCambiarDestinoCompra();
+      showToast('Item de COCINA · Categoría: ' + fam.toUpperCase());
+      return;
+    }
+  }
   if (document.getElementById('nueva-compra-destino')?.value === 'stocks') {
     actualizarAlmacenesCompra(valor);
   }
@@ -7389,6 +7406,12 @@ function cargarCompras() {
       // COCINA/STOCK: se incluyen TODOS los items (aunque estén en cantidad 0) para poder
       // emparejar el ingreso con un producto que ya existe en la base de datos.
       (cocinaStock || []).forEach(s => addSug(s.ingrediente));
+      // Mapa nombre -> familia para auto-detectar COCINA al escribir el item
+      _cocinaStockItems = {};
+      (cocinaStock || []).forEach(s => {
+        const n = String(s.ingrediente || '').trim().toUpperCase().replace(/\s+/g, ' ');
+        if (n) _cocinaStockItems[n] = String(s.familia || '');
+      });
       // BASE DE DATOS UNIFICADA (refuerzo: STOCKS + BARRA + COCINA + BASE)
       (bdUnificada || []).forEach(x => addSug(x.nombre));
       dl.innerHTML = html;
