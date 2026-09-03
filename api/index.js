@@ -1628,6 +1628,69 @@ app.put('/api/compras/:id', authMiddleware, async (req, res) => {
 });
 
 // --- VENTAS: helpers de stock de barra (descontar / sumar consumo de recetas) ---
+// --- RECETAS BASE: cantidad de producción leída del nombre (ej. "R.B ZUMO DE LIMON - 1 ONZ" -> 1 onza).
+function parseCantidadBase(nombre) {
+  const n = String(nombre || '');
+  const m = n.match(/(?:^|\s|\(|x\s|-\s)(\d+(?:\.\d+)?)\s*(UNIDADES?|UND|COCTELES|COCTEL|ONZAS?|ONZ|ML|LTS?|LITROS?|LITRO|GR|GRAMOS?|KG)\b/i);
+  if (m) return { cantidad: parseFloat(m[1]), unidad: m[2].toLowerCase() };
+  if (/x\s*und\b/i.test(n)) return { cantidad: 1, unidad: 'und' };
+  return null;
+}
+
+// Expande recursivamente los ingredientes de RECETAS BASE en sus componentes crudos (ej.
+// "R.B ZUMO DE LIMON - 1 ONZ" -> LIMON X UND), para que el descuento de stock use los items reales.
+// lookupRec: function(nombre) -> { id, nombre, categoria } | undefined
+function expandirRecetasBase(consumos, lookupRec, ingByRec) {
+  const salida = [];
+  const expand = (nombre, cantidad, unidad, prof) => {
+    const rec = lookupRec(nombre);
+    if (rec && String(rec.categoria || '') === 'RECETAS BASE' && prof < 12) {
+      const prod = parseCantidadBase(rec.nombre);
+      const ings = ingByRec[rec.id] || [];
+      if (prod && prod.cantidad > 0 && ings.length) {
+        const usadaOz = aOnzas(cantidad, unidad, nombre);
+        const prodOz = aOnzas(prod.cantidad, prod.unidad, rec.nombre);
+        const lotes = (usadaOz !== null && prodOz !== null && prodOz > 0) ? usadaOz / prodOz : ((parseFloat(cantidad) || 0) / prod.cantidad);
+        ings.forEach(comp => {
+          expand(comp.ingrediente, Math.round(((parseFloat(comp.cantidad) || 0) * lotes) * 100) / 100, comp.unidad || 'unidad', prof + 1);
+        });
+        return;
+      }
+    }
+    salida.push({ ingrediente: nombre, cantidad, unidad });
+  };
+  (consumos || []).forEach(c => expand(c.ingrediente, c.cantidad, c.unidad, 0));
+  return salida;
+}
+
+// Lookup de RECETAS BASE por nombre (exacto o prefijo común largo con UNA coincidencia), como la
+// lógica de costos. recBaseByName: { nombreNormalizado: receta } para la búsqueda exacta.
+function makeLookupRecetaBase(recetasList, normNombreFn) {
+  const exact = {};
+  const list = [];
+  (recetasList || []).forEach(r => {
+    if (String(r.categoria || '') !== 'RECETAS BASE') return;
+    exact[normNombreFn(r.nombre)] = r;
+    list.push(r);
+  });
+  return (nombre) => {
+    const nk = normNombreFn(nombre);
+    if (exact[nk] !== undefined) return exact[nk];
+    let best = undefined, bestLen = 0, ties = false;
+    for (const r of list) {
+      const bn = normNombreFn(r.nombre);
+      const min = Math.min(nk.length, bn.length);
+      let len = 0;
+      while (len < min && nk[len] === bn[len]) len++;
+      if (len >= 12 && len >= 0.7 * min) {
+        if (len > bestLen) { best = r; bestLen = len; ties = false; }
+        else if (len === bestLen) { ties = true; }
+      }
+    }
+    return ties ? undefined : best;
+  };
+}
+
 async function descontarStockBarra(consumos, fecha, savedBy) {
   const stockSnap = await col('barra_stock').get();
   const allStock = stockSnap.docs.map(d => ({ ref: d.ref, id: Number(d.id) || 0, data: d.data() }));
@@ -1919,7 +1982,7 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       const recSnap = await col('recetas').get();
       const ingSnap = await col('receta_ingredientes').get();
       const recetasMap = {};
-      recSnap.docs.forEach(d => { const a = d.data(); recetasMap[String(a.nombre).trim().toUpperCase()] = { id: d.id, nombre: a.nombre }; });
+      recSnap.docs.forEach(d => { const a = d.data(); recetasMap[String(a.nombre).trim().toUpperCase()] = { id: d.id, nombre: a.nombre, categoria: a.categoria || '' }; });
       const ingByRec = {};
       ingSnap.docs.forEach(d => { const a = d.data(); if (!ingByRec[a.receta_id]) ingByRec[a.receta_id] = []; ingByRec[a.receta_id].push(a); });
       const batch = db.batch();
@@ -1947,7 +2010,9 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         }
       }
       await batch.commit();
-      resumen.noDescontados = await descontarStockBarra(consumos, fecha, savedBy);
+      // Expandir RECETAS BASE en sus componentes crudos (ej. "R.B ZUMO DE LIMON - 1 ONZ" -> LIMON X UND)
+      const consumosExpandidos = expandirRecetasBase(consumos, n => recetasMap[String(n || '').trim().toUpperCase()], ingByRec);
+      resumen.noDescontados = await descontarStockBarra(consumosExpandidos, fecha, savedBy);
       // Ingredientes de receta que son items de STOCKS/ALMACENES: SOLO se descuentan de los
       // almacenes cuando el usuario eligió almacén para ese ingrediente en la importación
       // (ej. CORONA X 330 ML / PILSEN X 305 ML de las MICHELADAS). El resto (ej. AGUA CON GAS que
@@ -1979,9 +2044,11 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       const crecSnap = await col('cocina_recetas').get();
       const cingSnap = await col('cocina_receta_ingredientes').get();
       const crecetasMap = {};
-      crecSnap.docs.forEach(d => { const a = d.data(); crecetasMap[String(a.nombre).trim().toUpperCase()] = { id: d.id, nombre: a.nombre }; });
+      crecSnap.docs.forEach(d => { const a = d.data(); crecetasMap[String(a.nombre).trim().toUpperCase()] = { id: d.id, nombre: a.nombre, categoria: a.categoria || '' }; });
       const cingByRec = {};
       cingSnap.docs.forEach(d => { const a = d.data(); if (!cingByRec[a.receta_id]) cingByRec[a.receta_id] = []; cingByRec[a.receta_id].push(a); });
+      // Lookup de RECETAS BASE de cocina (exacto + prefijo común, ej. "R.B ARROZ COCIDO" -> "R.B ARROZ COCIDO X 1.930 GR")
+      const lookupCocina = makeLookupRecetaBase(crecSnap.docs.map(d => ({ id: d.id, ...d.data() })), normNombre);
       const batch = db.batch();
       const consumosCocina = [];
       if (!resumen.sinReceta) resumen.sinReceta = [];
@@ -1999,7 +2066,7 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         }
       }
       await batch.commit();
-      const noDescCocina = await descontarStockCocina(consumosCocina);
+      const noDescCocina = await descontarStockCocina(expandirRecetasBase(consumosCocina, lookupCocina, cingByRec));
       if (noDescCocina.length) {
         if (!Array.isArray(resumen.noDescontados)) resumen.noDescontados = [];
         resumen.noDescontados.push(...noDescCocina);
