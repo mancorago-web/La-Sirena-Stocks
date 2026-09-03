@@ -5290,18 +5290,28 @@ function cargarCocinaMovimientos(tipo) {
         </div>`;
       });
       html += '<div id="items-salientes-cocina"><h3 style="margin:1rem 0 0.5rem 0;">ITEMS SALIENTES</h3>';
-      const ingSaved = movs.filter(m => m.es_receta === false);
-      if (ingSaved.length) {
-        const agg = {};
-        const units = {};
-        ingSaved.forEach(m => {
-          const key = String(m.ingrediente || '').trim().toUpperCase().replace(/\s+/g, ' ');
-          agg[key] = (agg[key] || 0) + (parseFloat(m.cantidad) || 0);
-          units[key] = m.unidad || 'unidad';
+      // Se calculan desde las RECETAS VENDIDAS (movimientos + ventas del apartado principal de VENTAS)
+      // multiplicadas por sus ingredientes. Así funciona aunque la venta venga del EXCEL (que no
+      // escribe cocina_movimientos de ingredientes).
+      const salientes = {};
+      const units = {};
+      const recetasByName = {};
+      recetas.forEach(r => { recetasByName[String(r.nombre || '').trim().toUpperCase().replace(/\s+/g, ' ')] = r; });
+      Object.keys(recQty).forEach(nombre => {
+        const qty = recQty[nombre] || 0;
+        if (qty <= 0) return;
+        const rec = recetasByName[String(nombre || '').trim().toUpperCase().replace(/\s+/g, ' ')];
+        if (!rec || !rec.ingredientes) return;
+        rec.ingredientes.forEach(ing => {
+          const key = String(ing.ingrediente || '').trim().toUpperCase().replace(/\s+/g, ' ');
+          salientes[key] = Math.round(((salientes[key] || 0) + ((parseFloat(ing.cantidad) || 0) * qty)) * 100) / 100;
+          units[key] = ing.unidad || 'unidad';
         });
-        const keys = Object.keys(agg).sort();
+      });
+      const keysS = Object.keys(salientes).sort();
+      if (keysS.length) {
         html += '<div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th>Cantidad Consumida</th><th>Unidad</th></tr></thead><tbody>';
-        keys.forEach(key => { html += `<tr><td>${key}</td><td>${(agg[key] || 0).toFixed(2)}</td><td>${units[key] || 'unidad'}</td></tr>`; });
+        keysS.forEach(key => { html += `<tr><td>${key}</td><td>${fmt3(salientes[key])}</td><td>${units[key] || 'unidad'}</td></tr>`; });
         html += '</tbody></table></div>';
       } else {
         html += '<p style="color:#888;">Calculado automáticamente al ingresar cantidades de recetas.</p>';
