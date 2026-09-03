@@ -1378,7 +1378,8 @@ app.get('/api/compras/detalle', async (req, res) => {
     const lista = logSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     // Solo se muestran las COMPRAS (líneas del log). Los ingresos internos/manuales (STOCKS/INGRESOS
     // y transferencias entre almacenes) se ven desde STOCKS/INGRESOS, no desde COMPRAS/INGRESOS.
-    lista.sort((a, b) => String(a.fecha || '').localeCompare(String(b.fecha || '')) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
+    // Orden descendente: primero el último item registrado (más reciente arriba).
+    lista.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
     res.json(lista);
   } catch (e) {
     res.status(500).json({ error: e.message });
