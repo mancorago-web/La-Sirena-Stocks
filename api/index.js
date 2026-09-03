@@ -4242,10 +4242,16 @@ app.get('/api/barra/movimientos', authMiddleware, async (req, res) => {
 // --- Conversión a onzas (misma regla que el frontend: 750ml = 25 onzas, 30ml/onza) ---
 function botellaParaMl(nombre) {
   const t = String(nombre || '').toLowerCase();
-  const m = t.match(/(\d+(?:[.,]\d+)?)\s*(ml|cc|l|lt)\b/);
-  if (!m) return null;
-  const v = parseFloat(m[1].replace(',', '.'));
-  return (m[2] === 'ml' || m[2] === 'cc') ? v : v * 1000;
+  const m = t.match(/(\d+(?:[.,]\d+)?)\s*(ml|cc|l|lt|gr|g)\b/);
+  if (m) {
+    const v = parseFloat(m[1].replace(',', '.'));
+    if (m[2] === 'gr' || m[2] === 'g') return v;
+    return (m[2] === 'ml' || m[2] === 'cc') ? v : v * 1000;
+  }
+  // Nombres "X LT" / "X GR" sin número explícito -> 1 unidad = 1 LT (1000) / 1 GR
+  if (/\bx\s*lt\b/i.test(t)) return 1000;
+  if (/\bx\s*gr\b/i.test(t)) return 1;
+  return null;
 }
 
 function aOnzas(cant, unidad, nombre) {
