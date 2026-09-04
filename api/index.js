@@ -4329,7 +4329,7 @@ function tokens(s) {
   return String(s || '')
     .toLowerCase()
     .split(/[^a-z0-9áéíóúñü]+/)
-    .filter(w => w.length > 1 && !['x', 'de', 'y', 'el', 'la', 'los', 'las', 'con', 'por', 'para', 'del', 'al', 'lt', 'ml', 'cc', 'oz', 'gr', 'kg', 'bot', 'botella', 'bote'].includes(w) && !/^\d/.test(w));
+    .filter(w => w.length > 1 && !['x', 'de', 'y', 'el', 'la', 'los', 'las', 'con', 'por', 'para', 'del', 'al', 'lt', 'ml', 'cc', 'oz', 'gr', 'kg', 'bot', 'botella', 'bote'].includes(w) && !/^\d/.test(w) && !/^x\d/i.test(w));
 }
 
 function matchStockFuzzy(nombre, stockItems) {
