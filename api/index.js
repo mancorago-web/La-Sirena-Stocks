@@ -1701,8 +1701,9 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
     if (!byNombre[k]) byNombre[k] = [];
     byNombre[k].push(s);
   });
-  const batch = db.batch();
+  let batch = db.batch();
   let ajustados = 0;
+  let ops = 0;
   const noDescontados = [];
   const COUNT_UNITS = new Set(['unidad', 'unidades', 'und', 'hojas', 'hoja', 'gotas', 'gota', 'copas', 'copa']);
   for (const c of consumos) {
@@ -1738,6 +1739,8 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
       const disp = parseFloat(si.data.cantidad) || 0;
       const aDescontar = Math.min(disp, restante);
       batch.update(si.ref, { cantidad: Math.round((disp - aDescontar) * 100) / 100, updated_at: new Date().toISOString() });
+      ops++;
+      if (ops >= 450) { await batch.commit(); batch = db.batch(); ops = 0; }
       restante -= aDescontar;
       ajustados++;
     }
@@ -1755,6 +1758,8 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
           const nuevoOz = Math.max(0, ozItem - aDescontar);
           const nueva = Math.round(desdeOnzas(nuevoOz, si.data.unidad, si.data.ingrediente) * 100) / 100;
           batch.update(si.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
+          ops++;
+          if (ops >= 450) { await batch.commit(); batch = db.batch(); ops = 0; }
           restanteOz -= aDescontar;
           ajustados++;
         }
@@ -1764,7 +1769,7 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
       noDescontados.push({ ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: uRec, motivo: 'sin_conversion_o_insuficiente' });
     }
   }
-  if (ajustados) await batch.commit();
+  if (ops) await batch.commit();
   return noDescontados;
 }
 
@@ -1777,8 +1782,9 @@ async function descontarStockCocina(consumos) {
     if (!byNombre[k]) byNombre[k] = [];
     byNombre[k].push(s);
   });
-  const batch = db.batch();
+  let batch = db.batch();
   let ajustados = 0;
+  let ops = 0;
   const noDescontados = [];
   for (const c of consumos) {
     const nombre = String(c.ingrediente || '').trim();
@@ -1803,6 +1809,8 @@ async function descontarStockCocina(consumos) {
       const aDescontar = Math.min(disp, conv);
       const nueva = Math.max(0, Math.round((disp - aDescontar) * 100) / 100);
       batch.update(m.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
+      ops++;
+      if (ops >= 450) { await batch.commit(); batch = db.batch(); ops = 0; }
       const consumidoRec = cocinaAjustar(aDescontar, uStock, uRec) || aDescontar;
       restante = Math.max(0, Math.round((restante - consumidoRec) * 100) / 100);
       ajustados++;
@@ -1811,7 +1819,7 @@ async function descontarStockCocina(consumos) {
       noDescontados.push({ ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: uRec, motivo: 'sin_conversion_o_insuficiente', zona: 'cocina' });
     }
   }
-  if (ajustados) await batch.commit();
+  if (ops) await batch.commit();
   return noDescontados;
 }
 
@@ -2012,8 +2020,15 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       }
       await batch.commit();
       // Expandir RECETAS BASE en sus componentes crudos (ej. "R.B ZUMO DE LIMON - 1 ONZ" -> LIMON X UND)
-      const consumosExpandidos = expandirRecetasBase(consumos, n => recetasMap[String(n || '').trim().toUpperCase()], ingByRec);
-      resumen.noDescontados = await descontarStockBarra(consumosExpandidos, fecha, savedBy);
+      // El descuento va protegido: si falla no rompe el guardado ni oculta el aviso.
+      try {
+        const consumosExpandidos = expandirRecetasBase(consumos, n => recetasMap[String(n || '').trim().toUpperCase()], ingByRec);
+        resumen.noDescontados = await descontarStockBarra(consumosExpandidos, fecha, savedBy);
+      } catch (e) {
+        console.error('Error descontando BARRA/STOCK:', e.message);
+        resumen.errorBarra = e.message;
+        if (!Array.isArray(resumen.noDescontados)) resumen.noDescontados = [];
+      }
       // Ingredientes de receta que son items de STOCKS/ALMACENES: SOLO se descuentan de los
       // almacenes cuando el usuario eligió almacén para ese ingrediente en la importación
       // (ej. CORONA X 330 ML / PILSEN X 305 ML de las MICHELADAS). El resto (ej. AGUA CON GAS que
@@ -2067,10 +2082,17 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         }
       }
       await batch.commit();
-      const noDescCocina = await descontarStockCocina(expandirRecetasBase(consumosCocina, lookupCocina, cingByRec));
-      if (noDescCocina.length) {
-        if (!Array.isArray(resumen.noDescontados)) resumen.noDescontados = [];
-        resumen.noDescontados.push(...noDescCocina);
+      // El descuento de COCINA/STOCK se hace con protección: si falla por cualquier motivo, NO
+      // rompe el guardado ni oculta el aviso (se registra y sigue).
+      try {
+        const noDescCocina = await descontarStockCocina(expandirRecetasBase(consumosCocina, lookupCocina, cingByRec));
+        if (noDescCocina.length) {
+          if (!Array.isArray(resumen.noDescontados)) resumen.noDescontados = [];
+          resumen.noDescontados.push(...noDescCocina);
+        }
+      } catch (e) {
+        console.error('Error descontando COCINA/STOCK:', e.message);
+        resumen.errorCocina = e.message;
       }
     }
 
