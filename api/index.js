@@ -1706,15 +1706,23 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
   let ops = 0;
   const noDescontados = [];
   const COUNT_UNITS = new Set(['unidad', 'unidades', 'und', 'hojas', 'hoja', 'gotas', 'gota', 'copas', 'copa']);
-  for (const c of consumos) {
-    const nombre = String(c.ingrediente || '').trim();
-    if (!nombre) continue;
-    // Items "- COPA": el stock se jala de los STOCKS (almacenes), con conversión BOTELLA->COPA.
-    if (/ - COPA$/i.test(nombre)) {
+  // Agregar consumos por item ANTES de descontar: un solo descuento por item evita que varias
+  // líneas del mismo ingrediente se sobrescriban (batch con snapshot viejo) y evita avisos falsos.
+  const agg = {};
+  (consumos || []).forEach(c => {
+    const n = String(c.ingrediente || '').trim();
+    if (!n) return;
+    if (/ - COPA$/i.test(n)) {
       const copas = parseFloat(c.cantidad) || 0;
-      if (copas > 0 && fecha) await consumirCopaDesdeStocks(fecha, nombre, copas, savedBy || 'unknown', '');
-      continue;
+      if (copas > 0 && fecha) consumirCopaDesdeStocks(fecha, n, copas, savedBy || 'unknown', '');
+      return;
     }
+    const k = n.toUpperCase();
+    if (!agg[k]) agg[k] = { ingrediente: n, cantidad: 0, unidad: c.unidad || 'unidad' };
+    agg[k].cantidad = Math.round((agg[k].cantidad + (parseFloat(c.cantidad) || 0)) * 100) / 100;
+  });
+  for (const c of Object.values(agg)) {
+    const nombre = c.ingrediente;
     const key = nombre.toUpperCase();
     const uRec = normalizeUnit(c.unidad || 'unidad');
     const cant = parseFloat(c.cantidad) || 0;
@@ -1727,7 +1735,6 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
     }
     const esConteo = COUNT_UNITS.has(uRec);
     // 1) Descuento DIRECTO 1:1 contra items con la MISMA unidad (o ambas de conteo).
-    //    Evita depender de la conversión a onzas (que falla en items "X KG"/"X UND").
     let restante = cant;
     for (const m of matches) {
       if (restante <= 0.0001) break;
@@ -1741,12 +1748,12 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
       batch.update(si.ref, { cantidad: Math.round((disp - aDescontar) * 100) / 100, updated_at: new Date().toISOString() });
       ops++;
       if (ops >= 450) { await batch.commit(); batch = db.batch(); ops = 0; }
-      restante -= aDescontar;
+      restante = Math.max(0, Math.round((restante - aDescontar) * 100) / 100);
       ajustados++;
     }
     // 2) Si sobra y se puede convertir, descontar por onzas contra los items restantes.
     if (restante > 0.0001) {
-      const deltaOz = aOnzas(cant, c.unidad, nombre);
+      const deltaOz = aOnzas(restante, c.unidad, nombre);
       let restanteOz = (deltaOz === null || isNaN(deltaOz)) ? null : deltaOz;
       if (restanteOz !== null) {
         for (const m of matches) {
@@ -1760,6 +1767,8 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
           batch.update(si.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
           ops++;
           if (ops >= 450) { await batch.commit(); batch = db.batch(); ops = 0; }
+          const consumidoRec = Math.round(desdeOnzas(aDescontar, uRec, nombre) * 100) / 100;
+          restante = Math.max(0, Math.round((restante - consumidoRec) * 100) / 100);
           restanteOz -= aDescontar;
           ajustados++;
         }
@@ -1786,9 +1795,17 @@ async function descontarStockCocina(consumos) {
   let ajustados = 0;
   let ops = 0;
   const noDescontados = [];
-  for (const c of consumos) {
-    const nombre = String(c.ingrediente || '').trim();
-    if (!nombre) continue;
+  // Agregar consumos por item ANTES de descontar (evita sobrescribir el mismo item y avisos falsos)
+  const agg = {};
+  (consumos || []).forEach(c => {
+    const n = String(c.ingrediente || '').trim();
+    if (!n) return;
+    const k = n.toUpperCase();
+    if (!agg[k]) agg[k] = { ingrediente: n, cantidad: 0, unidad: c.unidad || 'unidad' };
+    agg[k].cantidad = Math.round((agg[k].cantidad + (parseFloat(c.cantidad) || 0)) * 100) / 100;
+  });
+  for (const c of Object.values(agg)) {
+    const nombre = c.ingrediente;
     const key = nombre.toUpperCase();
     const cant = parseFloat(c.cantidad) || 0;
     if (cant <= 0) continue;
