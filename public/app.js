@@ -210,13 +210,18 @@ function actualizarContadoresMenu() {
   const b = document.getElementById('menu-items-barra');
   const c = document.getElementById('menu-items-cocina');
   if (!s && !b && !c) return;
+  if (window._actualizandoContadores) return;
+  window._actualizandoContadores = true;
   api('GET', '/api/resumen/items?fecha=' + todayStr()).then(r => {
+    window._actualizandoContadores = false;
     if (s) s.textContent = 'Items: ' + (r.stocks === undefined ? '—' : r.stocks);
     if (b) b.textContent = 'Items: ' + (r.barra === undefined ? '—' : r.barra);
     if (c) c.textContent = 'Items: ' + (r.cocina === undefined ? '—' : r.cocina);
     requestAnimationFrame(dibujarFlujoMenu);
-  }).catch(() => {});
+  }).catch(() => { window._actualizandoContadores = false; });
 }
+// Actualización automática en tiempo real (cada 30s) para que los montos del menú estén al día
+setInterval(actualizarContadoresMenu, 30000);
 window.addEventListener('resize', dibujarFlujoMenu);
 setTimeout(dibujarFlujoMenu, 300);
 
