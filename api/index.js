@@ -2046,10 +2046,10 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         resumen.errorBarra = e.message;
         if (!Array.isArray(resumen.noDescontados)) resumen.noDescontados = [];
       }
-      // Ingredientes de receta que son items de STOCKS/ALMACENES: SOLO se descuentan de los
-      // almacenes cuando el usuario eligió almacén para ese ingrediente en la importación
-      // (ej. CORONA X 330 ML / PILSEN X 305 ML de las MICHELADAS). El resto (ej. AGUA CON GAS que
-      // solo sale a BARRA) NO se descuenta de STOCKS como venta: queda reportado como no descontado.
+      // Ingredientes de receta que son items de STOCKS/ALMACENES. Se descuentan de los almacenes en 2 pasos:
+      // 1) Los que el usuario eligió almacén en la importación (MICHELADAS: CORONA/PILSEN).
+      // 2) AUTO: items que están en los ALMACENES pero NO en BARRA/STOCK (ej. RICCADONNA PROSECCO que
+      //    vive en los refrigeradores/almacén). Se EXCLUYE la gasificadora (AGUA CON GAS) que no consume botella.
       const seleccionStocks = {};
       ventasBarra.forEach(v => {
         if (Array.isArray(v.ingredientesStocks)) {
@@ -2059,16 +2059,27 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
           });
         }
       });
-      if (Object.keys(seleccionStocks).length) {
-        const sinStockBarra = (resumen.noDescontados || []).filter(x => x.motivo === 'sin_stock' && seleccionStocks[String(x.ingrediente).trim().toUpperCase().replace(/\s+/g, '')]);
-        if (sinStockBarra.length) {
-          const deducidosAlm = await descontarStocksDesdeAlmacenes(sinStockBarra, fecha, savedBy, seleccionStocks);
-          if (deducidosAlm.length) {
-            const set = new Set(deducidosAlm.map(d => String(d.ingrediente).trim().toUpperCase()));
-            resumen.noDescontados = (resumen.noDescontados || []).filter(x => !set.has(String(x.ingrediente).trim().toUpperCase()));
-            resumen.deducidosDeAlmacenes = deducidosAlm;
-          }
-        }
+      const sinStockBarra = (resumen.noDescontados || []).filter(x => x.motivo === 'sin_stock');
+      const quitar = (deducidos) => {
+        if (!deducidos || !deducidos.length) return;
+        const set = new Set(deducidos.map(d => String(d.ingrediente).trim().toUpperCase()));
+        resumen.noDescontados = (resumen.noDescontados || []).filter(x => !set.has(String(x.ingrediente).trim().toUpperCase()));
+        if (!Array.isArray(resumen.deducidosDeAlmacenes)) resumen.deducidosDeAlmacenes = [];
+        resumen.deducidosDeAlmacenes.push(...deducidos);
+      };
+      // 1) Seleccionados (MICHELADA)
+      const seleccionados = sinStockBarra.filter(x => seleccionStocks[String(x.ingrediente).trim().toUpperCase().replace(/\s+/g, '')]);
+      if (seleccionados.length) {
+        try { quitar(await descontarStocksDesdeAlmacenes(seleccionados, fecha, savedBy, seleccionStocks)); } catch (e) { console.error('Error almacenes MICHELADA:', e.message); }
+      }
+      // 2) AUTO desde almacenes (excluyendo gasificadora y los ya seleccionados)
+      const GASIFICADORA = new Set(['AGUA CON GAS SAN LUIS PLASTICO X 625 ML'.toUpperCase().replace(/\s+/g, '')]);
+      const autoItems = sinStockBarra.filter(x => {
+        const k = String(x.ingrediente).trim().toUpperCase().replace(/\s+/g, '');
+        return !seleccionStocks[k] && !GASIFICADORA.has(k);
+      });
+      if (autoItems.length) {
+        try { quitar(await descontarStocksDesdeAlmacenes(autoItems, fecha, savedBy)); } catch (e) { console.error('Error auto almacenes:', e.message); }
       }
     }
 
