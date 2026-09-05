@@ -5866,9 +5866,11 @@ function getUnitToGr(unit) {
 
 function parseEquivFromName(name) {
   if (!name) return {};
-  const m = name.match(/x\s*(\d+(?:\.\d+)?)\s*(L|LT|LTS|ML|KG|GR|G|OZ|ONZAS?|LITRO|LITROS|KILO|KILOS|GRAMO|GRAMOS)\b/i);
+  // El número es OPCIONAL: "X 2 KG" o "X KG" (default 1). Así los items "X KG"/"X LT" sin número
+  // (ej. PAPA AMARILLA X KG, SILLAO X LT) obtienen su equivalencia y el precio se autoactualiza.
+  const m = name.match(/x\s*(\d+(?:\.\d+)?)?\s*(L|LT|LTS|ML|KG|GR|G|OZ|ONZAS?|LITRO|LITROS|KILO|KILOS|GRAMO|GRAMOS)\b/i);
   if (!m) return {};
-  const qty = parseFloat(m[1]);
+  const qty = m[1] ? parseFloat(m[1]) : 1;
   const u = m[2].toLowerCase();
   if (['l', 'lt', 'lts', 'litro', 'litros'].includes(u)) return { equiv_ml: qty * 1000 };
   if (['ml'].includes(u)) return { equiv_ml: qty };
