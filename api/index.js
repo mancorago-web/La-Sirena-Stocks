@@ -1476,6 +1476,9 @@ function calcularPrecioVenta(nombre, ultimoPrecioCompra, unidadVenta) {
   const uv = normalizeUnit(unidadVenta || 'unidad');
   if (precioVal <= 0) return null;
   if (uv === 'unidad') return precioVal;
+  // Items por UNIDAD (nombre "X UND" ej. PIÑA X UND, LIMON X UND): su precio es por pieza entera,
+  // sin importar la unidad guardada (que a veces quedó como gramos/onzas por un error viejo).
+  if (/X\s*UND\b/i.test(String(nombre || ''))) return precioVal;
   const equiv = parseEquivFromName(nombre);
   if (equiv.equiv_ml) {
     const ventaMl = getUnitToMl(uv);
