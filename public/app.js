@@ -1494,21 +1494,32 @@ function guardarDia() {
 // (día de conteo físico de referencia). Se muestra para detectar el error a tiempo.
 function mostrarAlertaAperturas(alerts) {
   if (!alerts || !alerts.length) return;
+  const esDiverge = alerts.some(a => a.tipo === 'apertura_manual_diverge');
   const lista = alerts.slice(0, 12).map(a =>
-    '<li>' + esc(a.nombre || ('item ' + a.item_id)) + ' (almacén ' + a.almacen_id + '): apertura ' + a.apertura + ' ≠ referencia ' + a.referencia + '</li>'
+    '<li>' + esc(a.nombre || ('item ' + a.item_id)) + ' (almacén ' + a.almacen_id + '): apertura ' + a.apertura + ' ≠ ' + (esDiverge ? 'cierre anterior ' : 'referencia ') + a.referencia + '</li>'
   ).join('');
   const restantes = alerts.length > 12 ? '<li>… y ' + (alerts.length - 12) + ' más</li>' : '';
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
   if (!modal || !body) return;
   modal.style.display = 'block';
-  body.innerHTML = '<h3 style="color:#c62828;">⚠️ ALERTA: aperturas protegidas modificadas</h3>' +
-    '<p style="color:#666;margin-top:0.75rem;">Este guardado intentó cambiar el STOCK TOTAL APERTURA de estos items (día de conteo físico de referencia):</p>' +
-    '<ul style="margin:0.75rem 0;padding-left:1.2rem;color:#c62828;max-height:300px;overflow:auto;">' + lista + restantes + '</ul>' +
-    '<p style="color:#666;font-size:0.85rem;">Si NO fue intencional, corrige los montos de apertura al valor de referencia. La alerta quedó registrada en el historial.</p>' +
-    '<div style="margin-top:1.5rem;display:flex;gap:0.5rem;">' +
-    '<button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Entendido</button>' +
-    '</div>';
+  if (esDiverge) {
+    body.innerHTML = '<h3 style="color:#c62828;">⚠️ ALERTA: aperturas manuales alejadas de la cadena</h3>' +
+      '<p style="color:#666;margin-top:0.75rem;">Estas aperturas (EDITAR APERTURA) se guardaron MUY distintas al cierre del día anterior. Suele ser un conteo físico mal tipeado o un ingreso mal registrado:</p>' +
+      '<ul style="margin:0.75rem 0;padding-left:1.2rem;color:#c62828;max-height:300px;overflow:auto;">' + lista + restantes + '</ul>' +
+      '<p style="color:#666;font-size:0.85rem;">Si NO fue intencional, revisa el item y corrige el valor de apertura al cierre anterior (la cadena).</p>' +
+      '<div style="margin-top:1.5rem;display:flex;gap:0.5rem;">' +
+      '<button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Entendido</button>' +
+      '</div>';
+  } else {
+    body.innerHTML = '<h3 style="color:#c62828;">⚠️ ALERTA: aperturas protegidas modificadas</h3>' +
+      '<p style="color:#666;margin-top:0.75rem;">Este guardado intentó cambiar el STOCK TOTAL APERTURA de estos items (día de conteo físico de referencia):</p>' +
+      '<ul style="margin:0.75rem 0;padding-left:1.2rem;color:#c62828;max-height:300px;overflow:auto;">' + lista + restantes + '</ul>' +
+      '<p style="color:#666;font-size:0.85rem;">Si NO fue intencional, corrige los montos de apertura al valor de referencia. La alerta quedó registrada en el historial.</p>' +
+      '<div style="margin-top:1.5rem;display:flex;gap:0.5rem;">' +
+      '<button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Entendido</button>' +
+      '</div>';
+  }
 }
 
 // Helper genérico de guardado de almacenes con protección anti conexión mala:

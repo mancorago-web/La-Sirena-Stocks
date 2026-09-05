@@ -752,10 +752,19 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
     // REGLA DE CADENA SIEMPRE (aunque el guardado NO envíe stock_apertura, ej. INGRESOS/SALIDAS):
     // la apertura de un día NO manual debe ser = cierre del día hábil anterior. Si el doc ya tenía
     // una apertura vieja/incorrecta, se corrige aquí (el cierre se recalcula con la apertura corregida).
+    const pcCadena = prevCierres[Number(r.almacen_id) + '_' + Number(r.item_id)];
     if (!aperturaManualEfectiva) {
-      const pc = prevCierres[Number(r.almacen_id) + '_' + Number(r.item_id)];
-      if (pc !== undefined && Math.abs(apertura - pc) > 0.001) {
-        apertura = pc;
+      if (pcCadena !== undefined && Math.abs(apertura - pcCadena) > 0.001) {
+        apertura = pcCadena;
+      }
+    } else if (r.apertura_manual === true && pcCadena !== undefined && Math.abs(apertura - pcCadena) > 0.001) {
+      // PREVENCIÓN: una apertura MANUAL (EDITAR APERTURA) muy alejada del cierre anterior de la
+      // cadena suele ser un conteo físico mal tipeado (ej. HIELO 39 en vez de 15). Se registra una
+      // alerta no bloqueante para que el error se detecte al instante.
+      const div = Math.abs(apertura - pcCadena);
+      if (div > 5 || div > 0.15 * Math.max(1, Math.abs(pcCadena))) {
+        const nInv = invDocMap[clave];
+        alerts.push({ fecha, almacen_id: Number(r.almacen_id), item_id: Number(r.item_id), nombre: nInv ? nInv.nombre : '', apertura, referencia: pcCadena, tipo: 'apertura_manual_diverge' });
       }
     }
     // Ajustes por auto-apertura de botella (copa recibe ingreso, botella registra salida)
