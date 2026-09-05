@@ -2530,7 +2530,14 @@ app.delete('/api/ventas/:id', authMiddleware, async (req, res) => {
           }
         });
         if (borrado) await batch.commit();
-        if (consumos.length) await sumarStockBarra(consumos);
+        if (consumos.length) {
+          await sumarStockBarra(consumos);
+          for (const c of consumos) {
+            if (/ - COPA$/i.test(String(c.ingrediente || '').trim())) {
+              await revertirCopaDesdeStocks(fecha, c.ingrediente, parseFloat(c.cantidad) || 0, savedBy);
+            }
+          }
+        }
       }
       return res.json({ ok: true });
     }
@@ -2564,7 +2571,14 @@ app.delete('/api/ventas/:id', authMiddleware, async (req, res) => {
           }
         });
         if (borrado) await batch.commit();
-        if (consumos.length) await sumarStockBarra(consumos);
+        if (consumos.length) {
+          await sumarStockBarra(consumos);
+          for (const c of consumos) {
+            if (/ - COPA$/i.test(String(c.ingrediente || '').trim())) {
+              await revertirCopaDesdeStocks(fecha, c.ingrediente, parseFloat(c.cantidad) || 0, savedBy);
+            }
+          }
+        }
         return res.json({ ok: true });
       }
     }
@@ -2632,7 +2646,14 @@ app.delete('/api/ventas/:id', authMiddleware, async (req, res) => {
         }
       });
       if (borrado) await batch.commit();
-      if (consumos.length) await sumarStockBarra(consumos);
+      if (consumos.length) {
+        await sumarStockBarra(consumos);
+        for (const c of consumos) {
+          if (/ - COPA$/i.test(String(c.ingrediente || '').trim())) {
+            await revertirCopaDesdeStocks(fecha, c.ingrediente, parseFloat(c.cantidad) || 0, savedBy);
+          }
+        }
+      }
     } else if (log.destino === 'cocina') {
       const cc = await col('cocina_ventas').where('fecha', '==', fecha).get();
       const batch = db.batch();
@@ -4524,6 +4545,73 @@ async function consumirCopaDesdeStocks(fecha, nombre, copas, savedBy, destino) {
     const item = Number(inv.data().item_id);
     const dp = dayDocs[fecha + '_' + al + '_' + item] || {};
     registros.push({ item_id: item, almacen_id: al, salida_almacen: (dp.salida_almacen || 0) + restante, destino_salida: destino || '' });
+  }
+  if (registros.length) await guardarDiaInterno(fecha, registros, savedBy);
+}
+
+// Revierte la transformación BOTELLA→COPA que hizo consumirCopaDesdeStocks cuando se CANCELA/ELIMINA
+// una venta. Reduce la venta de copas en inventario_diario y, si el día tenía una conversión de
+// botella asociada, la deshace (restaura la botella y quita las copas convertidas del ingreso).
+// Así, "anular la venta" deja el stock tal como estaba (evita que la transformación quede fantasma
+// y se duplique al registrar la venta real).
+async function revertirCopaDesdeStocks(fecha, nombre, copas, savedBy) {
+  if (!fecha || !copas || copas <= 0) return;
+  const base = String(nombre).replace(/ - COPA$/i, '');
+  const botNombre = base + ' - BOTELLA';
+  const invSnap = await col('inventario').get();
+  const copaInv = invSnap.docs.filter(d => String(d.data().nombre || '').trim().toUpperCase() === String(nombre).trim().toUpperCase());
+  if (!copaInv.length) return;
+  const diaSnap = await col('inventario_diario').where('fecha', '==', fecha).get();
+  const dayDocs = {};
+  diaSnap.docs.forEach(d => { dayDocs[d.id] = d.data(); });
+  const registros = [];
+  const copasVendidas = copas;
+  let restante = copas;
+  for (const inv of copaInv) {
+    if (restante <= 0.0001) break;
+    const al = Number(inv.data().almacen_id);
+    const item = Number(inv.data().item_id);
+    const diaId = fecha + '_' + al + '_' + item;
+    const dp = dayDocs[diaId] || {};
+    const sal = dp.salida_almacen || 0;
+    const aRevertir = Math.min(sal, restante);
+    const upd = { salida_almacen: Math.max(0, Math.round((sal - aRevertir) * 100) / 100), updated_at: new Date().toISOString() };
+    restante -= aRevertir;
+    // Deshacer SOLO la conversión atribuible a las copas de esta venta (no toda la del día)
+    const origen = Array.isArray(dp.ingreso_origen) ? dp.ingreso_origen : [];
+    const convTotal = origen.filter(o => o.tipo === 'conversion').reduce((s, o) => s + (Number(o.cantidad) || 0), 0);
+    if (convTotal > 0) {
+      const convParaVenta = Math.min(convTotal, Math.ceil(copasVendidas / 5) * 5);
+      if (convParaVenta > 0) {
+        upd.stock_ingreso = Math.max(0, Math.round(((dp.stock_ingreso || 0) - convParaVenta) * 100) / 100);
+        const nuevoOrigen = [];
+        let porQuitar = convParaVenta;
+        for (const o of origen) {
+          if (o.tipo === 'conversion' && porQuitar > 0) {
+            const c = Math.min(Number(o.cantidad) || 0, porQuitar);
+            porQuitar -= c;
+            if ((Number(o.cantidad) || 0) - c > 0) nuevoOrigen.push({ tipo: 'conversion', cantidad: Math.round(((Number(o.cantidad) || 0) - c) * 100) / 100 });
+          } else nuevoOrigen.push(o);
+        }
+        upd.ingreso_origen = nuevoOrigen;
+        // Restaurar la(s) botella(s) que se abrieron para esa conversión (destino COPAS)
+        const botellasAbrir = Math.ceil(convParaVenta / 5);
+        const botInv = invSnap.docs.filter(d => String(d.data().nombre || '').trim().toUpperCase() === botNombre.trim().toUpperCase());
+        for (const b of botInv) {
+          const bAl = Number(b.data().almacen_id);
+          const bItem = Number(b.data().item_id);
+          const bDiaId = fecha + '_' + bAl + '_' + bItem;
+          const bd = dayDocs[bDiaId] || {};
+          const bSal = bd.salida_almacen || 0;
+          if (bSal > 0 && String(bd.destino_salida || '').toUpperCase() === 'COPAS') {
+            const aRestaurar = Math.min(bSal, botellasAbrir);
+            registros.push({ item_id: bItem, almacen_id: bAl, salida_almacen: Math.max(0, Math.round((bSal - aRestaurar) * 100) / 100), updated_at: new Date().toISOString() });
+            break;
+          }
+        }
+      }
+    }
+    registros.push({ item_id: item, almacen_id: al, ...upd });
   }
   if (registros.length) await guardarDiaInterno(fecha, registros, savedBy);
 }
