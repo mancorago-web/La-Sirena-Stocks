@@ -1531,6 +1531,9 @@ async function registrarUltimoPrecioCompra(nombre, precio, destino) {
     }
   }
   await batch.commit();
+  // Al cambiar un precio por COMPRA, los costos de las recetas (BARRA y COCINA) se recalcular al
+  // instante invalidando su caché (si no, quedarían hasta 10s obsoletos).
+  invalidarCache('recetas', 'cocina_recetas');
 }
 
 // --- COMPRAS: detalle de compras/ingresos registrados por fecha o rango de fechas ---
