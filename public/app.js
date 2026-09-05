@@ -206,6 +206,8 @@ function refrescarVista() {
 // puede borrar valores sin guardar o colapsar los acordeones. La app se refresca al navegar o recargar.
 
 function actualizarContadoresMenu() {
+  // Solo refrescar cuando la pestaña está visible (ahorra CPU/red en segundo plano)
+  if (document.visibilityState !== 'visible') return;
   const s = document.getElementById('menu-items-stocks');
   const b = document.getElementById('menu-items-barra');
   const c = document.getElementById('menu-items-cocina');
@@ -220,8 +222,10 @@ function actualizarContadoresMenu() {
     requestAnimationFrame(dibujarFlujoMenu);
   }).catch(() => { window._actualizandoContadores = false; });
 }
-// Actualización automática en tiempo real (cada 30s) para que los montos del menú estén al día
-setInterval(actualizarContadoresMenu, 30000);
+// Actualización automática del menú (cada 60s, solo con pestaña visible) para que los montos estén
+// al día sin gastar CPU. Al volver a la pestaña se refresca de inmediato.
+setInterval(actualizarContadoresMenu, 60000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') actualizarContadoresMenu(); });
 window.addEventListener('resize', dibujarFlujoMenu);
 setTimeout(dibujarFlujoMenu, 300);
 

@@ -283,6 +283,13 @@ function cached(key, ttlMs, fetchFn) {
   return p;
 }
 
+// Invalida claves concretas y TODOS los contadores del menú (resumen_items_*) para que una
+// escritura se refleje de inmediato en la pantalla principal.
+function invalidarCache(...claves) {
+  claves.forEach(c => { delete _cache[c]; });
+  Object.keys(_cache).forEach(k => { if (k.startsWith('resumen_items_')) delete _cache[k]; });
+}
+
 // --- ALMACENES ---
 app.get('/api/almacenes', async (req, res) => {
   const snap = await col('almacenes').orderBy('orden').get();
@@ -463,32 +470,38 @@ app.get('/api/almacenes/con-inventario-rango', async (req, res) => {
 app.get('/api/resumen/items', async (req, res) => {
   try {
     const fecha = String(req.query.fecha || '').trim();
-    const [almSnap, allItemsSnap, diaSnap] = await Promise.all([
-      col('almacenes').get(),
-      col('inventario').get(),
-      fecha ? col('inventario_diario').where('fecha', '==', fecha).get() : Promise.resolve({ docs: [] }),
-    ]);
-    const diaByKey = {};
-    diaSnap.docs.forEach(d => { const dd = d.data(); diaByKey[dd.almacen_id + '_' + dd.item_id] = dd; });
-    let totalStocks = 0;
-    allItemsSnap.docs.forEach(d => {
-      const inv = d.data();
-      const dia = diaByKey[inv.almacen_id + '_' + inv.item_id] || {};
-      const apertura = (dia.stock_apertura ?? inv.stock_apertura ?? 0);
-      const ingreso = (dia.stock_ingreso ?? 0);
-      const salida = (dia.salida_almacen ?? 0);
-      const ventas = (dia.total_ventas ?? 0);
-      const falta = (dia.falta_almacen ?? 0);
-      const baja = (dia.stock_baja ?? 0);
-      totalStocks += apertura + ingreso - salida - ventas - falta - baja;
+    // Cache corto (25s): el contador del menú se consulta cada 30s desde cada pestaña/equipo.
+    // Con caché, todas las peticiones dentro de la ventana de tiempo usan el mismo resultado y no
+    // re-leen miles de documentos de Firestore (reduce mucho el CPU de Vercel).
+    const data = await cached('resumen_items_' + fecha, 25000, async () => {
+      const [almSnap, allItemsSnap, diaSnap] = await Promise.all([
+        col('almacenes').get(),
+        col('inventario').get(),
+        fecha ? col('inventario_diario').where('fecha', '==', fecha).get() : Promise.resolve({ docs: [] }),
+      ]);
+      const diaByKey = {};
+      diaSnap.docs.forEach(d => { const dd = d.data(); diaByKey[dd.almacen_id + '_' + dd.item_id] = dd; });
+      let totalStocks = 0;
+      allItemsSnap.docs.forEach(d => {
+        const inv = d.data();
+        const dia = diaByKey[inv.almacen_id + '_' + inv.item_id] || {};
+        const apertura = (dia.stock_apertura ?? inv.stock_apertura ?? 0);
+        const ingreso = (dia.stock_ingreso ?? 0);
+        const salida = (dia.salida_almacen ?? 0);
+        const ventas = (dia.total_ventas ?? 0);
+        const falta = (dia.falta_almacen ?? 0);
+        const baja = (dia.stock_baja ?? 0);
+        totalStocks += apertura + ingreso - salida - ventas - falta - baja;
+      });
+      const barraSnap = await col('barra_stock').get();
+      let totalBarra = 0;
+      barraSnap.docs.forEach(d => { totalBarra += parseFloat(d.data().cantidad) || 0; });
+      const cocinaSnap = await col('cocina_stock').get();
+      let totalCocina = 0;
+      cocinaSnap.docs.forEach(d => { totalCocina += parseFloat(d.data().cantidad) || 0; });
+      return { stocks: Math.round(totalStocks * 100) / 100, barra: Math.round(totalBarra * 100) / 100, cocina: Math.round(totalCocina * 100) / 100 };
     });
-    const barraSnap = await col('barra_stock').get();
-    let totalBarra = 0;
-    barraSnap.docs.forEach(d => { totalBarra += parseFloat(d.data().cantidad) || 0; });
-    const cocinaSnap = await col('cocina_stock').get();
-    let totalCocina = 0;
-    cocinaSnap.docs.forEach(d => { totalCocina += parseFloat(d.data().cantidad) || 0; });
-    res.json({ stocks: Math.round(totalStocks * 100) / 100, barra: Math.round(totalBarra * 100) / 100, cocina: Math.round(totalCocina * 100) / 100 });
+    res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -856,9 +869,7 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
   }
 
   await batch.commit();
-  delete _cache['inv_diario_' + fecha];
-  delete _cache['con_inv_' + fecha];
-  delete _cache['inventario_snap']; // el guardado pudo crear items o cambiar stock_apertura
+  invalidarCache('inv_diario_' + fecha, 'con_inv_' + fecha, 'inventario_snap'); // el guardado pudo crear items o cambiar stock_apertura
 
   // Propagation: cadena hacia adelante SOLO de los items que realmente cambiaron
   const propErrors = [];
@@ -2777,7 +2788,7 @@ app.put('/api/inventario/minimos', async (req, res) => {
       }
     }
     await batch.commit();
-    delete _cache['inventario_snap'];
+    invalidarCache('inventario_snap', 'recetas'); // los precios afectan los costos de las recetas
     res.json({ ok: true });
   } catch (e) {
     console.error('Error en minimos:', e.message);
@@ -2840,11 +2851,14 @@ app.put('/api/precios', async (req, res) => {
 
 // --- RECETAS ---
 app.get('/api/recetas', async (req, res) => {
-  const [recSnap, precSnap, ingSnap] = await Promise.all([
-    col('recetas').orderBy('nombre').get(),
-    col('barra_precios').orderBy('ingrediente').get(),
-    col('receta_ingredientes').orderBy('id').get(),
-  ]);
+  // Cache corto (10s): el cálculo de costos es recursivo y se dispara al abrir recetas, editar,
+  // importar ventas, etc. Un TTL breve evita recomputar cientos de veces sin datos obsoletos.
+  const data = await cached('recetas', 10000, async () => {
+    const [recSnap, precSnap, ingSnap] = await Promise.all([
+      col('recetas').orderBy('nombre').get(),
+      col('barra_precios').orderBy('ingrediente').get(),
+      col('receta_ingredientes').orderBy('id').get(),
+    ]);
   const precios = precSnap.docs.map(d => d.data());
   const ingByRec = {};
   ingSnap.docs.forEach(idoc => {
@@ -2958,7 +2972,9 @@ app.get('/api/recetas', async (req, res) => {
     });
     return { ...r, ingredientes: ingredientesConPrecio, costoTotal };
   });
-  res.json(result);
+    return result;
+  });
+  res.json(data);
 });
 
 app.post('/api/recetas', async (req, res) => {
@@ -2975,6 +2991,7 @@ app.post('/api/recetas', async (req, res) => {
     nombre: n, categoria: categoria || 'Clásicos',
     created_at: new Date().toISOString(), updated_at: new Date().toISOString()
   });
+  invalidarCache('recetas');
   res.json({ id: nextId, nombre: n });
 });
 
@@ -2985,6 +3002,7 @@ app.put('/api/recetas/:id', async (req, res) => {
   if (categoria !== undefined) upd.categoria = categoria || 'Clásicos';
   if (precio_venta !== undefined) upd.precio_venta = parseFloat(precio_venta) || 0;
   await col('recetas').doc(req.params.id).update(upd);
+  invalidarCache('recetas');
   res.json({ ok: true });
 });
 
@@ -2995,6 +3013,7 @@ app.delete('/api/recetas/:id', async (req, res) => {
   ingSnap.docs.forEach(d => batch.delete(d.ref));
   batch.delete(col('recetas').doc(id));
   await batch.commit();
+  invalidarCache('recetas');
   res.json({ ok: true });
 });
 
@@ -3008,6 +3027,7 @@ app.post('/api/recetas/:id/ingredientes', async (req, res) => {
     ingrediente, cantidad: cantidad || 0, unidad: normalizeUnit(unidad)
   });
   await ensureIngredienteInPrecios(ingrediente, unidad);
+  invalidarCache('recetas');
   res.json({ ok: true });
 });
 
@@ -3016,11 +3036,13 @@ app.put('/api/receta-ingredientes/:id', async (req, res) => {
   await col('receta_ingredientes').doc(req.params.id).update({
     ingrediente, cantidad: cantidad || 0, unidad: normalizeUnit(unidad)
   });
+  invalidarCache('recetas');
   res.json({ ok: true });
 });
 
 app.delete('/api/receta-ingredientes/:id', async (req, res) => {
   await col('receta_ingredientes').doc(req.params.id).delete();
+  invalidarCache('recetas');
   res.json({ ok: true });
 });
 
@@ -3047,6 +3069,7 @@ app.put('/api/recetas/:id/with-ingredientes', async (req, res) => {
   if (ingredientes && ingredientes.length) {
     await Promise.all(ingredientes.map(ing => ensureIngredienteInPrecios(ing.ingrediente, ing.unidad)));
   }
+  invalidarCache('recetas');
   res.json({ ok: true });
 });
 
@@ -3584,6 +3607,7 @@ async function ajustarCocinaStock(ajustes) {
     }
   }
   await batch.commit();
+  invalidarCache('inventario_snap'); // cambió el total de BARRA/COCINA del menú
 }
 
 // Suma (o resta) cantidades al stock de BARRA; crea el item si no existe
@@ -3636,6 +3660,7 @@ async function ajustarBarraStock(ajustes) {
     }
   }
   await batch.commit();
+  invalidarCache('inventario_snap'); // cambió el total de BARRA del menú
 }
 
 app.post('/api/cocina/movimientos', authMiddleware, async (req, res) => {
@@ -6346,8 +6371,7 @@ app.post('/api/inventario/agregar-item', authMiddleware, async (req, res) => {
         updated_at: new Date().toISOString(), saved_by: req.user.displayName || req.user.email
       });
     }
-    delete _cache['con_inv_' + fecha];
-    delete _cache['inventario_snap'];
+    invalidarCache('con_inv_' + fecha, 'inventario_snap');
 
     res.json({ ok: true, item_id, nombre, almacen_id });
   } catch (e) {    res.status(500).json({ error: e.message });
