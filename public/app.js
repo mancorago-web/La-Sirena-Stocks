@@ -2194,12 +2194,12 @@ function verDetallesVentas() {
   if (!fecha) { alert('Selecciona una fecha'); return; }
   const fin = document.getElementById('fecha-ventas-fin')?.value || fecha;
   if (fin > fecha) {
-    api('GET', '/api/almacenes/con-inventario-rango?fecha_inicio=' + encodeURIComponent(fecha) + '&fecha_fin=' + encodeURIComponent(fin)).then(data => {
+    api('GET', '/api/almacenes/ventas-rango?fecha_inicio=' + encodeURIComponent(fecha) + '&fecha_fin=' + encodeURIComponent(fin)).then(list => {
       const body = document.getElementById('modal-body');
       body.innerHTML = '<h3>Detalle de Ventas — ' + fecha + ' a ' + fin + '</h3>';
       const wrap = document.createElement('div');
       wrap.style.marginTop = '0.5rem';
-      renderRangoDetalle(wrap, data, 'ventas');
+      renderVentasRango(wrap, list, fecha, fin);
       body.appendChild(wrap);
       document.getElementById('modal').style.display = 'block';
     });
@@ -2282,8 +2282,8 @@ function cargarVentas(fechaIni, fechaFin) {
   const container = document.getElementById('accordion-ventas');
   if (fechaFin > fechaIni) {
     if (btnGuardar) { btnGuardar.disabled = true; btnGuardar.textContent = '🔒 SOLO LECTURA (RANGO)'; }
-    api('GET', '/api/almacenes/con-inventario-rango?fecha_inicio=' + encodeURIComponent(fechaIni) + '&fecha_fin=' + encodeURIComponent(fechaFin)).then(data => {
-      renderRangoDetalle(container, data, 'ventas');
+    api('GET', '/api/almacenes/ventas-rango?fecha_inicio=' + encodeURIComponent(fechaIni) + '&fecha_fin=' + encodeURIComponent(fechaFin)).then(list => {
+      renderVentasRango(container, list, fechaIni, fechaFin);
     }).catch(e => console.error(e));
     return;
   }
@@ -2790,6 +2790,19 @@ function renderIngresosRango(container, list, ini, fin) {
     + list.map(r => '<tr data-item-id="' + r.item_id + '"><td>' + esc(r.nombre) + '</td><td>' + esc(r.fecha) + '</td><td>' + esc(r.almacen) + '</td><td>' + fmt3(r.cantidad) + '</td><td>' + t(r.updated_at) + '</td><td>' + esc(DISPLAY_NAMES[r.saved_by] || r.saved_by || '-') + '</td></tr>').join('')
     + '</tbody></table></div>'
     + '<p style="font-weight:700;color:#0f3460;margin-top:0.5rem;">TOTAL INGRESOS: <b>' + fmt3(total) + '</b> (' + list.length + ' registros)</p>';
+}
+
+// Render del detalle de VENTAS por fecha (rango): muestra la FECHA de cada venta y permite filtrar
+// por item con el buscador (las filas llevan data-item-id y el item en la primera celda).
+function renderVentasRango(container, list, ini, fin) {
+  if (!container) return;
+  if (!list || !list.length) { container.innerHTML = '<p style="color:#888;">No hay ventas registradas en el rango <b>' + ini + ' a ' + fin + '</b>.</p>'; return; }
+  const total = list.reduce((s, r) => s + (r.cantidad || 0), 0);
+  const t = (u) => u ? new Date(u).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '—';
+  container.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Fecha</th><th>Almacén</th><th>Cantidad</th><th>Hora</th><th>Usuario</th></tr></thead><tbody>'
+    + list.map(r => '<tr data-item-id="' + r.item_id + '"><td>' + esc(r.nombre) + '</td><td>' + esc(r.fecha) + '</td><td>' + esc(r.almacen) + '</td><td>' + fmt3(r.cantidad) + '</td><td>' + t(r.updated_at) + '</td><td>' + esc(DISPLAY_NAMES[r.saved_by] || r.saved_by || '-') + '</td></tr>').join('')
+    + '</tbody></table></div>'
+    + '<p style="font-weight:700;color:#0f3460;margin-top:0.5rem;">TOTAL VENTAS: <b>' + fmt3(total) + '</b> (' + list.length + ' registros)</p>';
 }
 
 function verDetallesIngresos() {
