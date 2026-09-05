@@ -7215,13 +7215,13 @@ function calcularCostosVenta() {
   document.querySelectorAll('#accordion-barra-ventas tr[data-receta]').forEach(tr => {
     const qty = parseFloat(tr.querySelector('.input-receta-qty').value) || 0;
     const costo = parseFloat(tr.dataset.costo) || 0;
-    if (qty > 0 && costo > 0) {
+    if (qty > 0) {
       const sub = costo * qty;
       total += sub;
       filas.push({ nombre: tr.dataset.receta, qty, costo, sub });
     }
   });
-  if (totalLabel) totalLabel.textContent = total > 0 ? '— TOTAL: S/ ' + total.toFixed(2) : '';
+  if (totalLabel) totalLabel.textContent = filas.length ? '— TOTAL: S/ ' + total.toFixed(2) : '';
   if (!filas.length) {
     seccion.innerHTML = '<p style="color:#888;">Ingresa cantidades de recetas para calcular los costos de venta.</p>';
     return;
