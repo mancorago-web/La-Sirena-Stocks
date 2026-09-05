@@ -1060,12 +1060,89 @@ app.get('/api/compras/destino', async (req, res) => {
   }
 });
 
+// --- PREVENCIÓN DE DUPLICADOS EN INVENTARIO ---
+// Normaliza el nombre de un item (mayúsculas, sin tildes, sin espacios) para comparar igualdad.
+function normItemName(n) {
+  return String(n || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '');
+}
+
+// Si existen 2+ items con el MISMO nombre (normalizado) en el MISMO almacén, los fusiona en el de
+// menor item_id: suma apertura/ingresos/cierres de TODOS los días, actualiza la base y elimina los
+// duplicados. Se ejecuta al registrar COMPRAS y VENTAS para que un duplicado accidental (ej. creado
+// por un nombre ligeramente distinto) NUNCA quede separado: la compra SIEMPRE suma al total correcto
+// en vez de "duplicar" el item.
+async function consolidarDuplicadosStock() {
+  const invSnap = await col('inventario').get();
+  const grupos = new Map(); // "norm|al" -> items[]
+  invSnap.docs.forEach(d => {
+    const a = d.data();
+    const norm = normItemName(a.nombre);
+    if (!norm) return;
+    const k = norm + '|' + Number(a.almacen_id);
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(a);
+  });
+  let fusionados = 0;
+  for (const [k, arr] of grupos) {
+    if (arr.length <= 1) continue;
+    arr.sort((a, b) => Number(a.item_id) - Number(b.item_id));
+    const keep = arr[0];
+    for (const ex of arr.slice(1)) {
+      try {
+        // Fusionar TODOS los días del duplicado en el item que se queda
+        const exDias = await col('inventario_diario').where('item_id', '==', Number(ex.item_id)).where('almacen_id', '==', Number(ex.almacen_id)).get();
+        for (const dd of exDias.docs) {
+          const exData = dd.data();
+          const fecha = exData.fecha;
+          const keepId = docId('invdiario', fecha, Number(keep.almacen_id), Number(keep.item_id));
+          const keepDia = await col('inventario_diario').doc(keepId).get();
+          const base = {
+            stock_apertura: parseFloat(exData.stock_apertura) || 0, stock_ingreso: parseFloat(exData.stock_ingreso) || 0,
+            salida_almacen: parseFloat(exData.salida_almacen) || 0, total_ventas: parseFloat(exData.total_ventas) || 0,
+            falta_almacen: parseFloat(exData.falta_almacen) || 0, stock_baja: parseFloat(exData.stock_baja) || 0,
+          };
+          if (keepDia.exists) {
+            const kd = keepDia.data();
+            const merged = {
+              stock_apertura: Math.round(((parseFloat(kd.stock_apertura) || 0) + base.stock_apertura) * 100) / 100,
+              stock_ingreso: Math.round(((parseFloat(kd.stock_ingreso) || 0) + base.stock_ingreso) * 100) / 100,
+              salida_almacen: Math.round(((parseFloat(kd.salida_almacen) || 0) + base.salida_almacen) * 100) / 100,
+              total_ventas: Math.round(((parseFloat(kd.total_ventas) || 0) + base.total_ventas) * 100) / 100,
+              falta_almacen: Math.round(((parseFloat(kd.falta_almacen) || 0) + base.falta_almacen) * 100) / 100,
+              stock_baja: Math.round(((parseFloat(kd.stock_baja) || 0) + base.stock_baja) * 100) / 100,
+            };
+            merged.stock_cierre = Math.round((merged.stock_apertura + merged.stock_ingreso - merged.salida_almacen - merged.total_ventas - merged.falta_almacen - merged.stock_baja) * 100) / 100;
+            await col('inventario_diario').doc(keepId).set({ ...kd, ...merged, updated_at: new Date().toISOString() });
+          } else {
+            await col('inventario_diario').doc(keepId).set({ ...exData, item_id: Number(keep.item_id), almacen_id: Number(keep.almacen_id), updated_at: new Date().toISOString() });
+          }
+          await dd.ref.delete();
+        }
+        // Sumar la apertura base del duplicado al item que se queda
+        await col('inventario').doc(docId('inventario', Number(keep.item_id), Number(keep.almacen_id))).update({
+          stock_apertura: admin.firestore.FieldValue.increment(parseFloat(ex.stock_apertura) || 0),
+          updated_at: new Date().toISOString()
+        });
+        // Eliminar el duplicado
+        await col('inventario').doc(docId('inventario', Number(ex.item_id), Number(ex.almacen_id))).delete();
+        fusionados++;
+      } catch (e) {
+        console.error('consolidarDuplicadosStock error:', k, e.message);
+      }
+    }
+  }
+  return fusionados;
+}
+
 // --- COMPRAS: guardado centralizado (enruta a STOCKS o BARRA según el item) ---
 app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
   try {
     const { fecha, items } = req.body;
     if (!fecha || !Array.isArray(items)) return res.status(400).json({ error: 'fecha e items requeridos' });
     const savedBy = req.user?.name || req.user?.email || 'unknown';
+
+    // Consolidar duplicados antes de procesar (la compra debe SUMAR al item existente, no duplicar)
+    try { await consolidarDuplicadosStock(); } catch (e) { console.error('consolidar duplicados (compras):', e.message); }
 
     // Índice para enrutar a STOCKS (inventario), normalizado (sin espacios, mayúsculas)
     const invSnap = await col('inventario').get();
@@ -1924,6 +2001,9 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
     const { fecha, items } = req.body;
     if (!fecha || !Array.isArray(items)) return res.status(400).json({ error: 'fecha e items requeridos' });
     const savedBy = req.user?.name || req.user?.email || 'unknown';
+
+    // Consolidar duplicados antes de procesar (evita que un duplicado divida el stock)
+    try { await consolidarDuplicadosStock(); } catch (e) { console.error('consolidar duplicados (ventas):', e.message); }
 
     const invSnap = await col('inventario').get();
     const stocksNorm = {};
@@ -6141,7 +6221,7 @@ app.post('/api/inventario/agregar-item', authMiddleware, async (req, res) => {
     if (!nombre || !almacen_id) return res.status(400).json({ error: 'Nombre y almacén requeridos' });
 
     const invSnap = await col('inventario').where('almacen_id', '==', almacen_id).get();
-    const existing = invSnap.docs.find(d => d.data().nombre.toLowerCase().trim() === nombre.toLowerCase().trim());
+    const existing = invSnap.docs.find(d => normItemName(d.data().nombre) === normItemName(nombre));
 
     let item_id;
     if (existing) {
