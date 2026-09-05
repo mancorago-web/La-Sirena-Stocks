@@ -467,6 +467,42 @@ app.get('/api/almacenes/con-inventario-rango', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// --- INGRESOS: detalle POR FECHA en un rango (cada ingreso con su fecha y monto) ---
+app.get('/api/almacenes/ingresos-rango', async (req, res) => {
+  try {
+    const ini = String(req.query.fecha_inicio || '').trim();
+    const fin = String(req.query.fecha_fin || '').trim();
+    if (!ini || !fin) return res.json([]);
+    const [invSnap, diaSnap, alSnap] = await Promise.all([
+      col('inventario').get(),
+      col('inventario_diario').where('fecha', '>=', ini).where('fecha', '<=', fin).get(),
+      col('almacenes').get()
+    ]);
+    const invByKey = {};
+    invSnap.docs.forEach(d => { const a = d.data(); invByKey[a.almacen_id + '_' + a.item_id] = a.nombre; });
+    const alById = {};
+    alSnap.docs.forEach(d => { alById[Number(d.id)] = d.data().nombre; });
+    const out = [];
+    diaSnap.docs.forEach(d => {
+      const a = d.data();
+      const cant = parseFloat(a.stock_ingreso) || 0;
+      if (cant <= 0) return;
+      out.push({
+        fecha: a.fecha,
+        item_id: Number(a.item_id),
+        almacen_id: Number(a.almacen_id),
+        nombre: invByKey[a.almacen_id + '_' + a.item_id] || String(a.nombre || '') || ('Item ' + a.item_id),
+        almacen: alById[Number(a.almacen_id)] || ('Almacén ' + a.almacen_id),
+        cantidad: Math.round(cant * 100) / 100,
+        updated_at: a.updated_at || null,
+        saved_by: a.saved_by || null
+      });
+    });
+    out.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.nombre.localeCompare(b.nombre, 'es'));
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 app.get('/api/resumen/items', async (req, res) => {
   try {
     const fecha = String(req.query.fecha || '').trim();
