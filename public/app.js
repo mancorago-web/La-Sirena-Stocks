@@ -5526,10 +5526,16 @@ function verDetallesCocina(tipo) {
 
 // --- COCINA: Recetas ---
 function renderRecetaCocina(r) {
-  return `<div class="accordion-item" data-receta-id="${r.id}">
+  const costoTotal = r.costoTotal || 0;
+  const esBase = r.categoria === 'RECETAS BASE';
+  const pv = parseFloat(r.precio_venta) || 0;
+  const costoConPerdida = costoTotal * 1.10;
+  const ganancia = pv > 0 ? (pv - costoConPerdida) : null;
+  return `<div class="accordion-item" data-receta-id="${r.id}"${esBase ? ' style="background:#e3f2fd;"' : ''}>
     <div class="accordion-header" onclick="toggleAcordeon(this)">
-      <span class="accordion-title">${esc(r.nombre)}</span>
+      <span class="accordion-title">${esc(r.nombre)}${costoTotal > 0 ? ` <span style="font-weight:400;font-size:0.85rem;color:#555">— COSTO: S/${costoTotal.toFixed(2)}</span>` : ''}</span>
       <span class="accordion-actions" onclick="event.stopPropagation()">
+        <label style="font-weight:700;color:#2e7d32;font-size:0.82rem;margin-right:0.4rem;white-space:nowrap;">PV S/ <input id="pv-cocina-${r.id}" type="number" step="0.01" min="0" value="${pv ? pv : ''}" placeholder="0.00" style="width:70px;padding:0.25rem;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;" oninput="actualizarMargenVivoCocina(${r.id}, ${costoTotal})" onchange="guardarPrecioVentaCocina(${r.id})"></label>
         <button onclick="editarRecetaCocina(${r.id})" style="margin-right:0.3rem">EDITAR</button>
         <button class="danger" onclick="eliminarRecetaCocina(${r.id})">ELIMINAR</button>
       </span>
@@ -5537,13 +5543,47 @@ function renderRecetaCocina(r) {
     </div>
     <div class="accordion-body">
       <div class="table-wrap"><table>
-        <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th></tr></thead>
+        <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>P.Unitario</th><th>P.Total</th></tr></thead>
         <tbody>
-          ${(r.ingredientes || []).map(ing => `<tr><td>${esc(ing.ingrediente)}</td><td>${ing.cantidad}</td><td>${ing.unidad}</td></tr>`).join('') || '<tr><td colspan="3">Sin ingredientes.</td></tr>'}
+          ${(r.ingredientes || []).map(ing => {
+            const pu = ing.precioUnidad || 0;
+            const pt = ing.costo || 0;
+            const convIcon = ing.converted ? ' ⚡' : '';
+            return `<tr><td>${esc(ing.ingrediente)}</td><td>${ing.cantidad}</td><td>${ing.unidad}</td><td>${ing.precioMatch ? 'S/' + pu.toFixed(5) : '—'}${convIcon}</td><td>${ing.precioMatch ? 'S/' + pt.toFixed(2) : '—'}</td></tr>`;
+          }).join('') || '<tr><td colspan="5">Sin ingredientes.</td></tr>'}
+          ${costoTotal > 0 ? `
+          <tr style="font-weight:700;background:#f0f0ff"><td colspan="4">COSTO TOTAL</td><td>S/${costoTotal.toFixed(2)}</td></tr>
+          <tr style="font-weight:700;background:#fdecea;color:#c62828"><td colspan="4">COSTO + 10% PÉRDIDA</td><td>S/${(costoTotal * 1.10).toFixed(2)}</td></tr>
+          <tr style="font-weight:700;background:#e8f5e9;color:#2e7d32;"><td colspan="4">GANANCIA APROX.</td><td id="margen-cocina-${r.id}">${ganancia !== null ? 'S/' + ganancia.toFixed(2) : '—'}</td></tr>` : ''}
         </tbody>
       </table></div>
     </div>
   </div>`;
+}
+
+function actualizarMargenVivoCocina(id, costoTotal) {
+  const el = document.getElementById('pv-cocina-' + id);
+  const cell = document.getElementById('margen-cocina-' + id);
+  if (!el || !cell) return;
+  const pv = parseFloat(el.value) || 0;
+  if (pv > 0) {
+    const ganancia = pv - costoTotal * 1.10;
+    cell.innerHTML = 'S/' + ganancia.toFixed(2);
+    cell.style.color = ganancia < 0 ? '#c62828' : '#2e7d32';
+  } else {
+    cell.innerHTML = '—';
+    cell.style.color = '#2e7d32';
+  }
+}
+
+function guardarPrecioVentaCocina(id) {
+  const el = document.getElementById('pv-cocina-' + id);
+  if (!el) return;
+  const precio = parseFloat(el.value) || 0;
+  api('PUT', '/api/cocina/recetas/' + id, { precio_venta: precio }).then(() => {
+    showToast('Precio de venta guardado');
+    cargarRecetasCocina(id);
+  }).catch(() => alert('Error al guardar'));
 }
 
 function cargarRecetasCocina(openId) {

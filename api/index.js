@@ -3800,25 +3800,125 @@ function cocinaAjustar(cant, fromUnit, toUnit) {
 }
 
 // --- COCINA: Recetas ---
+// --- COCINA: RECETAS ---
+// Enriquece las recetas de cocina con el costo por ingrediente (P.UNITARIO / P.TOTAL) y el
+// COSTO TOTAL, igual que BARRA/RECETAS. Los ingredientes se resuelven contra cocina_precios y,
+// si el ingrediente es una RECETA BASE de cocina, contra los ingredientes de esa receta base.
+function enriquecerCocinaRecetasConCostos(recetas, ingByRec, precios) {
+  const recetasById = {};
+  recetas.forEach(r => { recetasById[Number(r.id)] = { ...r }; });
+  const parseCantidadBase = nombre => {
+    const n = String(nombre || '');
+    const m = n.match(/(?:^|\s|\(|x\s|-\s)(\d+(?:\.\d+)?)\s*(UNIDADES?|UND|COCTELES|COCTEL|ONZAS?|ONZ|ML|LTS?|LITROS?|LITRO|GR|GRAMOS?|KG)\b/i);
+    if (m) return { cantidad: parseFloat(m[1]), unidad: m[2].toLowerCase() };
+    if (/x\s*und\b/i.test(n)) return { cantidad: 1, unidad: 'und' };
+    return null;
+  };
+  const recBaseInfo = {};
+  Object.values(recetasById).forEach(r => { if (String(r.categoria || '') === 'RECETAS BASE') { const p = parseCantidadBase(r.nombre); if (p) recBaseInfo[r.id] = p; } });
+  const recBaseByName = {};
+  Object.values(recetasById).forEach(r => { if (String(r.categoria || '') === 'RECETAS BASE') recBaseByName[normNombre(r.nombre)] = r.id; });
+  const matchRecetaBase = ingrediente => {
+    const nk = normNombre(ingrediente);
+    if (recBaseByName[nk] !== undefined) return recBaseByName[nk];
+    let best, bestLen = 0, ties = false;
+    for (const [bn, bid] of Object.entries(recBaseByName)) {
+      let len = 0; const min = Math.min(nk.length, bn.length);
+      while (len < min && nk[len] === bn[len]) len++;
+      if (len >= 12 && len >= 0.7 * min) { if (len > bestLen) { best = bid; bestLen = len; ties = false; } else if (len === bestLen) ties = true; }
+    }
+    return ties ? undefined : best;
+  };
+  const prodParams = unidad => {
+    const u = normalizeUnit(unidad);
+    if (u === 'ml') return { unidadItem: 'ml', equivMl: 1, equivGr: 0 };
+    if (u === 'lt') return { unidadItem: 'lt', equivMl: 1000, equivGr: 0 };
+    if (u === 'onzas') return { unidadItem: 'onzas', equivMl: 29.5735, equivGr: 28.3495 };
+    if (u === 'gramos') return { unidadItem: 'gramos', equivMl: 0, equivGr: 1 };
+    if (u === 'kg') return { unidadItem: 'kg', equivMl: 0, equivGr: 1000 };
+    return { unidadItem: 'unidad', equivMl: 0, equivGr: 0 };
+  };
+  const memo = {}, calculando = new Set();
+  function costoReceta(id) {
+    if (memo[id] !== undefined) return memo[id];
+    if (calculando.has(id)) return 0;
+    calculando.add(id);
+    const r = recetasById[id];
+    let total = 0;
+    if (r) { const ings = ingByRec[id] || []; for (const ing of ings) total += costoIngrediente(ing); }
+    calculando.delete(id);
+    memo[id] = total;
+    return total;
+  }
+  function costoIngrediente(ing) {
+    const baseId = matchRecetaBase(ing.ingrediente);
+    if (baseId !== undefined) {
+      const bi = recBaseInfo[baseId];
+      if (bi && bi.cantidad > 0) {
+        const costoBase = costoReceta(baseId);
+        const perUnit = (costoBase * 1.10) / bi.cantidad;
+        const pp = prodParams(bi.unidad);
+        const conv = calcularCosto(ing.cantidad, ing.unidad, perUnit, pp.unidadItem, pp.equivMl, pp.equivGr, ing.ingrediente);
+        return typeof conv === 'object' ? conv.costo : conv;
+      }
+    }
+    const match = precios.find(p => p.ingrediente && normNombre(p.ingrediente) === normNombre(ing.ingrediente));
+    const precioUnidad = match ? (match.precio || 0) : 0;
+    const conv = match ? calcularCosto(ing.cantidad, ing.unidad, precioUnidad, match.unidad, match.equiv_ml, match.equiv_gr, match.ingrediente) : { costo: (ing.cantidad || 0) * precioUnidad, converted: false };
+    return typeof conv === 'object' ? conv.costo : conv;
+  }
+  return recetas.map(r => {
+    const ingredientes = ingByRec[r.id] || [];
+    let costoTotal = 0;
+    const ingredientesConPrecio = ingredientes.map(ing => {
+      const baseId = matchRecetaBase(ing.ingrediente);
+      let precioUnidad = 0, converted = false, costo = 0, precioMatch = false, esRecetaBase = false;
+      if (baseId !== undefined && recBaseInfo[baseId] && recBaseInfo[baseId].cantidad > 0) {
+        const bi = recBaseInfo[baseId];
+        const costoBase = costoReceta(baseId);
+        precioUnidad = (costoBase * 1.10) / bi.cantidad;
+        const pp = prodParams(bi.unidad);
+        const conv = calcularCosto(ing.cantidad, ing.unidad, precioUnidad, pp.unidadItem, pp.equivMl, pp.equivGr, ing.ingrediente);
+        costo = typeof conv === 'object' ? conv.costo : conv;
+        converted = typeof conv === 'object' ? conv.converted : false;
+        precioMatch = true;
+        esRecetaBase = true;
+        costoTotal += costo;
+        return { ...ing, precioUnidad, costo, converted, precioMatch, esRecetaBase };
+      }
+      const match = precios.find(p => p.ingrediente && normNombre(p.ingrediente) === normNombre(ing.ingrediente));
+      precioUnidad = match ? (match.precio || 0) : 0;
+      const conv = match ? calcularCosto(ing.cantidad, ing.unidad, precioUnidad, match.unidad, match.equiv_ml, match.equiv_gr, match.ingrediente) : { costo: (ing.cantidad || 0) * precioUnidad, converted: false };
+      costo = typeof conv === 'object' ? conv.costo : conv;
+      converted = typeof conv === 'object' ? conv.converted : false;
+      precioMatch = !!match;
+      costoTotal += costo;
+      return { ...ing, precioUnidad, costo, converted, precioMatch, esRecetaBase };
+    });
+    return { ...r, ingredientes: ingredientesConPrecio, costoTotal };
+  });
+}
+
 app.get('/api/cocina/recetas', async (req, res) => {
   try {
-    const [recSnap, ingSnap] = await Promise.all([
-      col('cocina_recetas').orderBy('nombre').get(),
-      col('cocina_receta_ingredientes').orderBy('id').get(),
-    ]);
-    const ingByRec = {};
-    ingSnap.docs.forEach(idoc => {
-      const ing = { id: Number(idoc.id), ...idoc.data() };
-      const rid = ing.receta_id;
-      if (!ingByRec[rid]) ingByRec[rid] = [];
-      ingByRec[rid].push(ing);
+    const data = await cached('cocina_recetas', 10000, async () => {
+      const [recSnap, ingSnap, precSnap] = await Promise.all([
+        col('cocina_recetas').orderBy('nombre').get(),
+        col('cocina_receta_ingredientes').orderBy('id').get(),
+        col('cocina_precios').get(),
+      ]);
+      const ingByRec = {};
+      ingSnap.docs.forEach(idoc => {
+        const ing = { id: Number(idoc.id), ...idoc.data() };
+        const rid = ing.receta_id;
+        if (!ingByRec[rid]) ingByRec[rid] = [];
+        ingByRec[rid].push(ing);
+      });
+      const precios = precSnap.docs.map(d => d.data());
+      const recetas = recSnap.docs.map(d => ({ id: Number(d.id), ...d.data() }));
+      return enriquecerCocinaRecetasConCostos(recetas, ingByRec, precios);
     });
-    const result = recSnap.docs.map(d => {
-      const r = { id: Number(d.id), ...d.data() };
-      r.ingredientes = ingByRec[r.id] || [];
-      return r;
-    });
-    res.json(result);
+    res.json(data);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -3837,16 +3937,20 @@ app.post('/api/cocina/recetas', async (req, res) => {
       id: nextId, nombre: n, categoria: categoria || 'Platos',
       created_at: new Date().toISOString(), updated_at: new Date().toISOString()
     });
+    invalidarCache('cocina_recetas');
     res.json({ id: nextId, nombre: n });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.put('/api/cocina/recetas/:id', async (req, res) => {
   try {
-    const { nombre, categoria } = req.body;
-    await col('cocina_recetas').doc(req.params.id).update({
-      nombre, categoria: categoria || 'Platos', updated_at: new Date().toISOString()
-    });
+    const { nombre, categoria, precio_venta } = req.body;
+    const upd = { updated_at: new Date().toISOString() };
+    if (nombre !== undefined) upd.nombre = nombre;
+    if (categoria !== undefined) upd.categoria = categoria || 'Platos';
+    if (precio_venta !== undefined) upd.precio_venta = parseFloat(precio_venta) || 0;
+    await col('cocina_recetas').doc(req.params.id).update(upd);
+    invalidarCache('cocina_recetas');
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -3859,6 +3963,7 @@ app.delete('/api/cocina/recetas/:id', async (req, res) => {
     ingSnap.docs.forEach(d => batch.delete(d.ref));
     batch.delete(col('cocina_recetas').doc(id));
     await batch.commit();
+    invalidarCache('cocina_recetas');
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -3888,6 +3993,7 @@ app.put('/api/cocina/recetas/:id/with-ingredientes', async (req, res) => {
     if (ingredientes && ingredientes.length) {
       await Promise.all(ingredientes.map(ing => ensureIngredienteEnBaseUnificada(ing.ingrediente, ing.unidad)));
     }
+    invalidarCache('cocina_recetas');
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
