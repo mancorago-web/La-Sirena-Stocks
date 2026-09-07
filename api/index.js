@@ -1453,7 +1453,7 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
     resumen.stocks.forEach(r => comprasConPrecio.push({ nombre: r.nombre, precio: r.precio, destino: 'stocks' }));
     resumen.barra.forEach(r => comprasConPrecio.push({ nombre: r.nombre, precio: r.precio, destino: 'barra' }));
     resumen.cocina.forEach(r => comprasConPrecio.push({ nombre: r.nombre, precio: r.precio, destino: 'cocina' }));
-    await Promise.all(comprasConPrecio.map(c => registrarUltimoPrecioCompra(c.nombre, c.precio, c.destino)));
+    await Promise.all(comprasConPrecio.map(c => registrarUltimoPrecioCompra(c.nombre, c.precio, c.destino, fecha)));
 
     res.json({ ok: true, resumen });
   } catch (e) {
@@ -1491,7 +1491,7 @@ function calcularPrecioVenta(nombre, ultimoPrecioCompra, unidadVenta) {
   return null;
 }
 
-async function registrarUltimoPrecioCompra(nombre, precio, destino) {
+async function registrarUltimoPrecioCompra(nombre, precio, destino, fechaCompra) {
   const precioVal = Math.round((parseFloat(precio) || 0) * 100) / 100;
   if (precioVal <= 0) return;
   const key = normNombre(nombre);
@@ -1515,9 +1515,13 @@ async function registrarUltimoPrecioCompra(nombre, precio, destino) {
     for (const d of candidates) {
       const cur = d.data();
       const anterior = parseFloat(cur.ultimo_precio_compra) || 0;
+      const fechaUlt = String(cur.ultimo_precio_compra_fecha || '');
+      const fechaCompraStr = fechaCompra || new Date().toISOString().slice(0, 10);
       const upd = {
         ultimo_precio_compra: precioVal,
+        ultimo_precio_compra_fecha: fechaCompraStr,
         precio_anterior_compra: anterior,
+        precio_anterior_compra_fecha: fechaUlt || null,
         updated_at: new Date().toISOString()
       };
       // Auto-actualizar PRECIO VENTA según ULT. PRECIO COMPRA (unidad de venta del item)
@@ -4281,6 +4285,7 @@ app.get('/api/basedatos/unificada', async (req, res) => {
         unidad_compra: x.unidad || '', precio_compra: x.precio || 0,
         unidad_venta: x.unidad_venta || '', precio_venta: x.precio_venta || 0,
         ultimo_precio_compra: x.ultimo_precio_compra || 0, precio_anterior_compra: x.precio_anterior_compra || 0,
+        ultimo_precio_compra_fecha: x.ultimo_precio_compra_fecha || '', precio_anterior_compra_fecha: x.precio_anterior_compra_fecha || '',
       });
     });
     barra.docs.forEach(d => {
@@ -4291,6 +4296,7 @@ app.get('/api/basedatos/unificada', async (req, res) => {
         unidad_compra: x.unidad_compra || '', precio_compra: x.precio_compra || 0,
         unidad_venta: x.unidad || '', precio_venta: x.precio || 0,
         ultimo_precio_compra: x.ultimo_precio_compra || 0, precio_anterior_compra: x.precio_anterior_compra || 0,
+        ultimo_precio_compra_fecha: x.ultimo_precio_compra_fecha || '', precio_anterior_compra_fecha: x.precio_anterior_compra_fecha || '',
       });
     });
     cocina.docs.forEach(d => {
@@ -4301,6 +4307,7 @@ app.get('/api/basedatos/unificada', async (req, res) => {
         unidad_compra: x.unidad_compra || '', precio_compra: x.precio_compra || 0,
         unidad_venta: x.unidad || '', precio_venta: x.precio || 0,
         ultimo_precio_compra: x.ultimo_precio_compra || 0, precio_anterior_compra: x.precio_anterior_compra || 0,
+        ultimo_precio_compra_fecha: x.ultimo_precio_compra_fecha || '', precio_anterior_compra_fecha: x.precio_anterior_compra_fecha || '',
       });
     });
     unificada.docs.forEach(d => {
@@ -4312,6 +4319,7 @@ app.get('/api/basedatos/unificada', async (req, res) => {
         unidad_compra: x.unidad_compra || '', precio_compra: x.precio_compra || 0,
         unidad_venta: x.unidad_venta || '', precio_venta: x.precio_venta || 0,
         ultimo_precio_compra: x.ultimo_precio_compra || 0, precio_anterior_compra: x.precio_anterior_compra || 0,
+        ultimo_precio_compra_fecha: x.ultimo_precio_compra_fecha || '', precio_anterior_compra_fecha: x.precio_anterior_compra_fecha || '',
       });
     });
     out.sort((a, b) => a.nombre.localeCompare(b.nombre));

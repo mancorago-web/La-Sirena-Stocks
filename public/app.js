@@ -425,16 +425,19 @@ function verVariacionPrecios() {
     const dif = ult - ant;
     const pct = (dif / ant) * 100;
     const up = dif > 0;
+    const fAnt = x.precio_anterior_compra_fecha ? ' <span style="font-weight:400;font-size:0.75rem;color:#aaa;">(' + esc(x.precio_anterior_compra_fecha) + ')</span>' : '';
+    const fUlt = x.ultimo_precio_compra_fecha ? ' <span style="font-weight:400;font-size:0.75rem;color:#aaa;">(' + esc(x.ultimo_precio_compra_fecha) + ')</span>' : '';
+    const notaAnt = x.precio_anterior_compra_fecha ? '' : ' <span style="font-weight:400;font-size:0.75rem;color:#e65100;">(sin compra previa)</span>';
     return `<tr>
       <td>${esc(x.nombre)}</td>
-      <td style="color:#888;">S/${ant.toFixed(2)}</td>
-      <td style="font-weight:700;">S/${ult.toFixed(2)}</td>
+      <td style="color:#888;">S/${ant.toFixed(2)}${fAnt}${notaAnt}</td>
+      <td style="font-weight:700;">S/${ult.toFixed(2)}${fUlt}</td>
       <td style="color:${up ? '#2e7d32' : '#c62828'};font-weight:700;">${up ? '▲ +' : '▼ '}S/${Math.abs(dif).toFixed(2)} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%)</td>
     </tr>`;
   }).join('');
   body.innerHTML = '<h3>📈 VARIACIÓN DE PRECIOS</h3>'
     + '<p style="font-size:0.8rem;color:#666;margin:0.4rem 0;">Items cuyo último precio de compra varió respecto a la compra anterior (' + conVariacion.length + ').</p>'
-    + '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Precio anterior</th><th>Último precio</th><th>Variación</th></tr></thead><tbody>' + filas + '</tbody></table></div>'
+    + '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Precio anterior (fecha)</th><th>Último precio (fecha)</th><th>Variación</th></tr></thead><tbody>' + filas + '</tbody></table></div>'
     + '<div style="margin-top:1rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
   const mc = document.querySelector('.modal-content');
   if (mc) mc.classList.add('modal-wide');
