@@ -1583,7 +1583,7 @@ app.get('/api/compras/variacion', async (req, res) => {
       const k = normNombre(a.nombre);
       if (!k) return;
       if (!porItem[k]) porItem[k] = [];
-      porItem[k].push({ fecha: a.fecha || '', precio: p, nombre: a.nombre, destino: a.destino || '' });
+      porItem[k].push({ fecha: a.fecha || '', precio: p, cantidad: parseFloat(a.cantidad) || 0, nombre: a.nombre, destino: a.destino || '' });
     });
     const out = [];
     Object.entries(porItem).forEach(([k, lista]) => {
@@ -1595,8 +1595,8 @@ app.get('/api/compras/variacion', async (req, res) => {
       if (Math.abs(ult.precio - ant.precio) <= 0.001) return;
       out.push({
         nombre: ult.nombre, // nombre original de la última compra (para mostrar)
-        anterior_precio: Math.round(ant.precio * 100) / 100, anterior_fecha: ant.fecha,
-        ultimo_precio: Math.round(ult.precio * 100) / 100, ultimo_fecha: ult.fecha,
+        anterior_precio: Math.round(ant.precio * 100) / 100, anterior_fecha: ant.fecha, anterior_cantidad: ant.cantidad,
+        ultimo_precio: Math.round(ult.precio * 100) / 100, ultimo_fecha: ult.fecha, ultimo_cantidad: ult.cantidad,
         destino: ult.destino
       });
     });
