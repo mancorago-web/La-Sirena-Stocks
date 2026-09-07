@@ -4076,21 +4076,23 @@ function normalizarBusquedaStock(el) {
 function exportarStockBarra() {
   const fecha = document.getElementById('fecha-stock-barra')?.value || todayStr();
   const esHoy = fecha === todayStr();
-  const wsData = [['Mueble', 'Item', 'Cantidad', 'Unidad', 'Onzas']];
+  const wsData = [['MUEBLE', 'ITEM', 'CANTIDAD', 'UNIDAD', 'ONZAS']];
   document.querySelectorAll('#barra-stock-container .accordion-item').forEach(acc => {
-    const mueble = acc.querySelector('.accordion-title')?.textContent?.split(' — ')[0] || '';
+    const mueble = (acc.querySelector('.accordion-title')?.textContent?.split(' — ')[0] || '').trim().toUpperCase();
     acc.querySelectorAll('tbody tr[data-stock-id]').forEach(tr => {
-      const ing = tr.querySelector('.stock-nombre')?.textContent || '';
+      let ing = (tr.querySelector('.stock-nombre')?.textContent || '').trim();
+      // Quitar la nota "(más en: ...)" y el badge "STOCK BAJO" del nombre
+      ing = ing.replace(/\s*\(más en:.*?\)\s*/g, '').replace(/STOCK BAJO/g, '').trim().toUpperCase();
       let cant, uni, onz;
       if (esHoy) {
-        cant = tr.querySelector('.input-stock-cant')?.value || '';
-        uni = tr.querySelector('.select-stock-uni')?.value || '';
-        onz = tr.querySelector('.onzas-stock')?.textContent || '';
+        cant = (tr.querySelector('.input-stock-cant')?.value || '').toUpperCase();
+        uni = (tr.querySelector('.select-stock-uni')?.value || '').toUpperCase();
+        onz = (tr.querySelector('.onzas-stock')?.textContent || '').toUpperCase();
       } else {
         const tds = tr.querySelectorAll('td');
-        cant = tds[1]?.textContent || '';
-        uni = tds[2]?.textContent || '';
-        onz = tds[3]?.textContent || '';
+        cant = (tds[1]?.textContent || '').toUpperCase();
+        uni = (tds[2]?.textContent || '').toUpperCase();
+        onz = (tds[3]?.textContent || '').toUpperCase();
       }
       wsData.push([mueble, ing, cant, uni, onz]);
     });
@@ -4103,8 +4105,14 @@ function exportarStockBarra() {
 
 function exportarStockBarraGeneral() {
   const datos = window._stockBarraGeneral || { fecha: todayStr(), filas: [] };
-  const wsData = [['Categoría', 'Item', 'Total', 'Unidad', 'Distribución']];
-  datos.filas.forEach(f => wsData.push([f.categoria, f.nombre, f.total, f.unidad, f.dist]));
+  const wsData = [['CATEGORÍA', 'ITEM', 'TOTAL', 'UNIDAD', 'DISTRIBUCIÓN']];
+  datos.filas.forEach(f => wsData.push([
+    String(f.categoria || '').toUpperCase(),
+    String(f.nombre || '').replace(/\s*\(más en:.*?\)\s*/g, '').trim().toUpperCase(),
+    f.total,
+    String(f.unidad || '').toUpperCase(),
+    String(f.dist || '').toUpperCase()
+  ]));
   const libro = XLSX.utils.book_new();
   const hoja = XLSX.utils.aoa_to_sheet(wsData);
   XLSX.utils.book_append_sheet(libro, hoja, 'Stock Barra General');
