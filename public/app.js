@@ -406,7 +406,9 @@ function verVariacionPrecios() {
   const conVariacion = (_bdUnificada || []).filter(x => {
     const ult = parseFloat(x.ultimo_precio_compra) || 0;
     const ant = parseFloat(x.precio_anterior_compra) || 0;
-    return ant > 0 && ult > 0 && Math.abs(ult - ant) > 0.001;
+    // Solo items con COMPRA PREVIA real (fecha del precio anterior registrada): un item con 1 sola
+    // compra (precio anterior viejo sin respaldo) no debe aparecer como variación.
+    return ant > 0 && ult > 0 && Math.abs(ult - ant) > 0.001 && !!x.precio_anterior_compra_fecha;
   });
   const body = document.getElementById('modal-body');
   if (!conVariacion.length) {
