@@ -428,7 +428,7 @@ function verVariacionPrecios() {
     const fAnt = x.precio_anterior_compra_fecha ? ' <span style="font-weight:400;font-size:0.75rem;color:#aaa;">(' + esc(x.precio_anterior_compra_fecha) + ')</span>' : '';
     const fUlt = x.ultimo_precio_compra_fecha ? ' <span style="font-weight:400;font-size:0.75rem;color:#aaa;">(' + esc(x.ultimo_precio_compra_fecha) + ')</span>' : '';
     const notaAnt = x.precio_anterior_compra_fecha ? '' : ' <span style="font-weight:400;font-size:0.75rem;color:#e65100;">(sin compra previa)</span>';
-    return `<tr>
+    return `<tr data-nombre="${esc(x.nombre)}">
       <td>${esc(x.nombre)}</td>
       <td style="color:#888;">S/${ant.toFixed(2)}${fAnt}${notaAnt}</td>
       <td style="font-weight:700;">S/${ult.toFixed(2)}${fUlt}</td>
@@ -437,11 +437,20 @@ function verVariacionPrecios() {
   }).join('');
   body.innerHTML = '<h3>📈 VARIACIÓN DE PRECIOS</h3>'
     + '<p style="font-size:0.8rem;color:#666;margin:0.4rem 0;">Items cuyo último precio de compra varió respecto a la compra anterior (' + conVariacion.length + ').</p>'
-    + '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Precio anterior (fecha)</th><th>Último precio (fecha)</th><th>Variación</th></tr></thead><tbody>' + filas + '</tbody></table></div>'
+    + '<div style="margin:0.5rem 0;"><input type="text" id="buscar-variacion" placeholder="🔍 Buscar item..." style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;" oninput="filtrarVariacion(this.value)"></div>'
+    + '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Precio anterior (fecha)</th><th>Último precio (fecha)</th><th>Variación</th></tr></thead><tbody id="variacion-precios-body">' + filas + '</tbody></table></div>'
     + '<div style="margin-top:1rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
   const mc = document.querySelector('.modal-content');
   if (mc) mc.classList.add('modal-wide');
   document.getElementById('modal').style.display = 'block';
+}
+
+function filtrarVariacion(term) {
+  const q = (term || '').trim().toLowerCase();
+  document.querySelectorAll('#variacion-precios-body tr').forEach(tr => {
+    const n = (tr.getAttribute('data-nombre') || '').toLowerCase();
+    tr.style.display = (!q || n.includes(q)) ? '' : 'none';
+  });
 }
 
 function irACategoria(cat) {
