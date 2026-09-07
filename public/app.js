@@ -403,7 +403,7 @@ function unificarItemsBaseDatos() {
 }
 
 function verVariacionPrecios() {
-  api('GET', '/api/compras/variacion').then(conVariacion => {
+  return api('GET', '/api/compras/variacion').then(conVariacion => {
     const body = document.getElementById('modal-body');
     if (!conVariacion || !conVariacion.length) {
       body.innerHTML = '<h3>📈 VARIACIÓN DE PRECIOS</h3><p style="margin-top:0.75rem;color:#666;">No hay items con variación de precio entre sus últimas dos compras.</p><div style="margin-top:1.5rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
@@ -436,11 +436,27 @@ function verVariacionPrecios() {
       + '<p style="font-size:0.75rem;color:#888;margin:0 0 0.4rem 0;">Las fechas filtran por la fecha de la <b>última compra</b>.</p>'
       + '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Precio anterior (fecha)</th><th>Último precio (fecha)</th><th>Variación</th></tr></thead><tbody id="variacion-precios-body">' + filas + '</tbody></table></div>'
       + '<div id="variacion-historial" style="margin-top:0.75rem;"></div>'
-      + '<div style="margin-top:1rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
+      + '<div id="variacion-historial" style="margin-top:0.75rem;"></div>'
+      + '<div style="margin-top:1rem;display:flex;gap:0.5rem;"><button onclick="refrescarVariacion()" style="flex:1;padding:0.5rem;background:#1565c0;color:#fff;border:none;border-radius:4px;cursor:pointer;">🔄 Actualizar</button><button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
     const mc = document.querySelector('.modal-content');
     if (mc) mc.classList.add('modal-wide');
     document.getElementById('modal').style.display = 'block';
   }).catch(() => { alert('Error al cargar variación de precios'); });
+}
+
+function refrescarVariacion() {
+  const item = document.getElementById('buscar-variacion')?.value || '';
+  const ini = document.getElementById('variacion-fecha-ini')?.value || '';
+  const fin = document.getElementById('variacion-fecha-fin')?.value || '';
+  verVariacionPrecios().then(() => {
+    const b = document.getElementById('buscar-variacion');
+    const i = document.getElementById('variacion-fecha-ini');
+    const f = document.getElementById('variacion-fecha-fin');
+    if (b && b.value !== item) b.value = item;
+    if (i && i.value !== ini) i.value = ini;
+    if (f && f.value !== fin) f.value = fin;
+    filtrarVariacion(item);
+  });
 }
 
 function filtrarVariacion(term) {
