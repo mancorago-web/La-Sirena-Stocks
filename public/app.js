@@ -444,6 +444,7 @@ function verVariacionPrecios() {
     + '</div>'
     + '<p style="font-size:0.75rem;color:#888;margin:0 0 0.4rem 0;">Las fechas filtran por la fecha del <b>último precio</b> (cuando se registró la compra).</p>'
     + '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Precio anterior (fecha)</th><th>Último precio (fecha)</th><th>Variación</th></tr></thead><tbody id="variacion-precios-body">' + filas + '</tbody></table></div>'
+    + '<div id="variacion-historial" style="margin-top:0.75rem;"></div>'
     + '<div style="margin-top:1rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
   const mc = document.querySelector('.modal-content');
   if (mc) mc.classList.add('modal-wide');
@@ -467,6 +468,28 @@ function filtrarVariacion(term) {
     }
     tr.style.display = ok ? '' : 'none';
   });
+  cargarHistorialVariacion();
+}
+
+// Muestra TODOS los precios (compras) de un item dentro del rango de fechas seleccionado.
+function cargarHistorialVariacion() {
+  const item = document.getElementById('buscar-variacion')?.value.trim() || '';
+  const ini = document.getElementById('variacion-fecha-ini')?.value || '';
+  const fin = document.getElementById('variacion-fecha-fin')?.value || '';
+  const cont = document.getElementById('variacion-historial');
+  if (!cont) return;
+  if (!item) { cont.innerHTML = ''; return; }
+  const q = 'item=' + encodeURIComponent(item) + (ini ? '&desde=' + encodeURIComponent(ini) : '') + (fin ? '&hasta=' + encodeURIComponent(fin) : '');
+  api('GET', '/api/compras/precio-historial?' + q).then(r => {
+    const compras = r.compras || [];
+    if (!compras.length) { cont.innerHTML = '<p style="font-size:0.8rem;color:#888;">Sin compras de "<b>' + esc(item) + '</b>"' + (ini || fin ? ' en el rango de fechas.' : '.') + '</p>'; return; }
+    const total = compras.reduce((s, c) => s + (c.precio_total || 0), 0);
+    cont.innerHTML = '<div style="margin-top:0.6rem;border-top:1px solid #eee;padding-top:0.5rem;"><b style="font-size:0.85rem;">📄 HISTORIAL DE PRECIOS — ' + esc(item.toUpperCase()) + '</b>' +
+      '<div class="table-wrap"><table style="font-size:0.82rem;"><thead><tr><th>Fecha</th><th>Cantidad</th><th>P.Unitario</th><th>Total</th><th>Destino</th></tr></thead><tbody>' +
+      compras.map(c => '<tr><td>' + esc(c.fecha) + '</td><td>' + c.cantidad + '</td><td>S/' + (c.precio || 0).toFixed(2) + '</td><td>S/' + (c.precio_total || 0).toFixed(2) + '</td><td>' + esc(c.destino || '') + '</td></tr>').join('') +
+      '</tbody></table></div>' +
+      '<p style="font-size:0.8rem;color:#0f3460;font-weight:700;margin-top:0.4rem;">Total comprado en el rango: S/' + total.toFixed(2) + '</p></div>';
+  }).catch(() => { cont.innerHTML = ''; });
 }
 
 function irACategoria(cat) {

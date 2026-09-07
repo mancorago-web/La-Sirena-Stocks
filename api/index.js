@@ -1540,6 +1540,37 @@ async function registrarUltimoPrecioCompra(nombre, precio, destino, fechaCompra)
   invalidarCache('recetas', 'cocina_recetas');
 }
 
+// --- COMPRAS: historial de precios de un item en un rango (para VARIACIÓN DE PRECIOS) ---
+app.get('/api/compras/precio-historial', async (req, res) => {
+  try {
+    const item = String(req.query.item || '').trim();
+    const desde = String(req.query.desde || '').trim();
+    const hasta = String(req.query.hasta || '').trim();
+    if (!item) return res.json({ item: '', compras: [] });
+    const key = normNombre(item);
+    let q = col('compras');
+    if (desde) q = q.where('fecha', '>=', desde);
+    if (hasta) q = q.where('fecha', '<=', hasta);
+    const snap = await q.get();
+    const out = [];
+    snap.docs.forEach(d => {
+      const a = d.data();
+      const nk = normNombre(a.nombre);
+      if (!nk || !(nk.includes(key) || key.includes(nk))) return;
+      out.push({
+        fecha: a.fecha || '',
+        nombre: a.nombre,
+        cantidad: parseFloat(a.cantidad) || 0,
+        precio: parseFloat(a.precio) || 0,
+        precio_total: parseFloat(a.precio_total) || 0,
+        destino: a.destino || ''
+      });
+    });
+    out.sort((a, b) => a.fecha.localeCompare(b.fecha));
+    res.json({ item, compras: out });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- COMPRAS: detalle de compras/ingresos registrados por fecha o rango de fechas ---
 app.get('/api/compras/detalle', async (req, res) => {
   try {
