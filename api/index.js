@@ -1571,6 +1571,40 @@ app.get('/api/compras/precio-historial', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- COMPRAS: VARIACIÓN DE PRECIOS desde el LOG de compras (última y penúltima compra real) ---
+app.get('/api/compras/variacion', async (req, res) => {
+  try {
+    const compras = await col('compras').get();
+    const porItem = {};
+    compras.docs.forEach(d => {
+      const a = d.data();
+      const p = parseFloat(a.precio) || 0;
+      if (p <= 0) return;
+      const k = normNombre(a.nombre);
+      if (!k) return;
+      if (!porItem[k]) porItem[k] = [];
+      porItem[k].push({ fecha: a.fecha || '', precio: p, nombre: a.nombre, destino: a.destino || '' });
+    });
+    const out = [];
+    Object.entries(porItem).forEach(([k, lista]) => {
+      lista.sort((a, b) => a.fecha.localeCompare(b.fecha));
+      if (lista.length < 2) return;
+      const ant = lista[lista.length - 2];
+      const ult = lista[lista.length - 1];
+      if (ant.precio <= 0 || ult.precio <= 0) return;
+      if (Math.abs(ult.precio - ant.precio) <= 0.001) return;
+      out.push({
+        nombre: ult.nombre, // nombre original de la última compra (para mostrar)
+        anterior_precio: Math.round(ant.precio * 100) / 100, anterior_fecha: ant.fecha,
+        ultimo_precio: Math.round(ult.precio * 100) / 100, ultimo_fecha: ult.fecha,
+        destino: ult.destino
+      });
+    });
+    out.sort((a, b) => (b.ultimo_precio / (b.anterior_precio || 1)) - (a.ultimo_precio / (a.anterior_precio || 1)));
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- COMPRAS: detalle de compras/ingresos registrados por fecha o rango de fechas ---
 app.get('/api/compras/detalle', async (req, res) => {
   try {

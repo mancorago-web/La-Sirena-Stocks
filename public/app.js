@@ -403,62 +403,43 @@ function unificarItemsBaseDatos() {
 }
 
 function verVariacionPrecios() {
-  const vistos = new Set();
-  const conVariacion = (_bdUnificada || []).filter(x => {
-    const ult = parseFloat(x.ultimo_precio_compra) || 0;
-    const ant = parseFloat(x.precio_anterior_compra) || 0;
-    // Solo items con COMPRA PREVIA real (fecha del precio anterior registrada): un item con 1 sola
-    // compra (precio anterior viejo sin respaldo) no debe aparecer como variación.
-    if (!(ant > 0 && ult > 0 && Math.abs(ult - ant) > 0.001 && !!x.precio_anterior_compra_fecha)) return false;
-    // Saltar duplicados que el usuario ya marcó como tal en BASE DE DATOS UNIFICADA
-    if (_bdNoDup.includes(String(x.nombre || '').trim().toUpperCase())) return false;
-    // DEDUP: un item que existe en varias zonas (STOCKS/BARRA/COCINA) se muestra UNA sola vez
-    const nk = String(x.nombre || '').trim().toUpperCase();
-    if (vistos.has(nk)) return false;
-    vistos.add(nk);
-    return true;
-  });
-  const body = document.getElementById('modal-body');
-  if (!conVariacion.length) {
-    body.innerHTML = '<h3>📈 VARIACIÓN DE PRECIOS</h3><p style="margin-top:0.75rem;color:#666;">No hay items con variación de precio desde la última compra.</p><div style="margin-top:1.5rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
+  api('GET', '/api/compras/variacion').then(conVariacion => {
+    const body = document.getElementById('modal-body');
+    if (!conVariacion || !conVariacion.length) {
+      body.innerHTML = '<h3>📈 VARIACIÓN DE PRECIOS</h3><p style="margin-top:0.75rem;color:#666;">No hay items con variación de precio entre sus últimas dos compras.</p><div style="margin-top:1.5rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
+      document.getElementById('modal').style.display = 'block';
+      return;
+    }
+    const filas = conVariacion.map(x => {
+      const ant = parseFloat(x.anterior_precio) || 0;
+      const ult = parseFloat(x.ultimo_precio) || 0;
+      const dif = ult - ant;
+      const pct = (dif / ant) * 100;
+      const up = dif > 0;
+      const fAnt = x.anterior_fecha ? ' <span style="font-weight:400;font-size:0.75rem;color:#aaa;">(' + esc(x.anterior_fecha) + ')</span>' : '';
+      const fUlt = x.ultimo_fecha ? ' <span style="font-weight:400;font-size:0.75rem;color:#aaa;">(' + esc(x.ultimo_fecha) + ')</span>' : '';
+      return `<tr data-nombre="${esc(x.nombre)}" data-ult-fecha="${esc(x.ultimo_fecha || '')}" data-ant-fecha="${esc(x.anterior_fecha || '')}">
+        <td>${esc(x.nombre)}</td>
+        <td style="color:#888;">S/${ant.toFixed(2)}${fAnt}</td>
+        <td style="font-weight:700;">S/${ult.toFixed(2)}${fUlt}</td>
+        <td style="color:${up ? '#2e7d32' : '#c62828'};font-weight:700;">${up ? '▲ +' : '▼ '}S/${Math.abs(dif).toFixed(2)} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%)</td>
+      </tr>`;
+    }).join('');
+    body.innerHTML = '<h3>📈 VARIACIÓN DE PRECIOS</h3>'
+      + '<p style="font-size:0.8rem;color:#666;margin:0.4rem 0;">Compara la <b>última compra</b> con la compra <b>anterior</b> de cada item (desde el log de compras, ' + conVariacion.length + ').</p>'
+      + '<div style="margin:0.5rem 0;display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;">'
+        + '<label style="font-size:0.8rem;color:#555;">Desde: <input type="date" id="variacion-fecha-ini" onchange="filtrarVariacion(document.getElementById(\'buscar-variacion\').value)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></label>'
+        + '<label style="font-size:0.8rem;color:#555;">Hasta: <input type="date" id="variacion-fecha-fin" onchange="filtrarVariacion(document.getElementById(\'buscar-variacion\').value)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></label>'
+        + '<input type="text" id="buscar-variacion" placeholder="🔍 Buscar item..." style="flex:1;min-width:150px;padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;" oninput="filtrarVariacion(this.value)">'
+      + '</div>'
+      + '<p style="font-size:0.75rem;color:#888;margin:0 0 0.4rem 0;">Las fechas filtran por la fecha de la <b>última compra</b>.</p>'
+      + '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Precio anterior (fecha)</th><th>Último precio (fecha)</th><th>Variación</th></tr></thead><tbody id="variacion-precios-body">' + filas + '</tbody></table></div>'
+      + '<div id="variacion-historial" style="margin-top:0.75rem;"></div>'
+      + '<div style="margin-top:1rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
+    const mc = document.querySelector('.modal-content');
+    if (mc) mc.classList.add('modal-wide');
     document.getElementById('modal').style.display = 'block';
-    return;
-  }
-  conVariacion.sort((a, b) => {
-    const ra = (parseFloat(a.ultimo_precio_compra) / (parseFloat(a.precio_anterior_compra) || 1));
-    const rb = (parseFloat(b.ultimo_precio_compra) / (parseFloat(b.precio_anterior_compra) || 1));
-    return rb - ra;
-  });
-  const filas = conVariacion.map(x => {
-    const ult = parseFloat(x.ultimo_precio_compra) || 0;
-    const ant = parseFloat(x.precio_anterior_compra) || 0;
-    const dif = ult - ant;
-    const pct = (dif / ant) * 100;
-    const up = dif > 0;
-    const fAnt = x.precio_anterior_compra_fecha ? ' <span style="font-weight:400;font-size:0.75rem;color:#aaa;">(' + esc(x.precio_anterior_compra_fecha) + ')</span>' : '';
-    const fUlt = x.ultimo_precio_compra_fecha ? ' <span style="font-weight:400;font-size:0.75rem;color:#aaa;">(' + esc(x.ultimo_precio_compra_fecha) + ')</span>' : '';
-    const notaAnt = x.precio_anterior_compra_fecha ? '' : ' <span style="font-weight:400;font-size:0.75rem;color:#e65100;">(sin compra previa)</span>';
-    return `<tr data-nombre="${esc(x.nombre)}" data-ult-fecha="${esc(x.ultimo_precio_compra_fecha || '')}" data-ant-fecha="${esc(x.precio_anterior_compra_fecha || '')}">
-      <td>${esc(x.nombre)}</td>
-      <td style="color:#888;">S/${ant.toFixed(2)}${fAnt}${notaAnt}</td>
-      <td style="font-weight:700;">S/${ult.toFixed(2)}${fUlt}</td>
-      <td style="color:${up ? '#2e7d32' : '#c62828'};font-weight:700;">${up ? '▲ +' : '▼ '}S/${Math.abs(dif).toFixed(2)} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%)</td>
-    </tr>`;
-  }).join('');
-  body.innerHTML = '<h3>📈 VARIACIÓN DE PRECIOS</h3>'
-    + '<p style="font-size:0.8rem;color:#666;margin:0.4rem 0;">Items cuyo último precio de compra varió respecto a la compra anterior (' + conVariacion.length + ').</p>'
-    + '<div style="margin:0.5rem 0;display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;">'
-      + '<label style="font-size:0.8rem;color:#555;">Desde: <input type="date" id="variacion-fecha-ini" onchange="filtrarVariacion(document.getElementById(\'buscar-variacion\').value)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></label>'
-      + '<label style="font-size:0.8rem;color:#555;">Hasta: <input type="date" id="variacion-fecha-fin" onchange="filtrarVariacion(document.getElementById(\'buscar-variacion\').value)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></label>'
-      + '<input type="text" id="buscar-variacion" placeholder="🔍 Buscar item..." style="flex:1;min-width:150px;padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;" oninput="filtrarVariacion(this.value)">'
-    + '</div>'
-    + '<p style="font-size:0.75rem;color:#888;margin:0 0 0.4rem 0;">Las fechas filtran por la fecha del <b>último precio</b> (cuando se registró la compra).</p>'
-    + '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Precio anterior (fecha)</th><th>Último precio (fecha)</th><th>Variación</th></tr></thead><tbody id="variacion-precios-body">' + filas + '</tbody></table></div>'
-    + '<div id="variacion-historial" style="margin-top:0.75rem;"></div>'
-    + '<div style="margin-top:1rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
-  const mc = document.querySelector('.modal-content');
-  if (mc) mc.classList.add('modal-wide');
-  document.getElementById('modal').style.display = 'block';
+  }).catch(() => { alert('Error al cargar variación de precios'); });
 }
 
 function filtrarVariacion(term) {
