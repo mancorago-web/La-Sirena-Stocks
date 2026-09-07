@@ -7632,7 +7632,7 @@ function editarCompra(id) {
     <p style="color:#666;margin-top:0.5rem;font-size:0.85rem;"><b>${esc(r.nombre)}</b> · ${esc(r.destino || '').toUpperCase()} · Fecha ${r.fecha || '—'}</p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-top:1rem;">
       <label style="font-size:0.82rem;color:#555;">Cantidad
-        <input type="number" id="edit-compra-cant" step="0.01" min="0" value="${r.cantidad}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
+        <input type="number" id="edit-compra-cant" step="0.01" min="0" value="${r.cantidad}" oninput="onEditCompraCantidad()" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
       </label>
       <label style="font-size:0.82rem;color:#555;">Precio Unidad (S/)
         <input type="number" id="edit-compra-precio-uni" step="0.01" min="0" value="${precioUni || ''}" oninput="onEditCompraPrecioUni()" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
@@ -7665,6 +7665,14 @@ function onEditCompraPrecioUni() {
   const pu = parseFloat(document.getElementById('edit-compra-precio-uni')?.value) || 0;
   const tot = document.getElementById('edit-compra-precio-total');
   if (tot) tot.value = pu > 0 ? Math.round(pu * cant * 100) / 100 : '';
+}
+
+// Al editar CANTIDAD se MANTIENE el PRECIO TOTAL y se recalcula el P.UNIDAD = total / cantidad.
+function onEditCompraCantidad() {
+  const cant = parseFloat(document.getElementById('edit-compra-cant')?.value) || 0;
+  const tot = parseFloat(document.getElementById('edit-compra-precio-total')?.value) || 0;
+  const pu = document.getElementById('edit-compra-precio-uni');
+  if (pu) pu.value = (tot > 0 && cant > 0) ? Math.round((tot / cant) * 100) / 100 : '';
 }
 
 function onEditCompraPrecioTotal() {

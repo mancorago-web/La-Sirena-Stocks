@@ -1801,6 +1801,9 @@ app.put('/api/compras/:id', authMiddleware, async (req, res) => {
     };
     if (categoria !== undefined) upd.categoria = String(categoria || '').trim().toUpperCase();
     await logRef.update(upd);
+    // Al editar una compra (cantidad/precio), actualizar el precio del item en las recetas (BARRA/COCINA)
+    const nuevoPrecio = parseFloat(precio) || 0;
+    if (nuevoPrecio > 0) await registrarUltimoPrecioCompra(nombre, nuevoPrecio, log.destino, fechaLog);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
