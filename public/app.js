@@ -403,12 +403,20 @@ function unificarItemsBaseDatos() {
 }
 
 function verVariacionPrecios() {
+  const vistos = new Set();
   const conVariacion = (_bdUnificada || []).filter(x => {
     const ult = parseFloat(x.ultimo_precio_compra) || 0;
     const ant = parseFloat(x.precio_anterior_compra) || 0;
     // Solo items con COMPRA PREVIA real (fecha del precio anterior registrada): un item con 1 sola
     // compra (precio anterior viejo sin respaldo) no debe aparecer como variación.
-    return ant > 0 && ult > 0 && Math.abs(ult - ant) > 0.001 && !!x.precio_anterior_compra_fecha;
+    if (!(ant > 0 && ult > 0 && Math.abs(ult - ant) > 0.001 && !!x.precio_anterior_compra_fecha)) return false;
+    // Saltar duplicados que el usuario ya marcó como tal en BASE DE DATOS UNIFICADA
+    if (_bdNoDup.includes(String(x.nombre || '').trim().toUpperCase())) return false;
+    // DEDUP: un item que existe en varias zonas (STOCKS/BARRA/COCINA) se muestra UNA sola vez
+    const nk = String(x.nombre || '').trim().toUpperCase();
+    if (vistos.has(nk)) return false;
+    vistos.add(nk);
+    return true;
   });
   const body = document.getElementById('modal-body');
   if (!conVariacion.length) {
