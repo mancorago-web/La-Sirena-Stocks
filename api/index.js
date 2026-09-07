@@ -1981,15 +1981,16 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
       continue;
     }
     const esConteo = COUNT_UNITS.has(uRec);
-    // 1) Descuento DIRECTO 1:1 contra items con la MISMA unidad (o ambas de conteo).
+    // 1) Descuento DIRECTO 1:1 SOLO cuando la receta y el stock usan la MISMA unidad de conteo.
+    //    Para unidades de conteo DISTINTAS (ej. la receta usa GOTAS y el stock es una BOTELLA),
+    //    NO se descuenta 1:1 (2 gotas NO son 2 botellas): se deja caer a la conversión por onzas.
     let restante = cant;
     for (const m of matches) {
       if (restante <= 0.0001) break;
       const si = m.item || m;
       const uStock = normalizeUnit(si.data.unidad || 'unidad');
       const mismaUnidad = (uStock === uRec);
-      const ambasConteo = esConteo && COUNT_UNITS.has(uStock);
-      if (!(mismaUnidad || ambasConteo)) continue;
+      if (!mismaUnidad) continue;
       const disp = parseFloat(si.data.cantidad) || 0;
       const aDescontar = Math.min(disp, restante);
       batch.update(si.ref, { cantidad: Math.round((disp - aDescontar) * 100) / 100, updated_at: new Date().toISOString() });
