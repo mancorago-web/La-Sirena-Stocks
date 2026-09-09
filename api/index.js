@@ -580,9 +580,21 @@ app.get('/api/resumen/items', async (req, res) => {
 });
 
 // --- GUARDAR DÍA ---
-// Items que NO están en la categoría BARRA pero cuyas SALIDAS de STOCK también van a BARRA/STOCK
-// (ej. AGUA CON GAS SAN LUIS PLASTICO X 625 ML). Se comparan por nombre normalizado.
-const NOMBRES_BARRA_AUTO = new Set(['AGUA CON GAS SAN LUIS PLASTICO X 625 ML']);
+// Items cuyas SALIDAS de STOCK van a BARRA/STOCK aunque NO tengan categoría (se comparan por nombre
+// normalizado). Incluye items de categoría BARRA que quedaron sin el campo categoria en inventario.
+const NOMBRES_BARRA_AUTO = new Set([
+  'AGUA CON GAS SAN LUIS PLASTICO X 625 ML',
+  'VODKA SMIRNOFF X 700ML',
+  'GINGER ALE EVERVESS 1.5L'
+]);
+// Items cuyas SALIDAS de STOCK van a COCINA/STOCK (salidas diarias de cocina) aunque no tengan categoría.
+const NOMBRES_COCINA_AUTO = new Set([
+  'VINO CLOS TINTO X1L',
+  'NESTLE - CREMA DE LECHE LATAS',
+  'NESTLE LECHE CONDENSADA 393G LATAS',
+  'LECHE EVAPORADA LATA 390G',
+  'ACEITE DE TRUFA X 250ML'
+]);
 
 async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
   if (!fecha || !registros) throw new Error('fecha y registros requeridos');
@@ -795,30 +807,36 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
       if (Array.isArray(doc.destino_salidas)) return sumDest(doc.destino_salidas, tipo);
       return String(doc.destino_salida || '').toLowerCase() === tipo ? (doc.salida_almacen || 0) : 0;
     };
-    const nuevoCoc = sumDest(r.destino_salidas, 'cocina') || (String(r.destino_salida || '') === 'cocina' ? salida : 0);
-    const cocinaNet = nuevoCoc - montoDest(prev, 'cocina');
-    if (cocinaNet !== 0) {
-      const nCoc = invDocMap[Number(r.almacen_id) + '_' + Number(r.item_id)];
-      if (nCoc && nCoc.nombre) cocinaStockAjustes.push({ nombre: nCoc.nombre, delta: cocinaNet, unidad: 'unidad' });
-    }
-    const nBar = invDocMap[Number(r.almacen_id) + '_' + Number(r.item_id)];
-    // AUTOMATIZACIÓN: salidas de items con categoría BARRA van 100% a BARRA/STOCK (MUEBLE DE ABAJO)
-    // aunque no se seleccione destino. Se respetan destinos explícitos distintos (cocina/juan/COPAS)
-    // y las transferencias entre almacenes (stocks). Idempotente: revierte el aporte previo.
-    const esCatBarra = !!(nBar && (String(nBar.categoria || '').toUpperCase() === 'BARRA' || (nBar.nombre && NOMBRES_BARRA_AUTO.has(normNombre(nBar.nombre)))));
+    const nCoc = invDocMap[Number(r.almacen_id) + '_' + Number(r.item_id)];
     const destinoPrim = String(r.destino_salida || '').toLowerCase();
     const esTransferStocks = destinoPrim === 'stocks' || (Array.isArray(r.transferencias) && r.transferencias.length > 0);
-    const otroExplicito = (destinoPrim !== '' && destinoPrim !== 'barra' && destinoPrim !== 'stocks')
+    // AUTOMATIZACIÓN: salidas de items con categoría BARRA/COCINA (o nombres en la lista) van solas a
+    // su destino aunque no se seleccione. Se respetan destinos explícitos distintos y las transferencias.
+    const esCatCocina = !!(nCoc && (String(nCoc.categoria || '').toUpperCase() === 'COCINA' || (nCoc.nombre && NOMBRES_COCINA_AUTO.has(normNombre(nCoc.nombre)))));
+    const esCatBarra = !!(nCoc && (String(nCoc.categoria || '').toUpperCase() === 'BARRA' || (nCoc.nombre && NOMBRES_BARRA_AUTO.has(normNombre(nCoc.nombre)))));
+    const otroBarra = (destinoPrim !== '' && destinoPrim !== 'barra' && destinoPrim !== 'stocks')
       || (Array.isArray(r.destino_salidas) && r.destino_salidas.some(d => String(d.destino).toLowerCase() !== 'barra'));
+    const otroCocina = (destinoPrim !== '' && destinoPrim !== 'cocina' && destinoPrim !== 'stocks')
+      || (Array.isArray(r.destino_salidas) && r.destino_salidas.some(d => String(d.destino).toLowerCase() !== 'cocina'));
+    let nuevoCoc = sumDest(r.destino_salidas, 'cocina') || (destinoPrim === 'cocina' ? salida : 0);
+    let cocinaAuto = false;
+    if (esCatCocina && !esCatBarra && nuevoCoc === 0 && !esTransferStocks && !otroCocina && salida > 0) {
+      nuevoCoc = salida;
+      cocinaAuto = true;
+    }
+    const cocinaNet = nuevoCoc - montoDest(prev, 'cocina');
+    if (cocinaNet !== 0) {
+      if (nCoc && nCoc.nombre) cocinaStockAjustes.push({ nombre: nCoc.nombre, delta: cocinaNet, unidad: 'unidad' });
+    }
     let nuevoBar = sumDest(r.destino_salidas, 'barra') || (destinoPrim === 'barra' ? salida : 0);
     let barraAuto = false;
-    if (esCatBarra && nuevoBar === 0 && !esTransferStocks && !otroExplicito && salida > 0) {
+    if (esCatBarra && nuevoBar === 0 && !esTransferStocks && !otroBarra && salida > 0) {
       nuevoBar = salida;
       barraAuto = true;
     }
     const barraNet = nuevoBar - montoDest(prev, 'barra');
     if (barraNet !== 0) {
-      if (nBar && nBar.nombre) barraStockAjustes.push({ nombre: nBar.nombre, delta: barraNet, unidad: 'unidad', grupo: (opts && opts.barraGrupoNuevo) || 'MUEBLE DE ABAJO' });
+      if (nCoc && nCoc.nombre) barraStockAjustes.push({ nombre: nCoc.nombre, delta: barraNet, unidad: 'unidad', grupo: (opts && opts.barraGrupoNuevo) || 'MUEBLE DE ABAJO' });
     }
 
     // Solo se propagan los items cuyos valores CAMBIARON realmente (comparando con lo ya guardado).
@@ -850,7 +868,7 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
     if (r.falta_almacen !== undefined) data.falta_almacen = falta;
     if (r.stock_baja !== undefined) data.stock_baja = baja;
     if (r.nota_baja !== undefined) data.nota_baja = notaBaja;
-    if (r.destino_salida !== undefined || barraAuto) data.destino_salida = barraAuto ? 'barra' : String(r.destino_salida || '');
+    if (r.destino_salida !== undefined || barraAuto || cocinaAuto) data.destino_salida = barraAuto ? 'barra' : (cocinaAuto ? 'cocina' : String(r.destino_salida || ''));
     // Desglose de destinos (varias salidas del mismo item a destinos distintos, ej. COPAS x4 + JUAN x1)
     if (r.destino_salidas !== undefined) {
       data.destino_salidas = Array.isArray(r.destino_salidas)
