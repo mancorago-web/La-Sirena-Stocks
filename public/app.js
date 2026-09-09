@@ -4876,10 +4876,22 @@ function cargarStockBarra() {
     groups['SIN CLASIFICAR'] = [];
     data.forEach(s => {
       const key = (s.grupo || '').toUpperCase();
+      const cant = parseFloat(s.cantidad) || 0;
+      // Ocultar items en 0 fuera de COMPRAS DIARIAS (ahí se necesitan visibles para los pedidos)
+      if (cant === 0 && key !== 'COMPRAS DIARIAS') return;
       (groups[key] || groups['SIN CLASIFICAR']).push(s);
     });
-    // Mismo orden visual en todos los grupos (alfabético)
-    Object.keys(groups).forEach(g => groups[g].sort((a, b) => String(a.ingrediente || '').localeCompare(String(b.ingrediente || ''), 'es')));
+    // Mismo orden visual (alfabético); en COMPRAS DIARIAS los items en 0 van al final de la lista
+    Object.keys(groups).forEach(g => {
+      groups[g].sort((a, b) => {
+        if (g === 'COMPRAS DIARIAS') {
+          const az = (parseFloat(a.cantidad) || 0) === 0;
+          const bz = (parseFloat(b.cantidad) || 0) === 0;
+          if (az !== bz) return az ? 1 : -1;
+        }
+        return String(a.ingrediente || '').localeCompare(String(b.ingrediente || ''), 'es');
+      });
+    });
     function fila(s, sinOnzas) {
       const esCompras = sinOnzas === true;
       const onz = esCompras ? '' : formatoOnzas(calcularOnzas(s));
@@ -5016,7 +5028,7 @@ function verStockBarraGeneral() {
     };
     stock.forEach(s => agregar(s.ingrediente, parseFloat(s.cantidad) || 0, s.unidad, (s.grupo || 'SIN CLASIFICAR').toUpperCase()));
     itemsAbajoBarra.forEach(it => agregar(it.nombre, parseFloat(it.cantidad) || 0, 'unidad', 'ALM. GENERAL ABAJO'));
-    const items = Object.values(porNombre);
+    const items = Object.values(porNombre).filter(i => (parseFloat(i.total) || 0) !== 0);
     const cats = {};
     CATEGORIAS.forEach(c => cats[c.label] = []);
     cats['OTROS'] = [];
