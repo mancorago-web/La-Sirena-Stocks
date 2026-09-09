@@ -4835,6 +4835,8 @@ function cargarSugerenciasStock() {
   }).catch(e => console.error('Error cargando sugerencias de busqueda:', e));
 }
 
+let _barraBloqueo = { bloqueado: false, muebles: GRUPOS_BARRA };
+
 function cargarStockBarra() {
   // Preservar las categorías abiertas (no colapsar al guardar/refrescar)
   const abiertas = new Set();
@@ -4860,7 +4862,8 @@ function cargarStockBarra() {
   }
   const url = esHoy ? '/api/barra/stock' : '/api/barra/stock?fecha=' + fecha;
   api('GET', url).then(data => {
-    return getInventario(fecha).then(invData => {
+    return Promise.all([getInventario(fecha), api('GET', '/api/barra/bloqueo').catch(() => ({ bloqueado: false, muebles: GRUPOS_BARRA }))]).then(([invData, bloqueo]) => {
+    _barraBloqueo = bloqueo || { bloqueado: false, muebles: GRUPOS_BARRA };
     const container = document.getElementById('barra-stock-container');
     if (!data.length) {
       container.innerHTML = '<p>No hay ingredientes en stock' + (esHoy ? '. Agrega uno nuevo.' : ' para esta fecha.') + '</p>';
@@ -4911,6 +4914,17 @@ function cargarStockBarra() {
           ${tdOnzas}
           <td>${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
           <td></td>
+        </tr>`;
+      }
+      const bloqueado = _barraBloqueo.bloqueado && GRUPOS_BARRA.includes((s.grupo || '').toUpperCase());
+      if (bloqueado) {
+        return `<tr data-stock-id="${s.id}" data-bloqueado="1" data-orig-cantidad="${s.cantidad}"${cls}>
+          <td class="stock-nombre">${nombreConNota}</td>
+          <td class="stock-cant-bloqueada" title="Conteo semanal de BARRA pendiente: cantidad bloqueada">${s.cantidad} 🔒</td>
+          <td>${s.unidad}</td>
+          ${tdOnzas}
+          <td>${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
+          <td style="color:#777;font-size:0.75rem;">bloqueado</td>
         </tr>`;
       }
       const opts = GRUPOS_BARRA_CON_COMPRAS.map(g => `<option value="${g}" ${((s.grupo || '').toUpperCase() === g) ? 'selected' : ''}>${g}</option>`).join('');
@@ -5193,6 +5207,7 @@ function guardarStockBarra() {
   const rows = document.querySelectorAll('#barra-stock-container tr[data-stock-id]');
   const updates = [];
   rows.forEach(tr => {
+    if (tr.getAttribute('data-bloqueado') === '1') return;
     const id = Number(tr.getAttribute('data-stock-id'));
     const cantN = parseFloat(tr.querySelector('.input-stock-cant').value) || 0;
     const uni = tr.querySelector('.select-stock-uni').value;

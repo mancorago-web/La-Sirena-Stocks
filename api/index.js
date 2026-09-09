@@ -3261,6 +3261,30 @@ function normalizeGrupo(g) {
   return GRUPOS_BARRA.find(x => x === up) || '';
 }
 
+// Bloqueo de CANTIDAD en los muebles de BARRA (conteo semanal). La config se guarda en
+// config/barra_bloqueo y se activa/desactiva sin redeploy.
+async function getBarraBloqueo() {
+  const doc = await col('config').doc('barra_bloqueo').get();
+  const d = doc.exists ? doc.data() : {};
+  return {
+    bloqueado: d.bloqueado === true,
+    muebles: Array.isArray(d.muebles) && d.muebles.length ? d.muebles : GRUPOS_BARRA
+  };
+}
+app.get('/api/barra/bloqueo', async (req, res) => {
+  res.json(await getBarraBloqueo());
+});
+app.post('/api/barra/bloqueo', authMiddleware, async (req, res) => {
+  const { bloqueado, muebles } = req.body;
+  const prev = await getBarraBloqueo();
+  await col('config').doc('barra_bloqueo').set({
+    bloqueado: bloqueado === true,
+    muebles: Array.isArray(muebles) && muebles.length ? muebles : prev.muebles,
+    updated_at: new Date().toISOString()
+  });
+  res.json({ ok: true });
+});
+
 app.get('/api/barra/stock', async (req, res) => {
   const { fecha } = req.query;
   const hoy = new Date().toISOString().split('T')[0];
@@ -3315,6 +3339,17 @@ app.post('/api/barra/stock', async (req, res) => {
 
 app.put('/api/barra/stock/:id', async (req, res) => {
   const { cantidad, ingrediente, unidad, grupo } = req.body;
+  if (cantidad !== undefined) {
+    const refDoc = col('barra_stock').doc(req.params.id);
+    const docActual = await refDoc.get();
+    if (docActual.exists) {
+      const { bloqueado, muebles } = await getBarraBloqueo();
+      const grp = String(docActual.data().grupo || '').toUpperCase();
+      if (bloqueado && muebles.some(m => String(m).toUpperCase() === grp)) {
+        return res.status(403).json({ error: 'CANTIDAD bloqueada en ' + grp + ' (conteo semanal de BARRA pendiente). No se puede editar manualmente.' });
+      }
+    }
+  }
   const upd = { updated_at: new Date().toISOString() };
   if (cantidad !== undefined) upd.cantidad = cantidad;
   if (ingrediente) upd.ingrediente = ingrediente;
@@ -3325,6 +3360,14 @@ app.put('/api/barra/stock/:id', async (req, res) => {
 });
 
 app.delete('/api/barra/stock/:id', async (req, res) => {
+  const docActual = await col('barra_stock').doc(req.params.id).get();
+  if (docActual.exists) {
+    const { bloqueado, muebles } = await getBarraBloqueo();
+    const grp = String(docActual.data().grupo || '').toUpperCase();
+    if (bloqueado && muebles.some(m => String(m).toUpperCase() === grp)) {
+      return res.status(403).json({ error: 'Item en ' + grp + ' está bloqueado (conteo semanal de BARRA pendiente). No se puede eliminar.' });
+    }
+  }
   await col('barra_stock').doc(req.params.id).delete();
   res.json({ ok: true });
 });
