@@ -2110,12 +2110,11 @@ function buildDestinoRows(i) {
     return '';
   } else {
     const NOMBRES_BARRA_AUTO = ['AGUA CON GAS SAN LUIS PLASTICO X 625 ML', 'VODKA SMIRNOFF X 700ML', 'GINGER ALE EVERVESS 1.5L'];
-    const NOMBRES_COCINA_AUTO = ['VINO CLOS TINTO X1L', 'NESTLE - CREMA DE LECHE LATAS', 'NESTLE LECHE CONDENSADA 393G LATAS', 'LECHE EVAPORADA LATA 390G', 'ACEITE DE TRUFA X 250ML'];
+    const RE_BARRA = /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF|PISCO PORTON ACHOLADO/i;
     const nrm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-    const cat = String(i.categoria || '').toUpperCase();
-    const enBarra = cat === 'BARRA' || NOMBRES_BARRA_AUTO.some(n => nrm(i.nombre) === nrm(n));
-    const enCocina = cat === 'COCINA' || NOMBRES_COCINA_AUTO.some(n => nrm(i.nombre) === nrm(n));
-    const destinoDef = !i.destino_salida ? (enBarra ? 'barra' : (enCocina ? 'cocina' : '')) : i.destino_salida;
+    const enBarra = String(i.categoria || '').toUpperCase() === 'BARRA' || NOMBRES_BARRA_AUTO.some(n => nrm(i.nombre) === nrm(n)) || RE_BARRA.test(i.nombre);
+    // Todo lo que NO es del grupo BARRA va a COCINA por defecto (se puede cambiar manualmente)
+    const destinoDef = !i.destino_salida ? (enBarra ? 'barra' : 'cocina') : i.destino_salida;
     rows = [{ destino: destinoDef, cantidad: i.salida_almacen || 0 }];
   }
   if (!rows.length) return '';

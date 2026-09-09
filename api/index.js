@@ -590,14 +590,6 @@ const NOMBRES_BARRA_AUTO = new Set([
 // Respaldo: mismo test del GRUPO BARRA que usa la app en ALMACENES/SALIDAS (por nombre). Así cualquier
 // item que aparezca en el grupo BARRA va a BARRA/STOCK aunque aún no tenga categoria='BARRA'.
 const RE_BARRA_GRUPO = /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF|PISCO PORTON ACHOLADO/i;
-// Items cuyas SALIDAS de STOCK van a COCINA/STOCK (salidas diarias de cocina) aunque no tengan categoría.
-const NOMBRES_COCINA_AUTO = new Set([
-  'VINO CLOS TINTO X1L',
-  'NESTLE - CREMA DE LECHE LATAS',
-  'NESTLE LECHE CONDENSADA 393G LATAS',
-  'LECHE EVAPORADA LATA 390G',
-  'ACEITE DE TRUFA X 250ML'
-]);
 
 async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
   if (!fecha || !registros) throw new Error('fecha y registros requeridos');
@@ -813,9 +805,8 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
     const nCoc = invDocMap[Number(r.almacen_id) + '_' + Number(r.item_id)];
     const destinoPrim = String(r.destino_salida || '').toLowerCase();
     const esTransferStocks = destinoPrim === 'stocks' || (Array.isArray(r.transferencias) && r.transferencias.length > 0);
-    // AUTOMATIZACIÓN: salidas de items con categoría BARRA/COCINA (o nombres en la lista) van solas a
-    // su destino aunque no se seleccione. Se respetan destinos explícitos distintos y las transferencias.
-    const esCatCocina = !!(nCoc && (String(nCoc.categoria || '').toUpperCase() === 'COCINA' || (nCoc.nombre && NOMBRES_COCINA_AUTO.has(normNombre(nCoc.nombre)))));
+    // AUTOMATIZACIÓN: los items del GRUPO BARRA van a BARRA/STOCK; TODO el resto va a COCINA/STOCK
+    // por defecto (se puede cambiar manualmente). Se respetan destinos explícitos y transferencias.
     const esCatBarra = !!(nCoc && (String(nCoc.categoria || '').toUpperCase() === 'BARRA' || (nCoc.nombre && (NOMBRES_BARRA_AUTO.has(normNombre(nCoc.nombre)) || RE_BARRA_GRUPO.test(nCoc.nombre)))));
     const otroBarra = (destinoPrim !== '' && destinoPrim !== 'barra' && destinoPrim !== 'stocks')
       || (Array.isArray(r.destino_salidas) && r.destino_salidas.some(d => String(d.destino).toLowerCase() !== 'barra'));
@@ -823,7 +814,7 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
       || (Array.isArray(r.destino_salidas) && r.destino_salidas.some(d => String(d.destino).toLowerCase() !== 'cocina'));
     let nuevoCoc = sumDest(r.destino_salidas, 'cocina') || (destinoPrim === 'cocina' ? salida : 0);
     let cocinaAuto = false;
-    if (esCatCocina && !esCatBarra && nuevoCoc === 0 && !esTransferStocks && !otroCocina && salida > 0) {
+    if (!esCatBarra && nuevoCoc === 0 && !esTransferStocks && !otroCocina && salida > 0) {
       nuevoCoc = salida;
       cocinaAuto = true;
     }
