@@ -3869,11 +3869,21 @@ async function ajustarBarraStock(ajustes) {
         if (nueva === 0 && aj.delta < 0) batch.delete(existente.ref);
         else batch.update(existente.ref, { cantidad: nueva, updated_at: now });
       } else if (aj.delta > 0) {
-        maxId++;
-        const ref = col('barra_stock').doc(String(maxId));
-        batch.set(ref, { id: maxId, ingrediente: aj.nombre, cantidad: aj.delta, unidad: aj.unidad || 'unidad', grupo: aj.grupo, created_at: now, updated_at: now });
-        if (!byNameGrupo[key]) byNameGrupo[key] = {};
-        byNameGrupo[key][grupo] = { ref, data: { cantidad: aj.delta, grupo: aj.grupo } };
+        // Si el item ya existe en COMPRAS DIARIAS (grupo de compras/ingresos), moverlo al mueble
+        // pedido en vez de crear un duplicado (evita 2 filas del mismo item en BARRA/STOCK).
+        const enCompras = (byNameGrupo[key] || {})['COMPRAS DIARIAS'];
+        if (enCompras) {
+          const nueva = Math.max(0, (parseFloat(enCompras.data().cantidad) || 0) + aj.delta);
+          batch.update(enCompras.ref, { cantidad: nueva, grupo, updated_at: now });
+          delete byNameGrupo[key]['COMPRAS DIARIAS'];
+          byNameGrupo[key][grupo] = { ref: enCompras.ref, data: { cantidad: nueva, grupo } };
+        } else {
+          maxId++;
+          const ref = col('barra_stock').doc(String(maxId));
+          batch.set(ref, { id: maxId, ingrediente: aj.nombre, cantidad: aj.delta, unidad: aj.unidad || 'unidad', grupo: aj.grupo, created_at: now, updated_at: now });
+          if (!byNameGrupo[key]) byNameGrupo[key] = {};
+          byNameGrupo[key][grupo] = { ref, data: { cantidad: aj.delta, grupo: aj.grupo } };
+        }
       }
     } else {
       // Comportamiento por defecto: buscar por nombre (cualquier mueble), o crear en MUEBLE DE APOYO.
