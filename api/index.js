@@ -6147,13 +6147,19 @@ function calcularCosto(cantidad, unidadReceta, precioItem, unidadItem, equivMl, 
   }
 
   if (equivMl || getUnitToMl(unidadItem)) {
-    const mlReceta = (cantidad || 0) * getUnitToMl(unidadReceta);
+    let mlReceta = (cantidad || 0) * getUnitToMl(unidadReceta);
+    // La receta usa PESO (gramos/kg) de un item VOLUMÉTRICO (ml/lt): asumir densidad ~1 (1 gr ≈ 1 ml).
+    if (mlReceta === 0 && getUnitToGr(unidadReceta) > 0) mlReceta = (cantidad || 0) * getUnitToGr(unidadReceta);
     const mlItem = equivMl || getUnitToMl(unidadItem);
     if (mlReceta > 0 && mlItem > 0) return { costo: (mlReceta / mlItem) * (precioItem || 0), converted: true };
   }
 
   if (equivGr || getUnitToGr(unidadItem)) {
-    const grReceta = (cantidad || 0) * getUnitToGr(unidadReceta);
+    let grReceta = (cantidad || 0) * getUnitToGr(unidadReceta);
+    // La receta usa VOLUMEN (ml/lt/onzas) de un item PESADO (kg/gr): asumir densidad ~1 (1 ml ≈ 1 gr),
+    // regla para líquidos/salsas. Sin esto el costo caería al fallback (cantidad × precio-por-kg)
+    // dando montos absurdos (ej. 70 ml de salsa por KG → 70 × precio-por-kg).
+    if (grReceta === 0 && getUnitToMl(unidadReceta) > 0) grReceta = (cantidad || 0) * getUnitToMl(unidadReceta);
     const grItem = equivGr || getUnitToGr(unidadItem);
     if (grReceta > 0 && grItem > 0) return { costo: (grReceta / grItem) * (precioItem || 0), converted: true };
   }
