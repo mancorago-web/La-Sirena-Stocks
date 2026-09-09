@@ -587,6 +587,9 @@ const NOMBRES_BARRA_AUTO = new Set([
   'VODKA SMIRNOFF X 700ML',
   'GINGER ALE EVERVESS 1.5L'
 ]);
+// Respaldo: mismo test del GRUPO BARRA que usa la app en ALMACENES/SALIDAS (por nombre). Así cualquier
+// item que aparezca en el grupo BARRA va a BARRA/STOCK aunque aún no tenga categoria='BARRA'.
+const RE_BARRA_GRUPO = /APEROL X 750ML|BARNIDET CREMA DE PECH|BELLS JUGO CRANBERRY|GINGER ALE EVERVESS|JOSE CUERVO BLANCO|JW RED LABEL|MATACUY DESTILADO|RED BULL|RICADONNA PRO SECO|RON KINGSTON|SALQA CAÑA|VODKA ABSOLUTE|VODKA SMIRNOFF|PISCO PORTON ACHOLADO/i;
 // Items cuyas SALIDAS de STOCK van a COCINA/STOCK (salidas diarias de cocina) aunque no tengan categoría.
 const NOMBRES_COCINA_AUTO = new Set([
   'VINO CLOS TINTO X1L',
@@ -813,7 +816,7 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
     // AUTOMATIZACIÓN: salidas de items con categoría BARRA/COCINA (o nombres en la lista) van solas a
     // su destino aunque no se seleccione. Se respetan destinos explícitos distintos y las transferencias.
     const esCatCocina = !!(nCoc && (String(nCoc.categoria || '').toUpperCase() === 'COCINA' || (nCoc.nombre && NOMBRES_COCINA_AUTO.has(normNombre(nCoc.nombre)))));
-    const esCatBarra = !!(nCoc && (String(nCoc.categoria || '').toUpperCase() === 'BARRA' || (nCoc.nombre && NOMBRES_BARRA_AUTO.has(normNombre(nCoc.nombre)))));
+    const esCatBarra = !!(nCoc && (String(nCoc.categoria || '').toUpperCase() === 'BARRA' || (nCoc.nombre && (NOMBRES_BARRA_AUTO.has(normNombre(nCoc.nombre)) || RE_BARRA_GRUPO.test(nCoc.nombre)))));
     const otroBarra = (destinoPrim !== '' && destinoPrim !== 'barra' && destinoPrim !== 'stocks')
       || (Array.isArray(r.destino_salidas) && r.destino_salidas.some(d => String(d.destino).toLowerCase() !== 'barra'));
     const otroCocina = (destinoPrim !== '' && destinoPrim !== 'cocina' && destinoPrim !== 'stocks')
