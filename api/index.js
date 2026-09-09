@@ -3288,12 +3288,13 @@ app.post('/api/barra/bloqueo', authMiddleware, async (req, res) => {
 app.get('/api/barra/stock', async (req, res) => {
   const { fecha } = req.query;
   const hoy = new Date().toISOString().split('T')[0];
+  const sinCero = s => (parseFloat(s.cantidad) || 0) !== 0;
   if (fecha && fecha !== hoy) {
     const snap = await col('barra_stock_diario').where('fecha', '==', fecha).get();
-    return res.json(snap.docs.map(d => ({ ...d.data() })));
+    return res.json(snap.docs.map(d => ({ ...d.data() })).filter(sinCero));
   }
   const snap = await col('barra_stock').orderBy('id').get();
-  res.json(snap.docs.map(d => ({ id: Number(d.id), ...d.data() })));
+  res.json(snap.docs.map(d => ({ id: Number(d.id), ...d.data() })).filter(sinCero));
 });
 
 // Guarda un snapshot histórico del stock para una fecha

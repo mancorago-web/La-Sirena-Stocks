@@ -4085,8 +4085,9 @@ function exportarStockBarra() {
       ing = ing.replace(/\s*\(más en:.*?\)\s*/g, '').replace(/STOCK BAJO/g, '').trim().toUpperCase();
       let cant, uni, onz;
       if (esHoy) {
-        cant = (tr.querySelector('.input-stock-cant')?.value || '').toUpperCase();
-        uni = (tr.querySelector('.select-stock-uni')?.value || '').toUpperCase();
+        const v = leerFilaStock(tr);
+        cant = String(v.cantidad || '').toUpperCase();
+        uni = String(v.unidad || '').toUpperCase();
         onz = (tr.querySelector('.onzas-stock')?.textContent || '').toUpperCase();
       } else {
         const tds = tr.querySelectorAll('td');
@@ -4106,7 +4107,7 @@ function exportarStockBarra() {
 function exportarStockBarraGeneral() {
   const datos = window._stockBarraGeneral || { fecha: todayStr(), filas: [] };
   const wsData = [['CATEGORÍA', 'ITEM', 'TOTAL', 'UNIDAD', 'DISTRIBUCIÓN']];
-  datos.filas.forEach(f => wsData.push([
+  datos.filas.filter(f => (parseFloat(f.total) || 0) !== 0).forEach(f => wsData.push([
     String(f.categoria || '').toUpperCase(),
     String(f.nombre || '').replace(/\s*\(más en:.*?\)\s*/g, '').trim().toUpperCase(),
     f.total,
@@ -5153,16 +5154,28 @@ function cargarConsumoNoRegistrado(fecha, container) {
   }).catch(() => {});
 }
 
+// Lee cantidad/unidad/grupo de una fila de BARRA/STOCK (funciona en filas editables, bloqueadas e históricas)
+function leerFilaStock(tr) {
+  const tds = tr.querySelectorAll('td');
+  const cantEl = tr.querySelector('.input-stock-cant') || tr.querySelector('.input-num');
+  return {
+    cantidad: cantEl ? (cantEl.value || 0) : (tds[1]?.textContent || 0),
+    unidad: (tr.querySelector('.select-stock-uni')?.value || (tds[2]?.textContent || '')).trim(),
+    grupo: (tr.querySelector('.select-stock-grupo')?.value || (tds[4]?.textContent || '')).trim()
+  };
+}
+
 function guardarSnapshotStock() {
   const fecha = document.getElementById('fecha-stock-barra')?.value || todayStr();
   const items = [];
   document.querySelectorAll('#barra-stock-container tr[data-stock-id]').forEach(tr => {
+    const v = leerFilaStock(tr);
     items.push({
       id: tr.getAttribute('data-stock-id'),
       ingrediente: tr.querySelector('.stock-nombre')?.textContent?.trim() || '',
-      cantidad: tr.querySelector('.input-stock-cant')?.value || 0,
-      unidad: tr.querySelector('.select-stock-uni')?.value || '',
-      grupo: tr.querySelector('.select-stock-grupo')?.value || ''
+      cantidad: v.cantidad,
+      unidad: v.unidad,
+      grupo: v.grupo
     });
   });
   api('POST', '/api/barra/stock/diario', { fecha, items }).catch(e => console.error('Error guardando snapshot:', e));
