@@ -580,6 +580,10 @@ app.get('/api/resumen/items', async (req, res) => {
 });
 
 // --- GUARDAR DÍA ---
+// Items que NO están en la categoría BARRA pero cuyas SALIDAS de STOCK también van a BARRA/STOCK
+// (ej. AGUA CON GAS SAN LUIS PLASTICO X 625 ML). Se comparan por nombre normalizado.
+const NOMBRES_BARRA_AUTO = new Set(['AGUA CON GAS SAN LUIS PLASTICO X 625 ML']);
+
 async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
   if (!fecha || !registros) throw new Error('fecha y registros requeridos');
 
@@ -801,7 +805,7 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
     // AUTOMATIZACIÓN: salidas de items con categoría BARRA van 100% a BARRA/STOCK (MUEBLE DE ABAJO)
     // aunque no se seleccione destino. Se respetan destinos explícitos distintos (cocina/juan/COPAS)
     // y las transferencias entre almacenes (stocks). Idempotente: revierte el aporte previo.
-    const esCatBarra = !!(nBar && String(nBar.categoria || '').toUpperCase() === 'BARRA');
+    const esCatBarra = !!(nBar && (String(nBar.categoria || '').toUpperCase() === 'BARRA' || (nBar.nombre && NOMBRES_BARRA_AUTO.has(normNombre(nBar.nombre)))));
     const destinoPrim = String(r.destino_salida || '').toLowerCase();
     const esTransferStocks = destinoPrim === 'stocks' || (Array.isArray(r.transferencias) && r.transferencias.length > 0);
     const otroExplicito = (destinoPrim !== '' && destinoPrim !== 'barra' && destinoPrim !== 'stocks')

@@ -2109,7 +2109,9 @@ function buildDestinoRows(i) {
   } else if (esStocks) {
     return '';
   } else {
-    const catBarra = String(i.categoria || '').toUpperCase() === 'BARRA';
+    const NOMBRES_BARRA_AUTO = ['AGUA CON GAS SAN LUIS PLASTICO X 625 ML'];
+    const nrm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    const catBarra = String(i.categoria || '').toUpperCase() === 'BARRA' || NOMBRES_BARRA_AUTO.some(n => nrm(i.nombre) === nrm(n));
     const destinoDef = (!i.destino_salida && catBarra) ? 'barra' : (i.destino_salida || '');
     rows = [{ destino: destinoDef, cantidad: i.salida_almacen || 0 }];
   }
