@@ -2109,7 +2109,9 @@ function buildDestinoRows(i) {
   } else if (esStocks) {
     return '';
   } else {
-    rows = [{ destino: i.destino_salida || '', cantidad: i.salida_almacen || 0 }];
+    const catBarra = String(i.categoria || '').toUpperCase() === 'BARRA';
+    const destinoDef = (!i.destino_salida && catBarra) ? 'barra' : (i.destino_salida || '');
+    rows = [{ destino: destinoDef, cantidad: i.salida_almacen || 0 }];
   }
   if (!rows.length) return '';
   return rows.map(r => {

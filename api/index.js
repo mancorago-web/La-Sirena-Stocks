@@ -797,11 +797,24 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
       const nCoc = invDocMap[Number(r.almacen_id) + '_' + Number(r.item_id)];
       if (nCoc && nCoc.nombre) cocinaStockAjustes.push({ nombre: nCoc.nombre, delta: cocinaNet, unidad: 'unidad' });
     }
-    const nuevoBar = sumDest(r.destino_salidas, 'barra') || (String(r.destino_salida || '') === 'barra' ? salida : 0);
+    const nBar = invDocMap[Number(r.almacen_id) + '_' + Number(r.item_id)];
+    // AUTOMATIZACIÓN: salidas de items con categoría BARRA van 100% a BARRA/STOCK (MUEBLE DE ABAJO)
+    // aunque no se seleccione destino. Se respetan destinos explícitos distintos (cocina/juan/COPAS)
+    // y las transferencias entre almacenes (stocks). Idempotente: revierte el aporte previo.
+    const esCatBarra = !!(nBar && String(nBar.categoria || '').toUpperCase() === 'BARRA');
+    const destinoPrim = String(r.destino_salida || '').toLowerCase();
+    const esTransferStocks = destinoPrim === 'stocks' || (Array.isArray(r.transferencias) && r.transferencias.length > 0);
+    const otroExplicito = (destinoPrim !== '' && destinoPrim !== 'barra' && destinoPrim !== 'stocks')
+      || (Array.isArray(r.destino_salidas) && r.destino_salidas.some(d => String(d.destino).toLowerCase() !== 'barra'));
+    let nuevoBar = sumDest(r.destino_salidas, 'barra') || (destinoPrim === 'barra' ? salida : 0);
+    let barraAuto = false;
+    if (esCatBarra && nuevoBar === 0 && !esTransferStocks && !otroExplicito && salida > 0) {
+      nuevoBar = salida;
+      barraAuto = true;
+    }
     const barraNet = nuevoBar - montoDest(prev, 'barra');
     if (barraNet !== 0) {
-      const nBar = invDocMap[Number(r.almacen_id) + '_' + Number(r.item_id)];
-      if (nBar && nBar.nombre) barraStockAjustes.push({ nombre: nBar.nombre, delta: barraNet, unidad: 'unidad', grupo: opts && opts.barraGrupoNuevo });
+      if (nBar && nBar.nombre) barraStockAjustes.push({ nombre: nBar.nombre, delta: barraNet, unidad: 'unidad', grupo: (opts && opts.barraGrupoNuevo) || 'MUEBLE DE ABAJO' });
     }
 
     // Solo se propagan los items cuyos valores CAMBIARON realmente (comparando con lo ya guardado).
@@ -833,7 +846,7 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
     if (r.falta_almacen !== undefined) data.falta_almacen = falta;
     if (r.stock_baja !== undefined) data.stock_baja = baja;
     if (r.nota_baja !== undefined) data.nota_baja = notaBaja;
-    if (r.destino_salida !== undefined) data.destino_salida = String(r.destino_salida || '');
+    if (r.destino_salida !== undefined || barraAuto) data.destino_salida = barraAuto ? 'barra' : String(r.destino_salida || '');
     // Desglose de destinos (varias salidas del mismo item a destinos distintos, ej. COPAS x4 + JUAN x1)
     if (r.destino_salidas !== undefined) {
       data.destino_salidas = Array.isArray(r.destino_salidas)
