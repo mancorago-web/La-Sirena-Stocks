@@ -2310,7 +2310,7 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
           });
         }
       });
-      const sinStockBarra = (resumen.noDescontados || []).filter(x => x.motivo === 'sin_stock');
+      const sinStockBarra = (resumen.noDescontados || []).filter(x => x.motivo === 'sin_stock' || x.motivo === 'sin_conversion_o_insuficiente');
       const quitar = (deducidos) => {
         if (!deducidos || !deducidos.length) return;
         const set = new Set(deducidos.map(d => String(d.ingrediente).trim().toUpperCase()));
@@ -2323,11 +2323,11 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       if (seleccionados.length) {
         try { quitar(await descontarStocksDesdeAlmacenes(seleccionados, fecha, savedBy, seleccionStocks)); } catch (e) { console.error('Error almacenes MICHELADA:', e.message); }
       }
-      // 2) AUTO desde almacenes (excluyendo gasificadora y los ya seleccionados)
-      const GASIFICADORA = new Set(['AGUA CON GAS SAN LUIS PLASTICO X 625 ML'.toUpperCase().replace(/\s+/g, '')]);
+      // 2) AUTO desde almacenes: items sin item en BARRA/STOCK (sin_stock) o con stock 0/insuficiente
+      //    (sin_conversion_o_insuficiente). Si el item existe en los ALMACENES, se descuenta de ahí.
       const autoItems = sinStockBarra.filter(x => {
         const k = String(x.ingrediente).trim().toUpperCase().replace(/\s+/g, '');
-        return !seleccionStocks[k] && !GASIFICADORA.has(k);
+        return !seleccionStocks[k];
       });
       if (autoItems.length) {
         try { quitar(await descontarStocksDesdeAlmacenes(autoItems, fecha, savedBy)); } catch (e) { console.error('Error auto almacenes:', e.message); }
@@ -4709,6 +4709,7 @@ function aOnzas(cant, unidad, nombre) {
   if (u === 'lt') return (c * 1000) / 30;
   if (u === 'gramos') return c / 28.3495;
   if (u === 'kg') return (c * 1000) / 28.3495;
+  if (u === 'gotas') return (c * 0.05) / 30; // 1 gota ≈ 0.05 ml
   if (u === 'unidad' || u === 'botella') {
     const ml = botellaParaMl(nombre);
     return ml ? (c * ml) / 30 : null;
@@ -4724,6 +4725,7 @@ function desdeOnzas(onzas, unidad, nombre) {
   if (u === 'lt') return (oz * 30) / 1000;
   if (u === 'gramos') return oz * 28.3495;
   if (u === 'kg') return (oz * 28.3495) / 1000;
+  if (u === 'gotas') return (oz * 30) / 0.05;
   if (u === 'unidad' || u === 'botella') {
     const ml = botellaParaMl(nombre);
     return ml ? (oz * 30) / ml : null;
