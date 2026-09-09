@@ -355,6 +355,12 @@ td button.danger { border-color: #c62828; color: #c62828; }
   outline: none;
   box-shadow: 0 0 0 2px rgba(26,35,126,0.15);
 }
+/* BARRA/STOCK: columna CANTIDAD con ancho fijo para alinear verticalmente en los muebles */
+#barra-stock-container .col-cant {
+  width: 95px;
+  text-align: center;
+  white-space: nowrap;
+}
 .transfer-row {
   display: flex;
   align-items: center;

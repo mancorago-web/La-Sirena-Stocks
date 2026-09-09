@@ -4877,39 +4877,17 @@ function cargarStockBarra() {
       const key = (s.grupo || '').toUpperCase();
       (groups[key] || groups['SIN CLASIFICAR']).push(s);
     });
-    // Cobertura: para cada item BAJO (muebles), ¿dónde hay más? (otro mueble/COMPRAS DIARIAS con
-    // stock, o ALMACEN GENERAL ABAJO grupo BARRA). Si está cubierto, no lleva etiqueta STOCK BAJO.
-    const conStock = data.filter(s => (parseFloat(s.cantidad) || 0) > 0.2);
-    const almacenGeneralAbajo = (invData || []).find(a => /GENERAL.*ABAJO|ABAJO.*GENERAL/i.test(a.nombre)) || (invData || []).find(a => Number(a.id) === 4);
-    const itemsAbajoBarra = (almacenGeneralAbajo ? almacenGeneralAbajo.items : [])
-      .filter(it => String(it.categoria || '').toUpperCase() === 'BARRA')
-      .map(it => ({ nombre: it.nombre, cantidad: (it.stock_cierre !== undefined && it.stock_cierre !== null) ? it.stock_cierre : (it.stock_apertura || 0) }));
-    const coverMap = {};
-    data.forEach(s => {
-      if (String(s.grupo || '').toUpperCase() === 'COMPRAS DIARIAS') return;
-      if ((parseFloat(s.cantidad) || 0) > 0.2) return;
-      const donde = [];
-      conStock.forEach(o => {
-        if (o.id !== s.id && comparteProductoBarra(s.ingrediente, o.ingrediente)) donde.push((o.grupo || 'SIN CLASIFICAR').toUpperCase());
-      });
-      const enAbajo = itemsAbajoBarra.find(it => comparteProductoBarra(s.ingrediente, it.nombre) && (parseFloat(it.cantidad) || 0) > 0);
-      if (enAbajo) donde.push('ALM. GENERAL ABAJO');
-      if (donde.length) coverMap[s.id] = [...new Set(donde)];
-    });
+    // Mismo orden visual en todos los grupos (alfabético)
+    Object.keys(groups).forEach(g => groups[g].sort((a, b) => String(a.ingrediente || '').localeCompare(String(b.ingrediente || ''), 'es')));
     function fila(s, sinOnzas) {
       const esCompras = sinOnzas === true;
       const onz = esCompras ? '' : formatoOnzas(calcularOnzas(s));
-      const bajo = !esCompras && (parseFloat(s.cantidad) || 0) <= 0.2;
-      const cubierto = bajo ? (coverMap[s.id] || null) : null;
-      const badge = bajo && !cubierto ? ' <span class="badge-stock-bajo" title="Stock bajo">STOCK BAJO</span>' : '';
-      const cls = bajo ? ' class="stock-bajo"' : '';
-      const nota = cubierto ? ' <span style="font-size:0.75rem;color:#0f3460;">(más en: ' + cubierto.join(', ') + ')</span>' : '';
-      const nombreConNota = esc(s.ingrediente) + badge + nota;
+      const nombreConNota = esc(s.ingrediente);
       const tdOnzas = esCompras ? '' : `<td class="onzas-stock">${onz}</td>`;
       if (!esHoy) {
-        return `<tr data-stock-id="${s.id}"${cls}>
+        return `<tr data-stock-id="${s.id}">
           <td class="stock-nombre">${nombreConNota}</td>
-          <td>${s.cantidad}</td>
+          <td class="col-cant">${s.cantidad}</td>
           <td>${s.unidad}</td>
           ${tdOnzas}
           <td>${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
@@ -4918,21 +4896,21 @@ function cargarStockBarra() {
       }
       const bloqueado = _barraBloqueo.bloqueado && GRUPOS_BARRA.includes((s.grupo || '').toUpperCase());
       if (bloqueado) {
-        return `<tr data-stock-id="${s.id}" data-bloqueado="1" data-orig-cantidad="${s.cantidad}"${cls}>
+        return `<tr data-stock-id="${s.id}" data-bloqueado="1">
           <td class="stock-nombre">${nombreConNota}</td>
-          <td class="stock-cant-bloqueada" title="Conteo semanal de BARRA pendiente: cantidad bloqueada">${s.cantidad} 🔒</td>
+          <td class="col-cant"><input type="number" class="input-num" value="${s.cantidad}" step="0.01" readonly title="Cantidad fija del conteo semanal (no editable)" style="background:#f0f0f0;color:#555;cursor:not-allowed;"></td>
           <td>${s.unidad}</td>
           ${tdOnzas}
           <td>${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
-          <td style="color:#777;font-size:0.75rem;">bloqueado</td>
+          <td></td>
         </tr>`;
       }
       const opts = GRUPOS_BARRA_CON_COMPRAS.map(g => `<option value="${g}" ${((s.grupo || '').toUpperCase() === g) ? 'selected' : ''}>${g}</option>`).join('');
       const uniList = UNIDADES_STOCK.includes(s.unidad) ? UNIDADES_STOCK : [...UNIDADES_STOCK, s.unidad];
       const uniOpts = uniList.map(u => `<option value="${u}" ${s.unidad === u ? 'selected' : ''}>${u}</option>`).join('');
-      return `<tr data-stock-id="${s.id}" data-orig-cantidad="${s.cantidad}" data-orig-unidad="${s.unidad}" data-orig-grupo="${(s.grupo || '').toUpperCase()}"${cls}>
+      return `<tr data-stock-id="${s.id}" data-orig-cantidad="${s.cantidad}" data-orig-unidad="${s.unidad}" data-orig-grupo="${(s.grupo || '').toUpperCase()}">
         <td class="stock-nombre">${nombreConNota}</td>
-        <td><input type="number" class="input-stock-cant" value="${s.cantidad}" step="0.01" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarOnzasFila(this); marcarStockDirty()"></td>
+        <td class="col-cant"><input type="number" class="input-num input-stock-cant" value="${s.cantidad}" step="0.01" oninput="actualizarOnzasFila(this); marcarStockDirty()"></td>
         <td><select class="select-stock-uni" onchange="onUnidadStockChange(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${uniOpts}</select></td>
         ${tdOnzas}
         <td><select class="select-stock-grupo" onchange="marcarStockDirty()" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${opts}</select></td>
@@ -4956,7 +4934,7 @@ function cargarStockBarra() {
           </div>
           <div class="accordion-body">
             <div class="table-wrap"><table>
-              <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th>${colOnzas}<th>Mueble</th><th></th></tr></thead>
+              <thead><tr><th>Ingrediente</th><th class="col-cant">Cantidad</th><th>Unidad</th>${colOnzas}<th>Mueble</th><th></th></tr></thead>
               <tbody>${items.map(i => fila(i, esCompras)).join('') || '<tr><td colspan="' + colSpan + '">Vacío.</td></tr>'}</tbody>
             </table></div>
           </div>
