@@ -958,14 +958,11 @@ function analizarVentas(esPrueba) {
     });
     const items = Object.values(uniq).map((i, idx) => { i.idx = idx; return i; });
     // Busca el mejor candidato existente (COCINA/BARRA/STOCKS) por similitud de nombre
-    // Nombres de PLATOS (traen "MENU" o terminan en "-"): se emparejan solo contra RECETAS, nunca
-    // contra ingredientes de STOCKS (evita que un plato nuevo se empareje a "ARROZ X KG" etc.).
-    const esPlato = (nombre) => /MENU|-\s*$/i.test(String(nombre || ''));
     const mejorCandidato = (nombre) => {
       const pool = [
         ...(cocinaNombres || []).map(n => ({ n, zona: 'cocina' })),
         ...(barraNombres || []).map(n => ({ n, zona: 'barra' })),
-        ...(esPlato(nombre) ? [] : (stockNombres || []).filter(n => !esBasura(n)).map(n => ({ n, zona: 'stocks' }))),
+        ...(stockNombres || []).filter(n => !esBasura(n)).map(n => ({ n, zona: 'stocks' })),
       ];
       let best = null, bestS = 0;
       pool.forEach(p => { const s = similitud(nombre, p.n); if (s > bestS) { bestS = s; best = p; } });
@@ -1027,15 +1024,11 @@ function renderVentasAsignacion(items, containerId) {
     return '<label style="display:inline-flex;align-items:center;gap:0.25rem;margin-right:0.75rem;font-size:0.85rem;cursor:pointer;"><input type="radio" name="dest-prueba-' + i.idx + '" value="' + d + '"' + checked + ' onchange="onPruebaDestinoChange(this)"> ' + d.toUpperCase() + '</label>';
   }).join('');
   const emparejar = (i) => {
-    // KOMBUCHA: siempre mostrar el selector editable para poder cambiarla manualmente a un KEFIR
-    // del mismo sabor (los meseros a veces anotan KOMBUCHA cuando vendieron un KEFIR).
+    // KOMBUCHA y platos nuevos puntuales (ej. "Fondo Menu - Atun al curry con arroz"): siempre
+    // mostrar el selector editable para emparejarlos manualmente o crear la receta nueva si no existe.
     const normMatch = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-    const esKombucha = /KOMBUCHA/i.test(i.nombre);
-    // Si el emparejamiento es EXACTO (el nombre del Excel ya es una receta/item existente), mostrar
-    // "✓ ..." directo. Si es un emparejamiento DIFUSO (nombre distinto), mostrar el selector para
-    // poder corregirlo o crear una receta nueva (ej. un plato que aún no existe en COCINA/RECETAS).
-    const esExacto = i.emparejado && normMatch(i.matched) === normMatch(i.nombre);
-    if (i.emparejado && esExacto && !esKombucha) return '<span style="color:#2e7d32;">✓ ' + esc(i.matched) + '</span><input type="hidden" class="match-ya" value="' + esc(i.matched) + '">';
+    const esSiempreEditable = /KOMBUCHA/i.test(i.nombre) || /ATUN AL CURRY CON ARROZ/i.test(i.nombre);
+    if (i.emparejado && !esSiempreEditable) return '<span style="color:#2e7d32;">✓ ' + esc(i.matched) + '</span><input type="hidden" class="match-ya" value="' + esc(i.matched) + '">';
     const candidatos = candidatosTodos(i.nombre, i.destino);
     const ya = i.emparejado ? i.matched : '';
     const marcado = (n) => ya && normMatch(ya) === normMatch(n);
