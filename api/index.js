@@ -6136,11 +6136,16 @@ function getUnitToGr(unit) {
 
 function parseEquivFromName(name) {
   if (!name) return {};
-  // El número es OPCIONAL: "X 2 KG" o "X KG" (default 1). Así los items "X KG"/"X LT" sin número
-  // (ej. PAPA AMARILLA X KG, SILLAO X LT) obtienen su equivalencia y el precio se autoactualiza.
-  const m = name.match(/x\s*(\d+(?:\.\d+)?)?\s*(L|LT|LTS|ML|KG|GR|G|OZ|ONZAS?|LITRO|LITROS|KILO|KILOS|GRAMO|GRAMOS)\b/i);
+  // 1) Patrón con "X" (ej. "X 750 ML", "X 1.8 KG", "X KG"). El número es OPCIONAL (default 1), así
+  // los items "X KG"/"X LT" sin número obtienen su equivalencia.
+  let m = String(name).match(/x\s*(\d+(?:[.,]\d+)?)?\s*(L|LT|LTS|ML|KG|GR|G|OZ|ONZAS?|LITRO|LITROS|KILO|KILOS|GRAMO|GRAMOS)\b/i);
+  if (!m) {
+    // 2) Patrón genérico sin "X" (ej. "GLORIA LECHE CAJA 31,9OZ", "PACK 200GR PESCADO", "COCA 192 ML").
+    // Toma la primera cantidad con unidad del nombre.
+    m = String(name).match(/(\d+(?:[.,]\d+)?)\s*(OZ|ONZAS?|ML|L|LT|LTS|KG|GR|G|LITRO|LITROS|KILO|KILOS|GRAMO|GRAMOS)\b/i);
+  }
   if (!m) return {};
-  const qty = m[1] ? parseFloat(m[1]) : 1;
+  const qty = m[1] ? parseFloat(String(m[1]).replace(',', '.')) : 1;
   const u = m[2].toLowerCase();
   if (['l', 'lt', 'lts', 'litro', 'litros'].includes(u)) return { equiv_ml: qty * 1000 };
   if (['ml'].includes(u)) return { equiv_ml: qty };
