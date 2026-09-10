@@ -2146,15 +2146,35 @@ async function descontarStocksDesdeAlmacenes(consumos, fecha, savedBy, seleccion
     if (!candidatos.length) continue;
     let restante = cant;
     const usados = [];
+    // BOTELLA: si el consumo viene en onzas/ml/gr y el item es un envase con tamaño (ej. "X 750 ML"),
+    // se abre la botella ENTERA (1 unidad) y el SOBRANTE pasa a BARRA/STOCK. Así no se descuentan
+    // varias botellas de más (bug previo: comparaba onzas contra botellas) y el resto queda en barra.
+    const consumoOz = aOnzas(cant, c.unidad, nombre);
+    const botellaOz = aOnzas(1, 'unidad', nombre);
+    const esBotella = botellaOz !== null && botellaOz > 0 && consumoOz !== null && consumoOz > 0;
+    let botellasFaltantes = esBotella ? Math.ceil(consumoOz / botellaOz) : 0;
+    let sobranteOz = 0;
     for (const cand of candidatos) {
-      if (restante <= 0.0001) break;
+      if (esBotella ? botellasFaltantes <= 0 : restante <= 0.0001) break;
       const d = dayDocs[fecha + '_' + cand.almacen_id + '_' + cand.item_id] || {};
       const disp = (parseFloat(d.stock_apertura) || 0) + (parseFloat(d.stock_ingreso) || 0) - (parseFloat(d.salida_almacen) || 0) - (parseFloat(d.total_ventas) || 0) - (parseFloat(d.falta_almacen) || 0) - (parseFloat(d.stock_baja) || 0);
       if (disp <= 0) continue;
-      const aDeducir = Math.min(disp, restante);
+      const aDeducir = esBotella ? Math.min(disp, botellasFaltantes) : Math.min(disp, restante);
       registros.push({ item_id: cand.item_id, almacen_id: cand.almacen_id, total_ventas: Math.round(((parseFloat(d.total_ventas) || 0) + aDeducir) * 100) / 100 });
       usados.push(alNombres[cand.almacen_id] || ('Almacén ' + cand.almacen_id));
-      restante = Math.max(0, Math.round((restante - aDeducir) * 100) / 100);
+      if (esBotella) {
+        sobranteOz += aDeducir * botellaOz;
+        botellasFaltantes -= aDeducir;
+      } else {
+        restante = Math.max(0, Math.round((restante - aDeducir) * 100) / 100);
+      }
+    }
+    // Sobrante de la botella abierta (ej. botella 750ml = 25oz, se usaron 4 -> sobran ~21oz) a BARRA/STOCK
+    if (esBotella && usados.length) {
+      sobranteOz = Math.round((sobranteOz - consumoOz) * 100) / 100;
+      if (sobranteOz > 0) {
+        try { await ajustarBarraStock([{ nombre, delta: sobranteOz, unidad: 'onzas', grupo: 'MUEBLE DE ABAJO' }]); } catch (e) { console.error('sobrante botella a BARRA:', e.message); }
+      }
     }
     if (usados.length) {
       deducidos.push({ ingrediente: nombre, cantidad: Math.round(cant * 100) / 100, descontado_de: usados });
