@@ -5721,7 +5721,7 @@ function cargarRecetasCocina(openId) {
     if (!data.length) { container.innerHTML = '<p>No hay recetas. Agrega una nueva.</p>'; return; }
     const grupos = {};
     data.forEach(r => { const cat = r.categoria || 'PLATOS'; if (!grupos[cat]) grupos[cat] = []; grupos[cat].push(r); });
-    const ordenCat = ['RECETAS BASE', 'ENTRADAS', 'FONDOS', 'POSTRES', 'PLATOS'];
+    const ordenCat = ['RECETAS BASE', 'ENTRADAS', 'ENTRADAS MENU', 'FONDOS', 'FONDOS MENU', 'POSTRES', 'POSTRES MENU', 'PLATOS'];
     const catsToRender = [...ordenCat, ...Object.keys(grupos).filter(c => !ordenCat.includes(c))];
     let html = '';
     catsToRender.forEach(cat => {
