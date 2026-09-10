@@ -5427,7 +5427,7 @@ function cargarCocinaMovimientos(tipo) {
       const container = document.getElementById(accId);
       if (!container) return;
       if (!recetas.length) { container.innerHTML = '<p>No hay recetas. Crea recetas en COCINA/RECETAS para registrar ventas.</p>'; return; }
-      const ordenCat = ['RECETAS BASE', 'ENTRADAS', 'FONDOS', 'POSTRES', 'PLATOS'];
+const ordenCat = ['RECETAS BASE', 'ENTRADAS', 'ENTRADAS MENU', 'FONDOS', 'FONDOS MENU', 'POSTRES', 'POSTRES MENU', 'PLATOS'];
       const recQty = {};
       movs.filter(m => m.es_receta !== false).forEach(m => { recQty[m.ingrediente] = (recQty[m.ingrediente] || 0) + (m.cantidad || 0); });
       // Sumar las ventas de COCINA registradas desde el apartado principal de VENTAS
@@ -5792,7 +5792,7 @@ function editarRecetaCocina(id) {
         });
         dl.innerHTML = opciones.join('');
       }
-      const cats = ['RECETAS BASE', 'ENTRADAS', 'FONDOS', 'POSTRES', 'PLATOS'];
+      const cats = ['RECETAS BASE', 'ENTRADAS', 'ENTRADAS MENU', 'FONDOS', 'FONDOS MENU', 'POSTRES', 'POSTRES MENU', 'PLATOS'];
       document.getElementById('modal-body').innerHTML = `
         <h3 style="margin-top:0">EDITAR RECETA</h3>
         <label style="font-weight:600;display:block;margin-bottom:0.2rem">Nombre</label>
