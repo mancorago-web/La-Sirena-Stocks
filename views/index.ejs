@@ -324,7 +324,7 @@
         <div class="header-actions">
           <h2>Stock Barra</h2>
           <div class="controles-dia" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-            <input type="text" id="buscar-stock-barra" placeholder="Buscar en stock..." list="sugerencia-stock-buscar" autocomplete="off" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:250px;" oninput="buscarTablaBarra(this.value, 'barra-stock-container', 'tr[data-stock-id]')" onchange="normalizarBusquedaStock(this)">
+            <input type="text" id="buscar-stock-barra" placeholder="Buscar en stock..." list="sugerencia-stock-buscar" autocomplete="off" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:250px;" oninput="buscarStockBarra(this.value)" onchange="normalizarBusquedaStock(this)">
             <datalist id="sugerencia-stock-buscar"></datalist>
             <label style="display:flex;align-items:center;gap:0.3rem;">Fecha:
               <input type="date" id="fecha-stock-barra" onchange="cargarStockBarra()" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">

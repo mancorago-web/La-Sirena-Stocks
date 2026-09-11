@@ -4079,6 +4079,23 @@ function normalizarBusquedaStock(el) {
   buscarTablaBarra(el.value, 'barra-stock-container', 'tr[data-stock-id]');
 }
 
+// Buscar en BARRA/STOCK: al BUSCAR se re-renderiza incluyendo los items en cantidad 0
+// (para poder encontrarlos) y luego se filtra. Solo se re-renderiza cuando cambia el
+// estado buscar/no-buscar, así no se re-guarda el snapshot en cada tecla.
+let _barraBuscarActivo = false;
+function buscarStockBarra(v) {
+  const activo = (v || '').trim().length > 0;
+  const cambio = activo !== _barraBuscarActivo;
+  _barraBuscarActivo = activo;
+  if (cambio) {
+    cargarStockBarra().then(() => {
+      if (activo) buscarTablaBarra(v, 'barra-stock-container', 'tr[data-stock-id]');
+    });
+  } else {
+    buscarTablaBarra(v, 'barra-stock-container', 'tr[data-stock-id]');
+  }
+}
+
 function exportarStockBarra() {
   const fecha = document.getElementById('fecha-stock-barra')?.value || todayStr();
   const esHoy = fecha === todayStr();
@@ -4868,7 +4885,7 @@ function cargarStockBarra() {
     }
   }
   const url = esHoy ? '/api/barra/stock' : '/api/barra/stock?fecha=' + fecha;
-  api('GET', url).then(data => {
+  return api('GET', url).then(data => {
     return Promise.all([getInventario(fecha), api('GET', '/api/barra/bloqueo').catch(() => ({ bloqueado: false, muebles: GRUPOS_BARRA }))]).then(([invData, bloqueo]) => {
     _barraBloqueo = bloqueo || { bloqueado: false, muebles: GRUPOS_BARRA };
     const container = document.getElementById('barra-stock-container');
@@ -4880,11 +4897,12 @@ function cargarStockBarra() {
     const groups = {};
     GRUPOS_BARRA_CON_COMPRAS.forEach(g => { groups[g] = []; });
     groups['SIN CLASIFICAR'] = [];
+    const buscarActivo = (document.getElementById('buscar-stock-barra')?.value || '').trim().length > 0;
     data.forEach(s => {
       const key = (s.grupo || '').toUpperCase();
       const cant = parseFloat(s.cantidad) || 0;
-      // Ocultar items en 0 fuera de COMPRAS DIARIAS (ahí se necesitan visibles para los pedidos)
-      if (cant === 0 && key !== 'COMPRAS DIARIAS') return;
+      // Ocultar items en 0 fuera de COMPRAS DIARIAS, salvo cuando se BUSCA (para poder encontrarlos)
+      if (cant === 0 && key !== 'COMPRAS DIARIAS' && !buscarActivo) return;
       (groups[key] || groups['SIN CLASIFICAR']).push(s);
     });
     // Mismo orden visual (alfabético); en COMPRAS DIARIAS los items en 0 van al final de la lista
