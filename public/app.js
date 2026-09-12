@@ -416,8 +416,8 @@ function verVariacionPrecios() {
       const dif = ult - ant;
       const pct = (dif / ant) * 100;
       const up = dif > 0;
-      const fAnt = x.anterior_fecha ? ' <span style="font-weight:400;font-size:0.75rem;color:#aaa;">(' + esc(x.anterior_fecha) + (x.anterior_cantidad ? ' ×' + x.anterior_cantidad + ' kg' : '') + ')</span>' : '';
-      const fUlt = x.ultimo_fecha ? ' <span style="font-weight:400;font-size:0.75rem;color:#aaa;">(' + esc(x.ultimo_fecha) + (x.ultimo_cantidad ? ' ×' + x.ultimo_cantidad + ' kg' : '') + ')</span>' : '';
+      const fAnt = x.anterior_fecha ? ' <span style="font-weight:400;font-size:0.75rem;color:#aaa;">(' + esc(x.anterior_fecha) + (x.anterior_cantidad ? ' ×' + x.anterior_cantidad : '') + ')</span>' : '';
+      const fUlt = x.ultimo_fecha ? ' <span style="font-weight:400;font-size:0.75rem;color:#aaa;">(' + esc(x.ultimo_fecha) + (x.ultimo_cantidad ? ' ×' + x.ultimo_cantidad : '') + ')</span>' : '';
       const mismoDia = x.anterior_fecha && x.anterior_fecha === x.ultimo_fecha ? ' <span style="font-weight:400;font-size:0.72rem;color:#e65100;">(2 compras el mismo día)</span>' : '';
       return `<tr data-nombre="${esc(x.nombre)}" data-ult-fecha="${esc(x.ultimo_fecha || '')}" data-ant-fecha="${esc(x.anterior_fecha || '')}">
         <td>${esc(x.nombre)}</td>
