@@ -688,58 +688,6 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
     }
   });
 
-  // --- Auto-apertura de botellas para cubrir ventas de COPAS ---
-  // Si se venden copas de un item "X - COPA" y el stock de copas no alcanza, se abre
-  // automáticamente una botella del item "X - BOTELLA" (1 botella = 5 copas). La búsqueda de
-  // la botella prioriza: 1) mismo almacén, 2) otros almacenes REFRIGERADOR, 3) ALMACÉN GENERAL (ABAJO).
-  const almsSnap = await col('almacenes').get();
-  const alNombres = {};
-  almsSnap.docs.forEach(d => { alNombres[Number(d.id)] = d.data().nombre; });
-  const COPAS_POR_BOTELLA = 5;
-  const ajusteCopa = {};    // al_item -> copas extra (ingreso de la copa)
-  const ajusteBotella = {}; // al_item -> botellas abiertas (salida de la botella)
-  for (const r of registros) {
-    if (r.total_ventas === undefined) continue;
-    const ventasReg = parseFloat(r.total_ventas) || 0;
-    if (ventasReg <= 0) continue;
-    const invCopa = invDocMap[Number(r.almacen_id) + '_' + Number(r.item_id)];
-    if (!invCopa || !/ - COPA$/i.test(String(invCopa.nombre || ''))) continue;
-    const copaKey = Number(r.almacen_id) + '_' + Number(r.item_id);
-    const copaId = docId('invdiario', fecha, Number(r.almacen_id), Number(r.item_id));
-    const dc = dayDocs[copaId] || {};
-    // Copas disponibles para VENDER hoy (sin restar las ventas ya registradas): apertura + ingreso - salida - falta - baja
-    const dispCopa = (dc.stock_apertura || 0) + (dc.stock_ingreso || 0) + (ajusteCopa[copaKey] || 0) - (dc.salida_almacen || 0) - (dc.falta_almacen || 0) - (dc.stock_baja || 0);
-    const faltante = Math.max(0, ventasReg - dispCopa);
-    if (faltante <= 0) continue;
-    const base = String(invCopa.nombre).replace(/ - COPA$/i, '');
-    const botNombre = base + ' - BOTELLA';
-    // Buscar BOTELLAS disponibles con prioridad: mismo almacén → REFRIGERADOR → ALMACÉN GENERAL (ABAJO).
-    const cands = invSnap.docs.filter(d => String(d.data().nombre || '').trim().toUpperCase() === botNombre.trim().toUpperCase());
-    const scoreAl = (alId) => {
-      if (Number(alId) === Number(r.almacen_id)) return 0;
-      const nm = String(alNombres[alId] || '').toUpperCase();
-      if (nm.includes('REFRIGERADOR')) return 1;
-      if (nm === 'ALMACEN GENERAL (ABAJO)') return 2;
-      return 3;
-    };
-    cands.sort((a, b) => scoreAl(Number(a.data().almacen_id)) - scoreAl(Number(b.data().almacen_id)));
-    for (const cand of cands) {
-      const botAl = Number(cand.data().almacen_id);
-      const botItem = Number(cand.data().item_id);
-      const botKey = botAl + '_' + botItem;
-      const botId = docId('invdiario', fecha, botAl, botItem);
-      const dbot = dayDocs[botId] || {};
-      const dispBot = (dbot.stock_apertura || 0) + (dbot.stock_ingreso || 0) - (dbot.salida_almacen || 0) - (dbot.total_ventas || 0) - (dbot.falta_almacen || 0) - (dbot.stock_baja || 0) - (ajusteBotella[botKey] || 0);
-      const necesarias = Math.ceil(faltante / COPAS_POR_BOTELLA);
-      const aAbrir = Math.min(necesarias, Math.max(0, dispBot));
-      if (aAbrir > 0) {
-        ajusteCopa[copaKey] = (ajusteCopa[copaKey] || 0) + aAbrir * COPAS_POR_BOTELLA;
-        ajusteBotella[botKey] = (ajusteBotella[botKey] || 0) + aAbrir;
-        break; // se abrió una botella para cubrir el faltante
-      }
-    }
-  }
-
   const cocinaStockAjustes = [];
   const barraStockAjustes = [];
   for (const r of registros) {
@@ -778,9 +726,6 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
         alerts.push({ fecha, almacen_id: Number(r.almacen_id), item_id: Number(r.item_id), nombre: nInv ? nInv.nombre : '', apertura, referencia: pcCadena, tipo: 'apertura_manual_diverge' });
       }
     }
-    // Ajustes por auto-apertura de botella (copa recibe ingreso, botella registra salida)
-    if (ajusteCopa[clave]) ingreso += ajusteCopa[clave];
-    if (ajusteBotella[clave]) salida += ajusteBotella[clave];
     // Valores finales de este guardado (para que las transferencias no sobrescriban lo recién editado)
     savedValues[id] = { stock_apertura: apertura, stock_ingreso: ingreso, salida_almacen: salida, total_ventas: ventas, falta_almacen: falta, stock_baja: baja };
     const cierre = apertura + ingreso - salida - ventas - falta - baja;
@@ -871,15 +816,6 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
     }
     if (r.transferencias !== undefined) data.transferencias = Array.isArray(r.transferencias) ? r.transferencias.map(t => ({ almacen_id: Number(t.almacen_id), cantidad: Number(t.cantidad) || 0 })) : [];
     if (r.ingreso_origen !== undefined) data.ingreso_origen = Array.isArray(r.ingreso_origen) ? r.ingreso_origen : [];
-    // Si hubo auto-apertura de botella, forzar la escritura del ingreso (copa) o salida (botella)
-    if (ajusteCopa[clave]) {
-      data.stock_ingreso = Math.round(ingreso * 100) / 100;
-      // Marcar el ingreso de copas como CONVERSION (apertura de botella)
-      const origPrev = Array.isArray(prev.ingreso_origen) ? prev.ingreso_origen.filter(o => o.tipo !== 'conversion').map(o => ({ tipo: o.tipo, almacen_id: o.almacen_id, cantidad: o.cantidad })) : [];
-      origPrev.push({ tipo: 'conversion', cantidad: ajusteCopa[clave] });
-      data.ingreso_origen = origPrev;
-    }
-    if (ajusteBotella[clave]) data.salida_almacen = Math.round(salida * 100) / 100;
     // Stock en observación: solo se fija explícitamente (se libera manualmente con la accion "usar como venta")
     if (r.stock_observado !== undefined) {
       data.stock_observado = Math.max(0, Number(r.stock_observado) || 0);
@@ -941,29 +877,6 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
       saved_by: savedBy, updated_at: new Date().toISOString()
     }, { merge: true });
     changedKeys.add(destAl + '_' + destItemId);
-  }
-
-  // Botellas abiertas que NO vienen en los registros del guardado: escribirlas directamente.
-  // Si la botella SÍ viene en los registros, el loop ya la procesó y aquí no se duplica.
-  const regKeys = new Set(registros.map(r => Number(r.almacen_id) + '_' + Number(r.item_id)));
-  for (const [botKey, abertura] of Object.entries(ajusteBotella)) {
-    if (!abertura || abertura <= 0) continue;
-    const us = botKey.indexOf('_');
-    const alBot = Number(botKey.slice(0, us));
-    const botItem = Number(botKey.slice(us + 1));
-    if (regKeys.has(alBot + '_' + botItem)) continue; // ya lo procesó el loop
-    const botId = docId('invdiario', fecha, alBot, botItem);
-    const dbot = dayDocs[botId] || {};
-    const nuevaSalida = Math.round(((dbot.salida_almacen || 0) + abertura) * 100) / 100;
-    const cierreBot = Math.round(((dbot.stock_apertura || 0) + (dbot.stock_ingreso || 0) - nuevaSalida - (dbot.total_ventas || 0) - (dbot.falta_almacen || 0) - (dbot.stock_baja || 0)) * 100) / 100;
-    batch.set(col('inventario_diario').doc(botId), {
-      fecha, item_id: botItem, almacen_id: alBot,
-      stock_apertura: dbot.stock_apertura || 0, stock_ingreso: dbot.stock_ingreso || 0,
-      salida_almacen: nuevaSalida, total_ventas: dbot.total_ventas || 0,
-      falta_almacen: dbot.falta_almacen || 0, stock_baja: dbot.stock_baja || 0,
-      stock_cierre: cierreBot, updated_at: new Date().toISOString()
-    }, { merge: true });
-    changedKeys.add(alBot + '_' + botItem);
   }
 
   // SALIDAS de STOCK con destino COCINA: sumar al COCINA/STOCK (los ingresos de cocina
@@ -4857,7 +4770,6 @@ function matchStockFuzzy(nombre, stockItems) {
 async function consumirCopaDesdeStocks(fecha, nombre, copas, savedBy, destino) {
   if (!fecha || !copas || copas <= 0) return;
   const base = String(nombre).replace(/ - COPA$/i, '');
-  const botNombre = base + ' - BOTELLA';
   const prioridad = [2, 4];
   const invSnap = await col('inventario').get();
   const copaInv = invSnap.docs
@@ -4873,27 +4785,6 @@ async function consumirCopaDesdeStocks(fecha, nombre, copas, savedBy, destino) {
   diaSnap.docs.forEach(d => { dayDocs[d.id] = d.data(); });
   let restante = copas;
   const registros = [];
-  // Todas las botellas del producto
-  const botellas = invSnap.docs
-    .filter(d => String(d.data().nombre || '').trim().toUpperCase() === botNombre.trim().toUpperCase());
-  // Orden de prioridad de almacenes para buscar botellas (se define por copa actual):
-  // 1) mismo almacén de la COPA, 2) Almacén General Abajo (al4), 3) todos los demás
-  const botellaConStock = (alCopa) => {
-    const prioridad = [alCopa, 4];
-    let mejor = null, mejorRank = Infinity;
-    botellas.forEach(b => {
-      const alB = Number(b.data().almacen_id);
-      const itB = Number(b.data().item_id);
-      const d = dayDocs[fecha + '_' + alB + '_' + itB] || {};
-      const dispB = (d.stock_apertura || 0) + (d.stock_ingreso || 0) - (d.salida_almacen || 0) - (d.total_ventas || 0) - (d.falta_almacen || 0) - (d.stock_baja || 0);
-      if (dispB > 0) {
-        let rank = prioridad.indexOf(alB);
-        if (rank === -1) rank = 100 + alB; // otros almacenes después de los prioritarios
-        if (rank < mejorRank) { mejorRank = rank; mejor = { al: alB, item: itB, dispB }; }
-      }
-    });
-    return mejor;
-  };
 
   for (const inv of copaInv) {
     if (restante <= 0) break;
@@ -4906,28 +4797,11 @@ async function consumirCopaDesdeStocks(fecha, nombre, copas, savedBy, destino) {
       registros.push({ item_id: item, almacen_id: al, salida_almacen: (dp.salida_almacen || 0) + restante, destino_salida: destino || '' });
       restante = 0;
     } else {
-      // Faltan copas
-      const faltante = restante - disp;
-      const bot = botellaConStock(al);
-      if (bot) {
-        // Hay botella con stock: convertir
-        const botellasNecesarias = Math.ceil(faltante / 5);
-        const aAbrir = Math.min(botellasNecesarias, bot.dispB);
-        const copasGanadas = aAbrir * 5;
-        const nuevoIngreso = (dp.stock_ingreso || 0) + copasGanadas;
-        const origen = (Array.isArray(dp.ingreso_origen) ? dp.ingreso_origen.filter(o => o.tipo !== 'conversion').map(o => ({ tipo: o.tipo, almacen_id: o.almacen_id, cantidad: o.cantidad })) : []);
-        origen.push({ tipo: 'conversion', cantidad: copasGanadas });
-        // La copa recibe las copas convertidas y registra la venta del total vendido
-        registros.push({ item_id: item, almacen_id: al, stock_ingreso: nuevoIngreso, salida_almacen: (dp.salida_almacen || 0) + restante, ingreso_origen: origen, destino_salida: destino || '' });
-        // La botella sale del almacén donde está, destino COPAS
-        const dbot = dayDocs[fecha + '_' + bot.al + '_' + bot.item] || {};
-        registros.push({ item_id: bot.item, almacen_id: bot.al, salida_almacen: (dbot.salida_almacen || 0) + aAbrir, destino_salida: 'COPAS' });
-        restante = 0;
-      } else {
-        // NO hay botellas con stock en ningún almacén: registrar venta como número negativo
-        registros.push({ item_id: item, almacen_id: al, salida_almacen: (dp.salida_almacen || 0) + restante, destino_salida: destino || '' });
-        restante = 0;
-      }
+      // Faltan copas: YA NO se auto-convierte la botella. Se registra la salida completa
+      // (permitiendo NEGATIVO) para que el bartender dé SALIDA manual a las botellas e
+      // INGRESE las copas cuando se requiera.
+      registros.push({ item_id: item, almacen_id: al, salida_almacen: (dp.salida_almacen || 0) + restante, destino_salida: destino || '' });
+      restante = 0;
     }
   }
   // Si quedó restante sin cubrir, registrar venta negativa en la primera copa
