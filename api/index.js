@@ -1977,16 +1977,6 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
     if (!byNombre[k]) byNombre[k] = [];
     byNombre[k].push(s);
   });
-  // Índice de COCINA/STOCK para el fallback: si un ingrediente de una receta de BARRA no está (o no
-  // alcanza) en BARRA/STOCK, se busca en COCINA/STOCK (ej. AZUCAR BLANCA en ABARROTES).
-  const cocinaStockSnap = await col('cocina_stock').get();
-  const cocinaStock = cocinaStockSnap.docs.map(d => ({ ref: d.ref, data: d.data() }));
-  const cocinaByNombre = {};
-  cocinaStock.forEach(s => {
-    const k = String(s.data.ingrediente || s.data.nombre || '').trim().toUpperCase();
-    if (!cocinaByNombre[k]) cocinaByNombre[k] = [];
-    cocinaByNombre[k].push(s);
-  });
   let batch = db.batch();
   let ajustados = 0;
   let ops = 0;
@@ -2050,7 +2040,7 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
           const ozItem = aOnzas(si.data.cantidad, si.data.unidad, si.data.ingrediente, eq);
           if (ozItem === null || isNaN(ozItem)) continue;
           const aDescontar = Math.min(ozItem, restanteOz);
-          const nuevoOz = Math.max(0, ozItem - aDescontar);
+          const nuevoOz = ozItem - aDescontar; // se permite NEGATIVO (faltante visible en BARRA/STOCK)
           const nueva = Math.round(desdeOnzas(nuevoOz, si.data.unidad, si.data.ingrediente, eq) * 100) / 100;
           batch.update(si.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
           ops++;
@@ -2062,29 +2052,7 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
         }
       }
     }
-    // 3) FALLBACK a COCINA/STOCK: si aún sobra (ej. AZUCAR BLANCA que vive en ABARROTES de cocina),
-    //    se descuenta de COCINA/STOCK (convirtiendo unidades).
-    if (restante > 0.0001) {
-      let cMatches = cocinaByNombre[key] || [];
-      if (!cMatches.length) cMatches = matchStockFuzzy(c.ingrediente, cocinaStock.map(s => ({ ...s, data: { ...s.data, ingrediente: s.data.ingrediente || s.data.nombre } })));
-      for (const m of cMatches) {
-        if (restante <= 0.0001) break;
-        const uStock = normalizeUnit(m.data.unidad || 'unidad');
-        const pn = m.data.ingrediente || m.data.nombre || '';
-        const eq2 = { equiv_ml: parseEquivFromName(pn).equiv_ml || m.data.equiv_ml, equiv_gr: parseEquivFromName(pn).equiv_gr || m.data.equiv_gr };
-        const conv = cocinaAjustar(restante, uRec, uStock, eq2);
-        if (conv === null || conv === undefined) continue;
-        const disp = parseFloat(m.data.cantidad) || 0;
-        const aDescontar = Math.min(disp, conv);
-        const nueva = Math.max(0, Math.round((disp - aDescontar) * 100) / 100);
-        batch.update(m.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
-        ops++;
-        if (ops >= 450) { await batch.commit(); batch = db.batch(); ops = 0; }
-        const consumidoRec = cocinaAjustar(aDescontar, uStock, uRec, eq2) || aDescontar;
-        restante = Math.max(0, Math.round((restante - consumidoRec) * 100) / 100);
-        ajustados++;
-      }
-    }
+    // 3) BARRA/STOCK NO jala de COCINA/STOCK: si aún sobra, se reporta (y se permite NEGATIVO).
     if (restante > 0.0001) {
       noDescontados.push({ ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: uRec, motivo: 'sin_conversion_o_insuficiente' });
     }
@@ -2383,41 +2351,9 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         resumen.errorBarra = e.message;
         if (!Array.isArray(resumen.noDescontados)) resumen.noDescontados = [];
       }
-      // Ingredientes de receta que son items de STOCKS/ALMACENES. Se descuentan de los almacenes en 2 pasos:
-      // 1) Los que el usuario eligió almacén en la importación (MICHELADAS: CORONA/PILSEN).
-      // 2) AUTO: items que están en los ALMACENES pero NO en BARRA/STOCK (ej. RICCADONNA PROSECCO que
-      //    vive en los refrigeradores/almacén). Se EXCLUYE la gasificadora (AGUA CON GAS) que no consume botella.
-      const seleccionStocks = {};
-      ventasBarra.forEach(v => {
-        if (Array.isArray(v.ingredientesStocks)) {
-          v.ingredientesStocks.forEach(is => {
-            const kk = String(is.nombre || '').trim().toUpperCase().replace(/\s+/g, '');
-            if (kk && Array.isArray(is.almacenes) && is.almacenes.length) seleccionStocks[kk] = is.almacenes.map(Number);
-          });
-        }
-      });
-      const sinStockBarra = (resumen.noDescontados || []).filter(x => x.motivo === 'sin_stock' || x.motivo === 'sin_conversion_o_insuficiente');
-      const quitar = (deducidos) => {
-        if (!deducidos || !deducidos.length) return;
-        const set = new Set(deducidos.map(d => String(d.ingrediente).trim().toUpperCase()));
-        resumen.noDescontados = (resumen.noDescontados || []).filter(x => !set.has(String(x.ingrediente).trim().toUpperCase()));
-        if (!Array.isArray(resumen.deducidosDeAlmacenes)) resumen.deducidosDeAlmacenes = [];
-        resumen.deducidosDeAlmacenes.push(...deducidos);
-      };
-      // 1) Seleccionados (MICHELADA)
-      const seleccionados = sinStockBarra.filter(x => seleccionStocks[String(x.ingrediente).trim().toUpperCase().replace(/\s+/g, '')]);
-      if (seleccionados.length) {
-        try { quitar(await descontarStocksDesdeAlmacenes(seleccionados, fecha, savedBy, seleccionStocks)); } catch (e) { console.error('Error almacenes MICHELADA:', e.message); }
-      }
-      // 2) AUTO desde almacenes: items sin item en BARRA/STOCK (sin_stock) o con stock 0/insuficiente
-      //    (sin_conversion_o_insuficiente). Si el item existe en los ALMACENES, se descuenta de ahí.
-      const autoItems = sinStockBarra.filter(x => {
-        const k = String(x.ingrediente).trim().toUpperCase().replace(/\s+/g, '');
-        return !seleccionStocks[k];
-      });
-      if (autoItems.length) {
-        try { quitar(await descontarStocksDesdeAlmacenes(autoItems, fecha, savedBy)); } catch (e) { console.error('Error auto almacenes:', e.message); }
-      }
+      // BARRA ya NO jala items de STOCKS/ALMACENES ni de COCINA para completar sus ventas.
+      // Si BARRA/STOCK no alcanza, el saldo se descuenta (permitiendo NEGATIVO) y queda visible
+      // en los avisos para identificar el faltante.
     }
 
     // Aplicar a COCINA (registro de ventas + expandir recetas + descontar COCINA/STOCK)
@@ -3880,7 +3816,7 @@ async function ajustarCocinaStock(ajustes) {
     if (!key || !aj.delta) continue;
     const existente = byName[key];
     if (existente) {
-      const nueva = Math.max(0, (parseFloat(existente.data().cantidad) || 0) + aj.delta);
+      const nueva = (parseFloat(existente.data().cantidad) || 0) + aj.delta;
       const upd = { cantidad: nueva, updated_at: now };
       if (aj.familia) upd.familia = String(aj.familia).toUpperCase();
       if (nueva === 0 && aj.delta < 0) {
@@ -3922,7 +3858,7 @@ async function ajustarBarraStock(ajustes) {
       // Así el → BARRA siempre deja el item en el mueble pedido (ej. MUEBLE DE ABAJO).
       const existente = (byNameGrupo[key] || {})[grupo];
       if (existente) {
-        const nueva = Math.max(0, (parseFloat(existente.data().cantidad) || 0) + aj.delta);
+        const nueva = (parseFloat(existente.data().cantidad) || 0) + aj.delta;
         if (nueva === 0 && aj.delta < 0) batch.delete(existente.ref);
         else batch.update(existente.ref, { cantidad: nueva, updated_at: now });
       } else if (aj.delta > 0) {
@@ -3946,7 +3882,7 @@ async function ajustarBarraStock(ajustes) {
       // Comportamiento por defecto: buscar por nombre (cualquier mueble), o crear en MUEBLE DE APOYO.
       const existente = byNameGrupo[key] ? Object.values(byNameGrupo[key])[0] : null;
       if (existente) {
-        const nueva = Math.max(0, (parseFloat(existente.data().cantidad) || 0) + aj.delta);
+        const nueva = (parseFloat(existente.data().cantidad) || 0) + aj.delta;
         if (nueva === 0 && aj.delta < 0) batch.delete(existente.ref);
         else batch.update(existente.ref, { cantidad: nueva, updated_at: now });
       } else if (aj.delta > 0) {
