@@ -1977,6 +1977,16 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
     if (!byNombre[k]) byNombre[k] = [];
     byNombre[k].push(s);
   });
+  // Índice de COCINA/STOCK para el fallback: si un ingrediente de una receta de BARRA no está (o no
+  // alcanza) en BARRA/STOCK, se busca en COCINA/STOCK (ej. AZUCAR BLANCA en ABARROTES).
+  const cocinaStockSnap = await col('cocina_stock').get();
+  const cocinaStock = cocinaStockSnap.docs.map(d => ({ ref: d.ref, data: d.data() }));
+  const cocinaByNombre = {};
+  cocinaStock.forEach(s => {
+    const k = String(s.data.ingrediente || s.data.nombre || '').trim().toUpperCase();
+    if (!cocinaByNombre[k]) cocinaByNombre[k] = [];
+    cocinaByNombre[k].push(s);
+  });
   let batch = db.batch();
   let ajustados = 0;
   let ops = 0;
@@ -2036,11 +2046,12 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
         for (const m of matches) {
           if (restanteOz <= 0.0001) break;
           const si = m.item || m;
-          const ozItem = aOnzas(si.data.cantidad, si.data.unidad, si.data.ingrediente);
+          const eq = { equiv_ml: si.data.equiv_ml, equiv_gr: si.data.equiv_gr };
+          const ozItem = aOnzas(si.data.cantidad, si.data.unidad, si.data.ingrediente, eq);
           if (ozItem === null || isNaN(ozItem)) continue;
           const aDescontar = Math.min(ozItem, restanteOz);
           const nuevoOz = Math.max(0, ozItem - aDescontar);
-          const nueva = Math.round(desdeOnzas(nuevoOz, si.data.unidad, si.data.ingrediente) * 100) / 100;
+          const nueva = Math.round(desdeOnzas(nuevoOz, si.data.unidad, si.data.ingrediente, eq) * 100) / 100;
           batch.update(si.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
           ops++;
           if (ops >= 450) { await batch.commit(); batch = db.batch(); ops = 0; }
@@ -2049,6 +2060,29 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
           restanteOz -= aDescontar;
           ajustados++;
         }
+      }
+    }
+    // 3) FALLBACK a COCINA/STOCK: si aún sobra (ej. AZUCAR BLANCA que vive en ABARROTES de cocina),
+    //    se descuenta de COCINA/STOCK (convirtiendo unidades).
+    if (restante > 0.0001) {
+      let cMatches = cocinaByNombre[key] || [];
+      if (!cMatches.length) cMatches = matchStockFuzzy(c.ingrediente, cocinaStock.map(s => ({ ...s, data: { ...s.data, ingrediente: s.data.ingrediente || s.data.nombre } })));
+      for (const m of cMatches) {
+        if (restante <= 0.0001) break;
+        const uStock = normalizeUnit(m.data.unidad || 'unidad');
+        const pn = m.data.ingrediente || m.data.nombre || '';
+        const eq2 = { equiv_ml: parseEquivFromName(pn).equiv_ml || m.data.equiv_ml, equiv_gr: parseEquivFromName(pn).equiv_gr || m.data.equiv_gr };
+        const conv = cocinaAjustar(restante, uRec, uStock, eq2);
+        if (conv === null || conv === undefined) continue;
+        const disp = parseFloat(m.data.cantidad) || 0;
+        const aDescontar = Math.min(disp, conv);
+        const nueva = Math.max(0, Math.round((disp - aDescontar) * 100) / 100);
+        batch.update(m.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
+        ops++;
+        if (ops >= 450) { await batch.commit(); batch = db.batch(); ops = 0; }
+        const consumidoRec = cocinaAjustar(aDescontar, uStock, uRec, eq2) || aDescontar;
+        restante = Math.max(0, Math.round((restante - consumidoRec) * 100) / 100);
+        ajustados++;
       }
     }
     if (restante > 0.0001) {
@@ -2097,7 +2131,8 @@ async function descontarStockCocina(consumos) {
     for (const m of matches) {
       if (restante <= 0.0001) break;
       const uStock = normalizeUnit(m.data.unidad || 'unidad');
-      const conv = cocinaAjustar(restante, uRec, uStock);
+      const eq = { equiv_ml: m.data.equiv_ml, equiv_gr: m.data.equiv_gr };
+      const conv = cocinaAjustar(restante, uRec, uStock, eq);
       if (conv === null || conv === undefined) continue;
       const disp = parseFloat(m.data.cantidad) || 0;
       const aDescontar = Math.min(disp, conv);
@@ -2105,7 +2140,7 @@ async function descontarStockCocina(consumos) {
       batch.update(m.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
       ops++;
       if (ops >= 450) { await batch.commit(); batch = db.batch(); ops = 0; }
-      const consumidoRec = cocinaAjustar(aDescontar, uStock, uRec) || aDescontar;
+      const consumidoRec = cocinaAjustar(aDescontar, uStock, uRec, eq) || aDescontar;
       restante = Math.max(0, Math.round((restante - consumidoRec) * 100) / 100);
       ajustados++;
     }
@@ -4052,7 +4087,7 @@ app.post('/api/cocina/movimientos', authMiddleware, async (req, res) => {
 });
 
 // Conversión de unidades para descuento de stock de cocina (peso y volumen)
-function cocinaAjustar(cant, fromUnit, toUnit) {
+function cocinaAjustar(cant, fromUnit, toUnit, equiv) {
   const u1 = normalizeUnit(fromUnit);
   const u2 = normalizeUnit(toUnit);
   if (u1 === u2) return parseFloat(cant) || 0;
@@ -4060,6 +4095,21 @@ function cocinaAjustar(cant, fromUnit, toUnit) {
   const vol = { 'lt': 1000, 'ml': 1 };
   if (peso[u1] && peso[u2]) return (parseFloat(cant) || 0) * peso[u1] / peso[u2];
   if (vol[u1] && vol[u2]) return (parseFloat(cant) || 0) * vol[u1] / vol[u2];
+  // Conversión usando la equivalencia del item (ej. stock "unidad" = lata de 360 ml).
+  const c = parseFloat(cant) || 0;
+  if (equiv && (equiv.equiv_ml || equiv.equiv_gr)) {
+    const esU = u => u === 'unidad' || u === 'botella';
+    if (esU(u1)) {
+      const gr1 = equiv.equiv_gr || 0, ml1 = equiv.equiv_ml || 0;
+      if (peso[u2]) return gr1 ? (c * gr1) / peso[u2] : null;
+      if (vol[u2]) return ml1 ? (c * ml1) / vol[u2] : null;
+    }
+    if (esU(u2)) {
+      const gr2 = equiv.equiv_gr || 0, ml2 = equiv.equiv_ml || 0;
+      if (peso[u1]) return gr2 ? (c * peso[u1]) / gr2 : null;
+      if (vol[u1]) return ml2 ? (c * vol[u1]) / ml2 : null;
+    }
+  }
   return null;
 }
 
@@ -4805,7 +4855,7 @@ function botellaParaMl(nombre) {
   return null;
 }
 
-function aOnzas(cant, unidad, nombre) {
+function aOnzas(cant, unidad, nombre, equiv) {
   const u = normalizeUnit(unidad);
   const c = parseFloat(cant) || 0;
   if (u === 'onzas') return c;
@@ -4815,13 +4865,16 @@ function aOnzas(cant, unidad, nombre) {
   if (u === 'kg') return (c * 1000) / 28.3495;
   if (u === 'gotas') return (c * 0.05) / 30; // 1 gota ≈ 0.05 ml
   if (u === 'unidad' || u === 'botella') {
+    // Equivalencia explícita del item (equiv_ml/equiv_gr guardados), o inferida del nombre.
+    if (equiv && equiv.equiv_ml) return (c * equiv.equiv_ml) / 30;
+    if (equiv && equiv.equiv_gr) return (c * equiv.equiv_gr) / 28.3495;
     const ml = botellaParaMl(nombre);
     return ml ? (c * ml) / 30 : null;
   }
   return null;
 }
 
-function desdeOnzas(onzas, unidad, nombre) {
+function desdeOnzas(onzas, unidad, nombre, equiv) {
   const u = normalizeUnit(unidad);
   const oz = parseFloat(onzas) || 0;
   if (u === 'onzas') return oz;
@@ -4831,6 +4884,8 @@ function desdeOnzas(onzas, unidad, nombre) {
   if (u === 'kg') return (oz * 28.3495) / 1000;
   if (u === 'gotas') return (oz * 30) / 0.05;
   if (u === 'unidad' || u === 'botella') {
+    if (equiv && equiv.equiv_ml) return (oz * 30) / equiv.equiv_ml;
+    if (equiv && equiv.equiv_gr) return (oz * 28.3495) / equiv.equiv_gr;
     const ml = botellaParaMl(nombre);
     return ml ? (oz * 30) / ml : null;
   }
