@@ -8437,15 +8437,11 @@ function renderCostoCategoria(prefix, container) {
       if (String(t).toUpperCase() === 'ALIMENTOS Y BEBIDAS') {
         html += `<div class="accordion-item" id="acordeon-alimentos-ybebidas">
           <div class="accordion-header" onclick="toggleAcordeon(this)">
-            <span class="accordion-title">${t} <span id="resumen-alimentos-total" style="font-weight:400;font-size:0.85rem;color:#777;">— Compras del día</span></span>
+            <span class="accordion-title">${t} <span id="resumen-alimentos-total" style="font-weight:400;font-size:0.85rem;color:#777;">— Compras del mes</span></span>
             <span class="accordion-arrow">▶</span>
           </div>
           <div class="accordion-body">
-            <div class="costos-fecha-row">
-              <label>FECHA</label>
-              <input type="date" id="resumen-compras-fecha" value="${todayStr()}" onchange="cargarComprasResumen()" style="padding:0.4rem;border:1px solid #ccc;border-radius:4px;">
-            </div>
-            <div style="font-size:0.75rem;color:#888;margin:0.25rem 0 0.5rem 0;">Muestra automáticamente las compras registradas en COMPRAS para la fecha, agrupadas por zona (solo lectura).</div>
+            <div style="font-size:0.75rem;color:#888;margin:0.25rem 0 0.5rem 0;">Muestra las compras de TODO el mes seleccionado arriba (MES), agrupadas por fecha y por zona. El TOTAL incluye las compras de todo el mes (solo lectura).</div>
             <div id="resumen-compras-div"></div>
           </div>
         </div>`;
@@ -8493,18 +8489,29 @@ function renderCostoCategoria(prefix, container) {
   }).catch(e => { console.error(e); container.innerHTML = '<p>Error al cargar.</p>'; });
 }
 
-// Carga el DETALLE DE COMPRAS del día y lo muestra en la sección ALIMENTOS Y BEBIDAS de RESUMEN
-// agrupado por zona (STOCKS, BARRA, COCINA, EVENTOS, LIMPIEZA). Dentro de COCINA se subdivide por
-// categoría (PESCADO, VERDURAS, ABARROTES, etc.). El total se muestra en el título de la sección y
-// se suma al TOTAL del RESUMEN.
+// Carga el DETALLE DE COMPRAS de TODO el mes (ej. desde 01-09 hasta fin de mes) y lo muestra en la
+// sección ALIMENTOS Y BEBIDAS de RESUMEN, agrupado por FECHA y dentro por zona. En COCINA se subdivide
+// por categoría (PESCADO, VERDURAS, ABARROTES, etc.). El TOTAL refleja todo el mes seleccionado.
 const ORDEN_CATEGORIAS_COCINA = ['FRUTAS', 'VERDURAS', 'PESCADO', 'CARNE', 'POLLO', 'LACTEOS', 'ABARROTES', 'ACEITES', 'SEMILLAS', 'RECETAS BASE', 'LIMPIEZA', 'VINOS', 'CERVEZAS', 'OTROS'];
+const MESES_CORTOS = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SET', 'OCT', 'NOV', 'DIC'];
+function fmtFechaCorta(iso) {
+  const partes = String(iso || '').split('-');
+  if (partes.length !== 3) return iso || '';
+  return parseInt(partes[2], 10) + ' ' + (MESES_CORTOS[Number(partes[1]) - 1] || partes[1]);
+}
 function cargarComprasResumen() {
-  const fecha = document.getElementById('resumen-compras-fecha')?.value || todayStr();
   const div = document.getElementById('resumen-compras-div');
   if (!div) return;
-  div.innerHTML = '<p style="color:#888;">Cargando compras de ' + fecha + '...</p>';
+  // El mes sale del selector MES que ya tiene la pestaña RESUMEN (gastos fijos + compras)
+  const mesEl = document.getElementById('mes-pestana-RESUMEN');
+  const mes = mesEl && mesEl.value ? mesEl.value : todayStr().slice(0, 7);
+  const [yy, mm] = mes.split('-').map(Number);
+  const ultimoDia = new Date(yy, mm, 0).getDate();
+  const fechaIni = mes + '-01';
+  const fechaFin = mes + '-' + String(ultimoDia).padStart(2, '0');
+  div.innerHTML = '<p style="color:#888;">Cargando compras de ' + mes + '...</p>';
   Promise.all([
-    api('GET', '/api/compras/detalle?fecha=' + encodeURIComponent(fecha)),
+    api('GET', '/api/compras/detalle?fecha_inicio=' + encodeURIComponent(fechaIni) + '&fecha_fin=' + encodeURIComponent(fechaFin)),
     api('GET', '/api/cocina/stock').catch(() => [])
   ]).then(([list, cocinaStock]) => {
     // Mapa nombre -> familia de COCINA/STOCK (para clasificar compras de COCINA sin categoría)
@@ -8515,84 +8522,110 @@ function cargarComprasResumen() {
     });
     const precioTotal = r => (parseFloat(r.precio_total) || 0) || ((parseFloat(r.precio) || 0) * (r.cantidad || 0));
     const zonas = ['stocks', 'barra', 'cocina', 'eventos', 'limpieza'];
-    const byZona = { stocks: [], barra: [], cocina: [], eventos: [], limpieza: [] };
-    (list || []).forEach(r => { if (byZona[r.destino]) byZona[r.destino].push(r); });
+    // Agrupar por fecha
+    const porFecha = {};
+    (list || []).forEach(r => { const f = r.fecha || ''; if (!f) return; (porFecha[f] = porFecha[f] || []).push(r); });
+    const fechas = Object.keys(porFecha).sort();
     let html = '';
     let totalGeneral = 0;
-    zonas.forEach(z => {
-      const rows = byZona[z];
-      if (!rows.length) return;
-      const subTotal = rows.reduce((s, r) => s + precioTotal(r), 0);
-      totalGeneral += subTotal;
-      let cuerpo;
-      if (z === 'cocina') {
-        // Subdividir COCINA por categoría (de la compra, o inferida de COCINA/STOCK)
-        const porCat = {};
-        rows.forEach(r => {
-          let cat = String(r.categoria || '').trim().toUpperCase();
-          if (!cat) cat = famMap[String(r.nombre || '').trim().toUpperCase()];
-          if (!cat) cat = 'OTROS';
-          if (!porCat[cat]) porCat[cat] = [];
-          porCat[cat].push(r);
-        });
-        const cats = Object.keys(porCat).sort((a, b) => {
-          const ia = ORDEN_CATEGORIAS_COCINA.indexOf(a), ib = ORDEN_CATEGORIAS_COCINA.indexOf(b);
-          return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || String(a).localeCompare(String(b));
-        });
-        cuerpo = cats.map(cat => {
-          const items = porCat[cat];
-          const cSub = items.reduce((s, r) => s + precioTotal(r), 0);
-          return `<div style="border-top:1px dashed #ddd;padding:0.45rem 0 0.25rem 0;">
-            <div style="font-weight:700;color:#2e7d32;font-size:0.8rem;display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem;">
-              <span>${esc(cat)}</span><span style="color:#33691e;">S/ ${cSub.toFixed(2)}</span>
-            </div>
-            <div class="table-wrap"><table style="margin:0;">
-              <thead><tr><th>Item</th><th style="text-align:center;">Cant.</th><th style="text-align:right;">P. Unit</th><th style="text-align:right;">P. Total</th><th>Proveedor</th></tr></thead>
-              <tbody>${items.map(r => {
-                const pu = parseFloat(r.precio) || 0;
-                const pt = precioTotal(r);
-                return `<tr>
-                  <td>${esc(r.nombre)}</td>
-                  <td style="text-align:center;">${r.cantidad}</td>
-                  <td style="text-align:right;">S/ ${pu.toFixed(2)}</td>
-                  <td style="text-align:right;">S/ ${pt.toFixed(2)}</td>
-                  <td>${esc(r.proveedor || '-')}</td>
-                </tr>`;
-              }).join('')}</tbody>
-            </table></div>
-          </div>`;
-        }).join('');
-      } else {
-        cuerpo = `<div class="table-wrap"><table style="margin:0;">
-          <thead><tr><th>Item</th><th style="text-align:center;">Cant.</th><th style="text-align:right;">P. Unit</th><th style="text-align:right;">P. Total</th><th>Proveedor</th></tr></thead>
-          <tbody>${rows.map(r => {
-            const pu = parseFloat(r.precio) || 0;
-            const pt = precioTotal(r);
-            return `<tr>
-              <td>${esc(r.nombre)}</td>
-              <td style="text-align:center;">${r.cantidad}</td>
-              <td style="text-align:right;">S/ ${pu.toFixed(2)}</td>
-              <td style="text-align:right;">S/ ${pt.toFixed(2)}</td>
-              <td>${esc(r.proveedor || '-')}</td>
-            </tr>`;
-          }).join('')}</tbody>
-        </table></div>`;
-      }
-      html += `<div style="margin-bottom:0.75rem;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;">
-        <div style="background:#eef2ff;padding:0.4rem 0.6rem;font-weight:700;color:#1a237e;font-size:0.82rem;display:flex;justify-content:space-between;align-items:center;">
-          <span>${z.toUpperCase()}</span>
-          <span style="color:#0f3460;">S/ ${subTotal.toFixed(2)}</span>
+    fechas.forEach(f => {
+      const dayRows = porFecha[f];
+      const dayTotal = dayRows.reduce((s, r) => s + precioTotal(r), 0);
+      totalGeneral += dayTotal;
+      const esHoy = f === todayStr();
+      const byZona = { stocks: [], barra: [], cocina: [], eventos: [], limpieza: [] };
+      dayRows.forEach(r => { if (byZona[r.destino]) byZona[r.destino].push(r); });
+      let cuerpo = '';
+      zonas.forEach(z => {
+        const rows = byZona[z];
+        if (!rows.length) return;
+        const subTotal = rows.reduce((s, r) => s + precioTotal(r), 0);
+        let inner;
+        if (z === 'cocina') {
+          // Subdividir COCINA por categoría (de la compra, o inferida de COCINA/STOCK)
+          const porCat = {};
+          rows.forEach(r => {
+            let cat = String(r.categoria || '').trim().toUpperCase();
+            if (!cat) cat = famMap[String(r.nombre || '').trim().toUpperCase()];
+            if (!cat) cat = 'OTROS';
+            (porCat[cat] = porCat[cat] || []).push(r);
+          });
+          const cats = Object.keys(porCat).sort((a, b) => {
+            const ia = ORDEN_CATEGORIAS_COCINA.indexOf(a), ib = ORDEN_CATEGORIAS_COCINA.indexOf(b);
+            return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || String(a).localeCompare(String(b));
+          });
+          inner = cats.map(cat => {
+            const items = porCat[cat];
+            const cSub = items.reduce((s, r) => s + precioTotal(r), 0);
+            return `<div style="border-top:1px dashed #ddd;padding:0.45rem 0 0.25rem 0;">
+              <div style="font-weight:700;color:#2e7d32;font-size:0.8rem;display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem;">
+                <span>${esc(cat)}</span><span style="color:#33691e;">S/ ${cSub.toFixed(2)}</span>
+              </div>
+              <div class="table-wrap"><table style="margin:0;">
+                <thead><tr><th>Item</th><th style="text-align:center;">Cant.</th><th style="text-align:right;">P. Unit</th><th style="text-align:right;">P. Total</th><th>Proveedor</th></tr></thead>
+                <tbody>${items.map(r => {
+                  const pu = parseFloat(r.precio) || 0;
+                  const pt = precioTotal(r);
+                  return `<tr>
+                    <td>${esc(r.nombre)}</td>
+                    <td style="text-align:center;">${r.cantidad}</td>
+                    <td style="text-align:right;">S/ ${pu.toFixed(2)}</td>
+                    <td style="text-align:right;">S/ ${pt.toFixed(2)}</td>
+                    <td>${esc(r.proveedor || '-')}</td>
+                  </tr>`;
+                }).join('')}</tbody>
+              </table></div>
+            </div>`;
+          }).join('');
+        } else {
+          inner = `<div class="table-wrap"><table style="margin:0;">
+            <thead><tr><th>Item</th><th style="text-align:center;">Cant.</th><th style="text-align:right;">P. Unit</th><th style="text-align:right;">P. Total</th><th>Proveedor</th></tr></thead>
+            <tbody>${rows.map(r => {
+              const pu = parseFloat(r.precio) || 0;
+              const pt = precioTotal(r);
+              return `<tr>
+                <td>${esc(r.nombre)}</td>
+                <td style="text-align:center;">${r.cantidad}</td>
+                <td style="text-align:right;">S/ ${pu.toFixed(2)}</td>
+                <td style="text-align:right;">S/ ${pt.toFixed(2)}</td>
+                <td>${esc(r.proveedor || '-')}</td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table></div>`;
+        }
+        cuerpo += `<div style="margin-bottom:0.75rem;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;">
+          <div style="background:#eef2ff;padding:0.4rem 0.6rem;font-weight:700;color:#1a237e;font-size:0.82rem;display:flex;justify-content:space-between;align-items:center;">
+            <span>${z.toUpperCase()}</span>
+            <span style="color:#0f3460;">S/ ${subTotal.toFixed(2)}</span>
+          </div>
+          <div style="padding:0.4rem 0.6rem;">${inner}</div>
+        </div>`;
+      });
+      html += `<div class="accordion-item" data-fecha="${f}">
+        <div class="accordion-header" onclick="toggleAcordeon(this)">
+          <span class="accordion-title">${fmtFechaCorta(f)}${esHoy ? ' <span style="color:#c62828;font-size:0.75rem;">(HOY)</span>' : ''} <span style="font-weight:400;font-size:0.85rem;color:#777;">— S/ ${dayTotal.toFixed(2)}</span></span>
+          <span class="accordion-arrow">▶</span>
         </div>
-        <div style="padding:0.4rem 0.6rem;">${cuerpo}</div>
+        <div class="accordion-body">${cuerpo || '<p style="color:#888;">Sin compras este día.</p>'}</div>
       </div>`;
     });
     if (!html) {
-      div.innerHTML = '<p style="color:#888;">No hay compras registradas en ' + fecha + '.</p>';
+      div.innerHTML = '<p style="color:#888;">No hay compras registradas en ' + mes + '.</p>';
       actualizarTotalAlimentos(0);
       return;
     }
-    html += `<div style="margin-top:0.5rem;padding:0.65rem;background:#0f3460;color:#fff;border-radius:8px;font-weight:700;text-align:right;font-size:0.9rem;">TOTAL ALIMENTOS Y BEBIDAS: S/ ${totalGeneral.toFixed(2)}</div>`;
+    html += `<div style="margin-top:0.75rem;padding:0.65rem;background:#0f3460;color:#fff;border-radius:8px;font-weight:700;text-align:right;font-size:0.9rem;">TOTAL ALIMENTOS Y BEBIDAS (${mes}): S/ ${totalGeneral.toFixed(2)}</div>`;
     div.innerHTML = html;
+    // Abrir por defecto el acordeón de HOY
+    const hoyAcc = div.querySelector('.accordion-item[data-fecha="' + todayStr() + '"]');
+    if (hoyAcc) {
+      const body = hoyAcc.querySelector('.accordion-body');
+      const hd = hoyAcc.querySelector('.accordion-header');
+      const ar = hoyAcc.querySelector('.accordion-arrow');
+      if (body) body.classList.add('open');
+      if (hd) hd.classList.add('active');
+      if (ar) ar.classList.add('open');
+    }
     actualizarTotalAlimentos(totalGeneral);
   }).catch(() => { div.innerHTML = '<p style="color:#c62828;">Error al cargar las compras.</p>'; });
 }
