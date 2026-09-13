@@ -128,7 +128,25 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
   justify-content: center;
   overflow: hidden;
 }
-.menu-ventas { grid-column: 2; grid-row: 3; }
+.menu-eventos { grid-column: 1; grid-row: 3; }
+.menu-limpieza { grid-column: 3; grid-row: 3; }
+.menu-ventas { grid-column: 2; grid-row: 4; }
+.category-btn.menu-eventos {
+  background: #ede7f6;
+  border-color: #b39ddb;
+}
+.category-btn.menu-eventos:hover { border-color: #7b1fa2; box-shadow: 0 4px 16px rgba(123,31,162,0.2); }
+.category-btn.menu-eventos .category-icon { color: #7b1fa2; }
+.category-btn.menu-eventos .category-label { color: #7b1fa2; }
+.category-btn.menu-eventos .category-desc { color: #7b1fa2; }
+.category-btn.menu-limpieza {
+  background: #e0f7fa;
+  border-color: #80deea;
+}
+.category-btn.menu-limpieza:hover { border-color: #00838f; box-shadow: 0 4px 16px rgba(0,131,143,0.2); }
+.category-btn.menu-limpieza .category-icon { color: #00838f; }
+.category-btn.menu-limpieza .category-label { color: #00838f; }
+.category-btn.menu-limpieza .category-desc { color: #00838f; }
 .category-btn {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem;
   background: #fff; border: 2px solid #e0e0e0; border-radius: 16px; padding: 2.5rem 1.5rem;
@@ -494,7 +512,9 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .menu-stocks { grid-column: 1; grid-row: 2; }
   .menu-barra { grid-column: 2; grid-row: 2; }
   .menu-cocina { grid-column: 3; grid-row: 2; }
-.menu-ventas { grid-column: 2; grid-row: 3; }
+  .menu-eventos { grid-column: 1; grid-row: 3; }
+  .menu-limpieza { grid-column: 3; grid-row: 3; }
+  .menu-ventas { grid-column: 2; grid-row: 4; }
 /* En PC (pantalla amplia) BASE DE DATOS y CONSOLIDADO se pegan al borde derecho, fuera de la cuadrícula */
 @media (min-width: 1300px) {
   .menu-bd,
@@ -507,7 +527,7 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .menu-costos { top: calc(50% + 15px); }
 }
   .menu-bd { grid-column: 1; grid-row: 4; }
-  .menu-costos { grid-column: 2; grid-row: 4; }
+  .menu-costos { grid-column: 3; grid-row: 4; }
   .flow-path { stroke-width: 2.5; opacity: 0.85; }
   .category-btn { min-height: 110px; padding: 0.7rem 0.3rem; }
   .category-icon { font-size: 1.6rem; }

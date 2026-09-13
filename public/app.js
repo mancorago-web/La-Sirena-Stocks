@@ -142,7 +142,7 @@ function dibujarFlujoMenu() {
   const rect = cont.getBoundingClientRect();
   const comprasBtn = document.getElementById('btn-compras');
   const ventasBtn = document.getElementById('btn-ventas');
-  const mids = ['stocks', 'barra', 'cocina']
+  const mids = ['stocks', 'barra', 'cocina', 'eventos', 'limpieza']
     .map(cat => cont.querySelector('.category-btn.menu-' + cat))
     .filter(Boolean);
   if (!comprasBtn || !ventasBtn || !mids.length) return;
@@ -211,6 +211,8 @@ function actualizarContadoresMenu() {
   const s = document.getElementById('menu-items-stocks');
   const b = document.getElementById('menu-items-barra');
   const c = document.getElementById('menu-items-cocina');
+  const e = document.getElementById('menu-items-eventos');
+  const l = document.getElementById('menu-items-limpieza');
   if (!s && !b && !c) return;
   if (window._actualizandoContadores) return;
   window._actualizandoContadores = true;
@@ -219,6 +221,8 @@ function actualizarContadoresMenu() {
     if (s) s.textContent = 'Items: ' + (r.stocks === undefined ? '—' : r.stocks);
     if (b) b.textContent = 'Items: ' + (r.barra === undefined ? '—' : r.barra);
     if (c) c.textContent = 'Items: ' + (r.cocina === undefined ? '—' : r.cocina);
+    if (e) e.textContent = 'Items: ' + (r.eventos === undefined ? '—' : r.eventos);
+    if (l) l.textContent = 'Items: ' + (r.limpieza === undefined ? '—' : r.limpieza);
     requestAnimationFrame(dibujarFlujoMenu);
   }).catch(() => { window._actualizandoContadores = false; });
 }
@@ -529,6 +533,7 @@ function irACategoria(cat) {
       _loaded[cat] = true;
       if (cat === 'barra') { cargarRecetas(); cargarStockBarra(); cargarPrecios(); cargarSugerenciasStock(); }
       if (cat === 'cocina') { cargarStockCocina(); cargarRecetasCocina(); cargarPreciosCocina(); }
+      if (cat === 'eventos' || cat === 'limpieza') { cargarExtraStock(cat); }
       if (cat === 'costos') {
         cargarPestanas().then(() => {
           const firstSub = document.querySelector('#tabs-costos .sub-tab[data-subtab]');
@@ -4740,6 +4745,10 @@ function cambiarSubTab(nombre, prefix) {
   if (prefix === 'cocina' && ['ingresos','salidas','ventas'].includes(nombre)) {
     cargarCocinaMovimientos(nombre);
   }
+  // Lazy load EVENTOS/LIMPIEZA movements (siempre frescos al entrar)
+  if ((prefix === 'eventos' || prefix === 'limpieza') && ['ingresos','salidas'].includes(nombre)) {
+    cargarExtraMovimientos(prefix, nombre);
+  }
   // Lazy load cocina porcionamiento
   if (prefix === 'cocina' && nombre === 'porcionamiento') {
     const key = 'cocina_porcionamiento';
@@ -7657,6 +7666,8 @@ function cargarComprasDetalle(ini, fin) {
       if (r.destino === 'stocks') det = 'STOCKS → ' + (r.almacenes || []).map(alNombre).join(', ');
       else if (r.destino === 'barra') det = 'BARRA → ' + (r.muebles || []).join(', ');
       else if (r.destino === 'cocina') det = 'COCINA';
+      else if (r.destino === 'eventos') det = 'EVENTOS';
+      else if (r.destino === 'limpieza') det = 'LIMPIEZA';
       const t = r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
       const precioUni = parseFloat(r.precio) || 0;
       const precioTot = parseFloat(r.precio_total) || (precioUni * (r.cantidad || 0));
@@ -8703,4 +8714,169 @@ function actualizarAutosuma(prefix) {
   inputs.forEach(inp => { const v = parseFloat(inp.value); if (!isNaN(v)) suma += v; });
   const monto = box.querySelector('.autosuma-monto');
   if (monto) monto.textContent = 'S/ ' + (base + suma).toFixed(2);
+}
+
+// --- EVENTOS / LIMPIEZA ---
+const ZONAS_EXTRA = { eventos: 'EVENTOS', limpieza: 'LIMPIEZA' };
+
+function cargarExtraMovimientos(zona, tipo) {
+  const fecha = document.getElementById('fecha-' + zona + '-' + tipo)?.value || todayStr();
+  const accId = 'accordion-' + zona + '-' + tipo;
+  const container = document.getElementById(accId);
+  if (!container) return;
+  Promise.all([
+    api('GET', '/api/extra/' + zona + '/stock'),
+    api('GET', '/api/extra/' + zona + '/movimientos?fecha=' + fecha + '&tipo=' + tipo)
+  ]).then(([stock, movs]) => {
+    const movBy = {};
+    movs.forEach(m => { movBy[m.ingrediente] = m; });
+    let lista;
+    if (tipo === 'ingresos') {
+      // Solo los items que SÍ tienen ingreso en la fecha (desde COMPRAS o ingresos manuales)
+      const conMov = stock.filter(s => (movBy[s.ingrediente]?.cantidad || 0) > 0);
+      const extra = Object.keys(movBy)
+        .filter(n => !stock.some(s => String(s.ingrediente || '').toUpperCase() === String(n).toUpperCase()))
+        .map(n => ({ ingrediente: n, unidad: movBy[n].unidad || 'unidad' }));
+      lista = [...conMov, ...extra];
+      if (!lista.length) {
+        container.innerHTML = '<p>No hay ingresos registrados en esta fecha (desde COMPRAS con destino ' + ZONAS_EXTRA[zona] + ' o INGRESOS manuales).</p>';
+        return;
+      }
+    } else {
+      lista = stock.slice();
+      if (!lista.length) { container.innerHTML = '<p>No hay items en el stock de ' + ZONAS_EXTRA[zona] + '.</p>'; return; }
+    }
+    container.innerHTML = `
+      <div class="table-wrap"><table>
+        <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th></tr></thead>
+        <tbody>
+          ${lista.map(s => {
+            const mov = movBy[s.ingrediente] || {};
+            return `<tr data-ing="${esc(s.ingrediente)}" data-uni="${esc(s.unidad || mov.unidad || 'unidad')}">
+              <td>${esc(s.ingrediente)}</td>
+              <td><input type="number" class="input-extra-mov" value="${mov.cantidad ? fmt3(mov.cantidad) : ''}" step="0.001" style="width:100px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
+              <td>${esc(s.unidad || mov.unidad || 'unidad')}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table></div>`;
+    const bp = document.getElementById('buscar-' + zona + '-' + tipo);
+    if (bp && bp.value) buscarEnTabla(bp.value, accId);
+  }).catch(e => {
+    const c = document.getElementById(accId);
+    if (c) c.innerHTML = '<p style="color:#c62828;">Error al cargar los movimientos: ' + esc(e && e.message ? e.message : 'desconocido') + '</p>';
+  });
+}
+
+function guardarExtraMovimientos(zona, tipo) {
+  const fecha = document.getElementById('fecha-' + zona + '-' + tipo)?.value || todayStr();
+  if (!fecha) { alert('Selecciona una fecha'); return; }
+  const items = [];
+  document.querySelectorAll('#accordion-' + zona + '-' + tipo + ' tr[data-ing]').forEach(tr => {
+    const cant = parseFloat(tr.querySelector('.input-extra-mov').value) || 0;
+    if (cant > 0) items.push({ ingrediente: tr.dataset.ing, cantidad: cant, unidad: tr.dataset.uni || 'unidad' });
+  });
+  if (!items.length) { alert('Ingresa cantidades para guardar'); return; }
+  api('POST', '/api/extra/' + zona + '/movimientos', { fecha, tipo, items }).then(() => {
+    showToast((tipo === 'ingresos' ? 'Ingresos' : 'Salidas') + ' guardados');
+    cargarExtraMovimientos(zona, tipo);
+    cargarExtraStock(zona);
+    actualizarContadoresMenu();
+  }).catch(e => { console.error(e); alert('Error al guardar'); });
+}
+
+function verDetallesExtra(zona, tipo) {
+  const fecha = document.getElementById('fecha-' + zona + '-' + tipo)?.value;
+  if (!fecha) { alert('Selecciona una fecha'); return; }
+  const label = tipo === 'ingresos' ? 'Ingresos' : 'Salidas';
+  api('GET', '/api/extra/' + zona + '/movimientos?fecha=' + fecha + '&tipo=' + tipo).then(movs => {
+    let html = '<h3>Detalle de ' + label + ' ' + ZONAS_EXTRA[zona] + ' — ' + fecha + '</h3>';
+    if (!movs.length) { html += '<p>No hay movimientos registrados en esta fecha.</p>'; }
+    else {
+      html += '<div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
+      movs.forEach(m => {
+        const t = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
+        const u = DISPLAY_NAMES[m.saved_by] || m.saved_by || '-';
+        html += '<tr><td>' + esc(m.ingrediente) + '</td><td>' + (m.cantidad || 0) + '</td><td>' + esc(m.unidad || 'unidad') + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+    document.getElementById('modal-body').innerHTML = html;
+    document.getElementById('modal').style.display = 'block';
+  }).catch(() => alert('Error al cargar detalle'));
+}
+
+function marcarExtraStockDirty(zona, reset) {
+  const btn = document.getElementById('btn-extra-guardar-' + zona);
+  if (!btn) return;
+  if (reset) { btn.style.background = '#2e7d32'; btn.textContent = '💾 GUARDAR STOCK'; }
+  else { btn.style.background = '#c62828'; btn.textContent = '💾 GUARDAR (*)'; }
+}
+
+function cargarExtraStock(zona) {
+  const container = document.getElementById(zona + '-stock-container');
+  if (!container) return;
+  return api('GET', '/api/extra/' + zona + '/stock').then(data => {
+    if (!data.length) {
+      container.innerHTML = '<p>No hay items en el stock de ' + ZONAS_EXTRA[zona] + '. Agrega uno nuevo o recibe items desde COMPRAS (destino ' + ZONAS_EXTRA[zona] + ').</p>';
+      marcarExtraStockDirty(zona, true);
+      return;
+    }
+    container.innerHTML = `
+      <div class="table-wrap"><table>
+        <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th></th></tr></thead>
+        <tbody>
+          ${data.map(s => `<tr data-stock-id="${s.id}" data-orig-cantidad="${s.cantidad}" data-orig-unidad="${s.unidad}">
+            <td class="stock-nombre">${esc(s.ingrediente)}</td>
+            <td class="col-cant"><input type="number" class="input-num input-extra-cant" value="${s.cantidad}" step="0.01" oninput="marcarExtraStockDirty('${zona}')"></td>
+            <td><select class="select-extra-uni" onchange="marcarExtraStockDirty('${zona}')" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${UNIDADES_STOCK.map(u => `<option value="${u}" ${s.unidad === u ? 'selected' : ''}>${u}</option>`).join('')}</select></td>
+            <td><button class="danger" onclick="eliminarExtraStock('${zona}', ${s.id})">✕</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>`;
+    marcarExtraStockDirty(zona, true);
+  }).catch(e => { console.error(e); container.innerHTML = '<p style="color:#c62828;">Error al cargar el stock.</p>'; });
+}
+
+function guardarExtraStock(zona) {
+  const rows = document.querySelectorAll('#' + zona + '-stock-container tr[data-stock-id]');
+  const updates = [];
+  rows.forEach(tr => {
+    const id = Number(tr.getAttribute('data-stock-id'));
+    const cantN = parseFloat(tr.querySelector('.input-extra-cant').value) || 0;
+    const uni = tr.querySelector('.select-extra-uni').value;
+    const oCant = parseFloat(tr.getAttribute('data-orig-cantidad')) || 0;
+    const oUni = tr.getAttribute('data-orig-unidad');
+    const body = {};
+    if (cantN !== oCant) body.cantidad = cantN;
+    if (uni !== oUni) body.unidad = uni;
+    if (Object.keys(body).length) updates.push(api('PUT', '/api/extra/' + zona + '/stock/' + id, body));
+  });
+  if (!updates.length) { showToast('Sin cambios por guardar'); return; }
+  Promise.all(updates).then(() => {
+    showToast('Stock guardado');
+    cargarExtraStock(zona);
+    actualizarContadoresMenu();
+  }).catch(() => alert('Error al guardar'));
+}
+
+function agregarExtraStock(zona) {
+  const ingrediente = document.getElementById('nuevo-stock-' + zona + '-input').value.trim();
+  const cantidad = parseFloat(document.getElementById('nuevo-stock-' + zona + '-cant').value) || 0;
+  const unidad = document.getElementById('nuevo-stock-' + zona + '-uni').value;
+  if (!ingrediente) { alert('Ingresa el nombre del item'); return; }
+  api('POST', '/api/extra/' + zona + '/stock', { ingrediente, cantidad, unidad }).then(() => {
+    document.getElementById('nuevo-stock-' + zona + '-input').value = '';
+    document.getElementById('nuevo-stock-' + zona + '-cant').value = '';
+    cargarExtraStock(zona);
+    actualizarContadoresMenu();
+  }).catch(() => alert('Error al agregar'));
+}
+
+function eliminarExtraStock(zona, id) {
+  if (!confirm('¿Eliminar este item del stock de ' + ZONAS_EXTRA[zona] + '?')) return;
+  api('DELETE', '/api/extra/' + zona + '/stock/' + id).then(() => {
+    cargarExtraStock(zona);
+    actualizarContadoresMenu();
+  }).catch(() => alert('Error al eliminar'));
 }

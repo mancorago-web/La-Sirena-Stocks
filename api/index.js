@@ -571,7 +571,11 @@ app.get('/api/resumen/items', async (req, res) => {
       const cocinaSnap = await col('cocina_stock').get();
       let totalCocina = 0;
       cocinaSnap.docs.forEach(d => { totalCocina += parseFloat(d.data().cantidad) || 0; });
-      return { stocks: Math.round(totalStocks * 100) / 100, barra: Math.round(totalBarra * 100) / 100, cocina: Math.round(totalCocina * 100) / 100 };
+      const [eventosSnap, limpiezaSnap] = await Promise.all([col('eventos_stock').get(), col('limpieza_stock').get()]);
+      let totalEventos = 0, totalLimpieza = 0;
+      eventosSnap.docs.forEach(d => { totalEventos += parseFloat(d.data().cantidad) || 0; });
+      limpiezaSnap.docs.forEach(d => { totalLimpieza += parseFloat(d.data().cantidad) || 0; });
+      return { stocks: Math.round(totalStocks * 100) / 100, barra: Math.round(totalBarra * 100) / 100, cocina: Math.round(totalCocina * 100) / 100, eventos: Math.round(totalEventos * 100) / 100, limpieza: Math.round(totalLimpieza * 100) / 100 };
     });
     res.json(data);
   } catch (e) {
@@ -1205,6 +1209,7 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
     const registrosStocks = [];
     const movsBarra = [];
     const cocinaCompras = [];
+    const extraCompras = { eventos: [], limpieza: [] };
     const resumen = { stocks: [], barra: [], cocina: [], noEncontrados: [] };
 
     for (const it of items) {
@@ -1255,6 +1260,11 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       } else if (destino === 'cocina') {
         cocinaCompras.push({ nombre, cantidad, unidad: it.unidad || 'unidad', precio, precio_total: precioTotal, documento, numero, proveedor, categoria });
         resumen.cocina.push({ nombre, cantidad, unidad: it.unidad || 'unidad', precio, precio_total: precioTotal, documento, numero, proveedor, categoria });
+      } else if (destino === 'eventos' || destino === 'limpieza') {
+        const zona = destino;
+        extraCompras[zona].push({ nombre, cantidad, unidad: it.unidad || 'unidad', precio, precio_total: precioTotal, documento, numero, proveedor });
+        resumen[zona] = resumen[zona] || [];
+        resumen[zona].push({ nombre, cantidad, unidad: it.unidad || 'unidad', precio, precio_total: precioTotal, documento, numero, proveedor });
       } else {
         resumen.noEncontrados.push({ nombre, cantidad, destino });
       }
@@ -1362,8 +1372,24 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       if (cpNuevos) await cpBatch.commit();
     }
 
+    // Aplicar a EVENTOS / LIMPIEZA (movimiento de ingreso + sumar al stock de la zona)
+    for (const zona of ['eventos', 'limpieza']) {
+      const comprasZona = extraCompras[zona] || [];
+      if (!comprasZona.length) continue;
+      const batch = db.batch();
+      const now = new Date().toISOString();
+      for (const m of comprasZona) {
+        batch.set(colExtra(zona, 'movimientos').doc(), {
+          fecha, tipo: 'ingresos', ingrediente: m.nombre, cantidad: m.cantidad,
+          unidad: m.unidad, saved_by: savedBy, created_at: now
+        });
+      }
+      await batch.commit();
+      await ajustarExtraStock(zona, comprasZona.map(m => ({ nombre: m.nombre, delta: m.cantidad, unidad: m.unidad })));
+    }
+
     // Registrar el log de cada compra (para el detalle de COMPRAS/INGRESOS)
-    if (resumen.stocks.length || resumen.barra.length || resumen.cocina.length) {
+    if (resumen.stocks.length || resumen.barra.length || resumen.cocina.length || (resumen.eventos || []).length || (resumen.limpieza || []).length) {
       const logBatch = db.batch();
       resumen.stocks.forEach(r => {
         logBatch.set(col('compras').doc(), {
@@ -1386,6 +1412,20 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
           documento: r.documento || '', numero: r.numero || '', proveedor: r.proveedor || '', categoria: r.categoria || '', saved_by: savedBy, created_at: new Date().toISOString()
         });
       });
+      (resumen.eventos || []).forEach(r => {
+        logBatch.set(col('compras').doc(), {
+          fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: r.unidad || 'unidad', destino: 'eventos',
+          precio: r.precio || 0, precio_total: r.precio_total || 0,
+          documento: r.documento || '', numero: r.numero || '', proveedor: r.proveedor || '', saved_by: savedBy, created_at: new Date().toISOString()
+        });
+      });
+      (resumen.limpieza || []).forEach(r => {
+        logBatch.set(col('compras').doc(), {
+          fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: r.unidad || 'unidad', destino: 'limpieza',
+          precio: r.precio || 0, precio_total: r.precio_total || 0,
+          documento: r.documento || '', numero: r.numero || '', proveedor: r.proveedor || '', saved_by: savedBy, created_at: new Date().toISOString()
+        });
+      });
       await logBatch.commit();
     }
 
@@ -1395,6 +1435,8 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
     resumen.stocks.forEach(r => comprasConPrecio.push({ nombre: r.nombre, precio: r.precio, destino: 'stocks' }));
     resumen.barra.forEach(r => comprasConPrecio.push({ nombre: r.nombre, precio: r.precio, destino: 'barra' }));
     resumen.cocina.forEach(r => comprasConPrecio.push({ nombre: r.nombre, precio: r.precio, destino: 'cocina' }));
+    (resumen.eventos || []).forEach(r => comprasConPrecio.push({ nombre: r.nombre, precio: r.precio, destino: 'eventos' }));
+    (resumen.limpieza || []).forEach(r => comprasConPrecio.push({ nombre: r.nombre, precio: r.precio, destino: 'limpieza' }));
     await Promise.all(comprasConPrecio.map(c => registrarUltimoPrecioCompra(c.nombre, c.precio, c.destino, fecha)));
 
     res.json({ ok: true, resumen });
@@ -1672,6 +1714,22 @@ app.delete('/api/compras/:id', authMiddleware, async (req, res) => {
       if (borrado) await batch.commit();
       // Restar del COCINA/STOCK (si llega a 0 se elimina el item, no deja rastro)
       await ajustarCocinaStock([{ nombre, delta: -cantidad, unidad: log.unidad || 'unidad' }]);
+    } else if (log.destino === 'eventos' || log.destino === 'limpieza') {
+      // Revertir el movimiento de ingreso de la zona y restar del stock
+      const zona = log.destino;
+      const em = await colExtra(zona, 'movimientos').where('fecha', '==', fecha).where('tipo', '==', 'ingresos').get();
+      const batch = db.batch();
+      let borrado = false;
+      em.docs.forEach(d => {
+        const a = d.data();
+        if (String(a.ingrediente || '').toUpperCase() === String(nombre).toUpperCase() &&
+            Math.abs((parseFloat(a.cantidad) || 0) - cantidad) < 0.001) {
+          batch.delete(d.ref);
+          borrado = true;
+        }
+      });
+      if (borrado) await batch.commit();
+      await ajustarExtraStock(zona, [{ nombre, delta: -cantidad, unidad: log.unidad || 'unidad' }]);
     }
 
     // Eliminar el registro del log
@@ -1793,6 +1851,32 @@ app.put('/api/compras/:id', authMiddleware, async (req, res) => {
         await col('cocina_compras').add({
           fecha: fechaLog, nombre, cantidad: newCantidad, unidad: 'unidad', precio: parseFloat(precio) || 0, precio_total: parseFloat(precio_total) || 0,
           categoria: String(categoria || log.categoria || '').trim().toUpperCase(), saved_by: savedBy, created_at: now
+        });
+      }
+    } else if (log.destino === 'eventos' || log.destino === 'limpieza') {
+      const zona = log.destino;
+      const em = await colExtra(zona, 'movimientos').where('fecha', '==', fechaLog).where('tipo', '==', 'ingresos').get();
+      const batch = db.batch();
+      let borrado = false;
+      em.docs.forEach(d => {
+        const a = d.data();
+        if (String(a.ingrediente || '').toUpperCase() === String(nombre).toUpperCase() &&
+            Math.abs((parseFloat(a.cantidad) || 0) - oldCantidad) < 0.001) {
+          batch.delete(d.ref);
+          borrado = true;
+        }
+      });
+      if (borrado) await batch.commit();
+      // Ajustar el stock de la zona por la diferencia neta
+      const delta = newCantidad - oldCantidad;
+      if (delta !== 0) {
+        await ajustarExtraStock(zona, [{ nombre, delta, unidad: 'unidad' }]);
+      }
+      // Registrar el nuevo movimiento de ingreso
+      if (newCantidad > 0) {
+        await colExtra(zona, 'movimientos').add({
+          fecha: fechaLog, tipo: 'ingresos', ingrediente: nombre, cantidad: newCantidad,
+          unidad: 'unidad', saved_by: savedBy, created_at: now
         });
       }
     }
@@ -7112,6 +7196,173 @@ app.delete('/api/costos/pestanas/:id', authMiddleware, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// --- EVENTOS / LIMPIEZA ---
+// Dos grupos principales con su propio INGRESOS / SALIDAS / STOCK. Son estructuralmente iguales a
+// BARRA/STOCK (sin recetas ni ventas). Pueden RECIBIR items desde COMPRAS.
+// VENTAS no jala datos de EVENTOS/LIMPIEZA (por ahora).
+const ZONAS_EXTRA = { eventos: 'EVENTOS', limpieza: 'LIMPIEZA' };
+function esZonaExtra(z) { return Object.prototype.hasOwnProperty.call(ZONAS_EXTRA, String(z || '').toLowerCase()); }
+function colExtra(zona, sufijo) { return col(String(zona).toLowerCase() + '_' + sufijo); }
+
+// Ajusta el stock de una zona extra (suma deltas). Crea el item si no existe y el delta es positivo.
+async function ajustarExtraStock(zona, ajustes) {
+  const z = String(zona).toLowerCase();
+  if (!esZonaExtra(z)) throw new Error('Zona inválida');
+  const grupo = ZONAS_EXTRA[z];
+  const snap = await colExtra(z, 'stock').get();
+  let maxId = snap.docs.length ? Math.max(...snap.docs.map(d => Number(d.id) || 0)) : 0;
+  const byName = {};
+  snap.docs.forEach(d => {
+    const k = String(d.data().ingrediente || '').trim().toUpperCase();
+    if (k && !byName[k]) byName[k] = d;
+  });
+  const batch = db.batch();
+  const now = new Date().toISOString();
+  for (const aj of (ajustes || [])) {
+    const key = String(aj.nombre || '').trim().toUpperCase();
+    const delta = parseFloat(aj.delta) || 0;
+    if (!key || !delta) continue;
+    const existente = byName[key];
+    if (existente) {
+      const nueva = Math.round(((parseFloat(existente.data().cantidad) || 0) + delta) * 100) / 100;
+      batch.update(existente.ref, { cantidad: nueva, updated_at: now });
+    } else if (delta > 0) {
+      maxId++;
+      const ref = colExtra(z, 'stock').doc(String(maxId));
+      batch.set(ref, {
+        id: maxId, ingrediente: aj.nombre, cantidad: Math.round(delta * 100) / 100,
+        unidad: normalizeUnit(aj.unidad || 'unidad'), grupo, created_at: now, updated_at: now
+      });
+      byName[key] = { ref, data: { cantidad: delta } };
+    }
+  }
+  await batch.commit();
+  invalidarCache('inventario_snap');
+}
+
+app.get('/api/extra/:zona/stock', async (req, res) => {
+  try {
+    const z = String(req.params.zona || '').toLowerCase();
+    if (!esZonaExtra(z)) return res.status(400).json({ error: 'Zona inválida' });
+    const snap = await colExtra(z, 'stock').orderBy('id').get();
+    res.json(snap.docs.map(d => ({ id: Number(d.id), ...d.data() })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/extra/:zona/stock', authMiddleware, async (req, res) => {
+  try {
+    const z = String(req.params.zona || '').toLowerCase();
+    if (!esZonaExtra(z)) return res.status(400).json({ error: 'Zona inválida' });
+    const { ingrediente, cantidad, unidad } = req.body;
+    if (!ingrediente) return res.status(400).json({ error: 'Nombre requerido' });
+    const all = await colExtra(z, 'stock').get();
+    const nextId = all.docs.length ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
+    await colExtra(z, 'stock').doc(String(nextId)).set({
+      id: nextId, ingrediente: String(ingrediente).trim(), cantidad: parseFloat(cantidad) || 0,
+      unidad: normalizeUnit(unidad), grupo: ZONAS_EXTRA[z],
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+    });
+    invalidarCache('inventario_snap');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/extra/:zona/stock/:id', authMiddleware, async (req, res) => {
+  try {
+    const z = String(req.params.zona || '').toLowerCase();
+    if (!esZonaExtra(z)) return res.status(400).json({ error: 'Zona inválida' });
+    const { cantidad, ingrediente, unidad } = req.body;
+    const upd = { updated_at: new Date().toISOString() };
+    if (cantidad !== undefined) upd.cantidad = parseFloat(cantidad) || 0;
+    if (ingrediente) upd.ingrediente = String(ingrediente).trim();
+    if (unidad) upd.unidad = normalizeUnit(unidad);
+    await colExtra(z, 'stock').doc(req.params.id).update(upd);
+    invalidarCache('inventario_snap');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/extra/:zona/stock/:id', authMiddleware, async (req, res) => {
+  try {
+    const z = String(req.params.zona || '').toLowerCase();
+    if (!esZonaExtra(z)) return res.status(400).json({ error: 'Zona inválida' });
+    await colExtra(z, 'stock').doc(req.params.id).delete();
+    invalidarCache('inventario_snap');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/extra/:zona/movimientos', authMiddleware, async (req, res) => {
+  try {
+    const z = String(req.params.zona || '').toLowerCase();
+    if (!esZonaExtra(z)) return res.status(400).json({ error: 'Zona inválida' });
+    const { fecha, tipo } = req.query;
+    let q = colExtra(z, 'movimientos');
+    if (fecha) q = q.where('fecha', '==', fecha);
+    if (tipo) q = q.where('tipo', '==', tipo);
+    const snap = await q.get();
+    const out = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    out.sort((a, b) => String(a.ingrediente || '').localeCompare(String(b.ingrediente || '')));
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Guarda los movimientos (ingresos o salidas) de un día y ajusta el STOCK de forma idempotente:
+// el delta aplicado es (nuevo - anterior) * signo, donde signo = +1 ingresos, -1 salidas.
+app.post('/api/extra/:zona/movimientos', authMiddleware, async (req, res) => {
+  try {
+    const z = String(req.params.zona || '').toLowerCase();
+    if (!esZonaExtra(z)) return res.status(400).json({ error: 'Zona inválida' });
+    const { fecha, tipo, items } = req.body;
+    if (!fecha || !tipo || !Array.isArray(items)) return res.status(400).json({ error: 'fecha, tipo e items requeridos' });
+    if (!['ingresos', 'salidas'].includes(tipo)) return res.status(400).json({ error: 'tipo inválido' });
+    const savedBy = req.user?.name || req.user?.email || 'unknown';
+
+    const existing = await colExtra(z, 'movimientos').where('fecha', '==', fecha).where('tipo', '==', tipo).get();
+    const oldBy = {};
+    existing.docs.forEach(d => {
+      const dd = d.data();
+      const k = String(dd.ingrediente || '').trim().toUpperCase();
+      if (!k) return;
+      if (!oldBy[k]) oldBy[k] = { cant: 0, unidad: dd.unidad || 'unidad', nombre: dd.ingrediente };
+      oldBy[k].cant += parseFloat(dd.cantidad) || 0;
+    });
+    const newBy = {};
+    for (const it of items) {
+      const k = String(it.ingrediente || '').trim().toUpperCase();
+      const cant = parseFloat(it.cantidad) || 0;
+      if (!k || cant <= 0) continue;
+      if (!newBy[k]) newBy[k] = { cant: 0, unidad: it.unidad || 'unidad', nombre: it.ingrediente };
+      newBy[k].cant += cant;
+    }
+
+    const batch = db.batch();
+    existing.docs.forEach(d => batch.delete(d.ref));
+    const now = new Date().toISOString();
+    for (const k of Object.keys(newBy)) {
+      batch.set(colExtra(z, 'movimientos').doc(), {
+        fecha, tipo, ingrediente: newBy[k].nombre, cantidad: Math.round(newBy[k].cant * 100) / 100,
+        unidad: newBy[k].unidad, saved_by: savedBy, created_at: now
+      });
+    }
+    await batch.commit();
+
+    const signo = tipo === 'ingresos' ? 1 : -1;
+    const ajustes = [];
+    const keys = new Set([...Object.keys(oldBy), ...Object.keys(newBy)]);
+    keys.forEach(k => {
+      const nc = newBy[k] ? newBy[k].cant : 0;
+      const oc = oldBy[k] ? oldBy[k].cant : 0;
+      const delta = (nc - oc) * signo;
+      if (!delta) return;
+      ajustes.push({ nombre: (newBy[k] && newBy[k].nombre) || (oldBy[k] && oldBy[k].nombre) || k, delta, unidad: (newBy[k] && newBy[k].unidad) || (oldBy[k] && oldBy[k].unidad) || 'unidad' });
+    });
+    if (ajustes.length) await ajustarExtraStock(z, ajustes);
+
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = app;

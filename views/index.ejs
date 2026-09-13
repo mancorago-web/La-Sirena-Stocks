@@ -52,6 +52,18 @@
           <span class="category-desc">Recetas, Stock y Base de Datos de la Cocina</span>
           <span class="category-items" id="menu-items-cocina">Items: —</span>
         </button>
+        <button class="category-btn menu-eventos" onclick="irACategoria('eventos')">
+          <span class="category-icon">🎪</span>
+          <span class="category-label">EVENTOS</span>
+          <span class="category-desc">Ingresos, Salidas y Stock de Eventos</span>
+          <span class="category-items" id="menu-items-eventos">Items: —</span>
+        </button>
+        <button class="category-btn menu-limpieza" onclick="irACategoria('limpieza')">
+          <span class="category-icon">🧹</span>
+          <span class="category-label">LIMPIEZA</span>
+          <span class="category-desc">Ingresos, Salidas y Stock de Limpieza</span>
+          <span class="category-items" id="menu-items-limpieza">Items: —</span>
+        </button>
         <button class="category-btn menu-costos" onclick="irACategoria('costos')">
           <span class="category-icon">💰</span>
           <span class="category-label">CONSOLIDADO</span>
@@ -115,6 +127,24 @@
       <button class="sub-tab" data-subtab="basedatos" onclick="cambiarSubTab('basedatos','cocina')">Base de Datos</button>
       <button class="sub-tab" data-subtab="porcionamiento" onclick="cambiarSubTab('porcionamiento','cocina')">Porcionamiento</button>
       <button class="sub-tab" data-subtab="desperdicios" onclick="cambiarSubTab('desperdicios','cocina')">Desperdicios</button>
+    </div>
+  </div>
+
+  <!-- Tabs bar (EVENTOS) -->
+  <div id="tabs-eventos" class="tabs-bar" style="display:none">
+    <div class="tabs">
+      <button class="sub-tab active" data-subtab="ingresos" onclick="cambiarSubTab('ingresos','eventos')">Ingresos</button>
+      <button class="sub-tab" data-subtab="salidas" onclick="cambiarSubTab('salidas','eventos')">Salidas</button>
+      <button class="sub-tab" data-subtab="stock" onclick="cambiarSubTab('stock','eventos')">Stock</button>
+    </div>
+  </div>
+
+  <!-- Tabs bar (LIMPIEZA) -->
+  <div id="tabs-limpieza" class="tabs-bar" style="display:none">
+    <div class="tabs">
+      <button class="sub-tab active" data-subtab="ingresos" onclick="cambiarSubTab('ingresos','limpieza')">Ingresos</button>
+      <button class="sub-tab" data-subtab="salidas" onclick="cambiarSubTab('salidas','limpieza')">Salidas</button>
+      <button class="sub-tab" data-subtab="stock" onclick="cambiarSubTab('stock','limpieza')">Stock</button>
     </div>
   </div>
 
@@ -496,6 +526,102 @@
       <div id="costos-content-area"></div>
     </div>
 
+    <div id="tab-eventos" class="tab-content">
+      <div id="sub-eventos-ingresos" class="sub-tab-content active">
+        <div class="header-actions">
+          <h2>Ingresos Eventos</h2>
+          <div class="controles-dia">
+            <label>Fecha: <input type="date" id="fecha-eventos-ingresos" onchange="cargarExtraMovimientos('eventos','ingresos')"></label>
+            <input type="text" id="buscar-eventos-ingresos" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-eventos-ingresos')">
+            <button class="btn-guardar-dia" onclick="guardarExtraMovimientos('eventos','ingresos')">💾 GUARDAR INGRESOS</button>
+            <button class="btn-detalles" onclick="verDetallesExtra('eventos','ingresos')">📋 DETALLES</button>
+          </div>
+        </div>
+        <div id="accordion-eventos-ingresos"></div>
+      </div>
+      <div id="sub-eventos-salidas" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>Salidas Eventos</h2>
+          <div class="controles-dia">
+            <label>Fecha: <input type="date" id="fecha-eventos-salidas" onchange="cargarExtraMovimientos('eventos','salidas')"></label>
+            <input type="text" id="buscar-eventos-salidas" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-eventos-salidas')">
+            <button class="btn-guardar-dia" onclick="guardarExtraMovimientos('eventos','salidas')">💾 GUARDAR SALIDAS</button>
+            <button class="btn-detalles" onclick="verDetallesExtra('eventos','salidas')">📋 DETALLES</button>
+          </div>
+        </div>
+        <div id="accordion-eventos-salidas"></div>
+      </div>
+      <div id="sub-eventos-stock" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>Stock Eventos</h2>
+          <div class="controles-dia" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+            <input type="text" id="nuevo-stock-eventos-input" placeholder="Item..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:180px;">
+            <input type="number" id="nuevo-stock-eventos-cant" placeholder="Cant." step="0.01" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:80px;">
+            <select id="nuevo-stock-eventos-uni" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:90px;">
+              <option value="unidad">unidad</option>
+              <option value="ml">ml</option>
+              <option value="lt">lt</option>
+              <option value="onzas">onzas</option>
+              <option value="gramos">gramos</option>
+              <option value="kg">kg</option>
+            </select>
+            <button class="btn-detalles" onclick="agregarExtraStock('eventos')">➕ AGREGAR</button>
+            <button class="btn-guardar-dia" id="btn-extra-guardar-eventos" onclick="guardarExtraStock('eventos')">💾 GUARDAR STOCK</button>
+            <input type="text" id="buscar-stock-eventos" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'eventos-stock-container')">
+          </div>
+        </div>
+        <div id="eventos-stock-container"></div>
+      </div>
+    </div>
+
+    <div id="tab-limpieza" class="tab-content">
+      <div id="sub-limpieza-ingresos" class="sub-tab-content active">
+        <div class="header-actions">
+          <h2>Ingresos Limpieza</h2>
+          <div class="controles-dia">
+            <label>Fecha: <input type="date" id="fecha-limpieza-ingresos" onchange="cargarExtraMovimientos('limpieza','ingresos')"></label>
+            <input type="text" id="buscar-limpieza-ingresos" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-limpieza-ingresos')">
+            <button class="btn-guardar-dia" onclick="guardarExtraMovimientos('limpieza','ingresos')">💾 GUARDAR INGRESOS</button>
+            <button class="btn-detalles" onclick="verDetallesExtra('limpieza','ingresos')">📋 DETALLES</button>
+          </div>
+        </div>
+        <div id="accordion-limpieza-ingresos"></div>
+      </div>
+      <div id="sub-limpieza-salidas" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>Salidas Limpieza</h2>
+          <div class="controles-dia">
+            <label>Fecha: <input type="date" id="fecha-limpieza-salidas" onchange="cargarExtraMovimientos('limpieza','salidas')"></label>
+            <input type="text" id="buscar-limpieza-salidas" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-limpieza-salidas')">
+            <button class="btn-guardar-dia" onclick="guardarExtraMovimientos('limpieza','salidas')">💾 GUARDAR SALIDAS</button>
+            <button class="btn-detalles" onclick="verDetallesExtra('limpieza','salidas')">📋 DETALLES</button>
+          </div>
+        </div>
+        <div id="accordion-limpieza-salidas"></div>
+      </div>
+      <div id="sub-limpieza-stock" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>Stock Limpieza</h2>
+          <div class="controles-dia" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+            <input type="text" id="nuevo-stock-limpieza-input" placeholder="Item..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:180px;">
+            <input type="number" id="nuevo-stock-limpieza-cant" placeholder="Cant." step="0.01" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:80px;">
+            <select id="nuevo-stock-limpieza-uni" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:90px;">
+              <option value="unidad">unidad</option>
+              <option value="ml">ml</option>
+              <option value="lt">lt</option>
+              <option value="onzas">onzas</option>
+              <option value="gramos">gramos</option>
+              <option value="kg">kg</option>
+            </select>
+            <button class="btn-detalles" onclick="agregarExtraStock('limpieza')">➕ AGREGAR</button>
+            <button class="btn-guardar-dia" id="btn-extra-guardar-limpieza" onclick="guardarExtraStock('limpieza')">💾 GUARDAR STOCK</button>
+            <input type="text" id="buscar-stock-limpieza" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'limpieza-stock-container')">
+          </div>
+        </div>
+        <div id="limpieza-stock-container"></div>
+      </div>
+    </div>
+
     <div id="tab-compras" class="tab-content">
       <div class="header-actions">
         <h2>COMPRAS</h2>
@@ -516,6 +642,8 @@
             <option value="stocks">STOCKS</option>
             <option value="barra">BARRA</option>
             <option value="cocina">COCINA</option>
+            <option value="eventos">EVENTOS</option>
+            <option value="limpieza">LIMPIEZA</option>
           </select>
           <button class="btn-detalles" id="btn-agregar-compra" onclick="agregarCompra()">➕ AGREGAR</button>
         </div>
