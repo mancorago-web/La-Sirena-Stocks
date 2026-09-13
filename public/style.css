@@ -65,13 +65,13 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .main-menu {
   position: relative;
   display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: calc(100vh - 4rem);
-  padding: 2rem;
+  padding: 0.75rem 1.5rem;
 }
 .menu-flow-container { position: relative; width: 100%; max-width: 1100px; }
 .menu-flow-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
 .flow-path { fill: none; stroke: #1a237e; stroke-width: 2; stroke-dasharray: 7 5; opacity: 0.65; }
 .main-menu-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; width: 100%;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.9rem 1rem; width: 100%;
   max-width: 1100px; position: relative; z-index: 1;
 }
 .menu-compras { grid-column: 2; grid-row: 1; }
@@ -120,14 +120,26 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .category-btn.menu-ventas,
 .category-btn.menu-bd,
 .category-btn.menu-costos {
-  padding: 1.1rem 1rem;
-  height: 135px;
-  min-height: 135px;
-  max-height: 135px;
-  gap: 0.55rem;
+  padding: 0.5rem 0.35rem;
+  height: 96px;
+  min-height: 96px;
+  max-height: 96px;
+  gap: 0.25rem;
   justify-content: center;
   overflow: hidden;
 }
+.category-btn.menu-compras .category-icon,
+.category-btn.menu-ventas .category-icon,
+.category-btn.menu-bd .category-icon,
+.category-btn.menu-costos .category-icon { font-size: 1.35rem; }
+.category-btn.menu-compras .category-label,
+.category-btn.menu-ventas .category-label,
+.category-btn.menu-bd .category-label,
+.category-btn.menu-costos .category-label { font-size: 0.72rem; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.category-btn.menu-compras .category-desc,
+.category-btn.menu-ventas .category-desc,
+.category-btn.menu-bd .category-desc,
+.category-btn.menu-costos .category-desc { display: none; }
 .menu-eventos { grid-column: 1; grid-row: 3; }
 .menu-limpieza { grid-column: 3; grid-row: 3; }
 .menu-ventas { grid-column: 2; grid-row: 4; }
@@ -148,20 +160,20 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .category-btn.menu-limpieza .category-label { color: #00838f; }
 .category-btn.menu-limpieza .category-desc { color: #00838f; }
 .category-btn {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem;
-  background: #fff; border: 2px solid #e0e0e0; border-radius: 16px; padding: 2.5rem 1.5rem;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem;
+  background: #fff; border: 2px solid #e0e0e0; border-radius: 12px; padding: 0.6rem 0.4rem;
   cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  font-family: inherit; text-transform: uppercase; min-height: 220px; min-width: 0;
+  font-family: inherit; text-transform: uppercase; min-height: 118px; min-width: 0;
 }
 .category-btn:hover { border-color: #1a237e; box-shadow: 0 4px 16px rgba(26,35,126,0.15); transform: translateY(-2px); }
 .category-btn:active { transform: translateY(0); }
-.category-icon { font-size: 3rem; line-height: 1; }
-.category-label { font-size: 1.3rem; font-weight: 700; color: #1a237e; letter-spacing: 1px; }
-.category-desc { font-size: 0.75rem; color: #888; text-align: center; text-transform: none; line-height: 1.3; }
+.category-icon { font-size: 1.55rem; line-height: 1; }
+.category-label { font-size: 0.88rem; font-weight: 700; color: #1a237e; letter-spacing: 0.5px; }
+.category-desc { font-size: 0.58rem; color: #888; text-align: center; text-transform: none; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .category-items {
-  font-size: 0.8rem; font-weight: 700; color: #fff; background: #1a237e;
-  border-radius: 999px; padding: 0.2rem 0.7rem; text-transform: none; letter-spacing: 0.5px;
-  box-sizing: border-box; min-width: 5.6rem; max-width: 100%; text-align: center;
+  font-size: 0.62rem; font-weight: 700; color: #fff; background: #1a237e;
+  border-radius: 999px; padding: 0.12rem 0.5rem; text-transform: none; letter-spacing: 0.5px;
+  box-sizing: border-box; min-width: 4.2rem; max-width: 100%; text-align: center;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   display: inline-flex; align-items: center; justify-content: center;
 }
@@ -506,8 +518,8 @@ td button.danger { border-color: #c62828; color: #c62828; }
   }
 
   /* Main menu (Android: distinto a PC) */
-  .main-menu { padding: 1rem; min-height: calc(100vh - 3.5rem); }
-  .main-menu-grid { grid-template-columns: repeat(3, 1fr); column-gap: 0.6rem; row-gap: 1.3rem; max-width: 100%; }
+  .main-menu { padding: 0.5rem; min-height: calc(100vh - 3.5rem); }
+  .main-menu-grid { grid-template-columns: repeat(3, 1fr); column-gap: 0.5rem; row-gap: 0.7rem; max-width: 100%; }
   .menu-compras { grid-column: 2; grid-row: 1; }
   .menu-stocks { grid-column: 1; grid-row: 2; }
   .menu-barra { grid-column: 2; grid-row: 2; }
@@ -529,13 +541,13 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .menu-bd { grid-column: 1; grid-row: 4; }
   .menu-costos { grid-column: 3; grid-row: 4; }
   .flow-path { stroke-width: 2.5; opacity: 0.85; }
-  .category-btn { min-height: 110px; padding: 0.7rem 0.3rem; }
-  .category-icon { font-size: 1.6rem; }
-  .category-label { font-size: 0.72rem; letter-spacing: 0.5px; }
+  .category-btn { min-height: 88px; padding: 0.5rem 0.25rem; }
+  .category-icon { font-size: 1.3rem; }
+  .category-label { font-size: 0.66rem; letter-spacing: 0.5px; }
   .category-desc { display: none; }
-  .category-btn.menu-compras, .category-btn.menu-ventas, .category-btn.menu-bd, .category-btn.menu-costos { height: 70px; min-height: 70px; max-height: 70px; padding: 0.5rem 0.3rem; }
-  .category-btn.menu-compras .category-icon, .category-btn.menu-ventas .category-icon, .category-btn.menu-bd .category-icon, .category-btn.menu-costos .category-icon { font-size: 1.2rem; }
-  .category-btn.menu-compras .category-label, .category-btn.menu-ventas .category-label, .category-btn.menu-bd .category-label, .category-btn.menu-costos .category-label { font-size: 0.65rem; }
+  .category-btn.menu-compras, .category-btn.menu-ventas, .category-btn.menu-bd, .category-btn.menu-costos { height: 58px; min-height: 58px; max-height: 58px; padding: 0.4rem 0.25rem; }
+  .category-btn.menu-compras .category-icon, .category-btn.menu-ventas .category-icon, .category-btn.menu-bd .category-icon, .category-btn.menu-costos .category-icon { font-size: 1.1rem; }
+  .category-btn.menu-compras .category-label, .category-btn.menu-ventas .category-label, .category-btn.menu-bd .category-label, .category-btn.menu-costos .category-label { font-size: 0.6rem; }
   .category-btn.menu-compras .category-desc, .category-btn.menu-ventas .category-desc, .category-btn.menu-bd .category-desc, .category-btn.menu-costos .category-desc { display: none; }
   .user-info {
     width: auto;
@@ -686,14 +698,14 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .accordion-title { font-size: 0.82rem; }
   .input-num { width: 48px; font-size: 0.7rem; }
   .accordion-actions button { font-size: 0.65rem; padding: 0.3rem 0.4rem; }
-  .main-menu { padding: 0.75rem; }
-  .category-btn { min-height: 95px; padding: 0.6rem 0.25rem; }
-  .category-icon { font-size: 1.4rem; }
-  .category-label { font-size: 0.66rem; }
+  .main-menu { padding: 0.4rem; }
+  .category-btn { min-height: 74px; padding: 0.45rem 0.2rem; }
+  .category-icon { font-size: 1.15rem; }
+  .category-label { font-size: 0.6rem; }
   .category-desc { display: none; }
-  .category-btn.menu-compras, .category-btn.menu-ventas, .category-btn.menu-bd, .category-btn.menu-costos { height: 60px; min-height: 60px; max-height: 60px; padding: 0.4rem 0.25rem; }
-  .category-btn.menu-compras .category-icon, .category-btn.menu-ventas .category-icon, .category-btn.menu-bd .category-icon, .category-btn.menu-costos .category-icon { font-size: 1.05rem; }
-  .category-btn.menu-compras .category-label, .category-btn.menu-ventas .category-label, .category-btn.menu-bd .category-label, .category-btn.menu-costos .category-label { font-size: 0.6rem; }
+  .category-btn.menu-compras, .category-btn.menu-ventas, .category-btn.menu-bd, .category-btn.menu-costos { height: 50px; min-height: 50px; max-height: 50px; padding: 0.35rem 0.2rem; }
+  .category-btn.menu-compras .category-icon, .category-btn.menu-ventas .category-icon, .category-btn.menu-bd .category-icon, .category-btn.menu-costos .category-icon { font-size: 1rem; }
+  .category-btn.menu-compras .category-label, .category-btn.menu-ventas .category-label, .category-btn.menu-bd .category-label, .category-btn.menu-costos .category-label { font-size: 0.55rem; }
 }
 
 /* --- Botones de acción de PORCIONAMIENTO --- */
