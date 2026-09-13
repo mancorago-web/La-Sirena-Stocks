@@ -8437,7 +8437,7 @@ function renderCostoCategoria(prefix, container) {
       if (String(t).toUpperCase() === 'ALIMENTOS Y BEBIDAS') {
         html += `<div class="accordion-item" id="acordeon-alimentos-ybebidas">
           <div class="accordion-header" onclick="toggleAcordeon(this)">
-            <span class="accordion-title">${t} <span style="font-weight:400;font-size:0.85rem;color:#777;">— Compras del día (comida y bebida)</span></span>
+            <span class="accordion-title">${t} <span id="resumen-alimentos-total" style="font-weight:400;font-size:0.85rem;color:#777;">— Compras del día</span></span>
             <span class="accordion-arrow">▶</span>
           </div>
           <div class="accordion-body">
@@ -8494,13 +8494,26 @@ function renderCostoCategoria(prefix, container) {
 }
 
 // Carga el DETALLE DE COMPRAS del día y lo muestra en la sección ALIMENTOS Y BEBIDAS de RESUMEN
-// agrupado por zona (STOCKS, BARRA, COCINA, EVENTOS, LIMPIEZA) con subtotales y total general.
+// agrupado por zona (STOCKS, BARRA, COCINA, EVENTOS, LIMPIEZA). Dentro de COCINA se subdivide por
+// categoría (PESCADO, VERDURAS, ABARROTES, etc.). El total se muestra en el título de la sección y
+// se suma al TOTAL del RESUMEN.
+const ORDEN_CATEGORIAS_COCINA = ['FRUTAS', 'VERDURAS', 'PESCADO', 'CARNE', 'POLLO', 'LACTEOS', 'ABARROTES', 'ACEITES', 'SEMILLAS', 'RECETAS BASE', 'LIMPIEZA', 'VINOS', 'CERVEZAS', 'OTROS'];
 function cargarComprasResumen() {
   const fecha = document.getElementById('resumen-compras-fecha')?.value || todayStr();
   const div = document.getElementById('resumen-compras-div');
   if (!div) return;
   div.innerHTML = '<p style="color:#888;">Cargando compras de ' + fecha + '...</p>';
-  api('GET', '/api/compras/detalle?fecha=' + encodeURIComponent(fecha)).then(list => {
+  Promise.all([
+    api('GET', '/api/compras/detalle?fecha=' + encodeURIComponent(fecha)),
+    api('GET', '/api/cocina/stock').catch(() => [])
+  ]).then(([list, cocinaStock]) => {
+    // Mapa nombre -> familia de COCINA/STOCK (para clasificar compras de COCINA sin categoría)
+    const famMap = {};
+    (cocinaStock || []).forEach(s => {
+      const k = String(s.ingrediente || '').trim().toUpperCase();
+      if (k && !famMap[k]) famMap[k] = (s.familia || '').trim().toUpperCase();
+    });
+    const precioTotal = r => (parseFloat(r.precio_total) || 0) || ((parseFloat(r.precio) || 0) * (r.cantidad || 0));
     const zonas = ['stocks', 'barra', 'cocina', 'eventos', 'limpieza'];
     const byZona = { stocks: [], barra: [], cocina: [], eventos: [], limpieza: [] };
     (list || []).forEach(r => { if (byZona[r.destino]) byZona[r.destino].push(r); });
@@ -8509,18 +8522,52 @@ function cargarComprasResumen() {
     zonas.forEach(z => {
       const rows = byZona[z];
       if (!rows.length) return;
-      const subTotal = rows.reduce((s, r) => s + ((parseFloat(r.precio_total) || 0) || ((parseFloat(r.precio) || 0) * (r.cantidad || 0))), 0);
+      const subTotal = rows.reduce((s, r) => s + precioTotal(r), 0);
       totalGeneral += subTotal;
-      html += `<div style="margin-bottom:0.75rem;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;">
-        <div style="background:#eef2ff;padding:0.4rem 0.6rem;font-weight:700;color:#1a237e;font-size:0.82rem;display:flex;justify-content:space-between;align-items:center;">
-          <span>${z.toUpperCase()}</span>
-          <span style="color:#0f3460;">S/ ${subTotal.toFixed(2)}</span>
-        </div>
-        <div class="table-wrap"><table style="margin:0;">
+      let cuerpo;
+      if (z === 'cocina') {
+        // Subdividir COCINA por categoría (de la compra, o inferida de COCINA/STOCK)
+        const porCat = {};
+        rows.forEach(r => {
+          let cat = String(r.categoria || '').trim().toUpperCase();
+          if (!cat) cat = famMap[String(r.nombre || '').trim().toUpperCase()];
+          if (!cat) cat = 'OTROS';
+          if (!porCat[cat]) porCat[cat] = [];
+          porCat[cat].push(r);
+        });
+        const cats = Object.keys(porCat).sort((a, b) => {
+          const ia = ORDEN_CATEGORIAS_COCINA.indexOf(a), ib = ORDEN_CATEGORIAS_COCINA.indexOf(b);
+          return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || String(a).localeCompare(String(b));
+        });
+        cuerpo = cats.map(cat => {
+          const items = porCat[cat];
+          const cSub = items.reduce((s, r) => s + precioTotal(r), 0);
+          return `<div style="border-top:1px dashed #ddd;padding:0.45rem 0 0.25rem 0;">
+            <div style="font-weight:700;color:#2e7d32;font-size:0.8rem;display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem;">
+              <span>${esc(cat)}</span><span style="color:#33691e;">S/ ${cSub.toFixed(2)}</span>
+            </div>
+            <div class="table-wrap"><table style="margin:0;">
+              <thead><tr><th>Item</th><th style="text-align:center;">Cant.</th><th style="text-align:right;">P. Unit</th><th style="text-align:right;">P. Total</th><th>Proveedor</th></tr></thead>
+              <tbody>${items.map(r => {
+                const pu = parseFloat(r.precio) || 0;
+                const pt = precioTotal(r);
+                return `<tr>
+                  <td>${esc(r.nombre)}</td>
+                  <td style="text-align:center;">${r.cantidad}</td>
+                  <td style="text-align:right;">S/ ${pu.toFixed(2)}</td>
+                  <td style="text-align:right;">S/ ${pt.toFixed(2)}</td>
+                  <td>${esc(r.proveedor || '-')}</td>
+                </tr>`;
+              }).join('')}</tbody>
+            </table></div>
+          </div>`;
+        }).join('');
+      } else {
+        cuerpo = `<div class="table-wrap"><table style="margin:0;">
           <thead><tr><th>Item</th><th style="text-align:center;">Cant.</th><th style="text-align:right;">P. Unit</th><th style="text-align:right;">P. Total</th><th>Proveedor</th></tr></thead>
           <tbody>${rows.map(r => {
             const pu = parseFloat(r.precio) || 0;
-            const pt = (parseFloat(r.precio_total) || 0) || (pu * (r.cantidad || 0));
+            const pt = precioTotal(r);
             return `<tr>
               <td>${esc(r.nombre)}</td>
               <td style="text-align:center;">${r.cantidad}</td>
@@ -8529,16 +8576,40 @@ function cargarComprasResumen() {
               <td>${esc(r.proveedor || '-')}</td>
             </tr>`;
           }).join('')}</tbody>
-        </table></div>
+        </table></div>`;
+      }
+      html += `<div style="margin-bottom:0.75rem;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;">
+        <div style="background:#eef2ff;padding:0.4rem 0.6rem;font-weight:700;color:#1a237e;font-size:0.82rem;display:flex;justify-content:space-between;align-items:center;">
+          <span>${z.toUpperCase()}</span>
+          <span style="color:#0f3460;">S/ ${subTotal.toFixed(2)}</span>
+        </div>
+        <div style="padding:0.4rem 0.6rem;">${cuerpo}</div>
       </div>`;
     });
     if (!html) {
       div.innerHTML = '<p style="color:#888;">No hay compras registradas en ' + fecha + '.</p>';
+      actualizarTotalAlimentos(0);
       return;
     }
     html += `<div style="margin-top:0.5rem;padding:0.65rem;background:#0f3460;color:#fff;border-radius:8px;font-weight:700;text-align:right;font-size:0.9rem;">TOTAL ALIMENTOS Y BEBIDAS: S/ ${totalGeneral.toFixed(2)}</div>`;
     div.innerHTML = html;
+    actualizarTotalAlimentos(totalGeneral);
   }).catch(() => { div.innerHTML = '<p style="color:#c62828;">Error al cargar las compras.</p>'; });
+}
+
+// Muestra el total de compras junto al título de ALIMENTOS Y BEBIDAS y lo suma al TOTAL de RESUMEN
+function actualizarTotalAlimentos(totalCompras) {
+  const t = document.getElementById('resumen-alimentos-total');
+  if (t) t.textContent = '— TOTAL: S/ ' + (parseFloat(totalCompras) || 0).toFixed(2);
+  const box = document.getElementById('autosuma-RESUMEN');
+  if (!box) return;
+  if (!box.dataset.baseOrig) box.dataset.baseOrig = box.dataset.base || '0';
+  const baseOrig = parseFloat(box.dataset.baseOrig) || 0;
+  const suma = parseFloat(totalCompras) || 0;
+  box.dataset.compras = String(suma);
+  box.dataset.base = String(baseOrig + suma);
+  const monto = box.querySelector('.autosuma-monto');
+  if (monto) monto.textContent = 'S/ ' + (baseOrig + suma).toFixed(2);
 }
 
 function guardarCostoCategoria(prefix, idx) {
