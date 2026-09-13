@@ -142,7 +142,12 @@ function dibujarFlujoMenu() {
   const rect = cont.getBoundingClientRect();
   const comprasBtn = document.getElementById('btn-compras');
   const ventasBtn = document.getElementById('btn-ventas');
+  // Grupos que reciben de COMPRAS (todos: STOCKS, BARRA, COCINA, EVENTOS, LIMPIEZA)
   const mids = ['stocks', 'barra', 'cocina', 'eventos', 'limpieza']
+    .map(cat => cont.querySelector('.category-btn.menu-' + cat))
+    .filter(Boolean);
+  // Grupos que SÍ alimentan VENTAS (EVENTOS y LIMPIEZA NO tienen ventas por ahora)
+  const midsVentas = ['stocks', 'barra', 'cocina']
     .map(cat => cont.querySelector('.category-btn.menu-' + cat))
     .filter(Boolean);
   if (!comprasBtn || !ventasBtn || !mids.length) return;
@@ -151,7 +156,7 @@ function dibujarFlujoMenu() {
   const comprasBottom = { x: (cr.left + cr.width / 2) - rect.left, y: cr.bottom - rect.top };
   const ventasTop = { x: (vr.left + vr.width / 2) - rect.left, y: vr.top - rect.top };
   const tops = mids.map(b => { const r = b.getBoundingClientRect(); return { x: (r.left + r.width / 2) - rect.left, y: r.top - rect.top }; });
-  const bottoms = mids.map(b => { const r = b.getBoundingClientRect(); return { x: (r.left + r.width / 2) - rect.left, y: r.bottom - rect.top }; });
+  const bottoms = midsVentas.map(b => { const r = b.getBoundingClientRect(); return { x: (r.left + r.width / 2) - rect.left, y: r.bottom - rect.top }; });
   let paths = '';
   tops.forEach(t => {
     const midY = (comprasBottom.y + t.y) / 2;

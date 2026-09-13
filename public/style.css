@@ -538,8 +538,8 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .menu-bd { top: calc(50% - 150px); }
   .menu-costos { top: calc(50% + 15px); }
 }
-  .menu-bd { grid-column: 1; grid-row: 4; }
-  .menu-costos { grid-column: 3; grid-row: 4; }
+  .menu-bd { grid-column: 1; grid-row: 5; }
+  .menu-costos { grid-column: 3; grid-row: 5; }
   .flow-path { stroke-width: 2.5; opacity: 0.85; }
   .category-btn { min-height: 88px; padding: 0.5rem 0.25rem; }
   .category-icon { font-size: 1.3rem; }
