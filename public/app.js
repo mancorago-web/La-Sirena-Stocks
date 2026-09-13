@@ -4772,6 +4772,9 @@ function cambiarSubTab(nombre, prefix) {
       if (CATEGORIAS_COSTOS[nombre]) {
         cargarCostoCategoria(nombre);
       }
+    } else if (nombre === 'RESUMEN') {
+      // Al volver a RESUMEN, refrescar las compras de la sección ALIMENTOS Y BEBIDAS
+      cargarComprasResumen();
     }
   }
   // VENTAS: registro / búsqueda
@@ -8430,6 +8433,24 @@ function renderCostoCategoria(prefix, container) {
         </div>`;
         return;
       }
+      // ALIMENTOS Y BEBIDAS: se alimenta automáticamente del DETALLE DE COMPRAS del día (agrupado por zona)
+      if (String(t).toUpperCase() === 'ALIMENTOS Y BEBIDAS') {
+        html += `<div class="accordion-item" id="acordeon-alimentos-ybebidas">
+          <div class="accordion-header" onclick="toggleAcordeon(this)">
+            <span class="accordion-title">${t} <span style="font-weight:400;font-size:0.85rem;color:#777;">— Compras del día (comida y bebida)</span></span>
+            <span class="accordion-arrow">▶</span>
+          </div>
+          <div class="accordion-body">
+            <div class="costos-fecha-row">
+              <label>FECHA</label>
+              <input type="date" id="resumen-compras-fecha" value="${todayStr()}" onchange="cargarComprasResumen()" style="padding:0.4rem;border:1px solid #ccc;border-radius:4px;">
+            </div>
+            <div style="font-size:0.75rem;color:#888;margin:0.25rem 0 0.5rem 0;">Muestra automáticamente las compras registradas en COMPRAS para la fecha, agrupadas por zona (solo lectura).</div>
+            <div id="resumen-compras-div"></div>
+          </div>
+        </div>`;
+        return;
+      }
       const records = groups[t].sort((a, b) => String(a.fecha || '').localeCompare(String(b.fecha || '')));
       const total = records.reduce((sum, r) => sum + (r.monto || 0), 0);
       const rows = records.map(r => {
@@ -8467,7 +8488,57 @@ function renderCostoCategoria(prefix, container) {
       html += '<p style="color:#c62828;margin-top:0.5rem;">Nota: ' + groups['OTROS'].length + ' registro(s) sin clasificar quedaron sin mostrar.</p>';
     }
     container.innerHTML = html;
+    // Si RESUMEN tiene la sección ALIMENTOS Y BEBIDAS, cargar las compras del día
+    if (document.getElementById('resumen-compras-div')) cargarComprasResumen();
   }).catch(e => { console.error(e); container.innerHTML = '<p>Error al cargar.</p>'; });
+}
+
+// Carga el DETALLE DE COMPRAS del día y lo muestra en la sección ALIMENTOS Y BEBIDAS de RESUMEN
+// agrupado por zona (STOCKS, BARRA, COCINA, EVENTOS, LIMPIEZA) con subtotales y total general.
+function cargarComprasResumen() {
+  const fecha = document.getElementById('resumen-compras-fecha')?.value || todayStr();
+  const div = document.getElementById('resumen-compras-div');
+  if (!div) return;
+  div.innerHTML = '<p style="color:#888;">Cargando compras de ' + fecha + '...</p>';
+  api('GET', '/api/compras/detalle?fecha=' + encodeURIComponent(fecha)).then(list => {
+    const zonas = ['stocks', 'barra', 'cocina', 'eventos', 'limpieza'];
+    const byZona = { stocks: [], barra: [], cocina: [], eventos: [], limpieza: [] };
+    (list || []).forEach(r => { if (byZona[r.destino]) byZona[r.destino].push(r); });
+    let html = '';
+    let totalGeneral = 0;
+    zonas.forEach(z => {
+      const rows = byZona[z];
+      if (!rows.length) return;
+      const subTotal = rows.reduce((s, r) => s + ((parseFloat(r.precio_total) || 0) || ((parseFloat(r.precio) || 0) * (r.cantidad || 0))), 0);
+      totalGeneral += subTotal;
+      html += `<div style="margin-bottom:0.75rem;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;">
+        <div style="background:#eef2ff;padding:0.4rem 0.6rem;font-weight:700;color:#1a237e;font-size:0.82rem;display:flex;justify-content:space-between;align-items:center;">
+          <span>${z.toUpperCase()}</span>
+          <span style="color:#0f3460;">S/ ${subTotal.toFixed(2)}</span>
+        </div>
+        <div class="table-wrap"><table style="margin:0;">
+          <thead><tr><th>Item</th><th style="text-align:center;">Cant.</th><th style="text-align:right;">P. Unit</th><th style="text-align:right;">P. Total</th><th>Proveedor</th></tr></thead>
+          <tbody>${rows.map(r => {
+            const pu = parseFloat(r.precio) || 0;
+            const pt = (parseFloat(r.precio_total) || 0) || (pu * (r.cantidad || 0));
+            return `<tr>
+              <td>${esc(r.nombre)}</td>
+              <td style="text-align:center;">${r.cantidad}</td>
+              <td style="text-align:right;">S/ ${pu.toFixed(2)}</td>
+              <td style="text-align:right;">S/ ${pt.toFixed(2)}</td>
+              <td>${esc(r.proveedor || '-')}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>
+      </div>`;
+    });
+    if (!html) {
+      div.innerHTML = '<p style="color:#888;">No hay compras registradas en ' + fecha + '.</p>';
+      return;
+    }
+    html += `<div style="margin-top:0.5rem;padding:0.65rem;background:#0f3460;color:#fff;border-radius:8px;font-weight:700;text-align:right;font-size:0.9rem;">TOTAL ALIMENTOS Y BEBIDAS: S/ ${totalGeneral.toFixed(2)}</div>`;
+    div.innerHTML = html;
+  }).catch(() => { div.innerHTML = '<p style="color:#c62828;">Error al cargar las compras.</p>'; });
 }
 
 function guardarCostoCategoria(prefix, idx) {
