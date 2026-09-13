@@ -5920,28 +5920,48 @@ app.post('/api/reportes/accion/intercambio', async (req, res) => {
         await guardarDiaInterno(fecha, [{ item_id: itemA, almacen_id: al, falta_almacen: Math.max(0, Math.round(((a.falta_almacen || 0) - movido) * 100) / 100) }], savedBy);
       }
     } else {
-      // caso INGRESO: A se registra el día de la falta (como antes)
-      const regA = {
+      // caso INGRESO: buscar la fecha REAL donde B se vendió (la venta equivocada) caminando
+      // hacia atrás, para corregir en la fecha correcta (NO en la fecha del reporte).
+      let fechaB = null;
+      let bCorr = b;
+      const d2 = new Date(fecha + 'T12:00:00');
+      for (let i = 0; i < 10; i++) {
+        const f2 = d2.toISOString().split('T')[0];
+        const bSnap2 = await col('inventario_diario').doc(docId('invdiario', f2, alB, itemB)).get();
+        if (bSnap2.exists && (bSnap2.data().total_ventas || 0) > 0) { fechaB = f2; bCorr = bSnap2.data(); break; }
+        d2.setDate(d2.getDate() - 1);
+      }
+      const fCorr = fechaB || fecha;
+      // A: registrar la venta CORRECTA en la fecha real de la venta equivocada
+      const aCorrSnap = await col('inventario_diario').doc(docId('invdiario', fCorr, al, itemA)).get();
+      const aCorr = aCorrSnap.exists ? aCorrSnap.data() : {};
+      const regACorr = {
         item_id: itemA, almacen_id: al,
-        total_ventas: Math.round(((a.total_ventas || 0) + cant) * 100) / 100,
-        falta_almacen: Math.max(0, Math.round(((a.falta_almacen || 0) - cant) * 100) / 100),
+        total_ventas: Math.round(((aCorr.total_ventas || 0) + cant) * 100) / 100,
       };
-      if (a.stock_apertura !== undefined) regA.stock_apertura = a.stock_apertura;
-      await guardarDiaInterno(fecha, [regA], savedBy);
-
-      // B = producto equivocado (tenía INGRESO): quitar la venta incorrecta y el ingreso sobrante
-      const nuevoIngB = Math.max(0, Math.round(((b.stock_ingreso || 0) - cant) * 100) / 100);
-      const regB = {
+      if (aCorr.stock_apertura !== undefined) regACorr.stock_apertura = aCorr.stock_apertura;
+      await guardarDiaInterno(fCorr, [regACorr], savedBy);
+      // B: quitar la venta equivocada en esa misma fecha
+      const regBCorr = {
         item_id: itemB, almacen_id: alB,
-        total_ventas: Math.max(0, Math.round(((b.total_ventas || 0) - cant) * 100) / 100),
+        total_ventas: Math.max(0, Math.round(((bCorr.total_ventas || 0) - cant) * 100) / 100),
+      };
+      if (bCorr.stock_apertura !== undefined) regBCorr.stock_apertura = bCorr.stock_apertura;
+      await guardarDiaInterno(fCorr, [regBCorr], savedBy);
+      // Quitar la falta de A registrada el día del reporte (ya explicada por la venta real)
+      await guardarDiaInterno(fecha, [{ item_id: itemA, almacen_id: al, falta_almacen: Math.max(0, Math.round(((a.falta_almacen || 0) - cant) * 100) / 100) }], savedBy);
+      // Quitar el ingreso sobrante de B (donde se detectó)
+      const nuevoIngB = Math.max(0, Math.round(((b.stock_ingreso || 0) - cant) * 100) / 100);
+      const regBIng = {
+        item_id: itemB, almacen_id: alB,
         stock_ingreso: nuevoIngB,
       };
-      if (b.stock_apertura !== undefined) regB.stock_apertura = b.stock_apertura;
+      if (b.stock_apertura !== undefined) regBIng.stock_apertura = b.stock_apertura;
       if (nuevoIngB === 0) {
-        regB.ingreso_origen = [];
-        regB.ingreso_transferencia = 0;
+        regBIng.ingreso_origen = [];
+        regBIng.ingreso_transferencia = 0;
       }
-      await guardarDiaInterno(fecha, [regB], savedBy);
+      await guardarDiaInterno(fecha, [regBIng], savedBy);
     }
 
     res.json({ ok: true });
