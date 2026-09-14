@@ -3136,6 +3136,10 @@ function showModal(tipo, data) {
           ${GRUPOS_BARRA_CON_COMPRAS.map(g => `<option value="${g}" ${data.grupo === g ? 'selected' : ''}>${g}</option>`).join('')}
         </select>
       </label>
+      <label style="display:block;margin-top:1rem;">
+        PRECIO U (S/) — precio unitario de compra
+        <input type="number" id="f-stock-precio" step="0.01" min="0" value="${data.precio || ''}" placeholder="0.00" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
       <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
         <button onclick="guardarEdicionStock(${data.id})" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
         <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
@@ -5428,7 +5432,8 @@ function editarItemStock(id) {
     nombre: tr.querySelector('.stock-nombre').textContent.trim(),
     cantidad: tr.querySelector('.input-stock-cant').value,
     unidad: tr.querySelector('.select-stock-uni').value,
-    grupo: tr.querySelector('.select-stock-grupo').value
+    grupo: tr.querySelector('.select-stock-grupo').value,
+    precio: parseFloat(tr.querySelector('.input-precio-barra')?.value) || 0
   });
 }
 
@@ -5437,8 +5442,18 @@ function guardarEdicionStock(id) {
   const cantidad = parseFloat(document.getElementById('f-stock-cantidad').value) || 0;
   const unidad = document.getElementById('f-stock-unidad').value;
   const grupo = document.getElementById('f-stock-grupo').value;
+  const precioRaw = document.getElementById('f-stock-precio')?.value;
+  const precio = parseFloat(precioRaw);
   if (!nombre) { alert('Ingresa el nombre'); return; }
   api('PUT', '/api/barra/stock/' + id, { ingrediente: nombre, cantidad, unidad, grupo }).then(() => {
+    // Si se ingresó un precio, guardarlo/actualizarlo en la Base de Datos de BARRA
+    if (precioRaw !== undefined && precioRaw !== '' && !isNaN(precio)) {
+      return api('POST', '/api/barra/precios/upsert', { ingrediente: nombre, precio }).then(() => {
+        cerrarModal();
+        showToast('✓ Item y precio actualizados');
+        cargarStockBarra();
+      });
+    }
     cerrarModal();
     showToast('Item actualizado');
     cargarStockBarra();

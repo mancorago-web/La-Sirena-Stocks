@@ -4824,6 +4824,32 @@ app.delete('/api/barra/precios/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// Upsert del PRECIO UNITARIO por nombre (desde EDITAR de BARRA/STOCK): crea o actualiza el item
+// en la Base de Datos de BARRA y lo usa para PRECIO U / PRECIO T.
+app.post('/api/barra/precios/upsert', async (req, res) => {
+  try {
+    const { ingrediente, precio } = req.body;
+    if (!ingrediente) return res.status(400).json({ error: 'Nombre requerido' });
+    const snap = await col('barra_precios').get();
+    const key = normNombre(String(ingrediente).trim());
+    const precioVal = Math.round((parseFloat(precio) || 0) * 100) / 100;
+    const now = new Date().toISOString();
+    const doc = snap.docs.find(d => normNombre(d.data().ingrediente || '') === key);
+    if (doc) {
+      await doc.ref.update({ precio: precioVal, precio_compra: precioVal, ultimo_precio_compra: precioVal, updated_at: now });
+    } else {
+      const nextId = snap.docs.length ? Math.max(...snap.docs.map(d => Number(d.id) || 0)) + 1 : 1;
+      await col('barra_precios').doc(String(nextId)).set({
+        id: nextId, ingrediente: String(ingrediente).trim(), unidad: 'unidad', precio: precioVal,
+        precio_compra: precioVal, unidad_compra: 'UNIDAD', ultimo_precio_compra: precioVal,
+        created_at: now, updated_at: now
+      });
+    }
+    invalidarCache('inventario_snap');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- BARRA MOVIMIENTOS (INGRESOS / VENTAS / BAJAS) ---
 app.get('/api/barra/movimientos', authMiddleware, async (req, res) => {
   try {
