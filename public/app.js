@@ -681,6 +681,8 @@ function actualizarTotalesPrecio() {
     item.querySelectorAll('tr[data-item-id] .input-precio-total').forEach(inp => { subtotal += parseFloat(inp.value) || 0; });
     const el = document.getElementById('total-almacen-' + alId);
     if (el) el.textContent = subtotal.toFixed(2);
+    const elH = document.getElementById('total-almacen-header-' + alId);
+    if (elH) elH.textContent = subtotal.toFixed(2);
     granTotal += subtotal;
   });
   const g = document.getElementById('total-inventario-val');
@@ -1774,6 +1776,7 @@ function cargarAlmacenes(fecha, preservar) {
       <div class="accordion-item" data-almacen-id="${a.id}">
         <div class="accordion-header" onclick="toggleAcordeon(this)">
           <span class="accordion-title">${a.nombre}</span>
+          <span style="font-weight:700;color:#1a237e;font-size:0.9rem;margin-left:0.6rem;white-space:nowrap;">💰 S/ <span id="total-almacen-header-${a.id}">0.00</span></span>
           <span class="accordion-actions" onclick="event.stopPropagation()">
             <button onclick="exportarAlmacen(${a.id})">Exportar</button>
           </span>
