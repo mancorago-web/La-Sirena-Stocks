@@ -647,7 +647,7 @@ function itemRow(i, a) {
     <td><input type="number" class="input-num input-ventas" value="${i.total_ventas || 0}" step="0.01" oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-falta" value="${i.falta_almacen || 0}" step="0.01" oninput="calcCierre(this)"><input type="hidden" class="input-baja" value="${i.stock_baja || 0}"></td>
     <td><input type="number" class="input-num input-cierre" value="${i.stock_cierre || 0}" step="0.01" readonly></td>
-    <td><input type="number" class="input-num input-precio-total" value="${(((i.precio || 0) * (i.stock_cierre || 0))).toFixed(2)}" step="0.01" readonly title="Precio total = Precio U x Stock Total Cierre" style="background:#e8f5e9;color:#1b5e20;cursor:not-allowed;font-weight:700;"></td>
+    <td><input type="number" class="input-num input-precio-total" value="${(((i.precio || 0) * (i.stock_cierre || 0))).toFixed(2)}" step="0.01" readonly title="Precio total = Precio U x Stock Total Cierre" style="background:#fff9c4;color:#555;cursor:not-allowed;font-weight:700;"></td>
     <td style="white-space:nowrap">
       <button onclick="editarItemAlmacen(${i.id}, ${a.id})" style="background:#0f3460;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">EDITAR</button>
       <button onclick="eliminarItemAlmacen(${i.id}, ${a.id})" style="background:#c62828;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">✕</button>
