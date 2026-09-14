@@ -7555,6 +7555,7 @@ let comprasCart = [];
 let comprasAlmacenes = [];
 let _comprasListaEditable = [];
 let _cocinaStockItems = {};
+let _ultimoPrecioItem = 0;
 
 function onCambiarDestinoCompra() {
   const destino = document.getElementById('nueva-compra-destino').value;
@@ -7570,6 +7571,20 @@ function onCambiarDestinoCompra() {
 
 function onBuscarItemCompra(valor) {
   const v = (valor || '').trim();
+  // Buscar el último precio del item (para estimar la cantidad cuando solo se conoce el MONTO total)
+  _ultimoPrecioItem = 0;
+  if (v.length >= 3) {
+    api('GET', '/api/compras/ultimo-precio?nombre=' + encodeURIComponent(v)).then(r => {
+      if ((document.getElementById('nueva-compra-input')?.value || '').trim() !== v) return; // respuesta vieja
+      _ultimoPrecioItem = (r && r.precio) ? r.precio : 0;
+      // Si ya se ingresó el MONTO total y falta la cantidad, estimar la cantidad con el precio hallado
+      if (_ultimoPrecioItem > 0
+        && (parseFloat(document.getElementById('nueva-compra-cant')?.value) || 0) <= 0
+        && (parseFloat(document.getElementById('nueva-compra-precio-total')?.value) || 0) > 0) {
+        recalcularPrecioCompra('total');
+      }
+    }).catch(() => {});
+  }
   // Auto-detectar items de COCINA/STOCK: si el nombre coincide con un item existente,
   // se selecciona destino COCINA y su categoría automáticamente (evita errores).
   if (v) {
@@ -8134,12 +8149,22 @@ function onCompraPrecioTotalChange() {
 // (ej. total 100 / cantidad 5 = 20 de precio unidad); si se ingresa el precio UNIDAD, multiplica
 // unidad*cantidad para el total.
 function recalcularPrecioCompra(origen) {
-  const cant = parseFloat(document.getElementById('nueva-compra-cant').value) || 0;
+  const cantEl = document.getElementById('nueva-compra-cant');
+  const cant = parseFloat(cantEl.value) || 0;
   const uniEl = document.getElementById('nueva-compra-precio-uni');
   const totEl = document.getElementById('nueva-compra-precio-total');
   if (!uniEl || !totEl) return;
   const uni = parseFloat(uniEl.value) || 0;
   const tot = parseFloat(totEl.value) || 0;
+  // Si solo se conoce el MONTO total y NO la cantidad, estimar la cantidad con el último precio
+  // conocido del item (aprox: monto total ÷ precio anterior). Ej: MENTA S/2 con precio previo S/3.78 → 0.53 kg.
+  if (origen === 'total' && cant <= 0 && tot > 0 && _ultimoPrecioItem > 0) {
+    const est = Math.round((tot / _ultimoPrecioItem) * 1000) / 1000;
+    cantEl.value = est;
+    uniEl.value = Math.round(_ultimoPrecioItem * 100) / 100;
+    showToast('≈ ' + est + ' estimado (S/' + tot.toFixed(2) + ' ÷ S/' + _ultimoPrecioItem.toFixed(2) + ' de la compra anterior)');
+    return;
+  }
   if (cant <= 0) return;
   if (origen === 'total' && tot > 0) {
     // Precio por unidad = total / cantidad (SIEMPRE se recalcula al cambiar el total o la cantidad)

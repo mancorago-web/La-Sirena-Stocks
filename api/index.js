@@ -1625,6 +1625,32 @@ app.get('/api/compras/detalle', async (req, res) => {
   }
 });
 
+// Último precio por unidad de compra de un item (promedio simple de las últimas 3 compras con precio).
+// Sirve para ESTIMAR la cantidad/peso cuando en COMPRAS solo se conoce el MONTO total.
+app.get('/api/compras/ultimo-precio', async (req, res) => {
+  try {
+    const nombre = String(req.query.nombre || '').trim();
+    if (!nombre) return res.status(400).json({ error: 'nombre requerido' });
+    const key = normNombre(nombre);
+    const snap = await col('compras').get();
+    const rows = [];
+    snap.docs.forEach(d => {
+      const a = d.data();
+      if (normNombre(a.nombre || '') !== key) return;
+      const cant = parseFloat(a.cantidad) || 0;
+      if (cant <= 0) return;
+      const pu = (parseFloat(a.precio_total) || 0) > 0 ? (parseFloat(a.precio_total) / cant) : (parseFloat(a.precio) || 0);
+      if (pu <= 0) return;
+      rows.push({ pu, unidad: a.unidad || 'unidad', fecha: a.fecha || '' });
+    });
+    if (!rows.length) return res.json({ precio: 0, unidad: 'unidad', muestras: 0 });
+    rows.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+    const ult = rows.slice(0, 3);
+    const precio = Math.round((ult.reduce((s, r) => s + r.pu, 0) / ult.length) * 100) / 100;
+    res.json({ precio, unidad: ult[0].unidad, muestras: rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- COMPRAS: eliminar una compra/ingreso registrada (efecto en cadena) ---
 app.delete('/api/compras/:id', authMiddleware, async (req, res) => {
   try {
