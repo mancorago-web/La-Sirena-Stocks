@@ -302,12 +302,20 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
   if (!fecha) return res.json([]);
   try {
     const result = await cached('con_inv_' + fecha, 0, async () => {
-      const [almsSnap, allItemsSnap] = await Promise.all([
+      const [almsSnap, allItemsSnap, spSnap] = await Promise.all([
         col('almacenes').orderBy('orden').get(),
         // Caché corto (2s) de la colección inventario: reduce lecturas/CPU al navegar.
         // Se invalida tras cada escritura a inventario (guardar día, compras, ventas, items, precios).
         cached('inventario_snap', 2000, () => col('inventario').get()),
+        col('stock_precios').get(),
       ]);
+      // Mapa de precios de STOCKS (Base de Datos) por nombre normalizado
+      const spBy = {};
+      spSnap.docs.forEach(d => {
+        const s = d.data();
+        const k = normNombre(s.nombre || '');
+        if (k && !spBy[k]) spBy[k] = s;
+      });
       const itemsByAl = {};
       allItemsSnap.docs.forEach(d => {
         const inv = d.data();
@@ -356,6 +364,8 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
         const items = invItems.map(inv => {
           const dia = diaMap[inv.item_id] || {};
           const prevDia = prevMap[inv.item_id] || {};
+          const sp = spBy[normNombre(inv.nombre || '')] || {};
+          const precioItem = parseFloat(sp.ultimo_precio_compra) || parseFloat(sp.precio) || 0;
           // If today's doc exists (from propagation or user-saved), use its apertura.
           // If not (new item or no data), fall back to prev day's cierre, then inventario base.
           const manualCount = !!dia.apertura_manual;
@@ -400,6 +410,7 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
             stock_cierre: Math.round(cierre * 100) / 100,
             cantidad_minima: inv.cantidad_minima || 0,
             fecha_apertura: inv.fecha_apertura || '',
+            precio: Math.round(precioItem * 100) / 100,
             saved_by: dia.saved_by || null,
             updated_at: dia.updated_at || null,
           };

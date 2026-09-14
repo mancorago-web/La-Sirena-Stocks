@@ -640,6 +640,7 @@ function itemRow(i, a) {
     : 'readonly title="Apertura fija del día (no editable)" style="background:#f0f0f0;color:#555;cursor:not-allowed;"';
   return `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
     <td>${i.nombre}${obs}</td>
+    <td><input type="number" class="input-num input-precio" value="${i.precio || 0}" step="0.01" readonly title="${i.precio ? 'Precio de compra (se edita en BASE DE DATOS)' : 'SIN PRECIO - cargar en BASE DE DATOS'}" style="background:${i.precio ? '#f0f0f0' : '#ffcdd2'};color:${i.precio ? '#555' : '#b71c1c'};cursor:not-allowed;font-weight:${i.precio ? 'normal' : '700'};"></td>
     <td><input type="number" class="input-num input-apertura" value="${i.stock_apertura || 0}" step="0.01" ${aperturaReadonly} oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-ingreso" value="${i.stock_ingreso || 0}" step="0.01" oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01" oninput="calcCierre(this)"></td>
@@ -1757,14 +1758,14 @@ function cargarAlmacenes(fecha, preservar) {
           ${a.items.length ? `
             <div class="table-wrap">
             <table>
-              <thead><tr><th>Item</th><th>Stock Total Apertura</th><th>Ingreso</th><th>Salida Almacén</th><th>Total Ventas</th><th>Falta</th><th>Stock Total Cierre</th><th></th></tr></thead>
+              <thead><tr><th>Item</th><th>PRECIO</th><th>Stock Total Apertura</th><th>Ingreso</th><th>Salida Almacén</th><th>Total Ventas</th><th>Falta</th><th>Stock Total Cierre</th><th></th></tr></thead>
               <tbody>
                 ${a.secciones.map(s => s.items.length ? `
-                  <tr class="section-header"><td colspan="8">— ${s.label} —</td></tr>
+                  <tr class="section-header"><td colspan="9">— ${s.label} —</td></tr>
                   ${s.items.map(i => itemRow(i, a)).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="8">— ${a.id === 3 ? 'CAFE' : (a.id === 1 ? 'KOMBUCHAS' : 'COCINA')} —</td></tr>
+                  <tr class="section-header"><td colspan="9">— ${a.id === 3 ? 'CAFE' : (a.id === 1 ? 'KOMBUCHAS' : 'COCINA')} —</td></tr>
                   ${a.otros.map(i => itemRow(i, a)).join('')}
                 ` : ''}
               </tbody>
@@ -4254,7 +4255,7 @@ function buscarTablaBarra(term, containerId, selector) {
 
 function exportarExcel() {
   const fecha = document.getElementById('fecha-almacenes')?.value || new Date().toISOString().split('T')[0];
-  const wsData = [['Almacén', 'Sección', 'Item', 'Stock Total Apertura', 'Ingreso', 'Salida Almacén', 'Total Ventas', 'Falta', 'Stock Total Cierre']];
+  const wsData = [['Almacén', 'Sección', 'Item', 'Precio', 'Stock Total Apertura', 'Ingreso', 'Salida Almacén', 'Total Ventas', 'Falta', 'Stock Total Cierre']];
   document.querySelectorAll('#accordion-almacenes .accordion-item').forEach(item => {
     const almacen = item.querySelector('.accordion-title')?.textContent || '';
     let seccion = '';
@@ -4264,13 +4265,14 @@ function exportarExcel() {
       } else if (tr.dataset.itemId) {
         const celdas = tr.querySelectorAll('td');
         const nombre = celdas[0]?.textContent || '';
-        const apertura = celdas[1]?.querySelector('input')?.value || '0';
-        const ingreso = celdas[2]?.querySelector('input')?.value || '0';
-        const salida = celdas[3]?.querySelector('input')?.value || '0';
-        const ventas = celdas[4]?.querySelector('input')?.value || '0';
-        const falta = celdas[5]?.querySelector('input')?.value || '0';
-        const cierre = celdas[7]?.querySelector('input')?.value || '0';
-        wsData.push([almacen, seccion, nombre, apertura, ingreso, salida, ventas, falta, cierre]);
+        const precio = celdas[1]?.querySelector('input')?.value || '0';
+        const apertura = celdas[2]?.querySelector('input')?.value || '0';
+        const ingreso = celdas[3]?.querySelector('input')?.value || '0';
+        const salida = celdas[4]?.querySelector('input')?.value || '0';
+        const ventas = celdas[5]?.querySelector('input')?.value || '0';
+        const falta = celdas[6]?.querySelector('input')?.value || '0';
+        const cierre = celdas[8]?.querySelector('input')?.value || '0';
+        wsData.push([almacen, seccion, nombre, precio, apertura, ingreso, salida, ventas, falta, cierre]);
       }
     });
   });
@@ -4285,7 +4287,7 @@ function exportarAlmacen(almacenId) {
   const item = document.querySelector(`.accordion-item[data-almacen-id="${almacenId}"]`);
   if (!item) return;
   const almacen = item.querySelector('.accordion-title')?.textContent || '';
-  const wsData = [['Sección', 'Item', 'Stock Total Apertura', 'Ingreso', 'Salida Almacén', 'Total Ventas', 'Falta', 'Stock Total Cierre']];
+  const wsData = [['Sección', 'Item', 'Precio', 'Stock Total Apertura', 'Ingreso', 'Salida Almacén', 'Total Ventas', 'Falta', 'Stock Total Cierre']];
   let seccion = '';
   item.querySelectorAll('tbody tr').forEach(tr => {
     if (tr.classList.contains('section-header')) {
@@ -4293,13 +4295,14 @@ function exportarAlmacen(almacenId) {
     } else if (tr.dataset.itemId) {
       const celdas = tr.querySelectorAll('td');
       const nombre = celdas[0]?.textContent || '';
-      const apertura = celdas[1]?.querySelector('input')?.value || '0';
-      const ingreso = celdas[2]?.querySelector('input')?.value || '0';
-      const salida = celdas[3]?.querySelector('input')?.value || '0';
-      const ventas = celdas[4]?.querySelector('input')?.value || '0';
-      const falta = celdas[5]?.querySelector('input')?.value || '0';
-      const cierre = celdas[7]?.querySelector('input')?.value || '0';
-      wsData.push([seccion, nombre, apertura, ingreso, salida, ventas, falta, cierre]);
+      const precio = celdas[1]?.querySelector('input')?.value || '0';
+      const apertura = celdas[2]?.querySelector('input')?.value || '0';
+      const ingreso = celdas[3]?.querySelector('input')?.value || '0';
+      const salida = celdas[4]?.querySelector('input')?.value || '0';
+      const ventas = celdas[5]?.querySelector('input')?.value || '0';
+      const falta = celdas[6]?.querySelector('input')?.value || '0';
+      const cierre = celdas[8]?.querySelector('input')?.value || '0';
+      wsData.push([seccion, nombre, precio, apertura, ingreso, salida, ventas, falta, cierre]);
     }
   });
   const libro = XLSX.utils.book_new();
