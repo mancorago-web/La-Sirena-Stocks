@@ -4434,6 +4434,33 @@ app.delete('/api/stock/precios/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Upsert del PRECIO UNITARIO por nombre (desde EDITAR de ALMACENES): crea o actualiza el item
+// en la Base de Datos de STOCKS y lo sincroniza con el precio de compra efectivo.
+app.post('/api/stock/precios/upsert', async (req, res) => {
+  try {
+    const { nombre, precio } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+    const snap = await col('stock_precios').get();
+    const key = normNombre(String(nombre).trim());
+    const precioVal = Math.round((parseFloat(precio) || 0) * 100) / 100;
+    const now = new Date().toISOString();
+    const doc = snap.docs.find(d => normNombre(d.data().nombre || '') === key);
+    if (doc) {
+      await doc.ref.update({ precio: precioVal, ultimo_precio_compra: precioVal, updated_at: now });
+    } else {
+      const nextId = snap.docs.length ? Math.max(...snap.docs.map(d => Number(d.id) || 0)) + 1 : 1;
+      await col('stock_precios').doc(String(nextId)).set({
+        id: nextId, nombre: String(nombre).trim(), unidad: 'unidad', precio: precioVal,
+        unidad_venta: 'unidad', precio_venta: precioVal,
+        ultimo_precio_compra: precioVal, ultimo_precio_compra_fecha: now.slice(0, 10),
+        created_at: now, updated_at: now
+      });
+    }
+    invalidarCache('inventario_snap');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- BASE DE DATOS UNIFICADA (STOCKS + BARRA + COCINA) ---
 app.get('/api/basedatos/unificada', async (req, res) => {
   try {

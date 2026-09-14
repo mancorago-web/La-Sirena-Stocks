@@ -1893,7 +1893,8 @@ function editarItemAlmacen(itemId, almacenId) {
   }
   const sectionItem = tr.closest('.accordion-item');
   const almacenNombre = sectionItem ? sectionItem.querySelector('.accordion-title')?.textContent?.trim() || '' : '';
-  showModal('editar-item-almacen', { itemId, almacenId, nombre, categoria, almacenNombre });
+  const precio = parseFloat(tr.querySelector('.input-precio')?.value) || 0;
+  showModal('editar-item-almacen', { itemId, almacenId, nombre, categoria, almacenNombre, precio });
 }
 
 async function guardarItemAlmacen() {
@@ -1920,8 +1921,20 @@ async function guardarItemAlmacen() {
 function guardarEdicionItem(itemId, almacenId) {
   const nombre = document.getElementById('f-editar-nombre').value.trim();
   const categoria = document.getElementById('f-editar-categoria').value;
+  const precioRaw = document.getElementById('f-editar-precio')?.value;
+  const precio = parseFloat(precioRaw);
   if (!nombre) { alert('Ingresa el nombre del item'); return; }
   api('PUT', '/api/inventario/' + itemId + '/' + almacenId, { nombre, categoria }).then(() => {
+    // Si se ingresó un precio, guardarlo/actualizarlo en la Base de Datos (stock_precios)
+    if (precioRaw !== undefined && precioRaw !== '' && !isNaN(precio)) {
+      return api('POST', '/api/stock/precios/upsert', { nombre, precio }).then(() => {
+        cerrarModal();
+        showToast('✓ Item y precio actualizados');
+        _invCache = { fecha: null, data: null, pending: null };
+        cargarAlmacenes();
+        cargarReportes();
+      });
+    }
     cerrarModal();
     showToast('✓ Item actualizado');
     _invCache = { fecha: null, data: null, pending: null };
@@ -3051,6 +3064,10 @@ function showModal(tipo, data) {
             `<option value="${c}" ${data.categoria === c ? 'selected' : ''}>${c}</option>`
           ).join('')}
         </select>
+      </label>
+      <label style="display:block;margin-top:1rem;">
+        PRECIO U (S/) — precio unitario de compra
+        <input type="number" id="f-editar-precio" step="0.01" min="0" value="${data.precio || ''}" placeholder="0.00" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
       </label>
       <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
         <button onclick="guardarEdicionItem(${data.itemId}, ${data.almacenId})" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
