@@ -170,6 +170,7 @@
           <input type="text" id="buscar-item" placeholder="Buscar item..." oninput="buscarItemAlmacen(this.value)">
           <button class="btn-detalles" id="btn-ver-cero" onclick="toggleVerCero()" title="Ocultar items con stock 0" style="font-size:1.1rem;">🙈</button>
           <button class="btn-detalles" id="btn-toggle-apertura" onclick="setAperturaEditable(!_aperturaEditable)" style="background:#0f3460;color:#fff;">✏️ EDITAR APERTURA (conteo)</button>
+          <button class="btn-detalles" id="btn-toggle-precios" onclick="toggleColumnasPrecio()" title="Ver columnas de precios" style="background:#0f3460;color:#fff;">💰 PRECIOS</button>
           <button class="btn-guardar-dia" onclick="guardarDia()">💾 GUARDAR</button>
           <button class="btn-detalles" onclick="exportarExcel()">Exportar</button>
         </div>

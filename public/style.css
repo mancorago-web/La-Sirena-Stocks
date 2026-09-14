@@ -483,6 +483,8 @@ td button.danger { border-color: #c62828; color: #c62828; }
   padding: 0.12rem 0.45rem; border-radius: 999px; letter-spacing: 0.5px;
 }
 
+.ocultar-precios .col-precio { display: none; }
+
 /* ===== Responsive / Mobile ===== */
 @media (max-width: 768px) {
   /* Nav */

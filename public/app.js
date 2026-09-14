@@ -622,6 +622,21 @@ function api(method, url, data) {
 }
 
 let _aperturaEditable = false;
+let _verPrecios = false;
+// Muestra/oculta las columnas PRECIO U y PRECIO T en ALMACENES (ocultas por defecto)
+function toggleColumnasPrecio() {
+  _verPrecios = !_verPrecios;
+  const c = document.getElementById('accordion-almacenes');
+  if (c) c.classList.toggle('ocultar-precios', !_verPrecios);
+  const btn = document.getElementById('btn-toggle-precios');
+  if (btn) {
+    btn.textContent = _verPrecios ? '💰 PRECIOS ✓' : '💰 PRECIOS';
+    btn.style.background = _verPrecios ? '#2e7d32' : '#0f3460';
+    btn.style.color = '#fff';
+    btn.title = _verPrecios ? 'Ocultar columnas de precios' : 'Ver columnas de precios';
+  }
+  actualizarTotalesPrecio();
+}
 function setAperturaEditable(val) {
   _aperturaEditable = !!val;
   const fecha = document.getElementById('fecha-almacenes')?.value;
@@ -640,14 +655,14 @@ function itemRow(i, a) {
     : 'readonly title="Apertura fija del día (no editable)" style="background:#f0f0f0;color:#555;cursor:not-allowed;"';
   return `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
     <td>${i.nombre}${obs}</td>
-    <td><input type="number" class="input-num input-precio" value="${i.precio || 0}" step="0.01" readonly title="${i.precio ? 'Precio unitario de compra (se edita en BASE DE DATOS)' : 'SIN PRECIO - cargar en BASE DE DATOS'}" style="background:${i.precio ? '#fff9c4' : '#ffcdd2'};color:${i.precio ? '#555' : '#b71c1c'};cursor:not-allowed;font-weight:${i.precio ? 'normal' : '700'};"></td>
+    <td class="col-precio"><input type="number" class="input-num input-precio" value="${i.precio || 0}" step="0.01" readonly title="${i.precio ? 'Precio unitario de compra (se edita en BASE DE DATOS)' : 'SIN PRECIO - cargar en BASE DE DATOS'}" style="background:${i.precio ? '#fff9c4' : '#ffcdd2'};color:${i.precio ? '#555' : '#b71c1c'};cursor:not-allowed;font-weight:${i.precio ? 'normal' : '700'};"></td>
     <td><input type="number" class="input-num input-apertura" value="${i.stock_apertura || 0}" step="0.01" ${aperturaReadonly} oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-ingreso" value="${i.stock_ingreso || 0}" step="0.01" oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01" oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-ventas" value="${i.total_ventas || 0}" step="0.01" oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-falta" value="${i.falta_almacen || 0}" step="0.01" oninput="calcCierre(this)"><input type="hidden" class="input-baja" value="${i.stock_baja || 0}"></td>
     <td><input type="number" class="input-num input-cierre" value="${i.stock_cierre || 0}" step="0.01" readonly></td>
-    <td><input type="number" class="input-num input-precio-total" value="${(((i.precio || 0) * (i.stock_cierre || 0))).toFixed(2)}" step="0.01" readonly title="Precio total = Precio U x Stock Total Cierre" style="background:#fff9c4;color:#555;cursor:not-allowed;font-weight:700;"></td>
+    <td class="col-precio"><input type="number" class="input-num input-precio-total" value="${(((i.precio || 0) * (i.stock_cierre || 0))).toFixed(2)}" step="0.01" readonly title="Precio total = Precio U x Stock Total Cierre" style="background:#fff9c4;color:#555;cursor:not-allowed;font-weight:700;"></td>
     <td style="white-space:nowrap">
       <button onclick="editarItemAlmacen(${i.id}, ${a.id})" style="background:#0f3460;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">EDITAR</button>
       <button onclick="eliminarItemAlmacen(${i.id}, ${a.id})" style="background:#c62828;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">✕</button>
@@ -1768,6 +1783,7 @@ function cargarAlmacenes(fecha, preservar) {
       return { ...a, secciones, otros };
     });
     const container = document.getElementById('accordion-almacenes');
+    container.classList.toggle('ocultar-precios', !_verPrecios);
     const totalBar = `<div style="margin-bottom:0.75rem;padding:0.75rem 1rem;background:#1a237e;color:#fff;border-radius:8px;font-weight:700;font-size:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem;">
       <span>💰 TOTAL INVERTIDO EN STOCK</span>
       <span>S/ <span id="total-inventario-val">0.00</span></span>
@@ -1786,7 +1802,7 @@ function cargarAlmacenes(fecha, preservar) {
           ${a.items.length ? `
             <div class="table-wrap">
             <table>
-              <thead><tr><th>Item</th><th>PRECIO U</th><th>Stock Total Apertura</th><th>Ingreso</th><th>Salida Almacén</th><th>Total Ventas</th><th>Falta</th><th>Stock Total Cierre</th><th>PRECIO T</th><th></th></tr></thead>
+              <thead><tr><th>Item</th><th class="col-precio">PRECIO U</th><th>Stock Total Apertura</th><th>Ingreso</th><th>Salida Almacén</th><th>Total Ventas</th><th>Falta</th><th>Stock Total Cierre</th><th class="col-precio">PRECIO T</th><th></th></tr></thead>
               <tbody>
                 ${a.secciones.map(s => s.items.length ? `
                   <tr class="section-header"><td colspan="10">— ${s.label} —</td></tr>
