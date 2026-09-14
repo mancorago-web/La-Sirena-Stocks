@@ -3114,6 +3114,20 @@ function showModal(tipo, data) {
         <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
       </div>
     `;
+  } else if (tipo === 'editar-precio-barra') {
+    body.innerHTML = `
+      <h3>Precio Unitario</h3>
+      <p style="color:#666;font-size:0.9rem;margin-top:0.5rem;">${esc(data.nombre)}</p>
+      <input type="hidden" id="fp-barra-nombre" value="${esc(data.nombre)}">
+      <label style="display:block;margin-top:1rem;">
+        PRECIO U (S/) — precio unitario de compra
+        <input type="number" id="fp-barra-precio" step="0.01" min="0" value="${data.precio || ''}" placeholder="0.00" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+        <button onclick="guardarEdicionPrecioBarra(${data.id})" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+        <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
+      </div>
+    `;
   } else if (tipo === 'editar-stock-item') {
     const uniOpts = UNIDADES_STOCK.map(u => `<option value="${u}" ${data.unidad === u ? 'selected' : ''}>${u}</option>`).join('');
     body.innerHTML = `
@@ -5061,6 +5075,7 @@ function cargarStockBarra() {
         </tr>`;
       }
       const bloqueado = _barraBloqueo.bloqueado && GRUPOS_BARRA.includes((s.grupo || '').toUpperCase());
+      const btnPrecio = `<button onclick="editarPrecioBarra(${s.id})" title="Poner/editar el precio unitario" style="padding:0.3rem 0.6rem;background:#e65100;color:#fff;border:none;border-radius:4px;cursor:pointer;">💰 PRECIO</button>`;
       if (bloqueado) {
         return `<tr data-stock-id="${s.id}" data-bloqueado="1">
           <td class="stock-nombre">${nombreConNota}</td>
@@ -5070,7 +5085,7 @@ function cargarStockBarra() {
           ${tdPrecioT}
           ${tdOnzas}
           <td>${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
-          <td></td>
+          <td>${btnPrecio}</td>
         </tr>`;
       }
       const opts = GRUPOS_BARRA_CON_COMPRAS.map(g => `<option value="${g}" ${((s.grupo || '').toUpperCase() === g) ? 'selected' : ''}>${g}</option>`).join('');
@@ -5085,7 +5100,7 @@ function cargarStockBarra() {
         ${tdOnzas}
         <td><select class="select-stock-grupo" onchange="marcarStockDirty()" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${opts}</select></td>
         <td>
-          <button class="editar" onclick="editarItemStock(${s.id})" style="padding:0.3rem 0.6rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">EDITAR</button>
+          ${btnPrecio}
           <button class="danger" onclick="eliminarStockBarra(${s.id})">✕</button>
         </td>
       </tr>`;
@@ -5463,6 +5478,29 @@ function guardarEdicionStock(id) {
 function eliminarStockBarra(id) {
   if (!confirm('¿Eliminar este ingrediente del stock?')) return;
   api('DELETE', '/api/barra/stock/' + id).then(() => cargarStockBarra());
+}
+
+// Botón PRECIO: abre un modal solo para poner/editar el PRECIO UNITARIO (funciona aunque BARRA esté bloqueada)
+function editarPrecioBarra(id) {
+  const tr = document.querySelector('#barra-stock-container tr[data-stock-id="' + id + '"]');
+  if (!tr) return;
+  showModal('editar-precio-barra', {
+    id,
+    nombre: tr.querySelector('.stock-nombre')?.textContent.trim() || '',
+    precio: parseFloat(tr.querySelector('.input-precio-barra')?.value) || 0
+  });
+}
+
+function guardarEdicionPrecioBarra(id) {
+  const nombre = document.getElementById('fp-barra-nombre')?.value.trim();
+  const precio = parseFloat(document.getElementById('fp-barra-precio')?.value);
+  if (!nombre) { alert('Ingresa el nombre'); return; }
+  if (precio === undefined || isNaN(precio)) { alert('Ingresa el precio unitario'); return; }
+  api('POST', '/api/barra/precios/upsert', { ingrediente: nombre, precio }).then(() => {
+    cerrarModal();
+    showToast('✓ Precio actualizado');
+    cargarStockBarra();
+  }).catch(() => alert('Error al guardar el precio'));
 }
 
 // --- COCINA: Stock con familias (flujo diario estilo ALMACENES) ---
