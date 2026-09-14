@@ -645,6 +645,7 @@ function actualizarPrecioTotalBarra(inputEl) {
   const cant = parseFloat(tr.querySelector('.input-stock-cant')?.value) || 0;
   const pt = tr.querySelector('.input-precio-total-barra');
   if (pt) pt.value = (pu * cant).toFixed(2);
+  actualizarTotalesPrecioBarra();
 }
 // Muestra/oculta las columnas PRECIO U y PRECIO T en ALMACENES (ocultas por defecto)
 function toggleColumnasPrecio() {
@@ -5086,17 +5087,22 @@ function cargarStockBarra() {
       </tr>`;
     }
     container.classList.toggle('ocultar-precios', !_verPreciosBarra);
-    container.innerHTML = GRUPOS_BARRA_CON_COMPRAS.map(g => {
+    const totalBar = `<div style="margin-bottom:0.75rem;padding:0.75rem 1rem;background:#1a237e;color:#fff;border-radius:8px;font-weight:700;font-size:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem;">
+      <span>💰 TOTAL INVERTIDO EN BARRA/STOCK</span>
+      <span>S/ <span id="total-barra-inv-val">0.00</span></span>
+    </div>`;
+    container.innerHTML = totalBar + GRUPOS_BARRA_CON_COMPRAS.map(g => {
       const items = groups[g];
       const esCompras = g === 'COMPRAS DIARIAS';
-      const total = items.reduce((sum, i) => sum + (parseFloat(i.cantidad) || 0), 0);
+      const key = g.replace(/\s+/g, '-');
       const colOnzas = esCompras ? '' : '<th>Onzas</th>';
       const colPrecio = '<th class="col-precio">PRECIO U</th><th class="col-precio">PRECIO T</th>';
       const colSpan = esCompras ? 7 : 8;
       return `
-        <div class="accordion-item">
+        <div class="accordion-item" data-grupo-key="${key}">
           <div class="accordion-header" onclick="toggleAcordeon(this)">
             <span class="accordion-title">${g} <span style="font-weight:400;font-size:0.85rem;color:#777;">— ${items.length} item(s)</span></span>
+            <span style="font-weight:700;color:#1a237e;font-size:0.9rem;margin-left:0.6rem;white-space:nowrap;">💰 S/ <span id="total-barra-header-${key}">0.00</span></span>
             <span class="accordion-arrow">▶</span>
           </div>
           <div class="accordion-body">
@@ -5107,9 +5113,10 @@ function cargarStockBarra() {
           </div>
         </div>`;
     }).join('') + (groups['SIN CLASIFICAR'].length ? `
-        <div class="accordion-item">
+        <div class="accordion-item" data-grupo-key="SIN-CLASIFICAR">
           <div class="accordion-header" onclick="toggleAcordeon(this)">
             <span class="accordion-title">SIN CLASIFICAR <span style="font-weight:400;font-size:0.85rem;color:#c62828;">— ${groups['SIN CLASIFICAR'].length} item(s) sin mueble asignado</span></span>
+            <span style="font-weight:700;color:#1a237e;font-size:0.9rem;margin-left:0.6rem;white-space:nowrap;">💰 S/ <span id="total-barra-header-SIN-CLASIFICAR">0.00</span></span>
             <span class="accordion-arrow">▶</span>
           </div>
           <div class="accordion-body">
@@ -5133,8 +5140,33 @@ function cargarStockBarra() {
     if (b) { b.style.background = '#2e7d32'; b.textContent = '💾 GUARDAR STOCK'; }
     if (esHoy) guardarSnapshotStock();
     cargarConsumoNoRegistrado(fecha, container);
+    actualizarTotalesPrecioBarra();
     });
   }).catch(e => { console.error(e); });
+}
+
+// Suma PRECIO T por mueble y el total general de BARRA/STOCK
+function actualizarTotalesPrecioBarra() {
+  const acc = document.getElementById('barra-stock-container');
+  if (!acc) return;
+  let granTotal = 0;
+  acc.querySelectorAll('.accordion-item').forEach(item => {
+    const key = item.dataset.grupoKey;
+    let sub = 0;
+    item.querySelectorAll('tr[data-stock-id]').forEach(tr => {
+      const inp = tr.querySelector('.input-precio-total-barra');
+      if (inp) sub += parseFloat(inp.value) || 0;
+      else {
+        const cps = tr.querySelectorAll('.col-precio');
+        if (cps[1]) sub += parseFloat(cps[1].textContent) || 0;
+      }
+    });
+    const h = document.getElementById('total-barra-header-' + key);
+    if (h) h.textContent = sub.toFixed(2);
+    granTotal += sub;
+  });
+  const g = document.getElementById('total-barra-inv-val');
+  if (g) g.textContent = granTotal.toFixed(2);
 }
 
 function comparteProductoBarra(a, b) {
