@@ -3349,7 +3349,15 @@ app.get('/api/barra/stock', async (req, res) => {
     return res.json(snap.docs.map(d => ({ ...d.data() })));
   }
   const snap = await col('barra_stock').orderBy('id').get();
-  res.json(snap.docs.map(d => ({ id: Number(d.id), ...d.data() })));
+  const precSnap = await col('barra_precios').get();
+  const precBy = {};
+  precSnap.docs.forEach(d => { const p = d.data(); const k = normNombre(p.ingrediente || ''); if (k && !precBy[k]) precBy[k] = p; });
+  res.json(snap.docs.map(d => {
+    const s = d.data();
+    const p = precBy[normNombre(s.ingrediente || '')] || {};
+    const pu = parseFloat(p.ultimo_precio_compra) || parseFloat(p.precio_compra) || parseFloat(p.precio) || 0;
+    return { id: Number(d.id), ...s, precio: Math.round(pu * 100) / 100 };
+  }));
 });
 
 // Guarda un snapshot histórico del stock para una fecha

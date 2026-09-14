@@ -623,6 +623,29 @@ function api(method, url, data) {
 
 let _aperturaEditable = false;
 let _verPrecios = false;
+let _verPreciosBarra = false;
+// Muestra/oculta las columnas PRECIO U y PRECIO T en BARRA/STOCK (ocultas por defecto)
+function toggleColumnasPrecioBarra() {
+  _verPreciosBarra = !_verPreciosBarra;
+  const c = document.getElementById('barra-stock-container');
+  if (c) c.classList.toggle('ocultar-precios', !_verPreciosBarra);
+  const btn = document.getElementById('btn-toggle-precios-barra');
+  if (btn) {
+    btn.textContent = _verPreciosBarra ? '💰 PRECIOS ✓' : '💰 PRECIOS';
+    btn.style.background = _verPreciosBarra ? '#2e7d32' : '#0f3460';
+    btn.style.color = '#fff';
+    btn.title = _verPreciosBarra ? 'Ocultar columnas de precios' : 'Ver columnas de precios';
+  }
+}
+// Recalcula PRECIO T = PRECIO U x Cantidad al editar la cantidad en BARRA/STOCK
+function actualizarPrecioTotalBarra(inputEl) {
+  const tr = inputEl.closest('tr');
+  if (!tr) return;
+  const pu = parseFloat(tr.querySelector('.input-precio-barra')?.value) || 0;
+  const cant = parseFloat(tr.querySelector('.input-stock-cant')?.value) || 0;
+  const pt = tr.querySelector('.input-precio-total-barra');
+  if (pt) pt.value = (pu * cant).toFixed(2);
+}
 // Muestra/oculta las columnas PRECIO U y PRECIO T en ALMACENES (ocultas por defecto)
 function toggleColumnasPrecio() {
   _verPrecios = !_verPrecios;
@@ -4175,26 +4198,30 @@ function buscarStockBarra(v) {
 function exportarStockBarra() {
   const fecha = document.getElementById('fecha-stock-barra')?.value || todayStr();
   const esHoy = fecha === todayStr();
-  const wsData = [['MUEBLE', 'ITEM', 'CANTIDAD', 'UNIDAD', 'ONZAS']];
+  const wsData = [['MUEBLE', 'ITEM', 'CANTIDAD', 'UNIDAD', 'PRECIO U', 'PRECIO T', 'ONZAS']];
   document.querySelectorAll('#barra-stock-container .accordion-item').forEach(acc => {
     const mueble = (acc.querySelector('.accordion-title')?.textContent?.split(' — ')[0] || '').trim().toUpperCase();
     acc.querySelectorAll('tbody tr[data-stock-id]').forEach(tr => {
       let ing = (tr.querySelector('.stock-nombre')?.textContent || '').trim();
       // Quitar la nota "(más en: ...)" y el badge "STOCK BAJO" del nombre
       ing = ing.replace(/\s*\(más en:.*?\)\s*/g, '').replace(/STOCK BAJO/g, '').trim().toUpperCase();
-      let cant, uni, onz;
+      let cant, uni, onz, pu, pt;
       if (esHoy) {
         const v = leerFilaStock(tr);
         cant = String(v.cantidad || '').toUpperCase();
         uni = String(v.unidad || '').toUpperCase();
+        pu = (tr.querySelector('.input-precio-barra')?.value || '0');
+        pt = (tr.querySelector('.input-precio-total-barra')?.value || '0');
         onz = (tr.querySelector('.onzas-stock')?.textContent || '').toUpperCase();
       } else {
         const tds = tr.querySelectorAll('td');
         cant = (tds[1]?.textContent || '').toUpperCase();
         uni = (tds[2]?.textContent || '').toUpperCase();
-        onz = (tds[3]?.textContent || '').toUpperCase();
+        pu = (tds[3]?.textContent || '0');
+        pt = (tds[4]?.textContent || '0');
+        onz = (tds[5]?.textContent || '').toUpperCase();
       }
-      wsData.push([mueble, ing, cant, uni, onz]);
+      wsData.push([mueble, ing, cant, uni, pu, pt, onz]);
     });
   });
   const libro = XLSX.utils.book_new();
@@ -5008,11 +5035,21 @@ function cargarStockBarra() {
       const onz = esCompras ? '' : formatoOnzas(calcularOnzas(s));
       const nombreConNota = esc(s.ingrediente);
       const tdOnzas = esCompras ? '' : `<td class="onzas-stock">${onz}</td>`;
+      const pu = parseFloat(s.precio) || 0;
+      const pt = Math.round(pu * (parseFloat(s.cantidad) || 0) * 100) / 100;
+      const tdPrecioU = `<td class="col-precio">${esHoy
+        ? `<input type="number" class="input-num input-precio-barra" value="${pu}" step="0.01" readonly title="${pu ? 'Precio unitario (de compras / base de datos)' : 'SIN PRECIO'}" style="background:${pu ? '#fff9c4' : '#ffcdd2'};color:${pu ? '#555' : '#b71c1c'};cursor:not-allowed;font-weight:${pu ? 'normal' : '700'};width:72px;">`
+        : (pu || 0)}</td>`;
+      const tdPrecioT = `<td class="col-precio">${esHoy
+        ? `<input type="number" class="input-num input-precio-total-barra" value="${pt}" step="0.01" readonly title="Precio total = Precio U x Cantidad" style="background:#fff9c4;color:#555;cursor:not-allowed;font-weight:700;width:82px;">`
+        : pt.toFixed(2)}</td>`;
       if (!esHoy) {
         return `<tr data-stock-id="${s.id}">
           <td class="stock-nombre">${nombreConNota}</td>
           <td class="col-cant">${s.cantidad}</td>
           <td>${s.unidad}</td>
+          ${tdPrecioU}
+          ${tdPrecioT}
           ${tdOnzas}
           <td>${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
           <td></td>
@@ -5024,6 +5061,8 @@ function cargarStockBarra() {
           <td class="stock-nombre">${nombreConNota}</td>
           <td class="col-cant"><input type="number" class="input-num" value="${s.cantidad}" step="0.01" readonly title="Cantidad fija del conteo semanal (no editable)" style="background:#f0f0f0;color:#555;cursor:not-allowed;"></td>
           <td>${s.unidad}</td>
+          ${tdPrecioU}
+          ${tdPrecioT}
           ${tdOnzas}
           <td>${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
           <td></td>
@@ -5034,8 +5073,10 @@ function cargarStockBarra() {
       const uniOpts = uniList.map(u => `<option value="${u}" ${s.unidad === u ? 'selected' : ''}>${u}</option>`).join('');
       return `<tr data-stock-id="${s.id}" data-orig-cantidad="${s.cantidad}" data-orig-unidad="${s.unidad}" data-orig-grupo="${(s.grupo || '').toUpperCase()}">
         <td class="stock-nombre">${nombreConNota}</td>
-        <td class="col-cant"><input type="number" class="input-num input-stock-cant" value="${s.cantidad}" step="0.01" oninput="actualizarOnzasFila(this); marcarStockDirty()"></td>
+        <td class="col-cant"><input type="number" class="input-num input-stock-cant" value="${s.cantidad}" step="0.01" oninput="actualizarOnzasFila(this); actualizarPrecioTotalBarra(this); marcarStockDirty()"></td>
         <td><select class="select-stock-uni" onchange="onUnidadStockChange(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${uniOpts}</select></td>
+        ${tdPrecioU}
+        ${tdPrecioT}
         ${tdOnzas}
         <td><select class="select-stock-grupo" onchange="marcarStockDirty()" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${opts}</select></td>
         <td>
@@ -5044,12 +5085,14 @@ function cargarStockBarra() {
         </td>
       </tr>`;
     }
+    container.classList.toggle('ocultar-precios', !_verPreciosBarra);
     container.innerHTML = GRUPOS_BARRA_CON_COMPRAS.map(g => {
       const items = groups[g];
       const esCompras = g === 'COMPRAS DIARIAS';
       const total = items.reduce((sum, i) => sum + (parseFloat(i.cantidad) || 0), 0);
       const colOnzas = esCompras ? '' : '<th>Onzas</th>';
-      const colSpan = esCompras ? 5 : 6;
+      const colPrecio = '<th class="col-precio">PRECIO U</th><th class="col-precio">PRECIO T</th>';
+      const colSpan = esCompras ? 7 : 8;
       return `
         <div class="accordion-item">
           <div class="accordion-header" onclick="toggleAcordeon(this)">
@@ -5058,7 +5101,7 @@ function cargarStockBarra() {
           </div>
           <div class="accordion-body">
             <div class="table-wrap"><table>
-              <thead><tr><th>Ingrediente</th><th class="col-cant">Cantidad</th><th>Unidad</th>${colOnzas}<th>Mueble</th><th></th></tr></thead>
+              <thead><tr><th>Ingrediente</th><th class="col-cant">Cantidad</th><th>Unidad</th>${colPrecio}${colOnzas}<th>Mueble</th><th></th></tr></thead>
               <tbody>${items.map(i => fila(i, esCompras)).join('') || '<tr><td colspan="' + colSpan + '">Vacío.</td></tr>'}</tbody>
             </table></div>
           </div>
@@ -5071,7 +5114,7 @@ function cargarStockBarra() {
           </div>
           <div class="accordion-body">
             <div class="table-wrap"><table>
-              <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th><th>Mueble</th><th></th></tr></thead>
+              <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th class="col-precio">PRECIO U</th><th class="col-precio">PRECIO T</th><th>Onzas</th><th>Mueble</th><th></th></tr></thead>
               <tbody>${groups['SIN CLASIFICAR'].map(fila).join('')}</tbody>
             </table></div>
           </div>
@@ -5284,7 +5327,7 @@ function leerFilaStock(tr) {
   return {
     cantidad: cantEl ? (cantEl.value || 0) : (tds[1]?.textContent || 0),
     unidad: (tr.querySelector('.select-stock-uni')?.value || (tds[2]?.textContent || '')).trim(),
-    grupo: (tr.querySelector('.select-stock-grupo')?.value || (tds[4]?.textContent || '')).trim()
+    grupo: (tr.querySelector('.select-stock-grupo')?.value || (tds[6]?.textContent || '')).trim()
   };
 }
 
