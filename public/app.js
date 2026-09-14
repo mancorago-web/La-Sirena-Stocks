@@ -640,13 +640,14 @@ function itemRow(i, a) {
     : 'readonly title="Apertura fija del día (no editable)" style="background:#f0f0f0;color:#555;cursor:not-allowed;"';
   return `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
     <td>${i.nombre}${obs}</td>
-    <td><input type="number" class="input-num input-precio" value="${i.precio || 0}" step="0.01" readonly title="${i.precio ? 'Precio de compra (se edita en BASE DE DATOS)' : 'SIN PRECIO - cargar en BASE DE DATOS'}" style="background:${i.precio ? '#f0f0f0' : '#ffcdd2'};color:${i.precio ? '#555' : '#b71c1c'};cursor:not-allowed;font-weight:${i.precio ? 'normal' : '700'};"></td>
+    <td><input type="number" class="input-num input-precio" value="${i.precio || 0}" step="0.01" readonly title="${i.precio ? 'Precio unitario de compra (se edita en BASE DE DATOS)' : 'SIN PRECIO - cargar en BASE DE DATOS'}" style="background:${i.precio ? '#fff9c4' : '#ffcdd2'};color:${i.precio ? '#555' : '#b71c1c'};cursor:not-allowed;font-weight:${i.precio ? 'normal' : '700'};"></td>
     <td><input type="number" class="input-num input-apertura" value="${i.stock_apertura || 0}" step="0.01" ${aperturaReadonly} oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-ingreso" value="${i.stock_ingreso || 0}" step="0.01" oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01" oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-ventas" value="${i.total_ventas || 0}" step="0.01" oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-falta" value="${i.falta_almacen || 0}" step="0.01" oninput="calcCierre(this)"><input type="hidden" class="input-baja" value="${i.stock_baja || 0}"></td>
     <td><input type="number" class="input-num input-cierre" value="${i.stock_cierre || 0}" step="0.01" readonly></td>
+    <td><input type="number" class="input-num input-precio-total" value="${(((i.precio || 0) * (i.stock_cierre || 0))).toFixed(2)}" step="0.01" readonly title="Precio total = Precio U x Stock Total Cierre" style="background:#e8f5e9;color:#1b5e20;cursor:not-allowed;font-weight:700;"></td>
     <td style="white-space:nowrap">
       <button onclick="editarItemAlmacen(${i.id}, ${a.id})" style="background:#0f3460;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">EDITAR</button>
       <button onclick="eliminarItemAlmacen(${i.id}, ${a.id})" style="background:#c62828;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">✕</button>
@@ -662,8 +663,28 @@ function calcCierre(el) {
   const v = parseFloat(tr.querySelector('.input-ventas').value) || 0;
   const f = parseFloat(tr.querySelector('.input-falta')?.value) || 0;
   const b = parseFloat(tr.querySelector('.input-baja')?.value) || 0;
-  tr.querySelector('.input-cierre').value = (a + i - s - v - f - b).toFixed(2);
+  const cierre = a + i - s - v - f - b;
+  tr.querySelector('.input-cierre').value = cierre.toFixed(2);
+  const precio = parseFloat(tr.querySelector('.input-precio')?.value) || 0;
+  const pt = tr.querySelector('.input-precio-total');
+  if (pt) pt.value = (precio * cierre).toFixed(2);
   compararCierre(tr.querySelector('.input-cierre'));
+  actualizarTotalesPrecio();
+}
+
+// Recalcula los totales de dinero por almacén y el total invertido en STOCK (suma de PRECIO T)
+function actualizarTotalesPrecio() {
+  let granTotal = 0;
+  document.querySelectorAll('#accordion-almacenes .accordion-item').forEach(item => {
+    const alId = item.dataset.almacenId;
+    let subtotal = 0;
+    item.querySelectorAll('tr[data-item-id] .input-precio-total').forEach(inp => { subtotal += parseFloat(inp.value) || 0; });
+    const el = document.getElementById('total-almacen-' + alId);
+    if (el) el.textContent = subtotal.toFixed(2);
+    granTotal += subtotal;
+  });
+  const g = document.getElementById('total-inventario-val');
+  if (g) g.textContent = granTotal.toFixed(2);
 }
 
 function compararCierre(el) {
@@ -1745,7 +1766,11 @@ function cargarAlmacenes(fecha, preservar) {
       return { ...a, secciones, otros };
     });
     const container = document.getElementById('accordion-almacenes');
-    container.innerHTML = data.map(a => `
+    const totalBar = `<div style="margin-bottom:0.75rem;padding:0.75rem 1rem;background:#1a237e;color:#fff;border-radius:8px;font-weight:700;font-size:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem;">
+      <span>💰 TOTAL INVERTIDO EN STOCK</span>
+      <span>S/ <span id="total-inventario-val">0.00</span></span>
+    </div>`;
+    container.innerHTML = totalBar + data.map(a => `
       <div class="accordion-item" data-almacen-id="${a.id}">
         <div class="accordion-header" onclick="toggleAcordeon(this)">
           <span class="accordion-title">${a.nombre}</span>
@@ -1758,24 +1783,29 @@ function cargarAlmacenes(fecha, preservar) {
           ${a.items.length ? `
             <div class="table-wrap">
             <table>
-              <thead><tr><th>Item</th><th>PRECIO</th><th>Stock Total Apertura</th><th>Ingreso</th><th>Salida Almacén</th><th>Total Ventas</th><th>Falta</th><th>Stock Total Cierre</th><th></th></tr></thead>
+              <thead><tr><th>Item</th><th>PRECIO U</th><th>Stock Total Apertura</th><th>Ingreso</th><th>Salida Almacén</th><th>Total Ventas</th><th>Falta</th><th>Stock Total Cierre</th><th>PRECIO T</th><th></th></tr></thead>
               <tbody>
                 ${a.secciones.map(s => s.items.length ? `
-                  <tr class="section-header"><td colspan="9">— ${s.label} —</td></tr>
+                  <tr class="section-header"><td colspan="10">— ${s.label} —</td></tr>
                   ${s.items.map(i => itemRow(i, a)).join('')}
                 ` : '').join('')}
                 ${a.otros.length ? `
-                  <tr class="section-header"><td colspan="9">— ${a.id === 3 ? 'CAFE' : (a.id === 1 ? 'KOMBUCHAS' : 'COCINA')} —</td></tr>
+                  <tr class="section-header"><td colspan="10">— ${a.id === 3 ? 'CAFE' : (a.id === 1 ? 'KOMBUCHAS' : 'COCINA')} —</td></tr>
                   ${a.otros.map(i => itemRow(i, a)).join('')}
                 ` : ''}
               </tbody>
             </table>
+            </div>
+            <div style="margin:0.5rem 0;padding:0.5rem 0.75rem;background:#e8f5e9;border-radius:8px;font-weight:700;color:#1b5e20;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem;">
+              <span>TOTAL ${a.nombre.toUpperCase()}</span>
+              <span>S/ <span id="total-almacen-${a.id}">0.00</span></span>
             </div>
           ` : '<p class="sin-items">Este almacén no tiene items.</p>'}
           <button class="btn-agregar-item" onclick="agregarItemAlmacen(${a.id}, '${a.nombre}')">+ Agregar Item</button>
         </div>
       </div>
     `).join('');
+    actualizarTotalesPrecio();
     const ba = document.getElementById('buscar-item');
     if (ba && ba.value) buscarEnTabla(ba.value, 'accordion-almacenes');
     container.querySelectorAll('tr[data-item-id]').forEach(tr => {
@@ -4255,7 +4285,7 @@ function buscarTablaBarra(term, containerId, selector) {
 
 function exportarExcel() {
   const fecha = document.getElementById('fecha-almacenes')?.value || new Date().toISOString().split('T')[0];
-  const wsData = [['Almacén', 'Sección', 'Item', 'Precio', 'Stock Total Apertura', 'Ingreso', 'Salida Almacén', 'Total Ventas', 'Falta', 'Stock Total Cierre']];
+  const wsData = [['Almacén', 'Sección', 'Item', 'Precio U', 'Stock Total Apertura', 'Ingreso', 'Salida Almacén', 'Total Ventas', 'Falta', 'Stock Total Cierre', 'Precio T']];
   document.querySelectorAll('#accordion-almacenes .accordion-item').forEach(item => {
     const almacen = item.querySelector('.accordion-title')?.textContent || '';
     let seccion = '';
@@ -4271,8 +4301,9 @@ function exportarExcel() {
         const salida = celdas[4]?.querySelector('input')?.value || '0';
         const ventas = celdas[5]?.querySelector('input')?.value || '0';
         const falta = celdas[6]?.querySelector('input')?.value || '0';
-        const cierre = celdas[8]?.querySelector('input')?.value || '0';
-        wsData.push([almacen, seccion, nombre, precio, apertura, ingreso, salida, ventas, falta, cierre]);
+        const cierre = celdas[7]?.querySelector('input')?.value || '0';
+        const precioT = celdas[8]?.querySelector('input')?.value || '0';
+        wsData.push([almacen, seccion, nombre, precio, apertura, ingreso, salida, ventas, falta, cierre, precioT]);
       }
     });
   });
@@ -4287,7 +4318,7 @@ function exportarAlmacen(almacenId) {
   const item = document.querySelector(`.accordion-item[data-almacen-id="${almacenId}"]`);
   if (!item) return;
   const almacen = item.querySelector('.accordion-title')?.textContent || '';
-  const wsData = [['Sección', 'Item', 'Precio', 'Stock Total Apertura', 'Ingreso', 'Salida Almacén', 'Total Ventas', 'Falta', 'Stock Total Cierre']];
+  const wsData = [['Sección', 'Item', 'Precio U', 'Stock Total Apertura', 'Ingreso', 'Salida Almacén', 'Total Ventas', 'Falta', 'Stock Total Cierre', 'Precio T']];
   let seccion = '';
   item.querySelectorAll('tbody tr').forEach(tr => {
     if (tr.classList.contains('section-header')) {
@@ -4301,8 +4332,9 @@ function exportarAlmacen(almacenId) {
       const salida = celdas[4]?.querySelector('input')?.value || '0';
       const ventas = celdas[5]?.querySelector('input')?.value || '0';
       const falta = celdas[6]?.querySelector('input')?.value || '0';
-      const cierre = celdas[8]?.querySelector('input')?.value || '0';
-      wsData.push([seccion, nombre, precio, apertura, ingreso, salida, ventas, falta, cierre]);
+      const cierre = celdas[7]?.querySelector('input')?.value || '0';
+      const precioT = celdas[8]?.querySelector('input')?.value || '0';
+      wsData.push([seccion, nombre, precio, apertura, ingreso, salida, ventas, falta, cierre, precioT]);
     }
   });
   const libro = XLSX.utils.book_new();
