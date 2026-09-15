@@ -7915,7 +7915,7 @@ function cargarComprasDetalle(ini, fin) {
         const prevTot = prev ? (parseFloat(prev.precio_total) || (prevUni * (parseFloat(prev.cantidad) || 0))) : 0;
         const celda = (display, raw) => '<td title="' + String(raw == null ? '' : raw).replace(/"/g, '&quot;') + '" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + display + '</td>';
         const celdasExtra = _compararCompras
-          ? `${celda(prev ? prev.fecha : '—')}${celda(prev ? prev.cantidad : '—')}${celda(prevUni > 0 ? 'S/ ' + prevUni.toFixed(2) : '—')}${celda(prevTot > 0 ? 'S/ ' + prevTot.toFixed(2) : '—')}`
+          ? `<td style="background:#e8f5e9;" title="${prev ? prev.fecha : 'Sin compra anterior'}">${prev ? prev.fecha : '—'}</td><td style="background:#e8f5e9;" title="${prev ? prev.cantidad : ''}">${prev ? prev.cantidad : '—'}</td><td style="background:#e8f5e9;" title="${prevUni > 0 ? 'S/ ' + prevUni.toFixed(2) : ''}">${prevUni > 0 ? 'S/ ' + prevUni.toFixed(2) : '—'}</td><td style="background:#e8f5e9;" title="${prevTot > 0 ? 'S/ ' + prevTot.toFixed(2) : ''}">${prevTot > 0 ? 'S/ ' + prevTot.toFixed(2) : '—'}</td>`
           : `${celda(esc(det), det)}${celda(esc(r.documento || '—') + (r.numero ? ' ' + esc(r.numero) : ''), (r.documento || '') + (r.numero ? ' ' + r.numero : ''))}${celda(esc(r.proveedor || '—'), r.proveedor || '—')}${celda(t)}${celda(esc(r.saved_by || '-'), r.saved_by || '-')}`;
         return `<tr>
           ${celda(r.fecha || '—', r.fecha || '—')}
@@ -7928,7 +7928,7 @@ function cargarComprasDetalle(ini, fin) {
         </tr>`;
       }).join('');
       const headersExtra = _compararCompras
-        ? '<th>Ant. Fecha</th><th>Ant. Cant</th><th>Ant. P.Unit</th><th>Ant. P.Total</th>'
+        ? '<th style="background:#e8f5e9;">Ant. Fecha</th><th style="background:#e8f5e9;">Ant. Cant</th><th style="background:#e8f5e9;">Ant. P.Unit</th><th style="background:#e8f5e9;">Ant. P.Total</th>'
         : '<th>Destino</th><th>Documento</th><th>Proveedor</th><th>Hora</th><th>Usuario</th>';
       const colgroup = _compararCompras
         ? '<col style="width:9%"><col style="width:26%"><col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:9%"><col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:70px">'
