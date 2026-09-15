@@ -7700,6 +7700,7 @@ let comprasAlmacenes = [];
 let _comprasListaEditable = [];
 let _cocinaStockItems = {};
 let _ultimoPrecioItem = 0;
+let _compararCompras = false;
 
 function onCambiarDestinoCompra() {
   const destino = document.getElementById('nueva-compra-destino').value;
@@ -7873,41 +7874,11 @@ function cargarComprasDetalle(ini, fin) {
     const actualFin = document.getElementById('fecha-compras-fin')?.value || todayStr();
     if (actualIni !== fechaIni || actualFin !== fechaFin) return; // el rango cambió, ignorar respuesta vieja
     if (!list || !list.length) {
-      c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE COMPRAS</h3><p style="color:#888;">No hay compras registradas en el rango <b>' + fechaIni + ' a ' + fechaFin + '</b>.</p>';
+      c.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;margin:0 0 0.5rem 0;"><h3 style="margin:0;">DETALLE DE COMPRAS</h3><button onclick="toggleCompararCompra()" style="padding:0.5rem 1rem;background:#e65100;color:#fff;border:none;border-radius:6px;font-size:0.85rem;font-weight:700;cursor:pointer;">⚖️ COMPARAR COMPRA</button></div><p style="color:#888;">No hay compras registradas en el rango <b>' + fechaIni + ' a ' + fechaFin + '</b>.</p>';
       _comprasListaEditable = [];
       return;
     }
     _comprasListaEditable = list;
-    const filas = list.map(r => {
-      const alNombre = (id) => {
-        const a = comprasAlmacenes.find(x => Number(x.id) === Number(id));
-        return a ? a.nombre : ('Almacén ' + id);
-      };
-      let det = '';
-      if (r.destino === 'stocks') det = 'STOCKS → ' + (r.almacenes || []).map(alNombre).join(', ');
-      else if (r.destino === 'barra') det = 'BARRA → ' + (r.muebles || []).join(', ');
-      else if (r.destino === 'cocina') det = 'COCINA';
-      else if (r.destino === 'eventos') det = 'EVENTOS';
-      else if (r.destino === 'limpieza') det = 'LIMPIEZA';
-      const t = r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
-      const precioUni = parseFloat(r.precio) || 0;
-      const precioTot = parseFloat(r.precio_total) || (precioUni * (r.cantidad || 0));
-      // Celda en una sola línea con truncado (…) y tooltip con el texto completo
-      const celda = (display, raw) => '<td title="' + String(raw == null ? '' : raw).replace(/"/g, '&quot;') + '" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + display + '</td>';
-      return `<tr>
-        ${celda(r.fecha || '—', r.fecha || '—')}
-        ${celda(esc(r.nombre), r.nombre)}
-        ${celda(r.cantidad)}
-        ${celda(precioUni > 0 ? 'S/ ' + precioUni.toFixed(2) : '—')}
-        ${celda(precioTot > 0 ? 'S/ ' + precioTot.toFixed(2) : '—')}
-        ${celda(esc(det), det)}
-        ${celda(esc(r.documento || '—') + (r.numero ? ' ' + esc(r.numero) : ''), (r.documento || '') + (r.numero ? ' ' + r.numero : ''))}
-        ${celda(esc(r.proveedor || '—'), r.proveedor || '—')}
-        ${celda(t)}
-        ${celda(esc(r.saved_by || '-'), r.saved_by || '-')}
-        <td style="white-space:nowrap;width:70px;"><button onclick="editarCompra('${r.id}')" style="background:#1565c0;color:#fff;border:none;padding:0.25rem 0.45rem;border-radius:4px;cursor:pointer;font-size:0.72rem;margin-right:0.2rem;" title="Editar">✎</button><button class="danger" onclick="confirmarEliminarCompra('${r.id}')" style="padding:0.25rem 0.45rem;font-size:0.72rem;">✕</button></td>
-      </tr>`;
-    }).join('');
     const totalCompra = (list || []).reduce((s, r) => s + (parseFloat(r.precio_total) || ((parseFloat(r.precio) || 0) * (r.cantidad || 0))), 0);
     const provDl = document.getElementById('sugerencia-proveedores');
     if (provDl) {
@@ -7923,60 +7894,69 @@ function cargarComprasDetalle(ini, fin) {
       });
       provDl.innerHTML = htmlP;
     }
-    c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE COMPRAS (' + fechaIni + ' a ' + fechaFin + ')</h3>' +
-      '<div class="table-wrap" style="overflow-x:hidden;"><table style="width:100%;table-layout:fixed;font-size:0.78rem;"><colgroup><col style="width:8%"><col style="width:26%"><col style="width:7%"><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:11%"><col style="width:12%"><col style="width:6%"><col style="width:7%"><col style="width:70px"></colgroup><thead><tr><th>Fecha</th><th>Item</th><th>Cantidad</th><th>P. Unidad</th><th>P. Total</th><th>Destino</th><th>Documento</th><th>Proveedor</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
+    const unicos = [...new Set((list || []).map(r => r.nombre).filter(Boolean))];
+    const render = (anteriores) => {
+      const alNombre = (id) => {
+        const a = comprasAlmacenes.find(x => Number(x.id) === Number(id));
+        return a ? a.nombre : ('Almacén ' + id);
+      };
+      const filas = list.map(r => {
+        let det = '';
+        if (r.destino === 'stocks') det = 'STOCKS → ' + (r.almacenes || []).map(alNombre).join(', ');
+        else if (r.destino === 'barra') det = 'BARRA → ' + (r.muebles || []).join(', ');
+        else if (r.destino === 'cocina') det = 'COCINA';
+        else if (r.destino === 'eventos') det = 'EVENTOS';
+        else if (r.destino === 'limpieza') det = 'LIMPIEZA';
+        const t = r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
+        const precioUni = parseFloat(r.precio) || 0;
+        const precioTot = parseFloat(r.precio_total) || (precioUni * (r.cantidad || 0));
+        const prev = (anteriores && anteriores[r.nombre]) || null;
+        const prevUni = prev ? (parseFloat(prev.precio) || 0) : 0;
+        const prevTot = prev ? (parseFloat(prev.precio_total) || (prevUni * (parseFloat(prev.cantidad) || 0))) : 0;
+        const celda = (display, raw) => '<td title="' + String(raw == null ? '' : raw).replace(/"/g, '&quot;') + '" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + display + '</td>';
+        const celdasExtra = _compararCompras
+          ? `${celda(prev ? prev.fecha : '—')}${celda(prev ? prev.cantidad : '—')}${celda(prevUni > 0 ? 'S/ ' + prevUni.toFixed(2) : '—')}${celda(prevTot > 0 ? 'S/ ' + prevTot.toFixed(2) : '—')}`
+          : `${celda(esc(det), det)}${celda(esc(r.documento || '—') + (r.numero ? ' ' + esc(r.numero) : ''), (r.documento || '') + (r.numero ? ' ' + r.numero : ''))}${celda(esc(r.proveedor || '—'), r.proveedor || '—')}${celda(t)}${celda(esc(r.saved_by || '-'), r.saved_by || '-')}`;
+        return `<tr>
+          ${celda(r.fecha || '—', r.fecha || '—')}
+          ${celda(esc(r.nombre), r.nombre)}
+          ${celda(r.cantidad)}
+          ${celda(precioUni > 0 ? 'S/ ' + precioUni.toFixed(2) : '—')}
+          ${celda(precioTot > 0 ? 'S/ ' + precioTot.toFixed(2) : '—')}
+          ${celdasExtra}
+          <td style="white-space:nowrap;width:70px;"><button onclick="editarCompra('${r.id}')" style="background:#1565c0;color:#fff;border:none;padding:0.25rem 0.45rem;border-radius:4px;cursor:pointer;font-size:0.72rem;margin-right:0.2rem;" title="Editar">✎</button><button class="danger" onclick="confirmarEliminarCompra('${r.id}')" style="padding:0.25rem 0.45rem;font-size:0.72rem;">✕</button></td>
+        </tr>`;
+      }).join('');
+      const headersExtra = _compararCompras
+        ? '<th>Ant. Fecha</th><th>Ant. Cant</th><th>Ant. P.Unit</th><th>Ant. P.Total</th>'
+        : '<th>Destino</th><th>Documento</th><th>Proveedor</th><th>Hora</th><th>Usuario</th>';
+      const colgroup = _compararCompras
+        ? '<col style="width:9%"><col style="width:26%"><col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:9%"><col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:70px">'
+        : '<col style="width:8%"><col style="width:26%"><col style="width:7%"><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:11%"><col style="width:12%"><col style="width:6%"><col style="width:7%"><col style="width:70px">';
+      c.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;margin:0 0 0.5rem 0;">' +
+        '<h3 style="margin:0;">DETALLE DE COMPRAS (' + fechaIni + ' a ' + fechaFin + ')</h3>' +
+        '<button onclick="toggleCompararCompra()" style="padding:0.5rem 1rem;background:#e65100;color:#fff;border:none;border-radius:6px;font-size:0.85rem;font-weight:700;cursor:pointer;" title="Comparar con la última compra anterior de cada item">⚖️ COMPARAR COMPRA' + (_compararCompras ? ' ✓' : '') + '</button>' +
+      '</div>' +
+      (_compararCompras ? '<p style="font-size:0.78rem;color:#888;margin:0 0 0.5rem 0;">Comparando cada item con su última compra <b>anterior al ' + fechaIni + '</b>.</p>' : '') +
+      '<div class="table-wrap" style="overflow-x:hidden;"><table style="width:100%;table-layout:fixed;font-size:0.78rem;"><colgroup>' + colgroup + '</colgroup><thead><tr><th>Fecha</th><th>Item</th><th>Cantidad</th><th>P. Unidad</th><th>P. Total</th>' + headersExtra + '<th></th></tr></thead><tbody>' +
       filas + '</tbody></table></div>' +
       (totalCompra > 0 ? '<p style="font-weight:700;color:#0f3460;margin-top:0.5rem;">TOTAL COMPRAS: S/ ' + totalCompra.toFixed(2) + '</p>' : '');
+    };
+    if (_compararCompras) {
+      api('GET', '/api/compras/anteriores?fecha=' + encodeURIComponent(fechaIni) + '&items=' + encodeURIComponent(unicos.join(','))).then(anteriores => {
+        if (!document.getElementById('compras-detalle-container')) return;
+        render(anteriores || {});
+      }).catch(() => render({}));
+    } else {
+      render(null);
+    }
   }).catch(() => { const ai = document.getElementById('fecha-compras-ini')?.value || todayStr(); const af = document.getElementById('fecha-compras-fin')?.value || todayStr(); if (ai === fechaIni && af === fechaFin) c.innerHTML = '<p style="color:#888;">DETALLE DE COMPRAS/INGRESOS</p>'; });
 }
 
-// ⚖️ COMPARAR COMPRA: para cada item comprado en el rango seleccionado, muestra su historial de
-// compras (fechas, cantidades, unidades, P. unitario y P. total) para comparar precios en el tiempo.
-function compararCompras() {
-  const fs = getFechasCompras();
-  const fechaIni = fs.ini, fechaFin = fs.fin;
-  const modal = document.getElementById('modal');
-  const body = document.getElementById('modal-body');
-  modal.style.display = 'block';
-  body.innerHTML = '<h3>⚖️ COMPARAR COMPRA</h3><p style="margin-top:0.75rem;color:#888;">Cargando compras de ' + fechaIni + ' a ' + fechaFin + '...</p>';
-  api('GET', '/api/compras/detalle?fecha_inicio=' + encodeURIComponent(fechaIni) + '&fecha_fin=' + encodeURIComponent(fechaFin)).then(list => {
-    const unicos = [...new Set((list || []).map(r => r.nombre).filter(Boolean))];
-    if (!unicos.length) {
-      body.innerHTML = '<h3>⚖️ COMPARAR COMPRA</h3><p style="color:#888;margin-top:0.75rem;">No hay compras en el rango seleccionado.</p><div style="margin-top:1.5rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
-      return;
-    }
-    Promise.all(unicos.map(n => api('GET', '/api/compras/historial?item=' + encodeURIComponent(n)).catch(() => []))).then(historiales => {
-      const fmtFecha = f => { const p = String(f || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] : (f || '—'); };
-      const enRango = f => f >= fechaIni && f <= fechaFin;
-      let html = '<h3>⚖️ COMPARAR COMPRA <span style="font-weight:400;font-size:0.85rem;color:#888;">(' + fechaIni + ' a ' + fechaFin + ')</span></h3>';
-      html += '<p style="font-size:0.8rem;color:#666;margin:0.5rem 0 0;">Cada item comprado en el rango con su historial. Las filas <span style="background:#fff3cd;padding:0 0.3rem;border-radius:3px;">resaltadas</span> son del rango seleccionado.</p>';
-      unicos.forEach((nombre, idx) => {
-        const hist = historiales[idx] || [];
-        const filas = hist.map(h => {
-          const pu = parseFloat(h.precio) || 0;
-          const pt = parseFloat(h.precio_total) || (pu * (parseFloat(h.cantidad) || 0));
-          return `<tr${enRango(h.fecha) ? ' style="background:#fff3cd;"' : ''}>
-            <td>${fmtFecha(h.fecha)}</td>
-            <td>${h.cantidad}</td>
-            <td>${esc(h.unidad || 'unidad')}</td>
-            <td style="text-align:right;">S/ ${pu.toFixed(2)}</td>
-            <td style="text-align:right;">S/ ${pt.toFixed(2)}</td>
-            <td>${esc((h.destino || '').toUpperCase())}</td>
-            <td>${esc(h.proveedor || '—')}</td>
-          </tr>`;
-        }).join('');
-        html += `<div style="margin-top:1rem;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;">
-          <div style="background:#eef2ff;padding:0.4rem 0.6rem;font-weight:700;color:#1a237e;font-size:0.85rem;">${esc(nombre)} <span style="font-weight:400;color:#888;">— ${hist.length} compra(s)</span></div>
-          <div class="table-wrap"><table style="margin:0;font-size:0.82rem;">
-            <thead><tr><th>Fecha</th><th style="text-align:center;">Cant.</th><th>Unidad</th><th style="text-align:right;">P. Unit</th><th style="text-align:right;">P. Total</th><th>Destino</th><th>Proveedor</th></tr></thead>
-            <tbody>${filas || '<tr><td colspan="7">Sin historial.</td></tr>'}</tbody>
-          </table></div>
-        </div>`;
-      });
-      html += '<div style="margin-top:1.5rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
-      body.innerHTML = html;
-    }).catch(() => { body.innerHTML = '<p style="color:#c62828;">Error al cargar las comparaciones.</p>'; });
-  }).catch(() => { body.innerHTML = '<p style="color:#c62828;">Error al cargar las compras.</p>'; });
+// ⚖️ Alterna el modo COMPARAR COMPRA en el DETALLE DE COMPRAS
+function toggleCompararCompra() {
+  _compararCompras = !_compararCompras;
+  cargarComprasDetalle();
 }
 
 function editarCompra(id) {

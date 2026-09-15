@@ -1649,6 +1649,37 @@ app.get('/api/compras/historial', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Última compra ANTERIOR (fecha < la indicada) de cada item solicitado. Para COMPARAR COMPRA:
+// dado el día visto (fecha), devuelve la compra previa de cada item comprado ese día.
+app.get('/api/compras/anteriores', async (req, res) => {
+  try {
+    const fecha = String(req.query.fecha || '').trim();
+    const items = String(req.query.items || '').split(',').map(s => String(s || '').trim()).filter(Boolean);
+    if (!fecha || !items.length) return res.json({});
+    const keys = new Set(items.map(n => normNombre(n)));
+    const snap = await col('compras').get();
+    const mejor = {};
+    snap.docs.forEach(d => {
+      const a = d.data();
+      const f = a.fecha || '';
+      if (!f || f >= fecha) return;
+      const n = normNombre(a.nombre || '');
+      if (!keys.has(n)) return;
+      const cant = parseFloat(a.cantidad) || 0;
+      const pu = (parseFloat(a.precio_total) || 0) > 0 && cant > 0 ? (parseFloat(a.precio_total) / cant) : (parseFloat(a.precio) || 0);
+      if (!mejor[n] || f > mejor[n].fecha) {
+        mejor[n] = {
+          fecha: f, nombre: a.nombre, cantidad: a.cantidad, unidad: a.unidad || 'unidad',
+          precio: Math.round(pu * 100) / 100, precio_total: parseFloat(a.precio_total) || 0
+        };
+      }
+    });
+    const out = {};
+    items.forEach(it => { const k = normNombre(it); if (mejor[k]) out[it] = mejor[k]; });
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Último precio por unidad de compra de un item (promedio simple de las últimas 3 compras con precio).
 // Sirve para ESTIMAR la cantidad/peso cuando en COMPRAS solo se conoce el MONTO total.
 app.get('/api/compras/ultimo-precio', async (req, res) => {
