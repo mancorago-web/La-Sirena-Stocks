@@ -7913,9 +7913,16 @@ function cargarComprasDetalle(ini, fin) {
         const prev = (anteriores && anteriores[r.nombre]) || null;
         const prevUni = prev ? (parseFloat(prev.precio) || 0) : 0;
         const prevTot = prev ? (parseFloat(prev.precio_total) || (prevUni * (parseFloat(prev.cantidad) || 0))) : 0;
+        // Variación del precio unitario: precio de HOY vs compra anterior (↓ rojo si hoy fue más barato, ↑ verde si más caro)
+        const variacion = (precioUni > 0 && prevUni > 0) ? (precioUni - prevUni) : null;
+        const spanVar = (variacion === null || variacion === 0)
+          ? ''
+          : (variacion < 0
+              ? ` <span style="color:#c62828;font-weight:700;">↓ (${variacion.toFixed(2)})</span>`
+              : ` <span style="color:#2e7d32;font-weight:700;">↑ (+${variacion.toFixed(2)})</span>`);
         const celda = (display, raw) => '<td title="' + String(raw == null ? '' : raw).replace(/"/g, '&quot;') + '" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + display + '</td>';
         const celdasExtra = _compararCompras
-          ? `<td style="background:#e8f5e9;" title="${prev ? prev.fecha : 'Sin compra anterior'}">${prev ? prev.fecha : '—'}</td><td style="background:#e8f5e9;" title="${prev ? prev.cantidad : ''}">${prev ? prev.cantidad : '—'}</td><td style="background:#e8f5e9;" title="${prevUni > 0 ? 'S/ ' + prevUni.toFixed(2) : ''}">${prevUni > 0 ? 'S/ ' + prevUni.toFixed(2) : '—'}</td><td style="background:#e8f5e9;" title="${prevTot > 0 ? 'S/ ' + prevTot.toFixed(2) : ''}">${prevTot > 0 ? 'S/ ' + prevTot.toFixed(2) : '—'}</td>`
+          ? `<td style="background:#e8f5e9;" title="${prev ? prev.fecha : 'Sin compra anterior'}">${prev ? prev.fecha : '—'}</td><td style="background:#e8f5e9;" title="${prev ? prev.cantidad : ''}">${prev ? prev.cantidad : '—'}</td><td style="background:#e8f5e9;" title="${prevUni > 0 ? 'S/ ' + prevUni.toFixed(2) : ''}">${prevUni > 0 ? 'S/ ' + prevUni.toFixed(2) : '—'}${spanVar}</td><td style="background:#e8f5e9;" title="${prevTot > 0 ? 'S/ ' + prevTot.toFixed(2) : ''}">${prevTot > 0 ? 'S/ ' + prevTot.toFixed(2) : '—'}</td>`
           : `${celda(esc(det), det)}${celda(esc(r.documento || '—') + (r.numero ? ' ' + esc(r.numero) : ''), (r.documento || '') + (r.numero ? ' ' + r.numero : ''))}${celda(esc(r.proveedor || '—'), r.proveedor || '—')}${celda(t)}${celda(esc(r.saved_by || '-'), r.saved_by || '-')}`;
         return `<tr>
           ${celda(r.fecha || '—', r.fecha || '—')}
