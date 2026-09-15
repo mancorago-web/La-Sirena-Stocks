@@ -7930,6 +7930,55 @@ function cargarComprasDetalle(ini, fin) {
   }).catch(() => { const ai = document.getElementById('fecha-compras-ini')?.value || todayStr(); const af = document.getElementById('fecha-compras-fin')?.value || todayStr(); if (ai === fechaIni && af === fechaFin) c.innerHTML = '<p style="color:#888;">DETALLE DE COMPRAS/INGRESOS</p>'; });
 }
 
+// ⚖️ COMPARAR COMPRA: para cada item comprado en el rango seleccionado, muestra su historial de
+// compras (fechas, cantidades, unidades, P. unitario y P. total) para comparar precios en el tiempo.
+function compararCompras() {
+  const fs = getFechasCompras();
+  const fechaIni = fs.ini, fechaFin = fs.fin;
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modal-body');
+  modal.style.display = 'block';
+  body.innerHTML = '<h3>⚖️ COMPARAR COMPRA</h3><p style="margin-top:0.75rem;color:#888;">Cargando compras de ' + fechaIni + ' a ' + fechaFin + '...</p>';
+  api('GET', '/api/compras/detalle?fecha_inicio=' + encodeURIComponent(fechaIni) + '&fecha_fin=' + encodeURIComponent(fechaFin)).then(list => {
+    const unicos = [...new Set((list || []).map(r => r.nombre).filter(Boolean))];
+    if (!unicos.length) {
+      body.innerHTML = '<h3>⚖️ COMPARAR COMPRA</h3><p style="color:#888;margin-top:0.75rem;">No hay compras en el rango seleccionado.</p><div style="margin-top:1.5rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
+      return;
+    }
+    Promise.all(unicos.map(n => api('GET', '/api/compras/historial?item=' + encodeURIComponent(n)).catch(() => []))).then(historiales => {
+      const fmtFecha = f => { const p = String(f || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] : (f || '—'); };
+      const enRango = f => f >= fechaIni && f <= fechaFin;
+      let html = '<h3>⚖️ COMPARAR COMPRA <span style="font-weight:400;font-size:0.85rem;color:#888;">(' + fechaIni + ' a ' + fechaFin + ')</span></h3>';
+      html += '<p style="font-size:0.8rem;color:#666;margin:0.5rem 0 0;">Cada item comprado en el rango con su historial. Las filas <span style="background:#fff3cd;padding:0 0.3rem;border-radius:3px;">resaltadas</span> son del rango seleccionado.</p>';
+      unicos.forEach((nombre, idx) => {
+        const hist = historiales[idx] || [];
+        const filas = hist.map(h => {
+          const pu = parseFloat(h.precio) || 0;
+          const pt = parseFloat(h.precio_total) || (pu * (parseFloat(h.cantidad) || 0));
+          return `<tr${enRango(h.fecha) ? ' style="background:#fff3cd;"' : ''}>
+            <td>${fmtFecha(h.fecha)}</td>
+            <td>${h.cantidad}</td>
+            <td>${esc(h.unidad || 'unidad')}</td>
+            <td style="text-align:right;">S/ ${pu.toFixed(2)}</td>
+            <td style="text-align:right;">S/ ${pt.toFixed(2)}</td>
+            <td>${esc((h.destino || '').toUpperCase())}</td>
+            <td>${esc(h.proveedor || '—')}</td>
+          </tr>`;
+        }).join('');
+        html += `<div style="margin-top:1rem;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;">
+          <div style="background:#eef2ff;padding:0.4rem 0.6rem;font-weight:700;color:#1a237e;font-size:0.85rem;">${esc(nombre)} <span style="font-weight:400;color:#888;">— ${hist.length} compra(s)</span></div>
+          <div class="table-wrap"><table style="margin:0;font-size:0.82rem;">
+            <thead><tr><th>Fecha</th><th style="text-align:center;">Cant.</th><th>Unidad</th><th style="text-align:right;">P. Unit</th><th style="text-align:right;">P. Total</th><th>Destino</th><th>Proveedor</th></tr></thead>
+            <tbody>${filas || '<tr><td colspan="7">Sin historial.</td></tr>'}</tbody>
+          </table></div>
+        </div>`;
+      });
+      html += '<div style="margin-top:1.5rem;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
+      body.innerHTML = html;
+    }).catch(() => { body.innerHTML = '<p style="color:#c62828;">Error al cargar las comparaciones.</p>'; });
+  }).catch(() => { body.innerHTML = '<p style="color:#c62828;">Error al cargar las compras.</p>'; });
+}
+
 function editarCompra(id) {
   const r = _comprasListaEditable.find(x => String(x.id) === String(id));
   if (!r) { alert('Registro no encontrado'); return; }

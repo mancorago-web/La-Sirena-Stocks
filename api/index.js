@@ -1625,6 +1625,30 @@ app.get('/api/compras/detalle', async (req, res) => {
   }
 });
 
+// Historial completo de compras de un item (todas las fechas, descendente). Sirve para COMPARAR
+// el precio del día contra compras anteriores del mismo item.
+app.get('/api/compras/historial', async (req, res) => {
+  try {
+    const item = String(req.query.item || '').trim();
+    if (!item) return res.status(400).json({ error: 'item requerido' });
+    const key = normNombre(item);
+    const snap = await col('compras').get();
+    const rows = [];
+    snap.docs.forEach(d => {
+      const a = d.data();
+      if (normNombre(a.nombre || '') !== key) return;
+      rows.push({
+        fecha: a.fecha, nombre: a.nombre, cantidad: a.cantidad, unidad: a.unidad || 'unidad',
+        precio: parseFloat(a.precio) || 0, precio_total: parseFloat(a.precio_total) || 0,
+        destino: a.destino || '', proveedor: a.proveedor || '', documento: a.documento || '', numero: a.numero || '',
+        created_at: a.created_at || ''
+      });
+    });
+    rows.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Último precio por unidad de compra de un item (promedio simple de las últimas 3 compras con precio).
 // Sirve para ESTIMAR la cantidad/peso cuando en COMPRAS solo se conoce el MONTO total.
 app.get('/api/compras/ultimo-precio', async (req, res) => {
