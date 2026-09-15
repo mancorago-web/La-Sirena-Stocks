@@ -7895,58 +7895,105 @@ function cargarComprasDetalle(ini, fin) {
       provDl.innerHTML = htmlP;
     }
     const unicos = [...new Set((list || []).map(r => r.nombre).filter(Boolean))];
+    const precioDe = r => (parseFloat(r.precio_total) || ((parseFloat(r.precio) || 0) * (parseFloat(r.cantidad) || 0)));
+    const horaDe = r => r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
+    const alNombre = (id) => {
+      const a = comprasAlmacenes.find(x => Number(x.id) === Number(id));
+      return a ? a.nombre : ('Almacén ' + id);
+    };
+    const btnAcciones = r => '<td style="white-space:nowrap;width:70px;"><button onclick="editarCompra(\'' + r.id + '\')" style="background:#1565c0;color:#fff;border:none;padding:0.25rem 0.45rem;border-radius:4px;cursor:pointer;font-size:0.72rem;margin-right:0.2rem;" title="Editar">✎</button><button class="danger" onclick="confirmarEliminarCompra(\'' + r.id + '\')" style="padding:0.25rem 0.45rem;font-size:0.72rem;">✕</button></td>';
     const render = (anteriores) => {
-      const alNombre = (id) => {
-        const a = comprasAlmacenes.find(x => Number(x.id) === Number(id));
-        return a ? a.nombre : ('Almacén ' + id);
-      };
-      const filas = list.map(r => {
-        let det = '';
-        if (r.destino === 'stocks') det = 'STOCKS → ' + (r.almacenes || []).map(alNombre).join(', ');
-        else if (r.destino === 'barra') det = 'BARRA → ' + (r.muebles || []).join(', ');
-        else if (r.destino === 'cocina') det = 'COCINA';
-        else if (r.destino === 'eventos') det = 'EVENTOS';
-        else if (r.destino === 'limpieza') det = 'LIMPIEZA';
-        const t = r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
-        const precioUni = parseFloat(r.precio) || 0;
-        const precioTot = parseFloat(r.precio_total) || (precioUni * (r.cantidad || 0));
-        const prev = (anteriores && anteriores[r.nombre]) || null;
-        const prevUni = prev ? (parseFloat(prev.precio) || 0) : 0;
-        const prevTot = prev ? (parseFloat(prev.precio_total) || (prevUni * (parseFloat(prev.cantidad) || 0))) : 0;
-        // Variación del precio unitario: precio de HOY vs compra anterior (↓ rojo si hoy fue más barato, ↑ verde si más caro)
-        const variacion = (precioUni > 0 && prevUni > 0) ? (precioUni - prevUni) : null;
-        const spanVar = (variacion === null || variacion === 0)
-          ? ''
-          : (variacion < 0
-              ? ` <span style="color:#c62828;font-weight:700;">↓ (${variacion.toFixed(2)})</span>`
-              : ` <span style="color:#2e7d32;font-weight:700;">↑ (+${variacion.toFixed(2)})</span>`);
-        const celda = (display, raw) => '<td title="' + String(raw == null ? '' : raw).replace(/"/g, '&quot;') + '" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + display + '</td>';
-        const celdasExtra = _compararCompras
-          ? `<td style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;" title="${prev ? prev.fecha : 'Sin compra anterior'}">${prev ? prev.fecha : '—'}</td><td style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;" title="${prev ? prev.cantidad : ''}">${prev ? prev.cantidad : '—'}</td><td style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;" title="${prevUni > 0 ? 'S/ ' + prevUni.toFixed(2) : ''}">${prevUni > 0 ? 'S/ ' + prevUni.toFixed(2) : '—'}${spanVar}</td><td style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;" title="${prevTot > 0 ? 'S/ ' + prevTot.toFixed(2) : ''}">${prevTot > 0 ? 'S/ ' + prevTot.toFixed(2) : '—'}</td>`
-          : `${celda(esc(det), det)}${celda(esc(r.documento || '—') + (r.numero ? ' ' + esc(r.numero) : ''), (r.documento || '') + (r.numero ? ' ' + r.numero : ''))}${celda(esc(r.proveedor || '—'), r.proveedor || '—')}${celda(t)}${celda(esc(r.saved_by || '-'), r.saved_by || '-')}`;
-        return `<tr>
-          ${celda(r.fecha || '—', r.fecha || '—')}
-          ${celda(esc(r.nombre), r.nombre)}
-          ${celda(r.cantidad)}
-          ${celda(precioUni > 0 ? 'S/ ' + precioUni.toFixed(2) : '—')}
-          ${celda(precioTot > 0 ? 'S/ ' + precioTot.toFixed(2) : '—')}
-          ${celdasExtra}
-          <td style="white-space:nowrap;width:70px;"><button onclick="editarCompra('${r.id}')" style="background:#1565c0;color:#fff;border:none;padding:0.25rem 0.45rem;border-radius:4px;cursor:pointer;font-size:0.72rem;margin-right:0.2rem;" title="Editar">✎</button><button class="danger" onclick="confirmarEliminarCompra('${r.id}')" style="padding:0.25rem 0.45rem;font-size:0.72rem;">✕</button></td>
-        </tr>`;
-      }).join('');
-      const headersExtra = _compararCompras
-        ? '<th style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;">Ant. Fecha</th><th style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;">Ant. Cant</th><th style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;">Ant. P.Unit</th><th style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;">Ant. P.Total</th>'
-        : '<th>Destino</th><th>Documento</th><th>Proveedor</th><th>Hora</th><th>Usuario</th>';
-      const colgroup = _compararCompras
-        ? '<col style="width:9%"><col style="width:26%"><col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:9%"><col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:70px">'
-        : '<col style="width:8%"><col style="width:26%"><col style="width:7%"><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:11%"><col style="width:12%"><col style="width:6%"><col style="width:7%"><col style="width:70px">';
+      let contenido;
+      if (_compararCompras) {
+        const filas = list.map(r => {
+          let det = '';
+          if (r.destino === 'stocks') det = 'STOCKS → ' + (r.almacenes || []).map(alNombre).join(', ');
+          else if (r.destino === 'barra') det = 'BARRA → ' + (r.muebles || []).join(', ');
+          else if (r.destino === 'cocina') det = 'COCINA';
+          else if (r.destino === 'eventos') det = 'EVENTOS';
+          else if (r.destino === 'limpieza') det = 'LIMPIEZA';
+          const t = horaDe(r);
+          const precioUni = parseFloat(r.precio) || 0;
+          const precioTot = precioDe(r);
+          const prev = (anteriores && anteriores[r.nombre]) || null;
+          const prevUni = prev ? (parseFloat(prev.precio) || 0) : 0;
+          const prevTot = prev ? (parseFloat(prev.precio_total) || (prevUni * (parseFloat(prev.cantidad) || 0))) : 0;
+          const variacion = (precioUni > 0 && prevUni > 0) ? (precioUni - prevUni) : null;
+          const spanVar = (variacion === null || variacion === 0)
+            ? ''
+            : (variacion < 0
+                ? ` <span style="color:#c62828;font-weight:700;">↓ (${variacion.toFixed(2)})</span>`
+                : ` <span style="color:#2e7d32;font-weight:700;">↑ (+${variacion.toFixed(2)})</span>`);
+          const celda = (display, raw) => '<td title="' + String(raw == null ? '' : raw).replace(/"/g, '&quot;') + '" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + display + '</td>';
+          return `<tr>
+            ${celda(r.fecha || '—', r.fecha || '—')}
+            ${celda(esc(r.nombre), r.nombre)}
+            ${celda(r.cantidad)}
+            ${celda(precioUni > 0 ? 'S/ ' + precioUni.toFixed(2) : '—')}
+            ${celda(precioTot > 0 ? 'S/ ' + precioTot.toFixed(2) : '—')}
+            <td style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;" title="${prev ? prev.fecha : 'Sin compra anterior'}">${prev ? prev.fecha : '—'}</td><td style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;" title="${prev ? prev.cantidad : ''}">${prev ? prev.cantidad : '—'}</td><td style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;" title="${prevUni > 0 ? 'S/ ' + prevUni.toFixed(2) : ''}">${prevUni > 0 ? 'S/ ' + prevUni.toFixed(2) : '—'}${spanVar}</td><td style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;" title="${prevTot > 0 ? 'S/ ' + prevTot.toFixed(2) : ''}">${prevTot > 0 ? 'S/ ' + prevTot.toFixed(2) : '—'}</td>
+            <td style="white-space:nowrap;width:70px;"><button onclick="editarCompra('${r.id}')" style="background:#1565c0;color:#fff;border:none;padding:0.25rem 0.45rem;border-radius:4px;cursor:pointer;font-size:0.72rem;margin-right:0.2rem;" title="Editar">✎</button><button class="danger" onclick="confirmarEliminarCompra('${r.id}')" style="padding:0.25rem 0.45rem;font-size:0.72rem;">✕</button></td>
+          </tr>`;
+        }).join('');
+        contenido = '<div class="table-wrap" style="overflow-x:hidden;"><table style="width:100%;table-layout:fixed;font-size:0.78rem;"><colgroup><col style="width:9%"><col style="width:26%"><col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:9%"><col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:70px"></colgroup><thead><tr><th>Fecha</th><th>Item</th><th>Cantidad</th><th>P. Unidad</th><th>P. Total</th><th style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;">Ant. Fecha</th><th style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;">Ant. Cant</th><th style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;">Ant. P.Unit</th><th style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;">Ant. P.Total</th><th></th></tr></thead><tbody>' + filas + '</tbody></table></div>';
+      } else {
+        // Agrupado por PROVEEDOR (bloque) y dentro por DESTINO (sub-títulos), estilo ALIMENTOS Y BEBIDAS
+        const gruposProv = {};
+        list.forEach(r => { const p = (r.proveedor || '').trim() || 'SIN PROVEEDOR'; (gruposProv[p] = gruposProv[p] || []).push(r); });
+        const zonas = ['stocks', 'barra', 'cocina', 'eventos', 'limpieza'];
+        const zonaLabel = { stocks: 'STOCKS', barra: 'BARRA', cocina: 'COCINA', eventos: 'EVENTOS', limpieza: 'LIMPIEZA' };
+        const provOrder = Object.keys(gruposProv).sort((a, b) => {
+          if (a === 'SIN PROVEEDOR') return 1;
+          if (b === 'SIN PROVEEDOR') return -1;
+          return gruposProv[b].reduce((s, r) => s + precioDe(r), 0) - gruposProv[a].reduce((s, r) => s + precioDe(r), 0);
+        });
+        contenido = provOrder.map(prov => {
+          const rows = gruposProv[prov];
+          const provTotal = rows.reduce((s, r) => s + precioDe(r), 0);
+          const byZona = { stocks: [], barra: [], cocina: [], eventos: [], limpieza: [] };
+          rows.forEach(r => { if (byZona[r.destino]) byZona[r.destino].push(r); });
+          let cuerpo = '';
+          zonas.forEach(z => {
+            const zrows = byZona[z];
+            if (!zrows.length) return;
+            const zTotal = zrows.reduce((s, r) => s + precioDe(r), 0);
+            cuerpo += `<div style="border-top:1px dashed #ddd;padding:0.45rem 0 0.25rem 0;">
+              <div style="font-weight:700;color:#2e7d32;font-size:0.8rem;display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem;">
+                <span>${zonaLabel[z]}</span><span style="color:#33691e;">S/ ${zTotal.toFixed(2)}</span>
+              </div>
+              <div class="table-wrap"><table style="margin:0;font-size:0.8rem;">
+                <thead><tr><th>Item</th><th style="text-align:center;">Cant.</th><th style="text-align:right;">P. Unit</th><th style="text-align:right;">P. Total</th><th>Documento</th><th>Hora</th><th></th></tr></thead>
+                <tbody>${zrows.map(r => {
+                  const pu = parseFloat(r.precio) || 0;
+                  const pt = precioDe(r);
+                  return `<tr>
+                    <td>${esc(r.nombre)}</td>
+                    <td style="text-align:center;">${r.cantidad}</td>
+                    <td style="text-align:right;">S/ ${pu.toFixed(2)}</td>
+                    <td style="text-align:right;">S/ ${pt.toFixed(2)}</td>
+                    <td>${esc(((r.documento || '') + (r.numero ? ' ' + r.numero : '')).trim() || '—')}</td>
+                    <td>${horaDe(r)}</td>
+                    ${btnAcciones(r)}
+                  </tr>`;
+                }).join('')}</tbody>
+              </table></div>
+            </div>`;
+          });
+          return `<div style="margin-bottom:0.75rem;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;">
+            <div style="background:#eef2ff;padding:0.4rem 0.6rem;font-weight:700;color:#1a237e;font-size:0.85rem;display:flex;justify-content:space-between;align-items:center;">
+              <span>PROVEEDOR: ${esc(prov)}</span>
+              <span style="color:#0f3460;">S/ ${provTotal.toFixed(2)}</span>
+            </div>
+            <div style="padding:0.4rem 0.6rem;">${cuerpo || '<p style="color:#888;">Sin items.</p>'}</div>
+          </div>`;
+        }).join('');
+      }
       c.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;margin:0 0 0.5rem 0;">' +
         '<h3 style="margin:0;">DETALLE DE COMPRAS (' + fechaIni + ' a ' + fechaFin + ')</h3>' +
         '<button onclick="toggleCompararCompra()" style="padding:0.5rem 1rem;background:#e65100;color:#fff;border:none;border-radius:6px;font-size:0.85rem;font-weight:700;cursor:pointer;" title="Comparar con la última compra anterior de cada item">⚖️ COMPARAR COMPRA' + (_compararCompras ? ' ✓' : '') + '</button>' +
       '</div>' +
       (_compararCompras ? '<p style="font-size:0.78rem;color:#888;margin:0 0 0.5rem 0;">Comparando cada item con su última compra <b>anterior al ' + fechaIni + '</b>.</p>' : '') +
-      '<div class="table-wrap" style="overflow-x:hidden;"><table style="width:100%;table-layout:fixed;font-size:0.78rem;"><colgroup>' + colgroup + '</colgroup><thead><tr><th>Fecha</th><th>Item</th><th>Cantidad</th><th>P. Unidad</th><th>P. Total</th>' + headersExtra + '<th></th></tr></thead><tbody>' +
-      filas + '</tbody></table></div>' +
+      contenido +
       (totalCompra > 0 ? '<p style="font-weight:700;color:#0f3460;margin-top:0.5rem;">TOTAL COMPRAS: S/ ' + totalCompra.toFixed(2) + '</p>' : '');
     };
     if (_compararCompras) {
