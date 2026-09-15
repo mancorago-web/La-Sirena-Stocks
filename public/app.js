@@ -7937,7 +7937,7 @@ function cargarComprasDetalle(ini, fin) {
         }).join('');
         contenido = '<div class="table-wrap" style="overflow-x:hidden;"><table style="width:100%;table-layout:fixed;font-size:0.78rem;"><colgroup><col style="width:9%"><col style="width:26%"><col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:9%"><col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:70px"></colgroup><thead><tr><th>Fecha</th><th>Item</th><th>Cantidad</th><th>P. Unidad</th><th>P. Total</th><th style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;">Ant. Fecha</th><th style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;">Ant. Cant</th><th style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;">Ant. P.Unit</th><th style="background:#e8f5e9;border-bottom:1px solid #c8e6c9;">Ant. P.Total</th><th></th></tr></thead><tbody>' + filas + '</tbody></table></div>';
       } else {
-        // Agrupado por PROVEEDOR (bloque) y dentro por DESTINO (sub-títulos), estilo ALIMENTOS Y BEBIDAS
+        // Agrupado por PROVEEDOR en UNA SOLA tabla (filas-sección de color) para alinear todas las columnas
         const gruposProv = {};
         list.forEach(r => { const p = (r.proveedor || '').trim() || 'SIN PROVEEDOR'; (gruposProv[p] = gruposProv[p] || []).push(r); });
         const zonas = ['stocks', 'barra', 'cocina', 'eventos', 'limpieza'];
@@ -7947,46 +7947,34 @@ function cargarComprasDetalle(ini, fin) {
           if (b === 'SIN PROVEEDOR') return -1;
           return gruposProv[b].reduce((s, r) => s + precioDe(r), 0) - gruposProv[a].reduce((s, r) => s + precioDe(r), 0);
         });
-        contenido = provOrder.map(prov => {
+        let bodyRows = '';
+        provOrder.forEach(prov => {
           const rows = gruposProv[prov];
           const provTotal = rows.reduce((s, r) => s + precioDe(r), 0);
+          bodyRows += `<tr style="background:#eef2ff;"><td colspan="7" style="font-weight:700;color:#1a237e;font-size:0.85rem;padding:0.4rem 0.6rem;">PROVEEDOR: ${esc(prov)} <span style="float:right;color:#0f3460;">S/ ${provTotal.toFixed(2)}</span></td></tr>`;
           const byZona = { stocks: [], barra: [], cocina: [], eventos: [], limpieza: [] };
           rows.forEach(r => { if (byZona[r.destino]) byZona[r.destino].push(r); });
-          let cuerpo = '';
           zonas.forEach(z => {
             const zrows = byZona[z];
             if (!zrows.length) return;
             const zTotal = zrows.reduce((s, r) => s + precioDe(r), 0);
-            cuerpo += `<div style="border-top:1px dashed #ddd;padding:0.45rem 0 0.25rem 0;">
-              <div style="font-weight:700;color:#2e7d32;font-size:0.8rem;display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem;">
-                <span>${zonaLabel[z]}</span><span style="color:#33691e;">S/ ${zTotal.toFixed(2)}</span>
-              </div>
-              <div class="table-wrap"><table style="margin:0;font-size:0.8rem;">
-                <thead><tr><th>Item</th><th style="text-align:center;">Cant.</th><th style="text-align:right;">P. Unit</th><th style="text-align:right;">P. Total</th><th>Documento</th><th>Hora</th><th></th></tr></thead>
-                <tbody>${zrows.map(r => {
-                  const pu = parseFloat(r.precio) || 0;
-                  const pt = precioDe(r);
-                  return `<tr>
-                    <td>${esc(r.nombre)}</td>
-                    <td style="text-align:center;">${r.cantidad}</td>
-                    <td style="text-align:right;">S/ ${pu.toFixed(2)}</td>
-                    <td style="text-align:right;">S/ ${pt.toFixed(2)}</td>
-                    <td>${esc(((r.documento || '') + (r.numero ? ' ' + r.numero : '')).trim() || '—')}</td>
-                    <td>${horaDe(r)}</td>
-                    ${btnAcciones(r)}
-                  </tr>`;
-                }).join('')}</tbody>
-              </table></div>
-            </div>`;
+            bodyRows += `<tr style="background:#f1f8e9;"><td colspan="7" style="font-weight:700;color:#2e7d32;font-size:0.8rem;padding:0.3rem 0.6rem;">${zonaLabel[z]} <span style="float:right;color:#33691e;">S/ ${zTotal.toFixed(2)}</span></td></tr>`;
+            zrows.forEach(r => {
+              const pu = parseFloat(r.precio) || 0;
+              const pt = precioDe(r);
+              bodyRows += `<tr>
+                <td>${esc(r.nombre)}</td>
+                <td style="text-align:center;">${r.cantidad}</td>
+                <td style="text-align:right;">S/ ${pu.toFixed(2)}</td>
+                <td style="text-align:right;">S/ ${pt.toFixed(2)}</td>
+                <td>${esc(((r.documento || '') + (r.numero ? ' ' + r.numero : '')).trim() || '—')}</td>
+                <td>${horaDe(r)}</td>
+                ${btnAcciones(r)}
+              </tr>`;
+            });
           });
-          return `<div style="margin-bottom:0.75rem;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;">
-            <div style="background:#eef2ff;padding:0.4rem 0.6rem;font-weight:700;color:#1a237e;font-size:0.85rem;display:flex;justify-content:space-between;align-items:center;">
-              <span>PROVEEDOR: ${esc(prov)}</span>
-              <span style="color:#0f3460;">S/ ${provTotal.toFixed(2)}</span>
-            </div>
-            <div style="padding:0.4rem 0.6rem;">${cuerpo || '<p style="color:#888;">Sin items.</p>'}</div>
-          </div>`;
-        }).join('');
+        });
+        contenido = '<div class="table-wrap" style="overflow-x:hidden;"><table style="width:100%;table-layout:fixed;font-size:0.78rem;"><colgroup><col style="width:36%"><col style="width:9%"><col style="width:10%"><col style="width:11%"><col style="width:12%"><col style="width:9%"><col style="width:70px"></colgroup><thead><tr><th>Item</th><th style="text-align:center;">Cant.</th><th style="text-align:right;">P. Unit</th><th style="text-align:right;">P. Total</th><th>Documento</th><th>Hora</th><th></th></tr></thead><tbody>' + bodyRows + '</tbody></table></div>';
       }
       c.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;margin:0 0 0.5rem 0;">' +
         '<h3 style="margin:0;">DETALLE DE COMPRAS (' + fechaIni + ' a ' + fechaFin + ')</h3>' +
