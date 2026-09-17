@@ -3125,12 +3125,30 @@ app.get('/api/recetas', async (req, res) => {
   // Cache corto (10s): el cálculo de costos es recursivo y se dispara al abrir recetas, editar,
   // importar ventas, etc. Un TTL breve evita recomputar cientos de veces sin datos obsoletos.
   const data = await cached('recetas', 10000, async () => {
-    const [recSnap, precSnap, ingSnap] = await Promise.all([
+    const [recSnap, precSnap, ingSnap, spSnap, cpSnap, comprasSnap] = await Promise.all([
       col('recetas').orderBy('nombre').get(),
       col('barra_precios').orderBy('ingrediente').get(),
       col('receta_ingredientes').orderBy('id').get(),
+      col('stock_precios').get(),
+      col('cocina_precios').get(),
+      col('compras').get(),
     ]);
   const precios = precSnap.docs.map(d => d.data());
+
+  // PRECIO UNIFICADO: respaldo para ingredientes sin precio en barra_precios.
+  // Prioridad: barra_precios > stock_precios > cocina_precios > última compra registrada.
+  const precioGlobal = {};
+  const addPrecioG = (nombre, precio, unidad, equiv_ml, equiv_gr) => {
+    const k = normNombre(nombre || '');
+    if (!k || !(parseFloat(precio) > 0)) return;
+    if (!precioGlobal[k]) precioGlobal[k] = { precio: parseFloat(precio), unidad: normalizeUnit(unidad || 'unidad'), equiv_ml: parseFloat(equiv_ml) || 0, equiv_gr: parseFloat(equiv_gr) || 0 };
+  };
+  precSnap.docs.forEach(d => { const p = d.data(); addPrecioG(p.ingrediente, p.precio, p.unidad, p.equiv_ml, p.equiv_gr); });
+  spSnap.docs.forEach(d => { const p = d.data(); addPrecioG(p.nombre, p.ultimo_precio_compra || p.precio, p.unidad, p.equiv_ml, p.equiv_gr); });
+  cpSnap.docs.forEach(d => { const p = d.data(); addPrecioG(p.ingrediente, p.ultimo_precio_compra || p.precio, p.unidad, p.equiv_ml, p.equiv_gr); });
+  const compraUlt = {};
+  comprasSnap.docs.forEach(d => { const a = d.data(); const k = normNombre(a.nombre || ''); const cant = parseFloat(a.cantidad) || 0; const pu = cant > 0 && parseFloat(a.precio_total) > 0 ? (parseFloat(a.precio_total) / cant) : (parseFloat(a.precio) || 0); if (pu > 0 && (!compraUlt[k] || (a.fecha || '') > compraUlt[k].fecha)) compraUlt[k] = { precio: pu, fecha: a.fecha || '' }; });
+  Object.keys(compraUlt).forEach(k => addPrecioG(k, compraUlt[k].precio, 'unidad', 0, 0));
   const ingByRec = {};
   ingSnap.docs.forEach(idoc => {
     const ing = { id: Number(idoc.id), ...idoc.data() };
@@ -3210,8 +3228,11 @@ app.get('/api/recetas', async (req, res) => {
       }
     }
     const match = precios.find(p => p.ingrediente && p.ingrediente.toLowerCase() === String(ing.ingrediente || '').trim().toLowerCase());
-    const precioUnidad = match ? (match.precio || 0) : 0;
-    const conv = match ? calcularCosto(ing.cantidad, ing.unidad, precioUnidad, match.unidad, match.equiv_ml, match.equiv_gr, match.ingrediente) : { costo: (ing.cantidad || 0) * precioUnidad, converted: false };
+    // Si barra_precios no tiene precio (0), usar el PRECIO UNIFICADO como respaldo
+    const barraOk = match && (parseFloat(match.precio) > 0);
+    const fuente = barraOk ? match : (precioGlobal[normNombre(ing.ingrediente)] || null);
+    const precioUnidad = fuente ? (parseFloat(fuente.precio) || 0) : 0;
+    const conv = fuente ? calcularCosto(ing.cantidad, ing.unidad, precioUnidad, fuente.unidad, fuente.equiv_ml, fuente.equiv_gr, ing.ingrediente) : { costo: (ing.cantidad || 0) * precioUnidad, converted: false };
     return typeof conv === 'object' ? conv.costo : conv;
   };
 
@@ -3234,12 +3255,15 @@ app.get('/api/recetas', async (req, res) => {
         return { ...ing, precioUnidad, costo, converted, precioMatch: true, esRecetaBase: true };
       }
       const match = precios.find(p => p.ingrediente && p.ingrediente.toLowerCase() === String(ing.ingrediente || '').trim().toLowerCase());
-      precioUnidad = match ? (match.precio || 0) : 0;
-      const conv = match ? calcularCosto(ing.cantidad, ing.unidad, precioUnidad, match.unidad, match.equiv_ml, match.equiv_gr, match.ingrediente) : { costo: (ing.cantidad || 0) * precioUnidad, converted: false };
+      // Si barra_precios no tiene precio (0), usar el PRECIO UNIFICADO como respaldo
+      const barraOk = match && (parseFloat(match.precio) > 0);
+      const fuente = barraOk ? match : (precioGlobal[normNombre(ing.ingrediente)] || null);
+      precioUnidad = fuente ? (parseFloat(fuente.precio) || 0) : 0;
+      const conv = fuente ? calcularCosto(ing.cantidad, ing.unidad, precioUnidad, fuente.unidad, fuente.equiv_ml, fuente.equiv_gr, ing.ingrediente) : { costo: (ing.cantidad || 0) * precioUnidad, converted: false };
       costo = typeof conv === 'object' ? conv.costo : conv;
       converted = typeof conv === 'object' ? conv.converted : false;
       costoTotal += costo;
-      return { ...ing, precioUnidad, costo, converted, precioMatch: !!match };
+      return { ...ing, precioUnidad, costo, converted, precioMatch: !!fuente };
     });
     return { ...r, ingredientes: ingredientesConPrecio, costoTotal };
   });
@@ -4151,7 +4175,7 @@ function cocinaAjustar(cant, fromUnit, toUnit, equiv) {
 // Enriquece las recetas de cocina con el costo por ingrediente (P.UNITARIO / P.TOTAL) y el
 // COSTO TOTAL, igual que BARRA/RECETAS. Los ingredientes se resuelven contra cocina_precios y,
 // si el ingrediente es una RECETA BASE de cocina, contra los ingredientes de esa receta base.
-function enriquecerCocinaRecetasConCostos(recetas, ingByRec, precios) {
+function enriquecerCocinaRecetasConCostos(recetas, ingByRec, precios, precioGlobal) {
   const recetasById = {};
   recetas.forEach(r => { recetasById[Number(r.id)] = { ...r }; });
   const parseCantidadBase = nombre => {
@@ -4210,8 +4234,11 @@ function enriquecerCocinaRecetasConCostos(recetas, ingByRec, precios) {
       }
     }
     const match = precios.find(p => p.ingrediente && normNombre(p.ingrediente) === normNombre(ing.ingrediente));
-    const precioUnidad = match ? (match.precio || 0) : 0;
-    const conv = match ? calcularCosto(ing.cantidad, ing.unidad, precioUnidad, match.unidad, match.equiv_ml, match.equiv_gr, match.ingrediente) : { costo: (ing.cantidad || 0) * precioUnidad, converted: false };
+    // Si cocina_precios no tiene precio (0), usar el PRECIO UNIFICADO como respaldo
+    const cocinaOk = match && (parseFloat(match.precio) > 0);
+    const fuente = cocinaOk ? match : ((precioGlobal && precioGlobal[normNombre(ing.ingrediente)]) || null);
+    const precioUnidad = fuente ? (parseFloat(fuente.precio) || 0) : 0;
+    const conv = fuente ? calcularCosto(ing.cantidad, ing.unidad, precioUnidad, fuente.unidad, fuente.equiv_ml, fuente.equiv_gr, ing.ingrediente) : { costo: (ing.cantidad || 0) * precioUnidad, converted: false };
     return typeof conv === 'object' ? conv.costo : conv;
   }
   return recetas.map(r => {
@@ -4234,11 +4261,14 @@ function enriquecerCocinaRecetasConCostos(recetas, ingByRec, precios) {
         return { ...ing, precioUnidad, costo, converted, precioMatch, esRecetaBase };
       }
       const match = precios.find(p => p.ingrediente && normNombre(p.ingrediente) === normNombre(ing.ingrediente));
-      precioUnidad = match ? (match.precio || 0) : 0;
-      const conv = match ? calcularCosto(ing.cantidad, ing.unidad, precioUnidad, match.unidad, match.equiv_ml, match.equiv_gr, match.ingrediente) : { costo: (ing.cantidad || 0) * precioUnidad, converted: false };
+      // Si cocina_precios no tiene precio (0), usar el PRECIO UNIFICADO como respaldo
+      const cocinaOk = match && (parseFloat(match.precio) > 0);
+      const fuente = cocinaOk ? match : ((precioGlobal && precioGlobal[normNombre(ing.ingrediente)]) || null);
+      precioUnidad = fuente ? (parseFloat(fuente.precio) || 0) : 0;
+      const conv = fuente ? calcularCosto(ing.cantidad, ing.unidad, precioUnidad, fuente.unidad, fuente.equiv_ml, fuente.equiv_gr, ing.ingrediente) : { costo: (ing.cantidad || 0) * precioUnidad, converted: false };
       costo = typeof conv === 'object' ? conv.costo : conv;
       converted = typeof conv === 'object' ? conv.converted : false;
-      precioMatch = !!match;
+      precioMatch = !!fuente;
       costoTotal += costo;
       return { ...ing, precioUnidad, costo, converted, precioMatch, esRecetaBase };
     });
@@ -4249,10 +4279,13 @@ function enriquecerCocinaRecetasConCostos(recetas, ingByRec, precios) {
 app.get('/api/cocina/recetas', async (req, res) => {
   try {
     const data = await cached('cocina_recetas', 10000, async () => {
-      const [recSnap, ingSnap, precSnap] = await Promise.all([
+      const [recSnap, ingSnap, precSnap, spSnap, bpSnap, comprasSnap] = await Promise.all([
         col('cocina_recetas').orderBy('nombre').get(),
         col('cocina_receta_ingredientes').orderBy('id').get(),
         col('cocina_precios').get(),
+        col('stock_precios').get(),
+        col('barra_precios').get(),
+        col('compras').get(),
       ]);
       const ingByRec = {};
       ingSnap.docs.forEach(idoc => {
@@ -4263,7 +4296,20 @@ app.get('/api/cocina/recetas', async (req, res) => {
       });
       const precios = precSnap.docs.map(d => d.data());
       const recetas = recSnap.docs.map(d => ({ id: Number(d.id), ...d.data() }));
-      return enriquecerCocinaRecetasConCostos(recetas, ingByRec, precios);
+      // PRECIO UNIFICADO de respaldo: cocina_precios > stock_precios > barra_precios > última compra
+      const precioGlobal = {};
+      const addPrecioG = (nombre, precio, unidad, equiv_ml, equiv_gr) => {
+        const k = normNombre(nombre || '');
+        if (!k || !(parseFloat(precio) > 0)) return;
+        if (!precioGlobal[k]) precioGlobal[k] = { precio: parseFloat(precio), unidad: normalizeUnit(unidad || 'unidad'), equiv_ml: parseFloat(equiv_ml) || 0, equiv_gr: parseFloat(equiv_gr) || 0 };
+      };
+      precSnap.docs.forEach(d => { const p = d.data(); addPrecioG(p.ingrediente, p.precio, p.unidad, p.equiv_ml, p.equiv_gr); });
+      spSnap.docs.forEach(d => { const p = d.data(); addPrecioG(p.nombre, p.ultimo_precio_compra || p.precio, p.unidad, p.equiv_ml, p.equiv_gr); });
+      bpSnap.docs.forEach(d => { const p = d.data(); addPrecioG(p.ingrediente, p.ultimo_precio_compra || p.precio_compra || p.precio, p.unidad, p.equiv_ml, p.equiv_gr); });
+      const compraUlt = {};
+      comprasSnap.docs.forEach(d => { const a = d.data(); const k = normNombre(a.nombre || ''); const cant = parseFloat(a.cantidad) || 0; const pu = cant > 0 && parseFloat(a.precio_total) > 0 ? (parseFloat(a.precio_total) / cant) : (parseFloat(a.precio) || 0); if (pu > 0 && (!compraUlt[k] || (a.fecha || '') > compraUlt[k].fecha)) compraUlt[k] = { precio: pu, fecha: a.fecha || '' }; });
+      Object.keys(compraUlt).forEach(k => addPrecioG(k, compraUlt[k].precio, 'unidad', 0, 0));
+      return enriquecerCocinaRecetasConCostos(recetas, ingByRec, precios, precioGlobal);
     });
     res.json(data);
   } catch (e) { res.status(500).json({ error: e.message }); }
