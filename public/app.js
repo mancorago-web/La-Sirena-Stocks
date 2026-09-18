@@ -5539,7 +5539,7 @@ function guardarEdicionPrecioBarra(id) {
 }
 
 // --- COCINA: Stock con familias (flujo diario estilo ALMACENES) ---
-const FAMILIAS_COCINA = ['FRUTAS', 'VERDURAS', 'CARNE', 'PESCADO', 'POLLO', 'LACTEOS', 'VINOS', 'CERVEZAS', 'ABARROTES', 'LIMPIEZA', 'RECETAS BASE', 'SEMILLAS', 'ACEITES'];
+const FAMILIAS_COCINA = ['FRUTAS', 'VERDURAS', 'CARNE', 'PESCADO - BARRA FRIA', 'PESCADO - BARRA CALIENTE', 'POLLO', 'LACTEOS', 'VINOS', 'CERVEZAS', 'ABARROTES', 'LIMPIEZA', 'RECETAS BASE', 'SEMILLAS', 'ACEITES'];
 
 function cargarStockCocina(familiasAbrir) {
   const fechaEl = document.getElementById('fecha-cocina-stock');
@@ -5547,7 +5547,7 @@ function cargarStockCocina(familiasAbrir) {
   const fecha = fechaEl ? fechaEl.value : todayStr();
   // Sub-grupos de COCINA: items SIN PORCIONAR (se listan tal cual) vs PORCIONADOS (el resto)
   const SUB_GRUPOS_SIN_PORCIONAR = {
-    'PESCADO': [
+    'PESCADO - BARRA FRIA': [
       'ATUN X KG', 'CALAMAR X KG', 'CONCHAS DE ABANICO X KG', 'LANGOSTINO X KG',
       'PESCADO - ATUN X KG', 'PESCADO - ESPADA X KG', 'PESCADO LIZA X KG', 'PESCADO PLUMA X KG', 'PULPO X KG'
     ],
@@ -6226,7 +6226,7 @@ function cargarPorcionamientoCocina(seleccionarItem) {
     // PESCADO, CARNE y POLLO (los que se pueden porcionar). El resto de familias se oculta.
     // Además, dentro del grupo PESCADO se excluyen los items derivados (MERMA, PACK) para
     // mostrar únicamente los pescados enteros (los que empiezan por "PESCADO").
-    const familiasPorcionamiento = ['PESCADO', 'CARNE', 'POLLO'];
+    const familiasPorcionamiento = ['PESCADO - BARRA FRIA', 'PESCADO - BARRA CALIENTE', 'CARNE', 'POLLO'];
     const items = (stock || []).filter(s => {
       const fam = String(s.familia || '').trim().toUpperCase();
       if (!familiasPorcionamiento.includes(fam)) return false;
@@ -8859,7 +8859,7 @@ function renderCostoCategoria(prefix, container) {
 // Carga el DETALLE DE COMPRAS de TODO el mes (ej. desde 01-09 hasta fin de mes) y lo muestra en la
 // sección ALIMENTOS Y BEBIDAS de RESUMEN, agrupado por FECHA y dentro por zona. En COCINA se subdivide
 // por categoría (PESCADO, VERDURAS, ABARROTES, etc.). El TOTAL refleja todo el mes seleccionado.
-const ORDEN_CATEGORIAS_COCINA = ['FRUTAS', 'VERDURAS', 'PESCADO', 'CARNE', 'POLLO', 'LACTEOS', 'ABARROTES', 'ACEITES', 'SEMILLAS', 'RECETAS BASE', 'LIMPIEZA', 'VINOS', 'CERVEZAS', 'OTROS'];
+const ORDEN_CATEGORIAS_COCINA = ['FRUTAS', 'VERDURAS', 'PESCADO - BARRA FRIA', 'PESCADO - BARRA CALIENTE', 'CARNE', 'POLLO', 'LACTEOS', 'ABARROTES', 'ACEITES', 'SEMILLAS', 'RECETAS BASE', 'LIMPIEZA', 'VINOS', 'CERVEZAS', 'OTROS'];
 const MESES_CORTOS = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SET', 'OCT', 'NOV', 'DIC'];
 function fmtFechaCorta(iso) {
   const partes = String(iso || '').split('-');
