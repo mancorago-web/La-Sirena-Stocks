@@ -3647,13 +3647,14 @@ app.delete('/api/cocina/desperdicios/:id', async (req, res) => {
 
 app.post('/api/cocina/stock', async (req, res) => {
   try {
-    const { ingrediente, cantidad, unidad, familia } = req.body;
+    const { ingrediente, cantidad, unidad, familia, subgrupo } = req.body;
     if (!ingrediente) return res.status(400).json({ error: 'Nombre requerido' });
     const all = await col('cocina_stock').get();
     const nextId = all.docs.length > 0 ? Math.max(...all.docs.map(d => Number(d.id) || 0)) + 1 : 1;
     await col('cocina_stock').doc(String(nextId)).set({
       id: nextId, ingrediente: String(ingrediente).trim(), cantidad: parseFloat(cantidad) || 0,
       unidad: normalizeUnit(unidad), familia: String(familia || '').toUpperCase(),
+      subgrupo: String(subgrupo || '').trim().toUpperCase(),
       created_at: new Date().toISOString(), updated_at: new Date().toISOString()
     });
     await ensureIngredienteCocinaPrecios(ingrediente, unidad);
@@ -3663,12 +3664,17 @@ app.post('/api/cocina/stock', async (req, res) => {
 
 app.put('/api/cocina/stock/:id', async (req, res) => {
   try {
-    const { cantidad, ingrediente, unidad, familia } = req.body;
+    const { cantidad, ingrediente, unidad, familia, subgrupo } = req.body;
     const upd = { updated_at: new Date().toISOString() };
     if (cantidad !== undefined) upd.cantidad = parseFloat(cantidad) || 0;
     if (ingrediente) upd.ingrediente = String(ingrediente).trim();
     if (unidad) upd.unidad = normalizeUnit(unidad);
     if (familia !== undefined) upd.familia = String(familia || '').toUpperCase();
+    if (subgrupo !== undefined) {
+      const sg = String(subgrupo || '').trim().toUpperCase();
+      if (sg) upd.subgrupo = sg;
+      else upd.subgrupo = admin.firestore.FieldValue.delete();
+    }
     await col('cocina_stock').doc(req.params.id).update(upd);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -3714,6 +3720,7 @@ app.get('/api/cocina/stock/con-inventario', async (req, res) => {
         nombre: item.ingrediente,
         unidad: item.unidad || 'unidad',
         familia: fam,
+        subgrupo: item.subgrupo || '',
         cantidad: item.cantidad || 0,
         stock_apertura: apertura,
         stock_ingreso: ingreso,

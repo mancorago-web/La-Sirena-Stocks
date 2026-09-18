@@ -3241,6 +3241,14 @@ function showModal(tipo, data) {
         Familia
         <select id="f-cocina-familia" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">${famOpts}</select>
       </label>
+      <label style="display:block;margin-top:1rem;">
+        Sub-grupo (SIN PORCIONAR / PORCIONADOS)
+        <select id="f-cocina-subgrupo" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+          <option value="">— Auto por nombre —</option>
+          <option value="SIN PORCIONAR" ${data.subgrupo === 'SIN PORCIONAR' ? 'selected' : ''}>SIN PORCIONAR</option>
+          <option value="PORCIONADOS" ${data.subgrupo === 'PORCIONADOS' ? 'selected' : ''}>PORCIONADOS</option>
+        </select>
+      </label>
       <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
         <button onclick="guardarEdicionStockCocina(${data.id})" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
         <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
@@ -5551,7 +5559,7 @@ function cargarStockCocina(familiasAbrir) {
       'ATUN X KG', 'CALAMAR X KG', 'CONCHAS DE ABANICO X KG', 'LANGOSTINO X KG',
       'PESCADO - ATUN X KG', 'PESCADO - ESPADA X KG', 'PESCADO LIZA X KG', 'PESCADO PLUMA X KG', 'PULPO X KG'
     ],
-    'PESCADO - BARRA CALIENTE': [],
+    'PESCADO - BARRA CALIENTE': ['CALAMAR X KG', 'LANGOSTINO X KG', 'PESCADO - ESPADA X KG', 'PULPO X KG'],
     'CARNE': ['LOMO FINO X KG', 'PANCETA X KG'],
     'POLLO': ['POLLO ENTERO X KG']
   };
@@ -5578,8 +5586,13 @@ function cargarStockCocina(familiasAbrir) {
     });
     // Orden alfabético dentro de cada categoría
     Object.keys(byFam).forEach(f => byFam[f].sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es')));
+    function subgrupoDe(i, fam) {
+      const sg = String(i.subgrupo || '').trim().toUpperCase();
+      if (sg) return sg;
+      return (SUB_GRUPOS_SIN_PORCIONAR_SET[fam] && SUB_GRUPOS_SIN_PORCIONAR_SET[fam].has(normCocina(i.nombre))) ? 'SIN PORCIONAR' : 'PORCIONADOS';
+    }
     function fila(i) {
-      return `<tr data-cocina-id="${i.id}" data-cantidad="${i.cantidad}" data-unidad="${esc(i.unidad)}" data-familia="${esc(i.familia)}">
+      return `<tr data-cocina-id="${i.id}" data-cantidad="${i.cantidad}" data-unidad="${esc(i.unidad)}" data-familia="${esc(i.familia)}" data-subgrupo="${esc(i.subgrupo || '')}">
         <td>${esc(i.nombre)}</td>
         <td><input type="number" class="input-num input-apertura" value="${fmt3(i.stock_apertura)}" step="0.001" oninput="calcCierre(this)"></td>
         <td><input type="number" class="input-num input-ingreso" value="${fmt3(i.stock_ingreso)}" step="0.001" oninput="calcCierre(this)"></td>
@@ -5603,8 +5616,8 @@ function cargarStockCocina(familiasAbrir) {
     function familiaAccordion(f, items, extraClass) {
       let bodyHtml;
       if (SUB_GRUPOS_SIN_PORCIONAR_SET[f]) {
-        const sinPorcionar = items.filter(i => SUB_GRUPOS_SIN_PORCIONAR_SET[f].has(normCocina(i.nombre)));
-        const porcionados = items.filter(i => !SUB_GRUPOS_SIN_PORCIONAR_SET[f].has(normCocina(i.nombre)));
+        const sinPorcionar = items.filter(i => subgrupoDe(i, f) === 'SIN PORCIONAR');
+        const porcionados = items.filter(i => subgrupoDe(i, f) !== 'SIN PORCIONAR');
         bodyHtml = `<div style="font-weight:700;color:#00695c;margin:0.4rem 0 0.25rem;">SIN PORCIONAR (${sinPorcionar.length})</div>${subTabla(sinPorcionar)}
           <div style="font-weight:700;color:#b71c1c;margin:0.75rem 0 0.25rem;">PORCIONADOS (${porcionados.length})</div>${subTabla(porcionados)}`;
       } else {
@@ -5685,7 +5698,8 @@ function editarStockCocina(id) {
     nombre: tr.querySelector('td').textContent.trim(),
     cantidad: tr.getAttribute('data-cantidad') || 0,
     unidad: tr.getAttribute('data-unidad') || 'unidad',
-    familia: tr.getAttribute('data-familia') || ''
+    familia: tr.getAttribute('data-familia') || '',
+    subgrupo: tr.getAttribute('data-subgrupo') || ''
   });
 }
 
@@ -5694,8 +5708,9 @@ function guardarEdicionStockCocina(id) {
   const cantidad = parseFloat(document.getElementById('f-cocina-cantidad').value) || 0;
   const unidad = document.getElementById('f-cocina-unidad').value;
   const familia = document.getElementById('f-cocina-familia').value;
+  const subgrupo = document.getElementById('f-cocina-subgrupo')?.value || '';
   if (!nombre) { alert('Ingresa el nombre'); return; }
-  api('PUT', '/api/cocina/stock/' + id, { ingrediente: nombre, cantidad, unidad, familia }).then(() => {
+  api('PUT', '/api/cocina/stock/' + id, { ingrediente: nombre, cantidad, unidad, familia, subgrupo }).then(() => {
     cerrarModal();
     showToast('Item actualizado');
     cargarStockCocina();
