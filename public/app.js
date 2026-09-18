@@ -5545,11 +5545,17 @@ function cargarStockCocina(familiasAbrir) {
   const fechaEl = document.getElementById('fecha-cocina-stock');
   if (fechaEl && !fechaEl.value) fechaEl.value = todayStr();
   const fecha = fechaEl ? fechaEl.value : todayStr();
-  // Sub-grupos de PESCADO: items SIN PORCIONAR (se listan tal cual) vs PORCIONADOS (el resto)
-  const PESCADO_SIN_PORCIONAR = new Set([
-    'ATUN X KG', 'CALAMAR X KG', 'CONCHAS DE ABANICO X KG', 'LANGOSTINO X KG',
-    'PESCADO - ATUN X KG', 'PESCADO - ESPADA X KG', 'PESCADO LIZA X KG', 'PESCADO PLUMA X KG', 'PULPO X KG'
-  ].map(s => s.toUpperCase().replace(/\s+/g, ' ')));
+  // Sub-grupos de COCINA: items SIN PORCIONAR (se listan tal cual) vs PORCIONADOS (el resto)
+  const SUB_GRUPOS_SIN_PORCIONAR = {
+    'PESCADO': [
+      'ATUN X KG', 'CALAMAR X KG', 'CONCHAS DE ABANICO X KG', 'LANGOSTINO X KG',
+      'PESCADO - ATUN X KG', 'PESCADO - ESPADA X KG', 'PESCADO LIZA X KG', 'PESCADO PLUMA X KG', 'PULPO X KG'
+    ],
+    'CARNE': ['LOMO FINO X KG', 'PANCETA X KG'],
+    'POLLO': ['POLLO ENTERO X KG']
+  };
+  const SUB_GRUPOS_SIN_PORCIONAR_SET = {};
+  Object.keys(SUB_GRUPOS_SIN_PORCIONAR).forEach(f => { SUB_GRUPOS_SIN_PORCIONAR_SET[f] = new Set(SUB_GRUPOS_SIN_PORCIONAR[f].map(s => s.toUpperCase().replace(/\s+/g, ' '))); });
   const normCocina = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
   // Preservar las categorías (acordeones) abiertas para no perder el lugar al editar/guardar
   const abiertas = new Set();
@@ -5595,9 +5601,9 @@ function cargarStockCocina(familiasAbrir) {
     }
     function familiaAccordion(f, items, extraClass) {
       let bodyHtml;
-      if (f === 'PESCADO') {
-        const sinPorcionar = items.filter(i => PESCADO_SIN_PORCIONAR.has(normCocina(i.nombre)));
-        const porcionados = items.filter(i => !PESCADO_SIN_PORCIONAR.has(normCocina(i.nombre)));
+      if (SUB_GRUPOS_SIN_PORCIONAR_SET[f]) {
+        const sinPorcionar = items.filter(i => SUB_GRUPOS_SIN_PORCIONAR_SET[f].has(normCocina(i.nombre)));
+        const porcionados = items.filter(i => !SUB_GRUPOS_SIN_PORCIONAR_SET[f].has(normCocina(i.nombre)));
         bodyHtml = `<div style="font-weight:700;color:#00695c;margin:0.4rem 0 0.25rem;">SIN PORCIONAR (${sinPorcionar.length})</div>${subTabla(sinPorcionar)}
           <div style="font-weight:700;color:#b71c1c;margin:0.75rem 0 0.25rem;">PORCIONADOS (${porcionados.length})</div>${subTabla(porcionados)}`;
       } else {
