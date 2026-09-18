@@ -5555,11 +5555,6 @@ function cargarStockCocina(familiasAbrir) {
   const fecha = fechaEl ? fechaEl.value : todayStr();
   // Sub-grupos de COCINA: items SIN PORCIONAR (se listan tal cual) vs PORCIONADOS (el resto)
   const SUB_GRUPOS_SIN_PORCIONAR = {
-    'PESCADO PORC. - BARRA FRIA': [
-      'ATUN X KG', 'CALAMAR X KG', 'CONCHAS DE ABANICO X KG', 'LANGOSTINO X KG',
-      'PESCADO - ATUN X KG', 'PESCADO - ESPADA X KG', 'PESCADO LIZA X KG', 'PESCADO PLUMA X KG', 'PULPO X KG'
-    ],
-    'PESCADO PORC. - BARRA CALIENTE': ['CALAMAR X KG', 'LANGOSTINO X KG', 'PESCADO - ESPADA X KG', 'PULPO X KG'],
     'CARNE': ['LOMO FINO X KG', 'PANCETA X KG'],
     'POLLO': ['POLLO ENTERO X KG']
   };
