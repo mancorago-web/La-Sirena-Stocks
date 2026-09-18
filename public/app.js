@@ -970,10 +970,20 @@ function parseVentasExcel(file, esPrueba) {
       const colItem = findKey(['item', 'producto', 'nombre', 'articulo', 'descripcion']);
       const colCant = findKey(['cantidad', 'cant', 'qty', 'und']);
       if (!colItem || !colCant) { alert('No encontré columnas de Item y Cantidad. Usa columnas como: Fecha | Item | Cantidad'); return; }
+      // Usar la FECHA del Excel (si existe) y reflejarla en el selector de fecha de VENTAS
+      let fechaExcel = '';
+      if (colFecha) {
+        const filaConFecha = rows.find(r => String(r[colFecha] || '').trim() !== '');
+        if (filaConFecha) {
+          const f = normalizarFechaExcel(filaConFecha[colFecha]);
+          if (f) { fechaExcel = f; const fechaMenu = document.getElementById('fecha-ventas-menu'); if (fechaMenu) fechaMenu.value = f; }
+        }
+      }
+      const fechaRegistro = fechaExcel || (document.getElementById('fecha-ventas-menu')?.value || todayStr());
       const filas = rows.map(r => ({
         item: String(r[colItem] || '').trim(),
         cantidad: parseFloat(String(r[colCant] || '').replace(',', '.')) || 0,
-        fecha: document.getElementById('fecha-ventas-menu')?.value || todayStr(),
+        fecha: (colFecha && normalizarFechaExcel(r[colFecha])) || fechaRegistro,
         destino: ''
       })).filter(x => x.item && x.cantidad > 0 && !esFilaNoProducto(x.item));
       if (esPrueba) { ventasPruebaRows = filas; } else { ventasImportRows = filas; }
