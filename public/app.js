@@ -1510,7 +1510,7 @@ function renderVentasImportPreview(esPrueba) {
 // Registra un conjunto de filas de ventas agrupándolas por fecha + destino
 function registrarVentasFilas(filas, onDone) {
   const fechaDefault = document.getElementById('fecha-ventas-menu')?.value || todayStr();
-  const grupos = {};
+  let grupos = {};
   filas.forEach(r => {
     const fecha = r.fecha || fechaDefault;
     const destino = r.destino || 'stocks';
@@ -1518,9 +1518,8 @@ function registrarVentasFilas(filas, onDone) {
     if (!grupos[key]) grupos[key] = [];
     grupos[key].push({ nombre: r.matched || r.item, cantidad: r.cantidad, destino, almacenes: r.almacenes, ingredientesStocks: r.ingredientesStocks });
   });
-  const keys = Object.keys(grupos);
+  let keys = Object.keys(grupos);
   if (!keys.length) { if (onDone) onDone(); return; }
-  if (!confirm('¿Registrar ' + filas.length + ' ventas (' + keys.length + ' grupos por fecha/destino)?')) return;
   let idx = 0;
   let noEncontrados = 0;
   const noDescontadosTotales = [];
@@ -1570,7 +1569,28 @@ function registrarVentasFilas(filas, onDone) {
       alert('Error registrando las ventas de ' + fecha);
     });
   }
-  procesar();
+  // Evitar DUPLICADOS al recargar un Excel: omitir items que ya estén registrados en esa fecha
+  // (mismo item + cantidad + destino). Solo se guardan los nuevos.
+  const normK = (s) => String(s || '').trim().toUpperCase().replace(/[\u2018\u2019\u201A\u201C\u201D\u00B4]/g, "'").replace(/\s+/g, ' ');
+  const fechas = [...new Set(keys.map(k => k.split('|')[0]))];
+  Promise.all(fechas.map(f => api('GET', '/api/ventas/detalle?fecha=' + encodeURIComponent(f)).catch(() => []))).then(lists => {
+    const yaRegistradas = new Set();
+    lists.forEach(list => (list || []).forEach(r => { if (r.nombre) yaRegistradas.add(normK(r.nombre) + '|' + (parseFloat(r.cantidad) || 0) + '|' + String(r.destino || '').toLowerCase()); }));
+    const nuevosPorGrupo = {};
+    let totalNuevas = 0;
+    keys.forEach(k => {
+      const [, destino] = k.split('|');
+      const nuevos = grupos[k].filter(it => !yaRegistradas.has(normK(it.nombre) + '|' + (parseFloat(it.cantidad) || 0) + '|' + destino));
+      if (nuevos.length) { nuevosPorGrupo[k] = nuevos; totalNuevas += nuevos.length; }
+    });
+    const keysNuevos = Object.keys(nuevosPorGrupo);
+    if (!keysNuevos.length) { showToast('Todos los items del Excel ya estaban registrados para estas fechas (se omiten)'); if (onDone) onDone(); return; }
+    const yaOmitidas = filas.length - totalNuevas;
+    if (!confirm('Registrar ' + totalNuevas + ' venta(s) nueva(s) (' + keysNuevos.length + ' grupo(s))' + (yaOmitidas > 0 ? ' — ' + yaOmitidas + ' ya estaban registrada(s), se omiten' : '') + '?')) return;
+    grupos = nuevosPorGrupo;
+    keys = keysNuevos;
+    procesar();
+  });
 }
 
 function guardarDia() {
