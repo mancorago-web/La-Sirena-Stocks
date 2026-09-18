@@ -5545,6 +5545,12 @@ function cargarStockCocina(familiasAbrir) {
   const fechaEl = document.getElementById('fecha-cocina-stock');
   if (fechaEl && !fechaEl.value) fechaEl.value = todayStr();
   const fecha = fechaEl ? fechaEl.value : todayStr();
+  // Sub-grupos de PESCADO: items SIN PORCIONAR (se listan tal cual) vs PORCIONADOS (el resto)
+  const PESCADO_SIN_PORCIONAR = new Set([
+    'ATUN X KG', 'CALAMAR X KG', 'CONCHAS DE ABANICO X KG', 'LANGOSTINO X KG',
+    'PESCADO - ATUN X KG', 'PESCADO - ESPADA X KG', 'PESCADO LIZA X KG', 'PESCADO PLUMA X KG', 'PULPO X KG'
+  ].map(s => s.toUpperCase().replace(/\s+/g, ' ')));
+  const normCocina = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
   // Preservar las categorías (acordeones) abiertas para no perder el lugar al editar/guardar
   const abiertas = new Set();
   document.querySelectorAll('#cocina-stock-container .accordion-item').forEach(item => {
@@ -5581,7 +5587,22 @@ function cargarStockCocina(familiasAbrir) {
         </td>
       </tr>`;
     }
+    function subTabla(items) {
+      return `<div class="table-wrap"><table>
+        <thead><tr><th>Item</th><th>Apertura</th><th>Ingreso</th><th>Salida</th><th>Ventas</th><th>Falta</th><th>Cierre</th><th></th></tr></thead>
+        <tbody>${items.map(fila).join('') || '<tr><td colspan="8">Vacío.</td></tr>'}</tbody>
+      </table></div>`;
+    }
     function familiaAccordion(f, items, extraClass) {
+      let bodyHtml;
+      if (f === 'PESCADO') {
+        const sinPorcionar = items.filter(i => PESCADO_SIN_PORCIONAR.has(normCocina(i.nombre)));
+        const porcionados = items.filter(i => !PESCADO_SIN_PORCIONAR.has(normCocina(i.nombre)));
+        bodyHtml = `<div style="font-weight:700;color:#00695c;margin:0.4rem 0 0.25rem;">SIN PORCIONAR (${sinPorcionar.length})</div>${subTabla(sinPorcionar)}
+          <div style="font-weight:700;color:#b71c1c;margin:0.75rem 0 0.25rem;">PORCIONADOS (${porcionados.length})</div>${subTabla(porcionados)}`;
+      } else {
+        bodyHtml = subTabla(items);
+      }
       return `
         <div class="accordion-item" data-familia="${esc(f)}">
           <div class="accordion-header" onclick="toggleAcordeon(this)">
@@ -5589,10 +5610,7 @@ function cargarStockCocina(familiasAbrir) {
             <span class="accordion-arrow">▶</span>
           </div>
           <div class="accordion-body">
-            <div class="table-wrap"><table>
-              <thead><tr><th>Item</th><th>Apertura</th><th>Ingreso</th><th>Salida</th><th>Ventas</th><th>Falta</th><th>Cierre</th><th></th></tr></thead>
-              <tbody>${items.map(fila).join('') || '<tr><td colspan="8">Vacío.</td></tr>'}</tbody>
-            </table></div>
+            ${bodyHtml}
             <button class="btn-agregar-item" onclick="agregarItemCocina('${f}')">+ Agregar Item</button>
           </div>
         </div>`;
