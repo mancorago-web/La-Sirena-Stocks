@@ -1036,6 +1036,9 @@ function analizarVentas(esPrueba) {
         ...(barraNombres || []).map(n => ({ n, zona: 'barra' })),
         ...(stockNombres || []).filter(n => !esBasura(n)).map(n => ({ n, zona: 'stocks' })),
       ];
+      // La coincidencia EXACTA (nombre normalizado) siempre gana sobre el difuso
+      const exacto = pool.find(p => norm(p.n) === norm(nombre));
+      if (exacto) return { ...exacto, score: 1 };
       let best = null, bestS = 0;
       pool.forEach(p => { const s = similitud(nombre, p.n); if (s > bestS) { bestS = s; best = p; } });
       return best && bestS >= 0.6 ? { ...best, score: bestS } : null;
@@ -1050,15 +1053,17 @@ function analizarVentas(esPrueba) {
       else if (barraSet.has(k)) i.destino = 'barra';
       else if (stockSet.has(k)) i.destino = 'stocks';
       else i.destino = (fuzzy ? fuzzy.zona : 'stocks');
-      // Emparejamiento: nombre del Excel ya mapeado a un item/receta real de la app
+      // Emparejamiento: nombre del Excel ya mapeado a un item/receta real de la app.
+      // Un match GUARDADO siempre gana (si el item existe en alguna zona), para no caer en el
+      // emparejado difuso que a veces elige el año equivocado (ej. 2022 en vez de 2023).
       const m = matchNorm[k];
-      const esSelf = m && norm(m) === k;
-      const mValido = m && ((i.destino === 'cocina' && cocinaSet.has(norm(m))) ||
-                            (i.destino === 'barra' && barraSet.has(norm(m))) ||
-                            (i.destino === 'stocks' && stockSet.has(norm(m))));
-      if (m && !esSelf && mValido) {
+      const matchedExiste = m && (cocinaSet.has(norm(m)) || barraSet.has(norm(m)) || stockSet.has(norm(m)));
+      if (m && matchedExiste) {
         i.matched = m;
         i.emparejado = true;
+        if (cocinaSet.has(norm(m))) i.destino = 'cocina';
+        else if (barraSet.has(norm(m))) i.destino = 'barra';
+        else i.destino = 'stocks';
       } else if ((i.destino === 'cocina' && cocinaSet.has(k)) ||
                  (i.destino === 'barra' && barraSet.has(k)) ||
                  (i.destino === 'stocks' && stockSet.has(k) && !esBasura(i.nombre))) {
