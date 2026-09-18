@@ -4606,11 +4606,13 @@ app.post('/api/stock/precios/upsert', async (req, res) => {
 // --- BASE DE DATOS UNIFICADA (STOCKS + BARRA + COCINA) ---
 app.get('/api/basedatos/unificada', async (req, res) => {
   try {
-    const [stocks, barra, cocina, unificada] = await Promise.all([
+    const [stocks, barra, cocina, unificada, cocinaStock, barraStock] = await Promise.all([
       col('stock_precios').get(),
       col('barra_precios').get(),
       col('cocina_precios').get(),
       col('base_unificada').get(),
+      col('cocina_stock').get(),
+      col('barra_stock').get(),
     ]);
     const out = [];
     stocks.docs.forEach(d => {
@@ -4644,6 +4646,30 @@ app.get('/api/basedatos/unificada', async (req, res) => {
         unidad_venta: x.unidad || '', precio_venta: x.precio || 0,
         ultimo_precio_compra: x.ultimo_precio_compra || 0, precio_anterior_compra: x.precio_anterior_compra || 0,
         ultimo_precio_compra_fecha: x.ultimo_precio_compra_fecha || '', precio_anterior_compra_fecha: x.precio_anterior_compra_fecha || '',
+      });
+    });
+    // Nombres ACTUALES de COCINA/STOCK y BARRA/STOCK: así, si se renombra un item en
+    // STOCK, el nombre nuevo aparece en las sugerencias de RECETAS sin depender de los precios.
+    cocinaStock.docs.forEach(d => {
+      const x = d.data();
+      out.push({
+        id: Number(d.id), origen: 'cocina_stock', zona: 'COCINA',
+        nombre: String(x.ingrediente || '').trim().toUpperCase(), categoria: '',
+        unidad_compra: '', precio_compra: 0,
+        unidad_venta: x.unidad || '', precio_venta: 0,
+        ultimo_precio_compra: 0, precio_anterior_compra: 0,
+        ultimo_precio_compra_fecha: '', precio_anterior_compra_fecha: '',
+      });
+    });
+    barraStock.docs.forEach(d => {
+      const x = d.data();
+      out.push({
+        id: Number(d.id), origen: 'barra_stock', zona: 'BARRA',
+        nombre: String(x.ingrediente || '').trim().toUpperCase(), categoria: '',
+        unidad_compra: '', precio_compra: 0,
+        unidad_venta: x.unidad || '', precio_venta: 0,
+        ultimo_precio_compra: 0, precio_anterior_compra: 0,
+        ultimo_precio_compra_fecha: '', precio_anterior_compra_fecha: '',
       });
     });
     unificada.docs.forEach(d => {
