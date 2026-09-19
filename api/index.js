@@ -3587,7 +3587,7 @@ app.delete('/api/cocina/porcionamientos/:id', async (req, res) => {
 // a COCINA/STOCK, y registra el desperdicio (no entra a stock).
 app.post('/api/cocina/porcionamiento/transformar', async (req, res) => {
   try {
-    const { nombre, fecha, cabeza, packs, desperdicio, secciones } = req.body;
+    const { nombre, fecha, cabeza, packs, desperdicio, secciones, peso_bruto, salidas } = req.body;
     if (!nombre || !fecha) return res.status(400).json({ error: 'nombre y fecha requeridos' });
 
     // 1) Guardar el porcionamiento
@@ -3600,6 +3600,25 @@ app.post('/api/cocina/porcionamiento/transformar', async (req, res) => {
     if (porcDoc) await col('porcionamientos').doc(porcDoc.id).update({ secciones: secs, updated_at: new Date().toISOString() });
     else await col('porcionamientos').doc().set({ nombre: String(nombre).trim(), fecha, secciones: secs, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
 
+    // NUEVA lógica: peso_bruto + salidas (los productos PORC. ya resueltos con su grupo destino).
+    if (peso_bruto !== undefined || (Array.isArray(salidas) && salidas.length)) {
+      // 2) Descontar el PESO BRUTO del item original de COCINA/STOCK (solo lo porcionado)
+      const bruto = Math.round((parseFloat(peso_bruto) || 0) * 100) / 100;
+      const cs = await col('cocina_stock').get();
+      const orig = cs.docs.find(d => String(d.data().ingrediente || '').trim().toUpperCase() === key);
+      if (orig && bruto > 0) {
+        const actual = parseFloat(orig.data().cantidad) || 0;
+        await col('cocina_stock').doc(orig.id).update({ cantidad: Math.max(0, Math.round((actual - bruto) * 100) / 100), updated_at: new Date().toISOString() });
+      }
+      // 3) Ingresar cada salida a COCINA/STOCK en su grupo destino (creando el item si falta)
+      const ajustes = (Array.isArray(salidas) ? salidas : [])
+        .filter(s => s && s.item && (parseFloat(s.peso) || 0) > 0)
+        .map(s => ({ nombre: String(s.item).trim(), delta: parseFloat(s.peso) || 0, unidad: s.unidad || 'kg', familia: String(s.grupo || '').toUpperCase() }));
+      if (ajustes.length) await ajustarCocinaStock(ajustes);
+      return res.json({ ok: true });
+    }
+
+    // Lógica anterior (compatibilidad): cabeza/colas + packs + desperdicio
     // 2) Sacar el item original de COCINA/STOCK (queda en 0, no se elimina)
     const cs = await col('cocina_stock').get();
     const orig = cs.docs.find(d => String(d.data().ingrediente || '').trim().toUpperCase() === key);

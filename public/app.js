@@ -6319,14 +6319,39 @@ function cargarPorcionamientoCocina(seleccionarItem) {
   }).catch(() => { container.innerHTML = '<p style="color:#c62828;">Error cargando porcionamiento.</p>'; });
 }
 
-// Cada item porcionable tiene su FORMA INDEPENDIENTE de porcionamiento: sus secciones de salida
-// (además del PESO BRUTO, que SIEMPRE es la primera fila y es cuanto se va a porcionar).
-// Se agregan items aquí a medida que se define su proceso.
-const _PORCIONAMIENTO_SECCIONES = {
-  'LANGOSTINO X KG': ['LANGOSTINO JUMBO', 'LANGOSTINO LIMPIO', 'CASCARA DE LANGOSTINO'],
-  'PESCADO - ATUN X KG': ['MERMA UTIL - ATUN X KG', 'PACK - ATUN X 200 GR'],
-  'PESCADO - ESPADA X KG': ['MERMA UTIL - ESPADA X KG', 'PACK - ESPADA X 200 GR']
+// Cada item porcionable tiene su FORMA INDEPENDIENTE de porcionamiento: sus salidas (además del
+// PESO BRUTO, que SIEMPRE es la primera fila y es cuanto se va a porcionar). Al aplicar la
+// TRANSFORMACIÓN, cada salida vuelve a COCINA/STOCK con su nombre "PORC. ..." en su grupo destino
+// (PESCADO PORC. - BARRA FRIA o BARRA CALIENTE), creando el item si no existe.
+const _PORCIONAMIENTO_DEFINICIONES = {
+  'LANGOSTINO X KG': {
+    grupo: 'PESCADO PORC. - BARRA CALIENTE',
+    ocultarPacks: true,
+    salidas: [
+      { nombre: 'LANGOSTINO JUMBO', item: 'PORC. LANGOSTINO JUMBO X KG' },
+      { nombre: 'LANGOSTINO LIMPIO', item: 'PORC. LANGOSTINO LIMPIO X KG' },
+      { nombre: 'CASCARA DE LANGOSTINO', item: 'PORC. CASCARA DE LANGOSTINO X KG' }
+    ]
+  },
+  'PESCADO - ATUN X KG': {
+    grupo: 'PESCADO PORC. - BARRA FRIA',
+    salidas: [
+      { nombre: 'MERMA UTIL - ATUN X KG', item: 'PORC. MERMA UTIL - ATUN X KG' },
+      { nombre: 'PACK - ATUN X 200 GR', item: 'PORC. PACK - ATUN X 200 GR' }
+    ]
+  },
+  'PESCADO - ESPADA X KG': {
+    grupo: 'PESCADO PORC. - BARRA FRIA',
+    salidas: [
+      { nombre: 'MERMA UTIL - ESPADA X KG', item: 'PORC. MERMA UTIL - ESPADA X KG' },
+      { nombre: 'PACK - ESPADA X 200 GR', item: 'PORC. PACK - ESPADA X 200 GR' }
+    ]
+  }
 };
+function seccionesDeDefinicion(nombre) {
+  const def = _PORCIONAMIENTO_DEFINICIONES[nombre];
+  return def ? def.salidas.map(s => s.nombre) : null;
+}
 
 function cargarPorcionamientoItem() {
   const ctx = _porcionamientoCtx;
@@ -6341,7 +6366,7 @@ function cargarPorcionamientoItem() {
   const porc = (ctx.porcs || []).find(p => String(p.nombre || '').trim().toUpperCase() === String(nombre).trim().toUpperCase());
   // Cada item tiene su FORMA INDEPENDIENTE de porcionamiento (secciones propias según el tipo).
   // Si el item tiene una definición, se usan SUS secciones; si no, las genéricas de respaldo.
-  const seccionesConfig = _PORCIONAMIENTO_SECCIONES[nombre];
+  const seccionesConfig = seccionesDeDefinicion(nombre);
   const secciones = porc && porc.secciones && porc.secciones.length
     ? porc.secciones
     : (seccionesConfig
@@ -6401,16 +6426,9 @@ function renderPorcionamientoEditor(secciones) {
   const editor = document.getElementById('porcionamiento-editor');
   if (!editor || !ctx || !ctx.item) return;
   const stock = ctx.item.stock;
-  editor.innerHTML = '<h3 style="margin-top:0">Porcionamiento: ' + esc(ctx.item.nombre) + '</h3>'
-    + '<p style="font-size:0.85rem;color:#666;">Stock en COCINA: <b>' + stock + '</b>. Registra manualmente a dónde se fue cada porción.</p>'
-    + '<div class="table-wrap"><table>'
-    + '<thead><tr><th>Sección / Porcionamiento</th><th>Peso</th><th>%</th><th>Precio</th><th></th></tr></thead>'
-    + '<tbody id="porcionamiento-secciones">' + secciones.map(porcionFila).join('') + '</tbody>'
-    + '</table></div>'
-    + '<button onclick="agregarSeccionPorcionamiento()" style="margin:0.5rem 0;">+ SECCIÓN</button>'
-    + '<span id="porcionamiento-total" style="font-size:0.9rem;margin-left:0.5rem;display:inline-block;margin-top:0.2rem;"></span>'
-    + '<br>'
-    + '<div id="porcionamiento-packs" style="margin-top:0.75rem;padding:0.75rem;background:#e8f5e9;border-radius:8px;border:1px solid #c8e6c9;">'
+  const def = _PORCIONAMIENTO_DEFINICIONES[ctx.item.nombre];
+  const packsHtml = def && def.ocultarPacks ? ''
+    : '<div id="porcionamiento-packs" style="margin-top:0.75rem;padding:0.75rem;background:#e8f5e9;border-radius:8px;border:1px solid #c8e6c9;">'
     + '<strong style="color:#2e7d32;">📦 GENERAR PACKS desde FILETES</strong>'
     + '<div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-top:0.5rem;">'
     + '<label>Tamaño del pack (gr):</label>'
@@ -6422,7 +6440,17 @@ function renderPorcionamientoEditor(secciones) {
     + '<input id="pack-cantidad" type="number" step="1" min="0" value="0" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;">'
     + '<span style="font-size:0.8rem;color:#666;">(calculado automáticamente, puedes calibrarlo manualmente)</span>'
     + '</div>'
-    + '</div>'
+    + '</div>';
+  editor.innerHTML = '<h3 style="margin-top:0">Porcionamiento: ' + esc(ctx.item.nombre) + '</h3>'
+    + '<p style="font-size:0.85rem;color:#666;">Stock en COCINA: <b>' + stock + '</b>. Ingresa el PESO BRUTO a porcionar y el peso de cada salida.</p>'
+    + '<div class="table-wrap"><table>'
+    + '<thead><tr><th>Sección / Porcionamiento</th><th>Peso</th><th>%</th><th>Precio</th><th></th></tr></thead>'
+    + '<tbody id="porcionamiento-secciones">' + secciones.map(porcionFila).join('') + '</tbody>'
+    + '</table></div>'
+    + '<button onclick="agregarSeccionPorcionamiento()" style="margin:0.5rem 0;">+ SECCIÓN</button>'
+    + '<span id="porcionamiento-total" style="font-size:0.9rem;margin-left:0.5rem;display:inline-block;margin-top:0.2rem;"></span>'
+    + '<br>'
+    + packsHtml
     + '<div class="porcionamiento-acciones">'
     + '<button class="btn-accion btn-transformar" onclick="aplicarTransformacionPorcionamiento()">🔄 APLICAR TRANSFORMACIÓN</button>'
     + '<button class="btn-accion btn-guardar" onclick="guardarPorcionamiento()">💾 GUARDAR</button>'
@@ -6630,38 +6658,32 @@ function aplicarTransformacionPorcionamiento() {
     if (nom) secciones.push({ nombre: nom, peso });
   });
   if (!secciones.length) { alert('Agrega al menos una sección'); return; }
-
-  // Identificar secciones
-  const getSeccion = (filtro) => {
-    const s = secciones.find(x => filtro.test(x.nombre.toUpperCase()));
-    return s ? s.peso : 0;
-  };
-  const bruto = getSeccion(/PESO BRUTO/);
-  const cabeza = getSeccion(/MERMA UTIL|CABEZA|COLA|ALETAS|ESQUELETO/);
-  const filetes = getSeccion(/FILETE/);
-  const desperdicio = getSeccion(/DESPERDICIO/);
-  const gramos = parseFloat(document.getElementById('pack-gramos')?.value) || 0;
-  const packs = parseInt(document.getElementById('pack-cantidad')?.value) || 0;
-
-  if (!cabeza && !filetes) { alert('Define MERMA UTIL y FILETES en el porcionamiento'); return; }
-
-  // Confirmar la transformación
-  const nombreBase = ctx.item.nombre;
-  // Patrón de nombres usado: cabeza/colas = "MERMA UTIL - <base>", packs = "PACK <gr>GR <base>"
-  const nombreCabeza = cabeza > 0 ? 'MERMA UTIL - ' + nombreBase : null;
-  const nombrePacks = packs > 0 ? 'PACK ' + gramos + 'GR ' + nombreBase : null;
-  let msg = 'APLICAR TRANSFORMACIÓN de ' + nombreBase + ':\n\n'
-    + '- Saldrá del stock de COCINA (queda en 0).\n';
-  if (cabeza > 0) msg += '- Entrará: ' + nombreCabeza + ' = ' + cabeza + ' kg\n';
-  if (nombrePacks) msg += '- Entrará: ' + nombrePacks + ' = ' + packs + ' packs\n';
-  if (desperdicio > 0) msg += '- DESPERDICIO (no entra a stock): ' + desperdicio + ' kg\n';
+  const def = _PORCIONAMIENTO_DEFINICIONES[ctx.item.nombre];
+  const pesoBruto = secciones.find(s => /PESO BRUTO/.test(s.nombre.toUpperCase()))?.peso || 0;
+  if (pesoBruto <= 0) { alert('Ingresa el PESO BRUTO a porcionar'); return; }
+  if (pesoBruto > ctx.item.stock) { alert('El PESO BRUTO (' + pesoBruto + ') es mayor que el stock (' + ctx.item.stock + ')'); return; }
+  // Construir las salidas según la definición del item (nombre destino "PORC. ..." + grupo)
+  const salidas = [];
+  let sinDefinir = false;
+  if (def) {
+    def.salidas.forEach(s => {
+      const sec = secciones.find(x => x.nombre.toUpperCase() === s.nombre.toUpperCase());
+      const peso = sec ? sec.peso : 0;
+      if (peso > 0) salidas.push({ item: s.item, grupo: def.grupo, peso, unidad: 'kg' });
+    });
+  } else {
+    sinDefinir = true;
+  }
+  if (sinDefinir || !salidas.length) { alert('Este item aún no tiene una definición de transformación (salidas por grupo).'); return; }
+  let msg = 'APLICAR TRANSFORMACIÓN de ' + ctx.item.nombre + ':\n\n'
+    + '- PESO BRUTO: ' + pesoBruto + ' kg (sale de COCINA/STOCK)\n'
+    + '-> ' + def.grupo + ':\n';
+  salidas.forEach(s => { msg += '  · ' + s.item + ' +' + s.peso + ' kg\n'; });
   if (!confirm(msg + '\n¿Continuar?')) return;
-
   api('POST', '/api/cocina/porcionamiento/transformar', {
-    nombre: nombreBase, fecha: ctx.fecha,
-    cabeza: { nombre: nombreCabeza, peso: cabeza },
-    packs: nombrePacks ? { nombre: nombrePacks, cantidad: packs } : null,
-    desperdicio: { nombre: nombreBase, peso: desperdicio },
+    nombre: ctx.item.nombre, fecha: ctx.fecha,
+    peso_bruto: pesoBruto,
+    salidas,
     secciones
   }).then(() => {
     showToast('Transformación aplicada');
