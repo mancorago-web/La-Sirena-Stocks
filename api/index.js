@@ -284,10 +284,24 @@ function cached(key, ttlMs, fetchFn) {
 }
 
 // Invalida claves concretas y TODOS los contadores del menú (resumen_items_*) para que una
-// escritura se refleje de inmediato en la pantalla principal.
+// escritura se refleje de inmediato en la pantalla principal. Si una clave termina en "*" se
+// borran TODAS las claves que empiecen con ese prefijo (ej. "ventas_detalle_" + fecha).
 function invalidarCache(...claves) {
-  claves.forEach(c => { delete _cache[c]; });
+  claves.forEach(c => {
+    if (c.endsWith('*')) {
+      const pre = c.slice(0, -1);
+      Object.keys(_cache).forEach(k => { if (k.startsWith(pre)) delete _cache[k]; });
+    } else {
+      delete _cache[c];
+    }
+  });
   Object.keys(_cache).forEach(k => { if (k.startsWith('resumen_items_')) delete _cache[k]; });
+}
+
+// Limpia las cachés de LECTURA pesadas (precios + datos derivados) tras una escritura.
+function invalidarCachesLectura() {
+  invalidarCache('precios_barra', 'precios_cocina', 'precios_stock', 'basedatos_unificada',
+    'ventas_detalle_*', 'cocina_inv_*', 'compras_detalle_*', 'porcionamientos_*');
 }
 
 // --- ALMACENES ---
@@ -1450,6 +1464,7 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
     (resumen.limpieza || []).forEach(r => comprasConPrecio.push({ nombre: r.nombre, precio: r.precio, destino: 'limpieza' }));
     await Promise.all(comprasConPrecio.map(c => registrarUltimoPrecioCompra(c.nombre, c.precio, c.destino, fecha)));
 
+    invalidarCachesLectura();
     res.json({ ok: true, resumen });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1538,6 +1553,7 @@ async function registrarUltimoPrecioCompra(nombre, precio, destino, fechaCompra)
   // Al cambiar un precio por COMPRA, los costos de las recetas (BARRA y COCINA) se recalcular al
   // instante invalidando su caché (si no, quedarían hasta 10s obsoletos).
   invalidarCache('recetas', 'cocina_recetas');
+  invalidarCachesLectura();
 }
 
 // --- COMPRAS: historial de precios de un item en un rango (para VARIACIÓN DE PRECIOS) ---
@@ -1612,18 +1628,22 @@ app.get('/api/compras/detalle', async (req, res) => {
     const fechaIni = req.query.fecha_inicio;
     const fechaFin = req.query.fecha_fin;
     if (!fecha && !(fechaIni && fechaFin)) return res.json([]);
-    // BARRA y COCINA desde el log; los de STOCKS se derivan de inventario_diario (fuente única)
-    let logSnap;
-    if (fecha) {
-      logSnap = await col('compras').where('fecha', '==', fecha).get();
-    } else {
-      logSnap = await col('compras').where('fecha', '>=', fechaIni).where('fecha', '<=', fechaFin).get();
-    }
-    const lista = logSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    // Solo se muestran las COMPRAS (líneas del log). Los ingresos internos/manuales (STOCKS/INGRESOS
-    // y transferencias entre almacenes) se ven desde STOCKS/INGRESOS, no desde COMPRAS/INGRESOS.
-    // Orden descendente: primero el último item registrado (más reciente arriba).
-    lista.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
+    const cacheKey = 'compras_detalle_' + (fecha || (fechaIni + '_' + fechaFin));
+    const lista = await cached(cacheKey, 5000, async () => {
+      // BARRA y COCINA desde el log; los de STOCKS se derivan de inventario_diario (fuente única)
+      let logSnap;
+      if (fecha) {
+        logSnap = await col('compras').where('fecha', '==', fecha).get();
+      } else {
+        logSnap = await col('compras').where('fecha', '>=', fechaIni).where('fecha', '<=', fechaFin).get();
+      }
+      const rows = logSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Solo se muestran las COMPRAS (líneas del log). Los ingresos internos/manuales (STOCKS/INGRESOS
+      // y transferencias entre almacenes) se ven desde STOCKS/INGRESOS, no desde COMPRAS/INGRESOS.
+      // Orden descendente: primero el último item registrado (más reciente arriba).
+      rows.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
+      return rows;
+    });
     res.json(lista);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -2500,6 +2520,7 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       await logBatch.commit();
     }
 
+    invalidarCachesLectura();
     res.json({ ok: true, resumen });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -2511,7 +2532,9 @@ app.get('/api/ventas/detalle', async (req, res) => {
   try {
     const fecha = req.query.fecha;
     if (!fecha) return res.json([]);
-    const list = [];
+    const list = await cached('ventas_detalle_' + fecha, 5000, async () => {
+
+    const arr = [];
 
     // Índice STOCKS (nombre normalizado -> items) y nombres
     const invSnap = await col('inventario').get();
@@ -2556,7 +2579,7 @@ app.get('/api/ventas/detalle', async (req, res) => {
     });
     Object.keys(stocksGroups).forEach(key => {
       const g = stocksGroups[key];
-      list.push({ id: 'grp_stocks_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'stocks', almacenes: [g.almacen_id], item_id: g.item_id, log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at });
+      arr.push({ id: 'grp_stocks_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'stocks', almacenes: [g.almacen_id], item_id: g.item_id, log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at });
     });
 
     // BARRA: agrupar por receta
@@ -2584,7 +2607,7 @@ app.get('/api/ventas/detalle', async (req, res) => {
     });
     Object.keys(barraGroups).forEach(key => {
       const g = barraGroups[key];
-      list.push({ id: 'grp_barra_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'barra', log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at });
+      arr.push({ id: 'grp_barra_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'barra', log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at });
     });
 
     // COCINA: agrupar por receta
@@ -2613,10 +2636,12 @@ app.get('/api/ventas/detalle', async (req, res) => {
     });
     Object.keys(cocinaGroups).forEach(key => {
       const g = cocinaGroups[key];
-      list.push({ id: 'grp_cocina_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'cocina', log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at });
+      arr.push({ id: 'grp_cocina_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'cocina', log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at });
     });
 
-    list.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+    arr.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+    return arr;
+    });
     res.json(list);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -3534,20 +3559,23 @@ app.get('/api/cocina/stock', async (req, res) => {
 app.get('/api/cocina/porcionamientos', async (req, res) => {
   try {
     const fecha = req.query.fecha;
+    const out = await cached('porcionamientos_' + (fecha || 'all'), 5000, async () => {
     const [porcSnap, csSnap] = await Promise.all([
       fecha ? col('porcionamientos').where('fecha', '==', fecha).get() : col('porcionamientos').get(),
       col('cocina_stock').get(),
     ]);
     const stockBy = {};
     csSnap.docs.forEach(d => { stockBy[String(d.data().ingrediente || '').trim().toUpperCase()] = d.data().cantidad || 0; });
-    const out = porcSnap.docs.map(d => ({
+    const arr = porcSnap.docs.map(d => ({
       id: d.id,
       nombre: d.data().nombre || '',
       fecha: d.data().fecha || '',
       secciones: Array.isArray(d.data().secciones) ? d.data().secciones : [],
       stock: stockBy[String(d.data().nombre || '').trim().toUpperCase()] || 0,
     }));
-    out.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
+    arr.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
+    return arr;
+    });
     res.json(out);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -3571,6 +3599,7 @@ app.post('/api/cocina/porcionamientos', async (req, res) => {
     }
     const ref = col('porcionamientos').doc();
     await ref.set({ nombre: nombreClean, fecha, secciones: secs, created_at: now, updated_at: now });
+    invalidarCache('porcionamientos_*', 'cocina_inv_*');
     res.json({ ok: true, id: ref.id });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -3578,6 +3607,7 @@ app.post('/api/cocina/porcionamientos', async (req, res) => {
 app.delete('/api/cocina/porcionamientos/:id', async (req, res) => {
   try {
     await col('porcionamientos').doc(req.params.id).delete();
+    invalidarCache('porcionamientos_*', 'cocina_inv_*');
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -3646,6 +3676,7 @@ app.post('/api/cocina/porcionamiento/transformar', async (req, res) => {
       });
     }
 
+    invalidarCachesLectura();
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -3682,6 +3713,7 @@ app.post('/api/cocina/stock', async (req, res) => {
       created_at: new Date().toISOString(), updated_at: new Date().toISOString()
     });
     await ensureIngredienteCocinaPrecios(ingrediente, unidad);
+    invalidarCachesLectura();
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -3700,6 +3732,7 @@ app.put('/api/cocina/stock/:id', async (req, res) => {
       else upd.subgrupo = admin.firestore.FieldValue.delete();
     }
     await col('cocina_stock').doc(req.params.id).update(upd);
+    invalidarCachesLectura();
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -3707,6 +3740,7 @@ app.put('/api/cocina/stock/:id', async (req, res) => {
 app.delete('/api/cocina/stock/:id', async (req, res) => {
   try {
     await col('cocina_stock').doc(req.params.id).delete();
+    invalidarCachesLectura();
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -3716,6 +3750,7 @@ app.get('/api/cocina/stock/con-inventario', async (req, res) => {
   const fecha = req.query.fecha;
   if (!fecha) return res.json([]);
   try {
+    const out = await cached('cocina_inv_' + fecha, 5000, async () => {
     const [stockSnap, diaSnap, prevSnap] = await Promise.all([
       col('cocina_stock').orderBy('id').get(),
       col('cocina_stock_diario').where('fecha', '==', fecha).get(),
@@ -3756,7 +3791,9 @@ app.get('/api/cocina/stock/con-inventario', async (req, res) => {
       });
     });
     Object.keys(groups).forEach(f => groups[f].sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es')));
-    res.json(Object.keys(groups).map(f => ({ familia: f, items: groups[f] })));
+    return Object.keys(groups).map(f => ({ familia: f, items: groups[f] }));
+    });
+    res.json(out);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -4479,8 +4516,11 @@ async function ensureIngredienteCocinaPrecios(ingrediente, unidad) {
 // --- COCINA: Base de Datos (precios) ---
 app.get('/api/cocina/precios', async (req, res) => {
   try {
-    const snap = await col('cocina_precios').orderBy('ingrediente').get();
-    res.json(snap.docs.map(d => ({ id: Number(d.id), ...d.data() })));
+    const data = await cached('precios_cocina', 5000, async () => {
+      const snap = await col('cocina_precios').orderBy('ingrediente').get();
+      return snap.docs.map(d => ({ id: Number(d.id), ...d.data() }));
+    });
+    res.json(data);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -4496,6 +4536,7 @@ app.post('/api/cocina/precios', async (req, res) => {
       created_at: new Date().toISOString(), updated_at: new Date().toISOString()
     });
     await ensureIngredienteCocinaStock(ingrediente, unidad);
+    invalidarCachesLectura();
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -4519,6 +4560,7 @@ app.put('/api/cocina/precios/:id', async (req, res) => {
       unidad_venta: upd.unidad !== undefined ? upd.unidad : undefined,
       precio_venta: req.body.precio,
     });
+    invalidarCachesLectura();
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -4526,6 +4568,7 @@ app.put('/api/cocina/precios/:id', async (req, res) => {
 app.delete('/api/cocina/precios/:id', async (req, res) => {
   try {
     await col('cocina_precios').doc(req.params.id).delete();
+    invalidarCachesLectura();
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -4533,8 +4576,11 @@ app.delete('/api/cocina/precios/:id', async (req, res) => {
 // --- STOCKS: Base de Datos (precios compra/venta) ---
 app.get('/api/stock/precios', async (req, res) => {
   try {
-    const snap = await col('stock_precios').orderBy('nombre').get();
-    res.json(snap.docs.map(d => ({ id: Number(d.id), ...d.data() })));
+    const data = await cached('precios_stock', 5000, async () => {
+      const snap = await col('stock_precios').orderBy('nombre').get();
+      return snap.docs.map(d => ({ id: Number(d.id), ...d.data() }));
+    });
+    res.json(data);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -4566,6 +4612,7 @@ app.post('/api/stock/precios', async (req, res) => {
       precio_venta: parseFloat(precio_venta) || 0,
       created_at: new Date().toISOString(), updated_at: new Date().toISOString()
     });
+    invalidarCachesLectura();
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -4589,6 +4636,7 @@ app.put('/api/stock/precios/:id', async (req, res) => {
       unidad_venta: req.body.unidad_venta,
       precio_venta: req.body.precio_venta,
     });
+    invalidarCachesLectura();
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -4596,6 +4644,7 @@ app.put('/api/stock/precios/:id', async (req, res) => {
 app.delete('/api/stock/precios/:id', async (req, res) => {
   try {
     await col('stock_precios').doc(req.params.id).delete();
+    invalidarCachesLectura();
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -4623,6 +4672,7 @@ app.post('/api/stock/precios/upsert', async (req, res) => {
       });
     }
     invalidarCache('inventario_snap');
+    invalidarCachesLectura();
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -4630,15 +4680,16 @@ app.post('/api/stock/precios/upsert', async (req, res) => {
 // --- BASE DE DATOS UNIFICADA (STOCKS + BARRA + COCINA) ---
 app.get('/api/basedatos/unificada', async (req, res) => {
   try {
-    const [stocks, barra, cocina, unificada, cocinaStock, barraStock] = await Promise.all([
-      col('stock_precios').get(),
-      col('barra_precios').get(),
-      col('cocina_precios').get(),
-      col('base_unificada').get(),
-      col('cocina_stock').get(),
-      col('barra_stock').get(),
-    ]);
-    const out = [];
+    const out = await cached('basedatos_unificada', 5000, async () => {
+      const [stocks, barra, cocina, unificada, cocinaStock, barraStock] = await Promise.all([
+        col('stock_precios').get(),
+        col('barra_precios').get(),
+        col('cocina_precios').get(),
+        col('base_unificada').get(),
+        col('cocina_stock').get(),
+        col('barra_stock').get(),
+      ]);
+      const out = [];
     stocks.docs.forEach(d => {
       const x = d.data();
       out.push({
@@ -4709,6 +4760,8 @@ app.get('/api/basedatos/unificada', async (req, res) => {
       });
     });
     out.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    return out;
+    });
     res.json(out);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -4738,6 +4791,7 @@ app.post('/api/basedatos/agregar', async (req, res) => {
       precio_venta: parseFloat(precio_venta) || 0,
       created_at: new Date().toISOString(), updated_at: new Date().toISOString()
     });
+    invalidarCachesLectura();
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -4763,6 +4817,7 @@ app.put('/api/basedatos/items/:id', async (req, res) => {
       unidad_venta: upd.unidad_venta,
       precio_venta: upd.precio_venta,
     });
+    invalidarCachesLectura();
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -4925,8 +4980,11 @@ app.post('/api/basedatos/limpiar-duplicados', async (req, res) => {
 
 // --- BARRA PRECIOS ---
 app.get('/api/barra/precios', async (req, res) => {
-  const snap = await col('barra_precios').orderBy('ingrediente').get();
-  res.json(snap.docs.map(d => ({ id: Number(d.id), ...d.data() })));
+  const data = await cached('precios_barra', 5000, async () => {
+    const snap = await col('barra_precios').orderBy('ingrediente').get();
+    return snap.docs.map(d => ({ id: Number(d.id), ...d.data() }));
+  });
+  res.json(data);
 });
 
 app.post('/api/barra/precios', async (req, res) => {
@@ -4942,6 +5000,7 @@ app.post('/api/barra/precios', async (req, res) => {
     equiv_ml: parsed.equiv_ml || 0, equiv_gr: parsed.equiv_gr || 0,
     created_at: new Date().toISOString(), updated_at: new Date().toISOString()
   });
+  invalidarCachesLectura();
   res.json({ ok: true });
 });
 
@@ -4974,11 +5033,13 @@ app.put('/api/barra/precios/:id', async (req, res) => {
     unidad_venta: updateData.unidad !== undefined ? updateData.unidad : undefined,
     precio_venta: req.body.precio,
   });
+  invalidarCachesLectura();
   res.json({ ok: true });
 });
 
 app.delete('/api/barra/precios/:id', async (req, res) => {
   await col('barra_precios').doc(req.params.id).delete();
+  invalidarCachesLectura();
   res.json({ ok: true });
 });
 
@@ -5004,6 +5065,7 @@ app.post('/api/barra/precios/upsert', async (req, res) => {
       });
     }
     invalidarCache('inventario_snap');
+    invalidarCachesLectura();
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
