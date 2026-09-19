@@ -582,9 +582,12 @@
           <h2>Ingresos Limpieza</h2>
           <div class="controles-dia">
             <label>Fecha: <input type="date" id="fecha-limpieza-ingresos" onchange="cargarExtraMovimientos('limpieza','ingresos')"></label>
+            <label>DESDE: <input type="date" id="fecha-ini-limpieza-ingresos"></label>
+            <label>HASTA: <input type="date" id="fecha-fin-limpieza-ingresos"></label>
             <input type="text" id="buscar-limpieza-ingresos" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-limpieza-ingresos')">
             <button class="btn-guardar-dia" onclick="guardarExtraMovimientos('limpieza','ingresos')">💾 GUARDAR INGRESOS</button>
             <button class="btn-detalles" onclick="verDetallesExtra('limpieza','ingresos')">📋 DETALLES</button>
+            <button class="btn-detalles" onclick="verDetallesExtraRango('limpieza','ingresos')">📋 VER RANGO</button>
           </div>
         </div>
         <div id="accordion-limpieza-ingresos"></div>

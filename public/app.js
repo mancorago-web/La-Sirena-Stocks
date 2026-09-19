@@ -9364,6 +9364,37 @@ function verDetallesExtra(zona, tipo) {
   }).catch(() => alert('Error al cargar detalle'));
 }
 
+function verDetallesExtraRango(zona, tipo) {
+  const ini = document.getElementById('fecha-ini-' + zona + '-' + tipo)?.value;
+  const fin = document.getElementById('fecha-fin-' + zona + '-' + tipo)?.value;
+  if (!ini || !fin) { alert('Selecciona las fechas DESDE y HASTA'); return; }
+  const label = tipo === 'ingresos' ? 'Ingresos' : 'Salidas';
+  api('GET', '/api/extra/' + zona + '/movimientos?tipo=' + tipo + '&fecha_inicio=' + encodeURIComponent(ini) + '&fecha_fin=' + encodeURIComponent(fin)).then(movs => {
+    let html = '<h3>Detalle de ' + label + ' ' + ZONAS_EXTRA[zona] + ' — del ' + ini + ' al ' + fin + '</h3>';
+    if (!movs.length) { html += '<p>No hay movimientos registrados en ese rango.</p>'; }
+    else {
+      html += '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
+      movs.forEach(m => {
+        const t = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
+        const u = DISPLAY_NAMES[m.saved_by] || m.saved_by || '-';
+        html += '<tr><td>' + esc(m.fecha || '') + '</td><td>' + esc(m.ingrediente) + '</td><td>' + (m.cantidad || 0) + '</td><td>' + esc(m.unidad || 'unidad') + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+      const tot = {};
+      movs.forEach(m => { const k = String(m.ingrediente || '').toUpperCase(); if (k) tot[k] = Math.round(((tot[k] || 0) + (parseFloat(m.cantidad) || 0)) * 100) / 100; });
+      html += '<h4 style="margin:1rem 0 0.3rem;">Totales por item</h4>';
+      html += '<div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th>Total</th><th>Unidad</th></tr></thead><tbody>';
+      Object.keys(tot).sort().forEach(k => {
+        const u = movs.find(m => String(m.ingrediente || '').toUpperCase() === k)?.unidad || 'unidad';
+        html += '<tr><td>' + esc(k) + '</td><td><strong>' + tot[k] + '</strong></td><td>' + esc(u) + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+    document.getElementById('modal-body').innerHTML = html;
+    document.getElementById('modal').style.display = 'block';
+  }).catch(() => alert('Error al cargar detalle'));
+}
+
 function marcarExtraStockDirty(zona, reset) {
   const btn = document.getElementById('btn-extra-guardar-' + zona);
   if (!btn) return;

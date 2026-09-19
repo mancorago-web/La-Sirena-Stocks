@@ -7530,13 +7530,16 @@ app.get('/api/extra/:zona/movimientos', authMiddleware, async (req, res) => {
   try {
     const z = String(req.params.zona || '').toLowerCase();
     if (!esZonaExtra(z)) return res.status(400).json({ error: 'Zona inválida' });
-    const { fecha, tipo } = req.query;
+    const { fecha, fecha_inicio, fecha_fin, tipo } = req.query;
     let q = colExtra(z, 'movimientos');
+    let filtrarTipo = null;
     if (fecha) q = q.where('fecha', '==', fecha);
-    if (tipo) q = q.where('tipo', '==', tipo);
+    else if (fecha_inicio && fecha_fin) q = q.where('fecha', '>=', fecha_inicio).where('fecha', '<=', fecha_fin);
+    if (tipo) filtrarTipo = String(tipo).toLowerCase();
     const snap = await q.get();
-    const out = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    out.sort((a, b) => String(a.ingrediente || '').localeCompare(String(b.ingrediente || '')));
+    let out = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (filtrarTipo) out = out.filter(m => String(m.tipo || '').toLowerCase() === filtrarTipo);
+    out.sort((a, b) => String(a.fecha || '').localeCompare(String(b.fecha || '')) || String(a.ingrediente || '').localeCompare(String(b.ingrediente || '')));
     res.json(out);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
