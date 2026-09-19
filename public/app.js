@@ -6233,24 +6233,30 @@ function cargarPorcionamientoCocina(seleccionarItem) {
     api('GET', '/api/cocina/compras')
   ]).then(([stock, porcs, precios, compras]) => {
     _porcionamientoCtx = { fecha, stock: stock || [], porcs: porcs || [], precios: precios || [], compras: compras || [], item: null };
-    // En el selector de COCINA/PORCIONAMIENTO solo se muestran los items de los grupos
-    // PESCADO, CARNE y POLLO (los que se pueden porcionar). El resto de familias se oculta.
-    // Además, dentro del grupo PESCADO se excluyen los items derivados (MERMA, PACK) para
-    // mostrar únicamente los pescados enteros (los que empiezan por "PESCADO").
-    const familiasPorcionamiento = ['PESCADO - BRUTO', 'PESCADO PORC. - BARRA FRIA', 'PESCADO PORC. - BARRA CALIENTE', 'CARNE', 'POLLO'];
-    const items = (stock || []).filter(s => {
-      const fam = String(s.familia || '').trim().toUpperCase();
-      if (!familiasPorcionamiento.includes(fam)) return false;
-      const nombre = String(s.ingrediente || '').toUpperCase();
-      const esDerivado = /(^|\s)(MERMA|PACK)\b/.test(nombre) || nombre.startsWith('MERMA') || nombre.startsWith('PACK');
-      return !esDerivado;
-    });
+    // En el selector de COCINA/PORCIONAMIENTO solo se muestran:
+    //  - PESCADO - BRUTO: TODOS los items.
+    //  - CARNE: solo los SIN PORCIONAR (LOMO FINO, PANCETA).
+    //  - POLLO: solo los SIN PORCIONAR (POLLO ENTERO).
+    const CARNE_SIN_PORCIONAR = new Set(['LOMO FINO X KG', 'PANCETA X KG'].map(s => s.toUpperCase().replace(/\s+/g, ' ')));
+    const POLLO_SIN_PORCIONAR = new Set(['POLLO ENTERO X KG'].map(s => s.toUpperCase().replace(/\s+/g, ' ')));
+    const nrm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    const esBruto = s => String(s.familia || '').trim().toUpperCase() === 'PESCADO - BRUTO';
+    const esCarneSin = s => String(s.familia || '').trim().toUpperCase() === 'CARNE' && CARNE_SIN_PORCIONAR.has(nrm(s.ingrediente));
+    const esPolloSin = s => String(s.familia || '').trim().toUpperCase() === 'POLLO' && POLLO_SIN_PORCIONAR.has(nrm(s.ingrediente));
+    const bruto = (stock || []).filter(esBruto);
+    const carne = (stock || []).filter(esCarneSin);
+    const pollo = (stock || []).filter(esPolloSin);
+    const opcItem = s => `<option value="${esc(s.ingrediente)}">${esc(s.ingrediente)} (${s.cantidad || 0})</option>`;
+    const gruposSelect = [];
+    gruposSelect.push('<optgroup label="PESCADO - BRUTO">' + bruto.map(opcItem).join('') + '</optgroup>');
+    gruposSelect.push('<optgroup label="CARNE">' + carne.map(opcItem).join('') + '</optgroup>');
+    gruposSelect.push('<optgroup label="POLLO">' + pollo.map(opcItem).join('') + '</optgroup>');
     const porc = porcs || [];
     let html = '<div class="table-wrap" style="margin-bottom:0.5rem;"><div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">'
       + '<label style="font-weight:600;">Item de COCINA/STOCK:</label>'
       + '<select id="porcionamiento-item" onchange="cargarPorcionamientoItem()" style="padding:0.4rem;border:1px solid #ccc;border-radius:4px;min-width:260px;">'
       + '<option value="">— Seleccionar —</option>'
-      + items.map(s => `<option value="${esc(s.ingrediente)}">${esc(s.ingrediente)} (${s.cantidad || 0})</option>`).join('')
+      + gruposSelect.join('')
       + '</select>'
       + '</div></div>';
     // Lista de TODOS los porcionamientos del día (guardados)
