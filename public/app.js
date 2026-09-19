@@ -7914,6 +7914,15 @@ function cargarCompras() {
         const n = String(s.ingrediente || '').trim().toUpperCase().replace(/\s+/g, ' ');
         if (n) _cocinaStockItems[n] = String(s.familia || '');
       });
+      // Selector de categoría COCINA en COMPRAS: siempre con los grupos ACTUALES de COCINA/STOCK
+      // (evita que aparezcan grupos viejos como "PESCADO").
+      const catSel = document.getElementById('nueva-compra-grupo-cocina');
+      if (catSel) {
+        const actual = catSel.value;
+        catSel.innerHTML = '<option value="">— AUTO (se infiere por el nombre) —</option>'
+          + FAMILIAS_COCINA.map(f => '<option value="' + f + '">' + f + '</option>').join('');
+        if (actual && FAMILIAS_COCINA.includes(actual)) catSel.value = actual;
+      }
       // BASE DE DATOS UNIFICADA (refuerzo: STOCKS + BARRA + COCINA + BASE)
       (bdUnificada || []).forEach(x => addSug(x.nombre));
       dl.innerHTML = html;
