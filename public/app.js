@@ -5581,6 +5581,29 @@ function cargarStockCocina(familiasAbrir) {
     });
     // Orden alfabético dentro de cada categoría
     Object.keys(byFam).forEach(f => byFam[f].sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es')));
+    // Sub-grupos por TIPO DE PESCADO en los grupos PORC. (BARRA FRIA/CALIENTE):
+    // se extraen los tipos desde PESCADO - BRUTO y cada item PORC. cae en su tipo.
+    const tipoDesdeBruto = nombre => {
+      let t = normCocina(nombre).replace(/^PESCADO\s*-\s*/, '');
+      t = t.replace(/\s*X\s+\d+(?:[.,]\d+)?\s*(KG|GR|G|UND|UNIDAD|ML|LT)\b.*$/, '');
+      t = t.replace(/\s*X\s*(KG|GR|G|UND|UNIDAD|ML|LT)\b.*$/, '');
+      return t.trim();
+    };
+    const tiposPescado = [];
+    const vistoTipos = new Set();
+    (byFam['PESCADO - BRUTO'] || []).forEach(i => {
+      const k = tipoDesdeBruto(i.nombre);
+      if (k && !vistoTipos.has(k)) { vistoTipos.add(k); tiposPescado.push(k); }
+    });
+    const subPescado = nombre => {
+      const n = normCocina(nombre);
+      let best = null, bestLen = 0;
+      for (const t of tiposPescado) {
+        if (n.includes(t) && t.length > bestLen) { best = t; bestLen = t.length; }
+      }
+      return best || 'OTROS';
+    };
+    const ES_PORC = f => f === 'PESCADO PORC. - BARRA FRIA' || f === 'PESCADO PORC. - BARRA CALIENTE';
     function subgrupoDe(i, fam) {
       const sg = String(i.subgrupo || '').trim().toUpperCase();
       if (sg) return sg;
@@ -5610,7 +5633,12 @@ function cargarStockCocina(familiasAbrir) {
     }
     function familiaAccordion(f, items, extraClass) {
       let bodyHtml;
-      if (SUB_GRUPOS_SIN_PORCIONAR_SET[f]) {
+      if (ES_PORC(f)) {
+        const groups = {};
+        items.forEach(i => { const t = subPescado(i.nombre); (groups[t] = groups[t] || []).push(i); });
+        const order = Object.keys(groups).sort((a, b) => (a === 'OTROS' ? 1 : 0) - (b === 'OTROS' ? 1 : 0) || String(a).localeCompare(String(b), 'es'));
+        bodyHtml = order.map(t => `<div style="font-weight:700;color:#0d47a1;margin:0.4rem 0 0.25rem;">${esc(t)} (${groups[t].length})</div>${subTabla(groups[t])}`).join('');
+      } else if (SUB_GRUPOS_SIN_PORCIONAR_SET[f]) {
         const sinPorcionar = items.filter(i => subgrupoDe(i, f) === 'SIN PORCIONAR');
         const porcionados = items.filter(i => subgrupoDe(i, f) !== 'SIN PORCIONAR');
         bodyHtml = `<div style="font-weight:700;color:#00695c;margin:0.4rem 0 0.25rem;">SIN PORCIONAR (${sinPorcionar.length})</div>${subTabla(sinPorcionar)}
