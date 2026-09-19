@@ -6319,6 +6319,15 @@ function cargarPorcionamientoCocina(seleccionarItem) {
   }).catch(() => { container.innerHTML = '<p style="color:#c62828;">Error cargando porcionamiento.</p>'; });
 }
 
+// Cada item porcionable tiene su FORMA INDEPENDIENTE de porcionamiento: sus secciones de salida
+// (además del PESO BRUTO, que SIEMPRE es la primera fila y es cuanto se va a porcionar).
+// Se agregan items aquí a medida que se define su proceso.
+const _PORCIONAMIENTO_SECCIONES = {
+  'LANGOSTINO X KG': ['LANGOSTINO JUMBO', 'LANGOSTINO LIMPIO', 'CASCARA DE LANGOSTINO'],
+  'PESCADO - ATUN X KG': ['MERMA UTIL - ATUN X KG', 'PACK - ATUN X 200 GR'],
+  'PESCADO - ESPADA X KG': ['MERMA UTIL - ESPADA X KG', 'PACK - ESPADA X 200 GR']
+};
+
 function cargarPorcionamientoItem() {
   const ctx = _porcionamientoCtx;
   if (!ctx) return;
@@ -6330,14 +6339,19 @@ function cargarPorcionamientoItem() {
   const item = (ctx.stock || []).find(s => String(s.ingrediente || '') === nombre);
   const stock = item ? (item.cantidad || 0) : 0;
   const porc = (ctx.porcs || []).find(p => String(p.nombre || '').trim().toUpperCase() === String(nombre).trim().toUpperCase());
+  // Cada item tiene su FORMA INDEPENDIENTE de porcionamiento (secciones propias según el tipo).
+  // Si el item tiene una definición, se usan SUS secciones; si no, las genéricas de respaldo.
+  const seccionesConfig = _PORCIONAMIENTO_SECCIONES[nombre];
   const secciones = porc && porc.secciones && porc.secciones.length
     ? porc.secciones
-    : [
-        { nombre: 'PESO BRUTO', peso: stock },
-        { nombre: 'MERMA UTIL', peso: 0 },
-        { nombre: 'DESPERDICIO', peso: 0 },
-        { nombre: 'FILETES', peso: 0 }
-      ];
+    : (seccionesConfig
+      ? [{ nombre: 'PESO BRUTO', peso: stock }].concat(seccionesConfig.map(n => ({ nombre: n, peso: 0 })))
+      : [
+          { nombre: 'PESO BRUTO', peso: stock },
+          { nombre: 'MERMA UTIL', peso: 0 },
+          { nombre: 'DESPERDICIO', peso: 0 },
+          { nombre: 'FILETES', peso: 0 }
+        ]);
   // Calcular el precio TOTAL y el PRECIO/KILO BASE del item (de la ultima compra).
   // El precio por kilo de la compra (total / cantidad comprada) es la base fija de referencia
   // para el porcionamiento, SIN importar cuantos kilos se ingresen al porcionamiento.
