@@ -1512,6 +1512,11 @@ async function registrarUltimoPrecioCompra(nombre, precio, destino, fechaCompra)
       const anterior = parseFloat(cur.ultimo_precio_compra) || 0;
       const fechaUlt = String(cur.ultimo_precio_compra_fecha || '');
       const fechaCompraStr = fechaCompra || new Date().toISOString().slice(0, 10);
+      // GUARDIA ANTI-INFLACIÓN: si el precio nuevo se aleja más de 10x del precio anterior del
+      // mismo item, NO se auto-aplica (probable error de unidad, ej. precio por KG digitado sobre
+      // un item "X UND" como LIMON/AGUACATE). La compra queda registrada, pero el precio de la
+      // receta no se corrompe.
+      if (anterior > 0 && (precioVal / anterior > 10 || anterior / precioVal > 10)) continue;
       const upd = {
         ultimo_precio_compra: precioVal,
         ultimo_precio_compra_fecha: fechaCompraStr,
