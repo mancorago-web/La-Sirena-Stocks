@@ -6331,7 +6331,8 @@ const _PORCIONAMIENTO_DEFINICIONES = {
       { nombre: 'LANGOSTINO JUMBO', item: 'PORC. LANGOSTINO JUMBO X KG' },
       { nombre: 'LANGOSTINO LIMPIO', item: 'PORC. LANGOSTINO LIMPIO X KG' },
       { nombre: 'CASCARA DE LANGOSTINO', item: 'PORC. CASCARA DE LANGOSTINO X KG' }
-    ]
+    ],
+    registros: ['MERMA NO UTIL']
   },
   'PESCADO - ATUN X KG': {
     grupo: 'PESCADO PORC. - BARRA FRIA',
@@ -6350,7 +6351,8 @@ const _PORCIONAMIENTO_DEFINICIONES = {
 };
 function seccionesDeDefinicion(nombre) {
   const def = _PORCIONAMIENTO_DEFINICIONES[nombre];
-  return def ? def.salidas.map(s => s.nombre) : null;
+  if (!def) return null;
+  return def.salidas.map(s => s.nombre).concat(def.registros || []);
 }
 
 function cargarPorcionamientoItem() {
@@ -6513,7 +6515,7 @@ function actualizarTotalPorcionamiento() {
 
   // 2) Calcular PRECIO por fila (protegido, si falla no rompe el %)
   let precioPorKiloBruto = 0;
-  let precioPorKiloFiletes = 0;
+  let precioPorKiloSalida = 0;
   try {
     const ctx = _porcionamientoCtx;
     // PRECIO/KILO BASE: es el precio por kilo de la compra (total compra / kilos comprados),
@@ -6523,9 +6525,11 @@ function actualizarTotalPorcionamiento() {
       ? ctx.item.precioKiloBase
       : 0;
     precioPorKiloBruto = precioKiloBase;
-    const filetesKg = obtenerPesoSeccion('FILETE');
-    precioPorKiloFiletes = (precioKiloBase > 0 && bruto > 0 && filetesKg > 0)
-      ? (precioKiloBase * bruto) / filetesKg
+    // Todas las SALIDAS se valoran con el MISMO precio/kg: el costo del bruto se reparte entre el
+    // peso total de las salidas. Ej: 5 kg a S/16 = S/80; salidas suman 4.5 kg => 80/4.5 = S/17.78/kg.
+    const sumaSalidas = sumaOtros; // suma de todo lo que NO es PESO BRUTO
+    precioPorKiloSalida = (precioKiloBase > 0 && bruto > 0 && sumaSalidas > 0)
+      ? (precioKiloBase * bruto) / sumaSalidas
       : 0;
 
     document.querySelectorAll('#porcionamiento-secciones tr').forEach(tr => {
@@ -6534,10 +6538,8 @@ function actualizarTotalPorcionamiento() {
       if (!precioCell) return;
       if (nom === 'PESO BRUTO') {
         precioCell.textContent = precioPorKiloBruto > 0 ? 'S/ ' + precioPorKiloBruto.toFixed(2) + '/kg' : '—';
-      } else if (nom.includes('FILETE')) {
-        precioCell.textContent = precioPorKiloFiletes > 0 ? 'S/ ' + precioPorKiloFiletes.toFixed(2) + '/kg' : '—';
       } else {
-        precioCell.textContent = '';
+        precioCell.textContent = precioPorKiloSalida > 0 ? 'S/ ' + precioPorKiloSalida.toFixed(2) + '/kg' : '—';
       }
     });
   } catch (e) {
@@ -6548,8 +6550,8 @@ function actualizarTotalPorcionamiento() {
   if (total) {
     const sumO = Math.round(sumaOtros * 100) / 100;
     const diff = Math.round(faltante * 100) / 100;
-    let html = 'Peso bruto: <b>' + bruto + '</b> kg · Precio/kg bruto: <b>S/ ' + (precioPorKiloBruto > 0 ? precioPorKiloBruto.toFixed(2) : '0') + '</b> · Suma porciones: <b>' + sumO + '</b>';
-    if (precioPorKiloFiletes > 0) html += ' · Precio/kg filete: <b>S/ ' + precioPorKiloFiletes.toFixed(2) + '</b>';
+    let html = 'Peso bruto: <b>' + bruto + '</b> kg · Precio/kg bruto: <b>S/ ' + (precioPorKiloBruto > 0 ? precioPorKiloBruto.toFixed(2) : '0') + '</b> · Suma salidas: <b>' + sumO + '</b>';
+    if (precioPorKiloSalida > 0) html += ' · Precio/kg salidas: <b>S/ ' + precioPorKiloSalida.toFixed(2) + '</b>';
     if (diff > 0) html += ' · <span style="color:#c62828;font-weight:700;">FALTANTE: ' + diff + '</span>';
     else if (diff < 0) html += ' · <span style="color:#e65100;font-weight:700;">EXCESO: ' + Math.abs(diff) + '</span>';
     else html += ' · <span style="color:#2e7d32;font-weight:700;">OK ✓</span>';
