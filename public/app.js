@@ -6534,7 +6534,7 @@ function toggleCostoRBPorcionamiento() {
   }
   api('GET', '/api/cocina/recetas').then(recetas => {
     const rec = (recetas || []).find(r => String(r.nombre || '').trim().toUpperCase() === String(rbNombre).trim().toUpperCase());
-    const costo = rec ? (parseFloat(rec.costo_total) || 0) : 0;
+    const costo = rec ? (parseFloat(rec.costoTotal != null ? rec.costoTotal : rec.costo_total) || 0) : 0;
     if (costo > 0) {
       _rbCosto = costo; _rbCostoActivo = true; _rbNombre = rbNombre;
       renderPorcionamientoEditor(seccionesActualesEditor());
