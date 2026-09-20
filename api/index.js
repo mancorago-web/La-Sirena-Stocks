@@ -3670,6 +3670,15 @@ app.post('/api/cocina/porcionamiento/transformar', async (req, res) => {
         .filter(s => s && s.item && (parseFloat(s.peso) || 0) > 0)
         .map(s => ({ nombre: String(s.item).trim(), delta: parseFloat(s.peso) || 0, unidad: s.unidad || 'kg', familia: String(s.grupo || '').toUpperCase() }));
       if (ajustes.length) await ajustarCocinaStock(ajustes);
+      // 4) Actualizar el DIARIO (lo que muestra COCINA/STOCK): el bruto sale del item original y
+      //    cada salida entra. Así el porcionamiento se refleja en COCINA/STOCK.
+      const cs2 = await col('cocina_stock').get();
+      if (orig && bruto > 0) await ajustarDiarioCocina(fecha, Number(orig.id), { salida_almacen: bruto });
+      for (const s of salidasGuardadas) {
+        const sItem = cs2.docs.find(d => String(d.data().ingrediente || '').trim().toUpperCase() === String(s.item).trim().toUpperCase());
+        if (sItem) await ajustarDiarioCocina(fecha, Number(sItem.id), { stock_ingreso: s.peso });
+      }
+      invalidarCache('cocina_inv_*', 'porcionamientos_*');
       return res.json({ ok: true });
     }
 
@@ -4023,6 +4032,34 @@ function cantDeItem(x) {
   if (!x) return 0;
   if (typeof x.data === 'function') return parseFloat(x.data().cantidad) || 0;
   return parseFloat((x.data && x.data.cantidad) || 0) || 0;
+}
+
+// Actualiza el DIARIO de cocina (lo que muestra COCINA/STOCK) tras un porcionamiento:
+// el PESO BRUTO sale del item original (salida_almacen) y cada salida entra (stock_ingreso).
+// Recalcula el cierre y crea el registro del día si no existía.
+async function ajustarDiarioCocina(fecha, itemId, campos) {
+  const snap = await col('cocina_stock_diario').where('fecha', '==', fecha).where('item_id', '==', Number(itemId)).get();
+  const now = new Date().toISOString();
+  if (!snap.empty) {
+    const d = snap.docs[0].data();
+    const upd = {
+      stock_ingreso: Math.round(((d.stock_ingreso || 0) + (campos.stock_ingreso || 0)) * 100) / 100,
+      salida_almacen: Math.round(((d.salida_almacen || 0) + (campos.salida_almacen || 0)) * 100) / 100,
+      updated_at: now
+    };
+    upd.stock_cierre = Math.round(((d.stock_apertura || 0) + upd.stock_ingreso - upd.salida_almacen - (d.total_ventas || 0) - (d.falta_almacen || 0) - (d.stock_baja || 0)) * 100) / 100;
+    await snap.docs[0].ref.update(upd);
+  } else {
+    const ing = campos.stock_ingreso || 0;
+    const sal = campos.salida_almacen || 0;
+    await col('cocina_stock_diario').doc(fecha + '_' + Number(itemId)).set({
+      fecha, item_id: Number(itemId), stock_apertura: 0,
+      stock_ingreso: Math.round(ing * 100) / 100, salida_almacen: Math.round(sal * 100) / 100,
+      total_ventas: 0, falta_almacen: 0, stock_baja: 0,
+      stock_cierre: Math.round((ing - sal) * 100) / 100,
+      saved_by: 'porcionamiento', created_at: now, updated_at: now
+    });
+  }
 }
 
 // Suma (o resta) cantidades al stock de cocina; crea el item si no existe
