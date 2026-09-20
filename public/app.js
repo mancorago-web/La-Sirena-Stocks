@@ -6372,7 +6372,9 @@ const _PORCIONAMIENTO_RB = {
   'ASADO DE TIRA X KG': 'R.B ASADO DE TIRA (OBS)'
 };
 // Pescados que al porcionar SALEN como "PESCA BLANCA" (FRIA o CALIENTE)
-const _PORCIONAMIENTO_PESCA_BLANCA = new Set(['ROBALO X KG', 'ECHERELA X KG', 'PLUMA X KG', 'CHITA X KG', 'LORO X KG']);
+const _PORCIONAMIENTO_PESCA_BLANCA = new Set(['ROBALO X KG', 'ECHERELA X KG', 'PLUMA X KG', 'CHITA X KG', 'LORO X KG', 'PESCADO - ESPADA X KG']);
+// Pescados PESCA BLANCA que SIEMPRE salen a BARRA CALIENTE (no usan BARRA FRIA)
+const _PORCIONAMIENTO_PESCA_BLANCA_CALIENTE = new Set(['PESCADO - ESPADA X KG']);
 const _TEMPERATURA_FAMILIA = { FRIA: 'PESCADO PORC. - BARRA FRIA', CALIENTE: 'PESCADO PORC. - BARRA CALIENTE' };
 let _porcionamientoTemperatura = 'FRIA';
 let _rbCosto = 0;
@@ -6392,7 +6394,7 @@ function cargarPorcionamientoItem() {
   const porc = (ctx.porcs || []).find(p => String(p.nombre || '').trim().toUpperCase() === String(nombre).trim().toUpperCase());
   // Al cambiar de item se reinicia el costo R.B agregado y la temperatura (FRIA por defecto)
   _rbCostoActivo = false; _rbCosto = 0; _rbNombre = '';
-  _porcionamientoTemperatura = 'FRIA';
+_porcionamientoTemperatura = _PORCIONAMIENTO_PESCA_BLANCA_CALIENTE.has(nombre) ? 'CALIENTE' : 'FRIA';
   // Cada item tiene su FORMA INDEPENDIENTE de porcionamiento (secciones propias según el tipo).
   // Si el item tiene una definición, se usan SUS secciones; si no, las genéricas de respaldo.
   const seccionesConfig = seccionesDeDefinicion(nombre);
@@ -6475,13 +6477,15 @@ function renderPorcionamientoEditor(secciones) {
     + '</div>' : '';
   // Selector BARRA FRIA / BARRA CALIENTE para los pescados que salen como PESCA BLANCA
   const esPB = _PORCIONAMIENTO_PESCA_BLANCA.has(ctx.item.nombre);
+  const soloCaliente = _PORCIONAMIENTO_PESCA_BLANCA_CALIENTE.has(ctx.item.nombre);
   const tempHtml = esPB ? '<div style="margin:0.5rem 0;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">'
     + '<label style="font-weight:600;font-size:0.85rem;color:#1a237e;">Destino del porcionamiento:</label>'
-    + '<select id="porcionamiento-temperatura" onchange="_porcionamientoTemperatura=this.value" style="padding:0.4rem;border:1px solid #ccc;border-radius:4px;font-weight:600;">'
-    + '<option value="FRIA" ' + (_porcionamientoTemperatura === 'FRIA' ? 'selected' : '') + '>BARRA FRIA</option>'
-    + '<option value="CALIENTE" ' + (_porcionamientoTemperatura === 'CALIENTE' ? 'selected' : '') + '>BARRA CALIENTE</option>'
-    + '</select>'
-    + '<span style="font-size:0.78rem;color:#666;">Los PORC. saldrán como PESCA BLANCA (' + (_porcionamientoTemperatura === 'CALIENTE' ? 'CALIENTE' : 'FRIA') + ').</span>'
+    + (soloCaliente
+      ? '<span style="font-weight:700;color:#b71c1c;">BARRA CALIENTE</span><span style="font-size:0.78rem;color:#666;">(este pescado solo se usa en BARRA CALIENTE)</span>'
+      : '<select id="porcionamiento-temperatura" onchange="_porcionamientoTemperatura=this.value" style="padding:0.4rem;border:1px solid #ccc;border-radius:4px;font-weight:600;">'
+      + '<option value="FRIA" ' + (_porcionamientoTemperatura === 'FRIA' ? 'selected' : '') + '>BARRA FRIA</option>'
+      + '<option value="CALIENTE" ' + (_porcionamientoTemperatura === 'CALIENTE' ? 'selected' : '') + '>BARRA CALIENTE</option>'
+      + '</select>')
     + '</div>' : '';
   const packsHtml = def && def.ocultarPacks ? ''
     : '<div id="porcionamiento-packs" style="margin-top:0.75rem;padding:0.75rem;background:#e8f5e9;border-radius:8px;border:1px solid #c8e6c9;">'
@@ -6767,7 +6771,7 @@ function aplicarTransformacionPorcionamiento() {
   const salidas = [];
   let sinDefinir = false;
   if (esPB) {
-    const temp = _porcionamientoTemperatura === 'CALIENTE' ? 'CALIENTE' : 'FRIA';
+    const temp = (_PORCIONAMIENTO_PESCA_BLANCA_CALIENTE.has(ctx.item.nombre) || _porcionamientoTemperatura === 'CALIENTE') ? 'CALIENTE' : 'FRIA';
     const familia = _TEMPERATURA_FAMILIA[temp];
     const merma = secciones.find(s => /MERMA UTIL/.test(s.nombre.toUpperCase()))?.peso || 0;
     const packCount = parseInt(document.getElementById('pack-cantidad')?.value) || 0;
