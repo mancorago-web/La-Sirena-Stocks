@@ -6371,6 +6371,10 @@ const _PORCIONAMIENTO_RB = {
   'PANCETA X KG': 'R.B PANCETA (OBS)',
   'ASADO DE TIRA X KG': 'R.B ASADO DE TIRA (OBS)'
 };
+// Pescados que al porcionar SALEN como "PESCA BLANCA" (FRIA o CALIENTE)
+const _PORCIONAMIENTO_PESCA_BLANCA = new Set(['ROBALO X KG', 'ECHERELA X KG', 'PLUMA X KG', 'CHITA X KG', 'LORO X KG']);
+const _TEMPERATURA_FAMILIA = { FRIA: 'PESCADO PORC. - BARRA FRIA', CALIENTE: 'PESCADO PORC. - BARRA CALIENTE' };
+let _porcionamientoTemperatura = 'FRIA';
 let _rbCosto = 0;
 let _rbCostoActivo = false;
 let _rbNombre = '';
@@ -6386,8 +6390,9 @@ function cargarPorcionamientoItem() {
   const item = (ctx.stock || []).find(s => String(s.ingrediente || '') === nombre);
   const stock = item ? (item.cantidad || 0) : 0;
   const porc = (ctx.porcs || []).find(p => String(p.nombre || '').trim().toUpperCase() === String(nombre).trim().toUpperCase());
-  // Al cambiar de item se reinicia el costo R.B agregado
+  // Al cambiar de item se reinicia el costo R.B agregado y la temperatura (FRIA por defecto)
   _rbCostoActivo = false; _rbCosto = 0; _rbNombre = '';
+  _porcionamientoTemperatura = 'FRIA';
   // Cada item tiene su FORMA INDEPENDIENTE de porcionamiento (secciones propias según el tipo).
   // Si el item tiene una definición, se usan SUS secciones; si no, las genéricas de respaldo.
   const seccionesConfig = seccionesDeDefinicion(nombre);
@@ -6468,6 +6473,16 @@ function renderPorcionamientoEditor(secciones) {
     + (_rbCostoActivo ? '✓ ' : '') + esc(rbNombre) + (_rbCostoActivo && _rbCosto > 0 ? ' — aplicando S/' + _rbCosto.toFixed(2) : '') + '</button>'
     + '<span style="font-size:0.78rem;color:#666;">Suma el costo de la sopa/caldo R.B y lo reparte entre todas las salidas.</span>'
     + '</div>' : '';
+  // Selector BARRA FRIA / BARRA CALIENTE para los pescados que salen como PESCA BLANCA
+  const esPB = _PORCIONAMIENTO_PESCA_BLANCA.has(ctx.item.nombre);
+  const tempHtml = esPB ? '<div style="margin:0.5rem 0;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">'
+    + '<label style="font-weight:600;font-size:0.85rem;color:#1a237e;">Destino del porcionamiento:</label>'
+    + '<select id="porcionamiento-temperatura" onchange="_porcionamientoTemperatura=this.value" style="padding:0.4rem;border:1px solid #ccc;border-radius:4px;font-weight:600;">'
+    + '<option value="FRIA" ' + (_porcionamientoTemperatura === 'FRIA' ? 'selected' : '') + '>BARRA FRIA</option>'
+    + '<option value="CALIENTE" ' + (_porcionamientoTemperatura === 'CALIENTE' ? 'selected' : '') + '>BARRA CALIENTE</option>'
+    + '</select>'
+    + '<span style="font-size:0.78rem;color:#666;">Los PORC. saldrán como PESCA BLANCA (' + (_porcionamientoTemperatura === 'CALIENTE' ? 'CALIENTE' : 'FRIA') + ').</span>'
+    + '</div>' : '';
   const packsHtml = def && def.ocultarPacks ? ''
     : '<div id="porcionamiento-packs" style="margin-top:0.75rem;padding:0.75rem;background:#e8f5e9;border-radius:8px;border:1px solid #c8e6c9;">'
     + '<strong style="color:#2e7d32;">📦 GENERAR PACKS desde FILETES</strong>'
@@ -6484,6 +6499,7 @@ function renderPorcionamientoEditor(secciones) {
     + '</div>';
   editor.innerHTML = '<h3 style="margin-top:0">Porcionamiento: ' + esc(ctx.item.nombre) + '</h3>'
     + '<p style="font-size:0.85rem;color:#666;">Stock en COCINA: <b>' + stock + '</b>. Ingresa el PESO BRUTO a porcionar y el peso de cada salida.</p>'
+    + tempHtml
     + rbHtml
     + '<div class="table-wrap"><table>'
     + '<thead><tr><th>Sección / Porcionamiento</th><th>Peso</th><th>%</th><th>Precio</th><th></th></tr></thead>'
@@ -6745,9 +6761,35 @@ function aplicarTransformacionPorcionamiento() {
   const pesoBruto = secciones.find(s => /PESO BRUTO/.test(s.nombre.toUpperCase()))?.peso || 0;
   if (pesoBruto <= 0) { alert('Ingresa el PESO BRUTO a porcionar'); return; }
   if (pesoBruto > ctx.item.stock) { alert('El PESO BRUTO (' + pesoBruto + ') es mayor que el stock (' + ctx.item.stock + ')'); return; }
-  // Construir las salidas según la definición del item (nombre destino "PORC. ..." + grupo)
+  // PESCA BLANCA (ROBALO/ECHERELA/PLUMA/CHITA/LORO): las salidas cambian de nombre a PESCA BLANCA
+  // según BARRA FRIA o CALIENTE (selector de temperatura).
+  const esPB = _PORCIONAMIENTO_PESCA_BLANCA.has(ctx.item.nombre);
   const salidas = [];
   let sinDefinir = false;
+  if (esPB) {
+    const temp = _porcionamientoTemperatura === 'CALIENTE' ? 'CALIENTE' : 'FRIA';
+    const familia = _TEMPERATURA_FAMILIA[temp];
+    const merma = secciones.find(s => /MERMA UTIL/.test(s.nombre.toUpperCase()))?.peso || 0;
+    const packCount = parseInt(document.getElementById('pack-cantidad')?.value) || 0;
+    if (merma <= 0 && packCount <= 0) { alert('Ingresa MERMA UTIL o PACKS (cantidad de packs) para transformar'); return; }
+    if (merma > 0) salidas.push({ item: 'PORC. MERMA UTIL - PESCA BLANCA X KG ' + temp, grupo: familia, peso: merma, unidad: 'kg' });
+    if (packCount > 0) salidas.push({ item: 'PORC. PACK - PESCA BLANCA X 200 GR ' + temp, grupo: familia, peso: packCount, unidad: 'unidad' });
+    let msg = 'APLICAR TRANSFORMACIÓN de ' + ctx.item.nombre + ' -> ' + temp + ':\n\n'
+      + '- PESO BRUTO: ' + pesoBruto + ' kg (sale de COCINA/STOCK)\n';
+    salidas.forEach(s => { msg += '  · ' + s.item + ' +' + s.peso + (s.unidad === 'kg' ? ' kg' : ' packs') + '\n'; });
+    if (!confirm(msg + '\n¿Continuar?')) return;
+    api('POST', '/api/cocina/porcionamiento/transformar', {
+      nombre: ctx.item.nombre, fecha: ctx.fecha,
+      peso_bruto: pesoBruto,
+      salidas,
+      secciones
+    }).then(() => {
+      showToast('Transformación aplicada');
+      cargarPorcionamientoCocina();
+    }).catch(() => alert('Error al aplicar transformación'));
+    return;
+  }
+  // Construir las salidas según la definición del item (nombre destino "PORC. ..." + grupo)
   if (def) {
     def.salidas.forEach(s => {
       const sec = secciones.find(x => x.nombre.toUpperCase() === s.nombre.toUpperCase());
