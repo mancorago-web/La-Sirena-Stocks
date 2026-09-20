@@ -6363,6 +6363,14 @@ function seccionesDeDefinicion(nombre) {
   return def.salidas.map(s => s.nombre).concat(def.registros || []);
 }
 
+// Costo agregado de RECETAS BASE (sopa/caldo) que se suma al porcionamiento y se reparte entre
+// TODAS las salidas (precio/kg salida = (bruto×precio/kg + costo R.B) ÷ peso de esa salida).
+// El costo R.B es FIJO por porcionamiento (la misma sopa sirve para 8, 10 o 12 kg).
+const _PORCIONAMIENTO_RB = { 'PULPO X KG': 'R.B PULPO (OBS)' };
+let _rbCosto = 0;
+let _rbCostoActivo = false;
+let _rbNombre = '';
+
 function cargarPorcionamientoItem() {
   const ctx = _porcionamientoCtx;
   if (!ctx) return;
@@ -6374,6 +6382,8 @@ function cargarPorcionamientoItem() {
   const item = (ctx.stock || []).find(s => String(s.ingrediente || '') === nombre);
   const stock = item ? (item.cantidad || 0) : 0;
   const porc = (ctx.porcs || []).find(p => String(p.nombre || '').trim().toUpperCase() === String(nombre).trim().toUpperCase());
+  // Al cambiar de item se reinicia el costo R.B agregado
+  _rbCostoActivo = false; _rbCosto = 0; _rbNombre = '';
   // Cada item tiene su FORMA INDEPENDIENTE de porcionamiento (secciones propias según el tipo).
   // Si el item tiene una definición, se usan SUS secciones; si no, las genéricas de respaldo.
   const seccionesConfig = seccionesDeDefinicion(nombre);
@@ -6448,6 +6458,12 @@ function renderPorcionamientoEditor(secciones) {
   if (!editor || !ctx || !ctx.item) return;
   const stock = ctx.item.stock;
   const def = _PORCIONAMIENTO_DEFINICIONES[ctx.item.nombre];
+  const rbNombre = _PORCIONAMIENTO_RB[ctx.item.nombre];
+  const rbHtml = rbNombre ? '<div style="margin:0.6rem 0;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">'
+    + '<button onclick="toggleCostoRBPorcionamiento()" style="padding:0.45rem 0.9rem;border:none;border-radius:4px;cursor:pointer;font-weight:700;background:' + (_rbCostoActivo ? '#2e7d32' : '#0f3460') + ';color:#fff;font-size:0.85rem;">'
+    + (_rbCostoActivo ? '✓ ' : '') + esc(rbNombre) + (_rbCostoActivo && _rbCosto > 0 ? ' — aplicando S/' + _rbCosto.toFixed(2) : '') + '</button>'
+    + '<span style="font-size:0.78rem;color:#666;">Suma el costo de la sopa/caldo R.B y lo reparte entre todas las salidas.</span>'
+    + '</div>' : '';
   const packsHtml = def && def.ocultarPacks ? ''
     : '<div id="porcionamiento-packs" style="margin-top:0.75rem;padding:0.75rem;background:#e8f5e9;border-radius:8px;border:1px solid #c8e6c9;">'
     + '<strong style="color:#2e7d32;">📦 GENERAR PACKS desde FILETES</strong>'
@@ -6464,6 +6480,7 @@ function renderPorcionamientoEditor(secciones) {
     + '</div>';
   editor.innerHTML = '<h3 style="margin-top:0">Porcionamiento: ' + esc(ctx.item.nombre) + '</h3>'
     + '<p style="font-size:0.85rem;color:#666;">Stock en COCINA: <b>' + stock + '</b>. Ingresa el PESO BRUTO a porcionar y el peso de cada salida.</p>'
+    + rbHtml
     + '<div class="table-wrap"><table>'
     + '<thead><tr><th>Sección / Porcionamiento</th><th>Peso</th><th>%</th><th>Precio</th><th></th></tr></thead>'
     + '<tbody id="porcionamiento-secciones">' + secciones.map(porcionFila).join('') + '</tbody>'
@@ -6490,6 +6507,42 @@ function porcionFila(sec) {
     + '<td class="celda-porc-precio" style="text-align:right;">—</td>'
     + '<td><button class="danger" onclick="this.closest(\'tr\').remove(); actualizarTotalPorcionamiento(); calcularPacksPorcionamiento();">✕</button></td>'
     + '</tr>';
+}
+
+// Lee las secciones actuales del editor (para no perder los valores al re-renderizar)
+function seccionesActualesEditor() {
+  const arr = [];
+  document.querySelectorAll('#porcionamiento-secciones tr').forEach(tr => {
+    const nom = tr.querySelector('.input-porc-nombre')?.value?.trim();
+    const peso = parseFloat(tr.querySelector('.input-porc-peso')?.value) || 0;
+    if (nom) arr.push({ nombre: nom, peso });
+  });
+  return arr;
+}
+
+// Toggle del costo R.B (sopa/caldo): trae el costo de la R.B desde COCINA/RECETAS y lo suma al
+// porcionamiento, repartiéndolo entre TODAS las salidas (precio/kg salida = (bruto×precio/kg + R.B) ÷ peso).
+function toggleCostoRBPorcionamiento() {
+  const ctx = _porcionamientoCtx;
+  if (!ctx || !ctx.item) return;
+  const rbNombre = _PORCIONAMIENTO_RB[ctx.item.nombre];
+  if (!rbNombre) return;
+  if (_rbCostoActivo) {
+    _rbCostoActivo = false; _rbCosto = 0; _rbNombre = '';
+    renderPorcionamientoEditor(seccionesActualesEditor());
+    return;
+  }
+  api('GET', '/api/cocina/recetas').then(recetas => {
+    const rec = (recetas || []).find(r => String(r.nombre || '').trim().toUpperCase() === String(rbNombre).trim().toUpperCase());
+    const costo = rec ? (parseFloat(rec.costo_total) || 0) : 0;
+    if (costo > 0) {
+      _rbCosto = costo; _rbCostoActivo = true; _rbNombre = rbNombre;
+      renderPorcionamientoEditor(seccionesActualesEditor());
+      showToast('Costo R.B aplicado: S/ ' + costo.toFixed(2));
+    } else {
+      alert('No se pudo obtener el costo de la R.B "' + rbNombre + '" (¿tiene precios sus ingredientes?).');
+    }
+  }).catch(() => alert('Error al obtener el costo de la R.B'));
 }
 
 function agregarSeccionPorcionamiento() {
@@ -6547,6 +6600,9 @@ function actualizarTotalPorcionamiento() {
     // PRECIO POR RENDIMIENTO de cada salida:
     // precio/kg de una salida = (PESO BRUTO ÷ peso de esa salida) × precio/kg bruto.
     // Ej: 1 kg bruto (S/16) -> 0.5 kg limpio => para 1 kg limpio se necesitan 2 kg bruto => S/32/kg.
+    // Si hay COSTO R.B activo (sopa/caldo fijo), se suma al costo total y se reparte entre todas
+    // las salidas: precio/kg salida = ((bruto × precio/kg bruto) + costoR.B) ÷ peso de esa salida.
+    const rbCosto = _rbCostoActivo ? (_rbCosto || 0) : 0;
     document.querySelectorAll('#porcionamiento-secciones tr').forEach(tr => {
       const nom = (tr.querySelector('.input-porc-nombre')?.value || '').trim().toUpperCase();
       const peso = parseFloat(tr.querySelector('.input-porc-peso')?.value) || 0;
@@ -6556,7 +6612,7 @@ function actualizarTotalPorcionamiento() {
         precioCell.textContent = precioPorKiloBruto > 0 ? 'S/ ' + precioPorKiloBruto.toFixed(2) + '/kg' : '—';
       } else {
         const precioKiloSalida = (precioKiloBase > 0 && bruto > 0 && peso > 0)
-          ? (precioKiloBase * bruto) / peso
+          ? ((precioKiloBase * bruto) + rbCosto) / peso
           : 0;
         precioCell.textContent = precioKiloSalida > 0 ? 'S/ ' + precioKiloSalida.toFixed(2) + '/kg' : '—';
       }
@@ -6570,6 +6626,7 @@ function actualizarTotalPorcionamiento() {
     const sumO = Math.round(sumaOtros * 100) / 100;
     const diff = Math.round(faltante * 100) / 100;
     let html = 'Peso bruto: <b>' + bruto + '</b> kg · Precio/kg bruto: <b>S/ ' + (precioPorKiloBruto > 0 ? precioPorKiloBruto.toFixed(2) : '0') + '</b> · Suma salidas: <b>' + sumO + '</b>';
+    if (_rbCostoActivo && _rbCosto > 0) html += ' · Costo R.B: <b style="color:#2e7d32;">S/ ' + _rbCosto.toFixed(2) + '</b>';
     if (diff > 0) html += ' · <span style="color:#c62828;font-weight:700;">FALTANTE: ' + diff + '</span>';
     else if (diff < 0) html += ' · <span style="color:#e65100;font-weight:700;">EXCESO: ' + Math.abs(diff) + '</span>';
     else html += ' · <span style="color:#2e7d32;font-weight:700;">OK ✓</span>';
