@@ -6292,12 +6292,13 @@ function cargarPorcionamientoCocina(seleccionarItem) {
     if (porc.length) {
       html += '<div class="table-wrap" style="margin-bottom:0.5rem;"><table><thead><tr><th>Item</th><th>Stock</th><th>Secciones</th><th></th></tr></thead><tbody>';
       porc.forEach(p => {
+        const abierto = _porcionamientoCtx && _porcionamientoCtx.item && String(_porcionamientoCtx.item.nombre || '').trim().toUpperCase() === String(p.nombre || '').trim().toUpperCase();
         html += `<tr>
           <td>${esc(p.nombre)}</td>
           <td>${p.stock}</td>
           <td style="font-size:0.8rem;">${(p.secciones || []).map(s => esc(s.nombre) + ' ' + s.peso).join(' · ') || '—'}</td>
           <td style="white-space:nowrap;">
-            <button onclick="cargarPorcionamientoExistente('${esc(p.nombre)}')" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.75rem;">ABRIR</button>
+            <button onclick="cargarPorcionamientoExistente('${esc(p.nombre)}')" style="background:${abierto ? '#b71c1c' : '#0f3460'};color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.75rem;">${abierto ? 'CERRAR' : 'ABRIR'}</button>
             <button class="danger" onclick="eliminarPorcionamiento('${p.id}')">✕</button>
           </td>
         </tr>`;
@@ -6419,6 +6420,17 @@ function cargarPorcionamientoItem() {
 
 function cargarPorcionamientoExistente(nombre) {
   const sel = document.getElementById('porcionamiento-item');
+  const editor = document.getElementById('porcionamiento-editor');
+  // Toggle: si ese mismo item ya está abierto, contraer (limpiar el editor y la selección)
+  const yaAbierto = _porcionamientoCtx && _porcionamientoCtx.item &&
+    String(_porcionamientoCtx.item.nombre || '').trim().toUpperCase() === String(nombre || '').trim().toUpperCase();
+  if (yaAbierto) {
+    if (sel) sel.value = '';
+    if (editor) editor.innerHTML = '';
+    if (_porcionamientoCtx) _porcionamientoCtx.item = null;
+    cargarPorcionamientoCocina();
+    return;
+  }
   if (sel) sel.value = nombre;
   cargarPorcionamientoItem();
 }
