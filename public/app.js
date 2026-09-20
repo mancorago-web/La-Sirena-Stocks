@@ -5562,7 +5562,7 @@ function cargarStockCocina(familiasAbrir) {
   const fecha = fechaEl ? fechaEl.value : todayStr();
   // Sub-grupos de COCINA: items SIN PORCIONAR (se listan tal cual) vs PORCIONADOS (el resto)
   const SUB_GRUPOS_SIN_PORCIONAR = {
-    'CARNE': ['LOMO FINO X KG', 'PANCETA X KG'],
+    'CARNE': ['LOMO FINO X KG', 'PANCETA X KG', 'ASADO DE TIRA X KG'],
     'POLLO': ['POLLO ENTERO X KG']
   };
   const SUB_GRUPOS_SIN_PORCIONAR_SET = {};
@@ -6272,7 +6272,7 @@ function cargarPorcionamientoCocina(seleccionarItem) {
     //  - PESCADO - BRUTO: TODOS los items.
     //  - CARNE: solo los SIN PORCIONAR (LOMO FINO, PANCETA).
     //  - POLLO: solo los SIN PORCIONAR (POLLO ENTERO).
-    const CARNE_SIN_PORCIONAR = new Set(['LOMO FINO X KG', 'PANCETA X KG'].map(s => s.toUpperCase().replace(/\s+/g, ' ')));
+    const CARNE_SIN_PORCIONAR = new Set(['LOMO FINO X KG', 'PANCETA X KG', 'ASADO DE TIRA X KG'].map(s => s.toUpperCase().replace(/\s+/g, ' ')));
     const POLLO_SIN_PORCIONAR = new Set(['POLLO ENTERO X KG'].map(s => s.toUpperCase().replace(/\s+/g, ' ')));
     const nrm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
     const esBruto = s => String(s.familia || '').trim().toUpperCase() === 'PESCADO - BRUTO';
@@ -6366,7 +6366,11 @@ function seccionesDeDefinicion(nombre) {
 // Costo agregado de RECETAS BASE (sopa/caldo) que se suma al porcionamiento y se reparte entre
 // TODAS las salidas (precio/kg salida = (bruto×precio/kg + costo R.B) ÷ peso de esa salida).
 // El costo R.B es FIJO por porcionamiento (la misma sopa sirve para 8, 10 o 12 kg).
-const _PORCIONAMIENTO_RB = { 'PULPO X KG': 'R.B PULPO (OBS)' };
+const _PORCIONAMIENTO_RB = {
+  'PULPO X KG': 'R.B PULPO (OBS)',
+  'PANCETA X KG': 'R.B PANCETA (OBS)',
+  'ASADO DE TIRA X KG': 'R.B ASADO DE TIRA (OBS)'
+};
 let _rbCosto = 0;
 let _rbCostoActivo = false;
 let _rbNombre = '';
