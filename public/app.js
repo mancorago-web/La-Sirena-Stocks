@@ -6601,12 +6601,12 @@ function actualizarTotalPorcionamiento() {
       : 0;
     precioPorKiloBruto = precioKiloBase;
 
-    // PRECIO POR RENDIMIENTO de cada salida:
-    // precio/kg de una salida = (PESO BRUTO ÷ peso de esa salida) × precio/kg bruto.
-    // Ej: 1 kg bruto (S/16) -> 0.5 kg limpio => para 1 kg limpio se necesitan 2 kg bruto => S/32/kg.
-    // Si hay COSTO R.B activo (sopa/caldo fijo), se suma al costo total y se reparte entre todas
-    // las salidas: precio/kg salida = ((bruto × precio/kg bruto) + costoR.B) ÷ peso de esa salida.
+    // PRECIO POR RENDIMIENTO de cada salida (precio/kg = costo bruto ÷ peso de esa salida), más el
+// recargo R.B repartido UNIFORMEMENTE por kg entre todas las salidas (R.B ÷ peso total de salidas).
+// Así la sopa/caldo R.B se distribuye según el % (peso) de cada porcionamiento, sin disparar las
+// salidas chicas. Ej: R.B 16 ÷ 4.4 kg = +3.64/kg para todas.
     const rbCosto = _rbCostoActivo ? (_rbCosto || 0) : 0;
+    const recargoRB = (rbCosto > 0 && sumaOtros > 0) ? rbCosto / sumaOtros : 0;
     document.querySelectorAll('#porcionamiento-secciones tr').forEach(tr => {
       const nom = (tr.querySelector('.input-porc-nombre')?.value || '').trim().toUpperCase();
       const peso = parseFloat(tr.querySelector('.input-porc-peso')?.value) || 0;
@@ -6615,9 +6615,11 @@ function actualizarTotalPorcionamiento() {
       if (nom === 'PESO BRUTO') {
         precioCell.textContent = precioPorKiloBruto > 0 ? 'S/ ' + precioPorKiloBruto.toFixed(2) + '/kg' : '—';
       } else {
-        const precioKiloSalida = (precioKiloBase > 0 && bruto > 0 && peso > 0)
-          ? ((precioKiloBase * bruto) + rbCosto) / peso
-          : 0;
+        let precioKiloSalida = 0;
+        if (peso > 0) {
+          const base = (precioKiloBase > 0 && bruto > 0) ? (precioKiloBase * bruto) / peso : 0;
+          precioKiloSalida = base + recargoRB;
+        }
         precioCell.textContent = precioKiloSalida > 0 ? 'S/ ' + precioKiloSalida.toFixed(2) + '/kg' : '—';
       }
     });
