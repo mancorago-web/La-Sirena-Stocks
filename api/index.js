@@ -3992,6 +3992,14 @@ app.get('/api/barra/salidas-stock', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Lee la cantidad de un item que puede ser un DocumentSnapshot (con .data()) o un objeto plano
+// { ref, data: { cantidad } } (cuando el item se CREÓ durante el mismo bucle de ajustes).
+function cantDeItem(x) {
+  if (!x) return 0;
+  if (typeof x.data === 'function') return parseFloat(x.data().cantidad) || 0;
+  return parseFloat((x.data && x.data.cantidad) || 0) || 0;
+}
+
 // Suma (o resta) cantidades al stock de cocina; crea el item si no existe
 async function ajustarCocinaStock(ajustes) {
   const cs = await col('cocina_stock').get();
@@ -4005,7 +4013,7 @@ async function ajustarCocinaStock(ajustes) {
     if (!key || !aj.delta) continue;
     const existente = byName[key];
     if (existente) {
-      const nueva = (parseFloat(existente.data().cantidad) || 0) + aj.delta;
+      const nueva = cantDeItem(existente) + aj.delta;
       const upd = { cantidad: nueva, updated_at: now };
       if (aj.familia) upd.familia = String(aj.familia).toUpperCase();
       if (nueva === 0 && aj.delta < 0) {
@@ -4047,7 +4055,7 @@ async function ajustarBarraStock(ajustes) {
       // Así el → BARRA siempre deja el item en el mueble pedido (ej. MUEBLE DE ABAJO).
       const existente = (byNameGrupo[key] || {})[grupo];
       if (existente) {
-        const nueva = (parseFloat(existente.data().cantidad) || 0) + aj.delta;
+        const nueva = cantDeItem(existente) + aj.delta;
         if (nueva === 0 && aj.delta < 0) batch.delete(existente.ref);
         else batch.update(existente.ref, { cantidad: nueva, updated_at: now });
       } else if (aj.delta > 0) {
@@ -4055,7 +4063,7 @@ async function ajustarBarraStock(ajustes) {
         // pedido en vez de crear un duplicado (evita 2 filas del mismo item en BARRA/STOCK).
         const enCompras = (byNameGrupo[key] || {})['COMPRAS DIARIAS'];
         if (enCompras) {
-          const nueva = Math.max(0, (parseFloat(enCompras.data().cantidad) || 0) + aj.delta);
+          const nueva = Math.max(0, cantDeItem(enCompras) + aj.delta);
           batch.update(enCompras.ref, { cantidad: nueva, grupo, updated_at: now });
           delete byNameGrupo[key]['COMPRAS DIARIAS'];
           byNameGrupo[key][grupo] = { ref: enCompras.ref, data: { cantidad: nueva, grupo } };
@@ -4071,7 +4079,7 @@ async function ajustarBarraStock(ajustes) {
       // Comportamiento por defecto: buscar por nombre (cualquier mueble), o crear en MUEBLE DE APOYO.
       const existente = byNameGrupo[key] ? Object.values(byNameGrupo[key])[0] : null;
       if (existente) {
-        const nueva = (parseFloat(existente.data().cantidad) || 0) + aj.delta;
+        const nueva = cantDeItem(existente) + aj.delta;
         if (nueva === 0 && aj.delta < 0) batch.delete(existente.ref);
         else batch.update(existente.ref, { cantidad: nueva, updated_at: now });
       } else if (aj.delta > 0) {
@@ -7544,7 +7552,7 @@ async function ajustarExtraStock(zona, ajustes) {
     if (!key || !delta) continue;
     const existente = byName[key];
     if (existente) {
-      const nueva = Math.round(((parseFloat(existente.data().cantidad) || 0) + delta) * 100) / 100;
+      const nueva = Math.round((cantDeItem(existente) + delta) * 100) / 100;
       batch.update(existente.ref, { cantidad: nueva, updated_at: now });
     } else if (delta > 0) {
       maxId++;
