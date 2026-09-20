@@ -6263,10 +6263,20 @@ function cargarPorcionamientoCocina(seleccionarItem) {
   if (!container) return;
   Promise.all([
     api('GET', '/api/cocina/stock'),
+    api('GET', '/api/cocina/stock/con-inventario?fecha=' + fecha),
     api('GET', '/api/cocina/porcionamientos?fecha=' + fecha),
     api('GET', '/api/cocina/precios'),
     api('GET', '/api/cocina/compras')
-  ]).then(([stock, porcs, precios, compras]) => {
+  ]).then(([stockRaw, inv, porcs, precios, compras]) => {
+    // Usar el STOCK REAL de COCINA/STOCK (cierre del día) para el selector, igual que se ve en la
+    // pestaña de COCINA/STOCK. El campo simple "cantidad" de cocina_stock puede divergir del diario.
+    const invMap = {};
+    (inv || []).forEach(g => (g.items || []).forEach(i => { invMap[String(i.nombre || '').toUpperCase()] = i.stock_cierre; }));
+    const stock = (stockRaw || []).map(s => {
+      const cierre = invMap[String(s.ingrediente || '').toUpperCase()];
+      if (cierre !== undefined) return { ...s, cantidad: cierre };
+      return s;
+    });
     _porcionamientoCtx = { fecha, stock: stock || [], porcs: porcs || [], precios: precios || [], compras: compras || [], item: null };
     // En el selector de COCINA/PORCIONAMIENTO solo se muestran:
     //  - PESCADO - BRUTO: TODOS los items.
