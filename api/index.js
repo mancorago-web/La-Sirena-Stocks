@@ -782,13 +782,15 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
     // AUTOMATIZACIÓN: los items del GRUPO BARRA van a BARRA/STOCK; TODO el resto va a COCINA/STOCK
     // por defecto (se puede cambiar manualmente). Se respetan destinos explícitos y transferencias.
     const esCatBarra = !!(nCoc && (String(nCoc.categoria || '').toUpperCase() === 'BARRA' || (nCoc.nombre && (NOMBRES_BARRA_AUTO.has(normNombre(nCoc.nombre)) || RE_BARRA_GRUPO.test(nCoc.nombre)))));
+    // Los VINOS NO tienen destino automático: solo salen manualmente (no entran solos a COCINA).
+    const esCatVinos = !!(nCoc && String(nCoc.categoria || '').toUpperCase() === 'VINOS');
     const otroBarra = (destinoPrim !== '' && destinoPrim !== 'barra' && destinoPrim !== 'stocks')
       || (Array.isArray(r.destino_salidas) && r.destino_salidas.some(d => String(d.destino).toLowerCase() !== 'barra'));
     const otroCocina = (destinoPrim !== '' && destinoPrim !== 'cocina' && destinoPrim !== 'stocks')
       || (Array.isArray(r.destino_salidas) && r.destino_salidas.some(d => String(d.destino).toLowerCase() !== 'cocina'));
     let nuevoCoc = sumDest(r.destino_salidas, 'cocina') || (destinoPrim === 'cocina' ? salida : 0);
     let cocinaAuto = false;
-    if (!esCatBarra && nuevoCoc === 0 && !esTransferStocks && !otroCocina && salida > 0) {
+    if (!esCatBarra && !esCatVinos && nuevoCoc === 0 && !esTransferStocks && !otroCocina && salida > 0) {
       nuevoCoc = salida;
       cocinaAuto = true;
     }
