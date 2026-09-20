@@ -600,7 +600,14 @@ function api(method, url, data) {
     }).then(r => {
       if (timer) clearTimeout(timer);
       if (r.status === 401) { window.location.href = '/login.html'; throw new Error('No autorizado'); }
-      if (!r.ok) throw new Error('Error del servidor: ' + r.status);
+      if (!r.ok) {
+        // Incluir el mensaje REAL del servidor en el error (para poder diagnosticar el 500)
+        return r.text().then(txt => {
+          let msg = 'Error del servidor: ' + r.status;
+          try { const b = JSON.parse(txt); if (b && b.error) msg = 'Error del servidor: ' + b.error; } catch (e) { if (txt) msg += ' — ' + txt.slice(0, 200); }
+          throw new Error(msg);
+        });
+      }
       return r.json();
     }).catch(err => {
       clearTimeout(timer);
