@@ -3606,7 +3606,26 @@ app.post('/api/cocina/porcionamientos', async (req, res) => {
 
 app.delete('/api/cocina/porcionamientos/:id', async (req, res) => {
   try {
-    await col('porcionamientos').doc(req.params.id).delete();
+    const snap = await col('porcionamientos').doc(req.params.id).get();
+    if (snap.exists) {
+      const p = snap.data();
+      // REVERSIÓN: si la transformación se aplicó (guardó peso_bruto + salidas), se deshace el stock:
+      //  - se devuelve el PESO BRUTO al item original de COCINA/STOCK
+      //  - se restan las salidas "PORC. ..." de sus items (se eliminan si llegan a 0)
+      const pb = parseFloat(p.peso_bruto) || 0;
+      const salidas = Array.isArray(p.salidas) ? p.salidas : [];
+      const ajustes = [];
+      if (pb > 0 && p.nombre) ajustes.push({ nombre: String(p.nombre).trim(), delta: pb, unidad: 'unidad' });
+      salidas.forEach(s => {
+        if (s && s.item && (parseFloat(s.peso) || 0) > 0) {
+          ajustes.push({ nombre: String(s.item).trim(), delta: -(parseFloat(s.peso) || 0), unidad: s.unidad || 'kg', familia: s.grupo || '' });
+        }
+      });
+      if (ajustes.length) await ajustarCocinaStock(ajustes);
+      await col('porcionamientos').doc(req.params.id).delete();
+    } else {
+      await col('porcionamientos').doc(req.params.id).delete();
+    }
     invalidarCache('porcionamientos_*', 'cocina_inv_*');
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -3627,8 +3646,14 @@ app.post('/api/cocina/porcionamiento/transformar', async (req, res) => {
     const key = String(nombre).trim().toUpperCase();
     const porcExisting = await col('porcionamientos').get();
     const porcDoc = porcExisting.docs.find(d => String(d.data().nombre || '').trim().toUpperCase() === key && d.data().fecha === fecha);
-    if (porcDoc) await col('porcionamientos').doc(porcDoc.id).update({ secciones: secs, updated_at: new Date().toISOString() });
-    else await col('porcionamientos').doc().set({ nombre: String(nombre).trim(), fecha, secciones: secs, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    // Guardar peso_bruto y salidas aplicadas para poder REVERTIR el stock al eliminar.
+    const pbGuardado = Math.round((parseFloat(peso_bruto) || 0) * 100) / 100;
+    const salidasGuardadas = (Array.isArray(salidas) ? salidas : [])
+      .filter(s => s && s.item && (parseFloat(s.peso) || 0) > 0)
+      .map(s => ({ item: String(s.item).trim(), grupo: String(s.grupo || '').toUpperCase(), peso: Math.round((parseFloat(s.peso) || 0) * 100) / 100, unidad: s.unidad || 'kg' }));
+    const now = new Date().toISOString();
+    if (porcDoc) await col('porcionamientos').doc(porcDoc.id).update({ secciones: secs, peso_bruto: pbGuardado, salidas: salidasGuardadas, updated_at: now });
+    else await col('porcionamientos').doc().set({ nombre: String(nombre).trim(), fecha, secciones: secs, peso_bruto: pbGuardado, salidas: salidasGuardadas, created_at: now, updated_at: now });
 
     // NUEVA lógica: peso_bruto + salidas (los productos PORC. ya resueltos con su grupo destino).
     if (peso_bruto !== undefined || (Array.isArray(salidas) && salidas.length)) {
