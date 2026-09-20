@@ -6355,19 +6355,12 @@ const _PORCIONAMIENTO_DEFINICIONES = {
       { nombre: 'MERMA UTIL - ESPADA X KG', item: 'PORC. MERMA UTIL - ESPADA X KG' },
       { nombre: 'PACK - ESPADA X 200 GR', item: 'PORC. PACK - ESPADA X 200 GR' }
     ]
-  },
-  'PULPO X KG': {
-    ocultarPacks: true
   }
 };
 function seccionesDeDefinicion(nombre) {
   const def = _PORCIONAMIENTO_DEFINICIONES[nombre];
   if (!def) return null;
-  const salidas = def.salidas || [];
-  const registros = def.registros || [];
-  // Sin secciones propias -> usar las secciones genéricas de respaldo (ej. PULPO usa MERMA/DESPERDICIO/FILETES)
-  if (!salidas.length && !registros.length) return null;
-  return salidas.map(s => s.nombre).concat(registros);
+  return def.salidas.map(s => s.nombre).concat(def.registros || []);
 }
 
 // Costo agregado de RECETAS BASE (sopa/caldo) que se suma al porcionamiento y se reparte entre
