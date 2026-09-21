@@ -6517,12 +6517,15 @@ function renderPorcionamientoEditor(secciones) {
     + '<label style="font-weight:600;font-size:0.85rem;color:#1a237e;">Destino del porcionamiento:</label>'
     + (soloCaliente
       ? '<span style="font-weight:700;color:#b71c1c;">BARRA CALIENTE</span><span style="font-size:0.78rem;color:#666;">(este pescado solo se usa en BARRA CALIENTE)</span>'
-      : '<select id="porcionamiento-temperatura" onchange="_porcionamientoTemperatura=this.value" style="padding:0.4rem;border:1px solid #ccc;border-radius:4px;font-weight:600;">'
+      : '<select id="porcionamiento-temperatura" onchange="_porcionamientoTemperatura=this.value; renderPorcionamientoEditor(seccionesActualesEditor())" style="padding:0.4rem;border:1px solid #ccc;border-radius:4px;font-weight:600;">'
       + '<option value="FRIA" ' + (_porcionamientoTemperatura === 'FRIA' ? 'selected' : '') + '>BARRA FRIA</option>'
       + '<option value="CALIENTE" ' + (_porcionamientoTemperatura === 'CALIENTE' ? 'selected' : '') + '>BARRA CALIENTE</option>'
       + '</select>')
     + '</div>' : '';
-  const packsHtml = def && def.ocultarPacks ? ''
+  // PACKS: se ocultan en LANGOSTINO (ocultarPacks), y en PESCA BLANCA cuando el destino es BARRA FRIA
+  // (en FRIA el FILETES sale como PESCA BLANCA LIMPIA X KG, no en packs).
+  const ocultarPacks = (def && def.ocultarPacks) || (esPB && _porcionamientoTemperatura === 'FRIA');
+  const packsHtml = ocultarPacks ? ''
     : '<div id="porcionamiento-packs" style="margin-top:0.75rem;padding:0.75rem;background:#e8f5e9;border-radius:8px;border:1px solid #c8e6c9;">'
     + '<strong style="color:#2e7d32;">📦 GENERAR PACKS desde FILETES</strong>'
     + '<div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-top:0.5rem;">'
@@ -6875,9 +6878,17 @@ function aplicarTransformacionPorcionamiento() {
     const merma = secciones.find(s => /MERMA UTIL/.test(s.nombre.toUpperCase()))?.peso || 0;
     const filetes = secciones.find(s => /FILETE/.test(s.nombre.toUpperCase()))?.peso || 0;
     const packCount = parseInt(document.getElementById('pack-cantidad')?.value) || 0;
-    if (merma <= 0 && packCount <= 0) { alert('Ingresa MERMA UTIL o PACKS (cantidad de packs) para transformar'); return; }
-    if (merma > 0) salidas.push({ item: 'PORC. MERMA UTIL - PESCA BLANCA X KG ' + temp, grupo: familia, peso: merma, unidad: 'kg', precio: precioKgDe(merma) });
-    if (packCount > 0) salidas.push({ item: 'PORC. PACK - PESCA BLANCA X 200 GR ' + temp, grupo: familia, peso: packCount, unidad: 'unidad', precio: precioKgDe(filetes) * 0.2 });
+    if (temp === 'FRIA') {
+      // BARRA FRIA: SIN PACKS. MERMA -> PESCA BLANCA X KG FRIA; FILETES -> PESCA BLANCA LIMPIA X KG
+      if (merma <= 0 && filetes <= 0) { alert('Ingresa MERMA UTIL o FILETES para transformar'); return; }
+      if (merma > 0) salidas.push({ item: 'PORC. MERMA UTIL - PESCA BLANCA X KG FRIA', grupo: familia, peso: merma, unidad: 'kg', precio: precioKgDe(merma) });
+      if (filetes > 0) salidas.push({ item: 'PORC. PESCA BLANCA LIMPIA X KG', grupo: familia, peso: filetes, unidad: 'kg', precio: precioKgDe(filetes) });
+    } else {
+      // BARRA CALIENTE: CON PACKS (MERMA + PACK)
+      if (merma <= 0 && packCount <= 0) { alert('Ingresa MERMA UTIL o PACKS (cantidad de packs) para transformar'); return; }
+      if (merma > 0) salidas.push({ item: 'PORC. MERMA UTIL - PESCA BLANCA X KG CALIENTE', grupo: familia, peso: merma, unidad: 'kg', precio: precioKgDe(merma) });
+      if (packCount > 0) salidas.push({ item: 'PORC. PACK - PESCA BLANCA X 200 GR CALIENTE', grupo: familia, peso: packCount, unidad: 'unidad', precio: precioKgDe(filetes) * 0.2 });
+    }
     let msg = 'APLICAR TRANSFORMACIÓN de ' + ctx.item.nombre + ' -> ' + temp + ':\n\n'
       + '- PESO BRUTO: ' + pesoBruto + ' kg (sale de COCINA/STOCK)\n';
     salidas.forEach(s => { msg += '  · ' + s.item + ' +' + s.peso + (s.unidad === 'kg' ? ' kg' : ' packs') + '\n'; });
