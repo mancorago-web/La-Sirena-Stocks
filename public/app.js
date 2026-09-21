@@ -6381,6 +6381,13 @@ const _PORCIONAMIENTO_DEFINICIONES = {
     salidas: [
       { nombre: 'PESO NETO', item: 'PORC. ASADO DE TIRA X KG' }
     ]
+  },
+  'LOMO FINO X KG': {
+    grupo: 'CARNE',
+    packsDesde: 'PESO NETO',
+    salidas: [
+      { nombre: 'PESO NETO', item: 'PORC. LOMO FINO X KG' }
+    ]
   }
 };
 function seccionesDeDefinicion(nombre) {
@@ -6802,7 +6809,7 @@ function aplicarTransformacionPorcionamiento() {
   // según BARRA FRIA o CALIENTE (selector de temperatura).
   const esPB = _PORCIONAMIENTO_PESCA_BLANCA.has(ctx.item.nombre);
   const esPulpo = ctx.item.nombre === 'PULPO X KG';
-  const esAsado = ctx.item.nombre === 'ASADO DE TIRA X KG';
+  const esAsado = ['ASADO DE TIRA X KG', 'LOMO FINO X KG'].includes(ctx.item.nombre);
   const salidas = [];
   let sinDefinir = false;
   // Precio por kg de cada salida (igual que muestra el editor): (bruto×precio/kg ÷ peso) + recargo R.B/kg
@@ -6838,14 +6845,15 @@ function aplicarTransformacionPorcionamiento() {
     return;
   }
   if (esAsado) {
-    // ASADO DE TIRA: PESO NETO -> PORC. ASADO DE TIRA X KG; packs (de PESO NETO) -> PORC. PACK - ASADO DE TIRA X <GR> GR
+    // ASADO DE TIRA / LOMO FINO: PESO NETO -> PORC. <BASE> X KG; packs (de PESO NETO) -> PORC. PACK - <BASE> X <GR> GR
     const familia = 'CARNE';
+    const base = ctx.item.nombre.replace(/\s*X\s*KG\s*$/i, '').trim();
     const pesoNeto = secciones.find(s => /PESO NETO/.test(s.nombre.toUpperCase()))?.peso || 0;
     const packCount = parseInt(document.getElementById('pack-cantidad')?.value) || 0;
     const gramos = parseFloat(document.getElementById('pack-gramos')?.value) || 0;
     if (pesoNeto <= 0 && packCount <= 0) { alert('Ingresa PESO NETO o PACKS (cantidad de packs) para transformar'); return; }
-    if (pesoNeto > 0) salidas.push({ item: 'PORC. ASADO DE TIRA X KG', grupo: familia, peso: pesoNeto, unidad: 'kg', precio: precioKgDe(pesoNeto) });
-    if (packCount > 0 && gramos > 0) salidas.push({ item: 'PORC. PACK - ASADO DE TIRA X ' + gramos + ' GR', grupo: familia, peso: packCount, unidad: 'unidad', precio: precioKgDe(pesoNeto) * (gramos / 1000) });
+    if (pesoNeto > 0) salidas.push({ item: 'PORC. ' + base + ' X KG', grupo: familia, peso: pesoNeto, unidad: 'kg', precio: precioKgDe(pesoNeto) });
+    if (packCount > 0 && gramos > 0) salidas.push({ item: 'PORC. PACK - ' + base + ' X ' + gramos + ' GR', grupo: familia, peso: packCount, unidad: 'unidad', precio: precioKgDe(pesoNeto) * (gramos / 1000) });
     let msg = 'APLICAR TRANSFORMACIÓN de ' + ctx.item.nombre + ' -> CARNE (PORCIONADOS):\n\n'
       + '- PESO BRUTO: ' + pesoBruto + ' kg (sale de COCINA/STOCK)\n';
     salidas.forEach(s => { msg += '  · ' + s.item + ' +' + s.peso + (s.unidad === 'kg' ? ' kg' : ' packs') + '\n'; });
