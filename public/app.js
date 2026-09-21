@@ -515,9 +515,11 @@ function cargarHistorialVariacion() {
     if (!compras.length) { cont.innerHTML = '<p style="font-size:0.8rem;color:#888;">Sin compras de "<b>' + esc(item) + '</b>"' + (ini || fin ? ' en el rango de fechas.' : '.') + '</p>'; return; }
     // Si el item NO tiene fila en la tabla de VARIACIÓN (no tuvo variación de precio), se agrega
     // una fila con sus dos últimas compras para que siempre se vean ITEM/PRECIO ANTERIOR/ÚLTIMO/VARIACIÓN.
+    // El nombre de la fila usa el nombre REAL del item (de la compra), NO el texto del buscador.
     const tbody = document.getElementById('variacion-precios-body');
     if (tbody) {
-      const yaExiste = Array.from(tbody.querySelectorAll('tr[data-nombre]')).some(tr => (tr.getAttribute('data-nombre') || '').toUpperCase() === String(item).toUpperCase());
+      const nombreReal = String((compras[0] && compras[0].nombre) || item);
+      const yaExiste = Array.from(tbody.querySelectorAll('tr[data-nombre]')).some(tr => (tr.getAttribute('data-nombre') || '').toUpperCase() === String(nombreReal).toUpperCase());
       if (!yaExiste) {
         const ordenadas = compras.slice().sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
         const ult = ordenadas[0] || {};
@@ -530,8 +532,8 @@ function cargarHistorialVariacion() {
         const fAnt = ant.fecha ? ' <span style="font-weight:400;font-size:0.75rem;color:#aaa;">(' + esc(ant.fecha) + (ant.cantidad ? ' ×' + ant.cantidad : '') + ')</span>' : '';
         const fUlt = ult.fecha ? ' <span style="font-weight:400;font-size:0.75rem;color:#aaa;">(' + esc(ult.fecha) + (ult.cantidad ? ' ×' + ult.cantidad : '') + ')</span>' : '';
         tbody.insertAdjacentHTML('beforeend',
-          '<tr data-nombre="' + esc(item) + '" data-ult-fecha="' + esc(ult.fecha || '') + '" data-ant-fecha="' + esc(ant.fecha || '') + '">'
-          + '<td>' + esc(item) + '</td>'
+          '<tr data-nombre="' + esc(nombreReal) + '" data-ult-fecha="' + esc(ult.fecha || '') + '" data-ant-fecha="' + esc(ant.fecha || '') + '">'
+          + '<td>' + esc(nombreReal) + '</td>'
           + '<td style="color:#888;">S/' + antNum.toFixed(2) + fAnt + '</td>'
           + '<td style="font-weight:700;">S/' + ultNum.toFixed(2) + fUlt + '</td>'
           + '<td style="color:' + (up ? '#2e7d32' : '#c62828') + ';font-weight:700;">' + (up ? '▲ +' : '▼ ') + 'S/' + Math.abs(dif).toFixed(2) + ' (' + (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%)</td>'
