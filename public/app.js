@@ -6365,6 +6365,15 @@ const _PORCIONAMIENTO_DEFINICIONES = {
       { nombre: 'MERMA UTIL - ESPADA X KG', item: 'PORC. MERMA UTIL - ESPADA X KG' },
       { nombre: 'PACK - ESPADA X 200 GR', item: 'PORC. PACK - ESPADA X 200 GR' }
     ]
+  },
+  'PULPO X KG': {
+    conTemperatura: true,
+    packsDesde: 'PULPO NETO',
+    salidas: [
+      { nombre: 'COLITAS DE PULPO', item: 'PORC. COLITAS DE PULPO X KG' },
+      { nombre: 'PULPO NETO', item: 'PACK' }
+    ],
+    registros: ['MERMA NO UTIL']
   }
 };
 function seccionesDeDefinicion(nombre) {
@@ -6383,6 +6392,8 @@ const _PORCIONAMIENTO_RB = {
 };
 // Pescados que al porcionar SALEN como "PESCA BLANCA" (FRIA o CALIENTE)
 const _PORCIONAMIENTO_PESCA_BLANCA = new Set(['PESCADO - ROBALO X KG', 'PESCADO - ECHERELA X KG', 'PESCADO - PLUMA X KG', 'PESCADO - CHITA X KG', 'PESCADO - LORO X KG', 'PESCADO - ESPADA X KG']);
+// Items que muestran el selector BARRA FRIA / BARRA CALIENTE (PESCA BLANCA + PULPO)
+const _PORCIONAMIENTO_CON_TEMPERATURA = new Set([..._PORCIONAMIENTO_PESCA_BLANCA, 'PULPO X KG']);
 // Pescados PESCA BLANCA que SIEMPRE salen a BARRA CALIENTE (no usan BARRA FRIA)
 const _PORCIONAMIENTO_PESCA_BLANCA_CALIENTE = new Set(['PESCADO - ESPADA X KG']);
 const _TEMPERATURA_FAMILIA = { FRIA: 'PESCADO PORC. - BARRA FRIA', CALIENTE: 'PESCADO PORC. - BARRA CALIENTE' };
@@ -6486,7 +6497,7 @@ function renderPorcionamientoEditor(secciones) {
     + '<span style="font-size:0.78rem;color:#666;">Suma el costo de la sopa/caldo R.B y lo reparte entre todas las salidas.</span>'
     + '</div>' : '';
   // Selector BARRA FRIA / BARRA CALIENTE para los pescados que salen como PESCA BLANCA
-  const esPB = _PORCIONAMIENTO_PESCA_BLANCA.has(ctx.item.nombre);
+  const esPB = _PORCIONAMIENTO_CON_TEMPERATURA.has(ctx.item.nombre);
   const soloCaliente = _PORCIONAMIENTO_PESCA_BLANCA_CALIENTE.has(ctx.item.nombre);
   const tempHtml = esPB ? '<div style="margin:0.5rem 0;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">'
     + '<label style="font-weight:600;font-size:0.85rem;color:#1a237e;">Destino del porcionamiento:</label>'
@@ -6743,9 +6754,14 @@ function eliminarPorcionamientoActual() {
 
 // Calcula cuantos PACKS salen del peso de FILETES (automático, con opción de calibrar manual)
 function calcularPacksPorcionamiento() {
+  // La sección de la que salen los packs es configurable por item (ej. PULPO usa "PULPO NETO");
+  // por defecto se usa FILETES.
+  const defActual = (_porcionamientoCtx && _porcionamientoCtx.item) ? _PORCIONAMIENTO_DEFINICIONES[_porcionamientoCtx.item.nombre] : null;
+  const fuente = (defActual && defActual.packsDesde) || 'FILETE';
+  const fuenteUpp = fuente.toUpperCase();
   const filetEl = Array.from(document.querySelectorAll('#porcionamiento-secciones tr')).find(tr => {
     const nom = (tr.querySelector('.input-porc-nombre')?.value || '').trim().toUpperCase();
-    return nom.includes('FILETE');
+    return nom.includes(fuenteUpp);
   });
   const filetPesoKg = filetEl ? (parseFloat(filetEl.querySelector('.input-porc-peso')?.value) || 0) : 0;
   const pesoEl = document.getElementById('pack-filet-peso');
@@ -6778,8 +6794,34 @@ function aplicarTransformacionPorcionamiento() {
   // PESCA BLANCA (ROBALO/ECHERELA/PLUMA/CHITA/LORO): las salidas cambian de nombre a PESCA BLANCA
   // según BARRA FRIA o CALIENTE (selector de temperatura).
   const esPB = _PORCIONAMIENTO_PESCA_BLANCA.has(ctx.item.nombre);
+  const esPulpo = ctx.item.nombre === 'PULPO X KG';
   const salidas = [];
   let sinDefinir = false;
+  if (esPulpo) {
+    // PULPO: COLITAS DE PULPO -> PORC. COLITAS DE PULPO X KG; PULPO NETO -> packs PORC. PACK - PULPO NETO X <GR> GR
+    const temp = _porcionamientoTemperatura === 'CALIENTE' ? 'CALIENTE' : 'FRIA';
+    const familia = _TEMPERATURA_FAMILIA[temp];
+    const colitas = secciones.find(s => /COLITAS DE PULPO/.test(s.nombre.toUpperCase()))?.peso || 0;
+    const packCount = parseInt(document.getElementById('pack-cantidad')?.value) || 0;
+    const gramos = parseFloat(document.getElementById('pack-gramos')?.value) || 0;
+    if (colitas <= 0 && packCount <= 0) { alert('Ingresa COLITAS DE PULPO o PACKS (cantidad de packs) para transformar'); return; }
+    if (colitas > 0) salidas.push({ item: 'PORC. COLITAS DE PULPO X KG', grupo: familia, peso: colitas, unidad: 'kg' });
+    if (packCount > 0 && gramos > 0) salidas.push({ item: 'PORC. PACK - PULPO NETO X ' + gramos + ' GR', grupo: familia, peso: packCount, unidad: 'unidad' });
+    let msg = 'APLICAR TRANSFORMACIÓN de ' + ctx.item.nombre + ' -> ' + temp + ':\n\n'
+      + '- PESO BRUTO: ' + pesoBruto + ' kg (sale de COCINA/STOCK)\n';
+    salidas.forEach(s => { msg += '  · ' + s.item + ' +' + s.peso + (s.unidad === 'kg' ? ' kg' : ' packs') + '\n'; });
+    if (!confirm(msg + '\n¿Continuar?')) return;
+    api('POST', '/api/cocina/porcionamiento/transformar', {
+      nombre: ctx.item.nombre, fecha: ctx.fecha,
+      peso_bruto: pesoBruto,
+      salidas,
+      secciones
+    }).then(() => {
+      showToast('Transformación aplicada');
+      cargarPorcionamientoCocina();
+    }).catch(() => alert('Error al aplicar transformación'));
+    return;
+  }
   if (esPB) {
     const temp = (_PORCIONAMIENTO_PESCA_BLANCA_CALIENTE.has(ctx.item.nombre) || _porcionamientoTemperatura === 'CALIENTE') ? 'CALIENTE' : 'FRIA';
     const familia = _TEMPERATURA_FAMILIA[temp];
