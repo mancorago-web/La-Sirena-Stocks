@@ -6394,17 +6394,15 @@ const _PORCIONAMIENTO_DEFINICIONES = {
   },
   'PESCADO - ATUN X KG': {
     grupo: 'PESCADO PORC. - BARRA FRIA',
-    salidas: [
-      { nombre: 'MERMA UTIL - ATUN X KG', item: 'PORC. MERMA UTIL - ATUN X KG' },
-      { nombre: 'PACK - ATUN X 200 GR', item: 'PORC. PACK - ATUN X 200 GR' }
-    ]
+    seccionesGenericas: true,
+    mermaItem: 'PORC. MERMA UTIL - ATUN X KG',
+    packItem: 'PORC. PACK - ATUN X '
   },
   'PESCADO - ESPADA X KG': {
     grupo: 'PESCADO PORC. - BARRA FRIA',
-    salidas: [
-      { nombre: 'MERMA UTIL - ESPADA X KG', item: 'PORC. MERMA UTIL - ESPADA X KG' },
-      { nombre: 'PACK - ESPADA X 200 GR', item: 'PORC. PACK - ESPADA X 200 GR' }
-    ]
+    seccionesGenericas: true,
+    mermaItem: 'PORC. MERMA UTIL - ESPADA X KG',
+    packItem: 'PORC. PACK - ESPADA X '
   },
   'PULPO X KG': {
     conTemperatura: true,
@@ -6433,6 +6431,7 @@ const _PORCIONAMIENTO_DEFINICIONES = {
 function seccionesDeDefinicion(nombre) {
   const def = _PORCIONAMIENTO_DEFINICIONES[nombre];
   if (!def) return null;
+  if (def.seccionesGenericas) return null; // ATUN/ESPADA usan las secciones genéricas (MERMA UTIL, DESPERDICIO, FILETES)
   return def.salidas.map(s => s.nombre).concat(def.registros || []);
 }
 
@@ -6939,6 +6938,33 @@ function aplicarTransformacionPorcionamiento() {
     }
     let msg = 'APLICAR TRANSFORMACIÓN de ' + ctx.item.nombre + ' -> ' + temp + ':\n\n'
       + '- PESO BRUTO: ' + pesoBruto + ' kg (sale de COCINA/STOCK)\n';
+    salidas.forEach(s => { msg += '  · ' + s.item + ' +' + s.peso + (s.unidad === 'kg' ? ' kg' : ' packs') + '\n'; });
+    if (!confirm(msg + '\n¿Continuar?')) return;
+    api('POST', '/api/cocina/porcionamiento/transformar', {
+      nombre: ctx.item.nombre, fecha: ctx.fecha,
+      peso_bruto: pesoBruto,
+      salidas,
+      secciones,
+      rb_activo: _rbCostoActivo, rb_costo: _rbCosto
+    }).then(() => {
+      showToast('Transformación aplicada');
+      cargarPorcionamientoCocina();
+    }).catch(() => alert('Error al aplicar transformación'));
+    return;
+  }
+  if (def && def.seccionesGenericas) {
+    // ATUN / ESPADA: secciones genéricas (MERMA UTIL, DESPERDICIO, FILETES); al salir:
+    // MERMA UTIL -> PORC. MERMA UTIL - <PESCADO> X KG; FILETES -> packs PORC. PACK - <PESCADO> X <GR> GR
+    const merma = secciones.find(s => /MERMA UTIL/.test(s.nombre.toUpperCase()))?.peso || 0;
+    const filetes = secciones.find(s => /FILETE/.test(s.nombre.toUpperCase()))?.peso || 0;
+    const packCount = parseInt(document.getElementById('pack-cantidad')?.value) || 0;
+    const gramos = parseFloat(document.getElementById('pack-gramos')?.value) || 0;
+    if (merma <= 0 && packCount <= 0) { alert('Ingresa MERMA UTIL o PACKS (cantidad de packs) para transformar'); return; }
+    if (merma > 0) salidas.push({ item: def.mermaItem, grupo: def.grupo, peso: merma, unidad: 'kg', precio: precioKgDe(merma) });
+    if (packCount > 0 && gramos > 0) salidas.push({ item: def.packItem + gramos + ' GR', grupo: def.grupo, peso: packCount, unidad: 'unidad', precio: precioKgDe(filetes) * (gramos / 1000) });
+    let msg = 'APLICAR TRANSFORMACIÓN de ' + ctx.item.nombre + ':\n\n'
+      + '- PESO BRUTO: ' + pesoBruto + ' kg (sale de COCINA/STOCK)\n'
+      + '-> ' + def.grupo + ':\n';
     salidas.forEach(s => { msg += '  · ' + s.item + ' +' + s.peso + (s.unidad === 'kg' ? ' kg' : ' packs') + '\n'; });
     if (!confirm(msg + '\n¿Continuar?')) return;
     api('POST', '/api/cocina/porcionamiento/transformar', {
