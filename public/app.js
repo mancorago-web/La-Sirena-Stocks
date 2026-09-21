@@ -6427,6 +6427,14 @@ const _PORCIONAMIENTO_DEFINICIONES = {
       { nombre: 'PESO NETO', item: 'PORC. LOMO FINO X KG' }
     ],
     registros: ['MERMA NO UTIL']
+  },
+  'PANCETA X KG': {
+    grupo: 'CARNE',
+    packsDesde: 'PESO NETO',
+    salidas: [
+      { nombre: 'PESO NETO', item: 'PORC. PANCETA X KG' }
+    ],
+    registros: ['MERMA NO UTIL']
   }
 };
 function seccionesDeDefinicion(nombre) {
@@ -6859,7 +6867,7 @@ function aplicarTransformacionPorcionamiento() {
   // según BARRA FRIA o CALIENTE (selector de temperatura).
   const esPB = _PORCIONAMIENTO_PESCA_BLANCA.has(ctx.item.nombre);
   const esPulpo = ctx.item.nombre === 'PULPO X KG';
-  const esAsado = ['ASADO DE TIRA X KG', 'LOMO FINO X KG'].includes(ctx.item.nombre);
+  const esAsado = ['ASADO DE TIRA X KG', 'LOMO FINO X KG', 'PANCETA X KG'].includes(ctx.item.nombre);
   const salidas = [];
   let sinDefinir = false;
   // Precio por kg de cada salida (igual que muestra el editor): (bruto×precio/kg ÷ peso) + recargo R.B/kg
