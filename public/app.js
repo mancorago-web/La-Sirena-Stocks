@@ -513,6 +513,31 @@ function cargarHistorialVariacion() {
   api('GET', '/api/compras/precio-historial?' + q).then(r => {
     const compras = r.compras || [];
     if (!compras.length) { cont.innerHTML = '<p style="font-size:0.8rem;color:#888;">Sin compras de "<b>' + esc(item) + '</b>"' + (ini || fin ? ' en el rango de fechas.' : '.') + '</p>'; return; }
+    // Si el item NO tiene fila en la tabla de VARIACIÓN (no tuvo variación de precio), se agrega
+    // una fila con sus dos últimas compras para que siempre se vean ITEM/PRECIO ANTERIOR/ÚLTIMO/VARIACIÓN.
+    const tbody = document.getElementById('variacion-precios-body');
+    if (tbody) {
+      const yaExiste = Array.from(tbody.querySelectorAll('tr[data-nombre]')).some(tr => (tr.getAttribute('data-nombre') || '').toUpperCase() === String(item).toUpperCase());
+      if (!yaExiste) {
+        const ordenadas = compras.slice().sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+        const ult = ordenadas[0] || {};
+        const ant = ordenadas[1] || ult;
+        const antNum = parseFloat(ant.precio) || 0;
+        const ultNum = parseFloat(ult.precio) || 0;
+        const dif = ultNum - antNum;
+        const pct = antNum > 0 ? (dif / antNum) * 100 : 0;
+        const up = dif > 0;
+        const fAnt = ant.fecha ? ' <span style="font-weight:400;font-size:0.75rem;color:#aaa;">(' + esc(ant.fecha) + (ant.cantidad ? ' ×' + ant.cantidad : '') + ')</span>' : '';
+        const fUlt = ult.fecha ? ' <span style="font-weight:400;font-size:0.75rem;color:#aaa;">(' + esc(ult.fecha) + (ult.cantidad ? ' ×' + ult.cantidad : '') + ')</span>' : '';
+        tbody.insertAdjacentHTML('beforeend',
+          '<tr data-nombre="' + esc(item) + '" data-ult-fecha="' + esc(ult.fecha || '') + '" data-ant-fecha="' + esc(ant.fecha || '') + '">'
+          + '<td>' + esc(item) + '</td>'
+          + '<td style="color:#888;">S/' + antNum.toFixed(2) + fAnt + '</td>'
+          + '<td style="font-weight:700;">S/' + ultNum.toFixed(2) + fUlt + '</td>'
+          + '<td style="color:' + (up ? '#2e7d32' : '#c62828') + ';font-weight:700;">' + (up ? '▲ +' : '▼ ') + 'S/' + Math.abs(dif).toFixed(2) + ' (' + (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%)</td>'
+          + '</tr>');
+      }
+    }
     const total = compras.reduce((s, c) => s + (c.precio_total || 0), 0);
     cont.innerHTML = '<div style="margin-top:0.6rem;border-top:1px solid #eee;padding-top:0.5rem;"><b style="font-size:0.85rem;">📄 HISTORIAL DE PRECIOS — ' + esc(item.toUpperCase()) + '</b>' +
       '<div class="table-wrap"><table style="font-size:0.82rem;"><thead><tr><th>Fecha</th><th>Cantidad</th><th>P.Unitario</th><th>Proveedor</th><th>Total</th><th>Destino</th></tr></thead><tbody>' +
