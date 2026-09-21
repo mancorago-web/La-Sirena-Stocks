@@ -6846,8 +6846,9 @@ function aplicarTransformacionPorcionamiento() {
       nombre: ctx.item.nombre, fecha: ctx.fecha,
       peso_bruto: pesoBruto,
       salidas,
-      secciones
-    rb_activo: _rbCostoActivo, rb_costo: _rbCosto    }).then(() => {
+      secciones,
+      rb_activo: _rbCostoActivo, rb_costo: _rbCosto
+    }).then(() => {
       showToast('Transformación aplicada');
       cargarPorcionamientoCocina();
     }).catch(() => alert('Error al aplicar transformación'));
@@ -6871,8 +6872,9 @@ function aplicarTransformacionPorcionamiento() {
       nombre: ctx.item.nombre, fecha: ctx.fecha,
       peso_bruto: pesoBruto,
       salidas,
-      secciones
-    rb_activo: _rbCostoActivo, rb_costo: _rbCosto    }).then(() => {
+      secciones,
+      rb_activo: _rbCostoActivo, rb_costo: _rbCosto
+    }).then(() => {
       showToast('Transformación aplicada');
       cargarPorcionamientoCocina();
     }).catch(() => alert('Error al aplicar transformación'));
