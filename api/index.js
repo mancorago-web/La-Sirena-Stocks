@@ -1581,6 +1581,7 @@ app.get('/api/compras/precio-historial', async (req, res) => {
         cantidad: parseFloat(a.cantidad) || 0,
         precio: parseFloat(a.precio) || 0,
         precio_total: parseFloat(a.precio_total) || 0,
+        proveedor: a.proveedor || '',
         destino: a.destino || ''
       });
     });

@@ -502,8 +502,8 @@ function cargarHistorialVariacion() {
     if (!compras.length) { cont.innerHTML = '<p style="font-size:0.8rem;color:#888;">Sin compras de "<b>' + esc(item) + '</b>"' + (ini || fin ? ' en el rango de fechas.' : '.') + '</p>'; return; }
     const total = compras.reduce((s, c) => s + (c.precio_total || 0), 0);
     cont.innerHTML = '<div style="margin-top:0.6rem;border-top:1px solid #eee;padding-top:0.5rem;"><b style="font-size:0.85rem;">📄 HISTORIAL DE PRECIOS — ' + esc(item.toUpperCase()) + '</b>' +
-      '<div class="table-wrap"><table style="font-size:0.82rem;"><thead><tr><th>Fecha</th><th>Cantidad</th><th>P.Unitario</th><th>Total</th><th>Destino</th></tr></thead><tbody>' +
-      compras.map(c => '<tr><td>' + esc(c.fecha) + '</td><td>' + c.cantidad + '</td><td>S/' + (c.precio || 0).toFixed(2) + '</td><td>S/' + (c.precio_total || 0).toFixed(2) + '</td><td>' + esc(c.destino || '') + '</td></tr>').join('') +
+      '<div class="table-wrap"><table style="font-size:0.82rem;"><thead><tr><th>Fecha</th><th>Cantidad</th><th>P.Unitario</th><th>Proveedor</th><th>Total</th><th>Destino</th></tr></thead><tbody>' +
+      compras.map(c => '<tr><td>' + esc(c.fecha) + '</td><td>' + c.cantidad + '</td><td>S/' + (c.precio || 0).toFixed(2) + '</td><td>' + esc(c.proveedor || '') + '</td><td>S/' + (c.precio_total || 0).toFixed(2) + '</td><td>' + esc(c.destino || '') + '</td></tr>').join('') +
       '</tbody></table></div>' +
       '<p style="font-size:0.8rem;color:#0f3460;font-weight:700;margin-top:0.4rem;">Total comprado en el rango: S/' + total.toFixed(2) + '</p></div>';
   }).catch(() => { cont.innerHTML = ''; });
