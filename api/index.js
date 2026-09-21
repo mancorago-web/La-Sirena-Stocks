@@ -3680,6 +3680,11 @@ app.post('/api/cocina/porcionamiento/transformar', async (req, res) => {
       for (const s of salidasGuardadas) {
         const sItem = cs2.docs.find(d => String(d.data().ingrediente || '').trim().toUpperCase() === String(s.item).trim().toUpperCase());
         if (sItem) await ajustarDiarioCocina(fecha, Number(sItem.id), { stock_ingreso: s.peso });
+        // Guardar el precio del porcionamiento para que las RECETAS lo usen
+        const salOriginal = (Array.isArray(salidas) ? salidas : []).find(x => x && String(x.item || '').trim().toUpperCase() === String(s.item).trim().toUpperCase());
+        if (salOriginal && parseFloat(salOriginal.precio) > 0) {
+          await registrarPrecioPorcionamiento(s.item, salOriginal.precio, salOriginal.unidad || 'kg');
+        }
       }
       invalidarCache('cocina_inv_*', 'porcionamientos_*');
       return res.json({ ok: true });
@@ -4035,6 +4040,31 @@ function cantDeItem(x) {
   if (!x) return 0;
   if (typeof x.data === 'function') return parseFloat(x.data().cantidad) || 0;
   return parseFloat((x.data && x.data.cantidad) || 0) || 0;
+}
+
+// Guarda (o actualiza) el precio de un item PORC. que sale del porcionamiento, para que las
+// recetas que lo usen calculen su costo con el precio real del porcionamiento.
+async function registrarPrecioPorcionamiento(nombre, precio, unidad) {
+  const p = Math.round((parseFloat(precio) || 0) * 100) / 100;
+  if (p <= 0 || !nombre) return;
+  const u = normalizeUnit(unidad || 'kg');
+  // equiv: para items por KG -> 1000 gr; para packs (unidad) -> se lee del nombre "X 200 GR".
+  let equiv_gr = 0;
+  if (u === 'kg') equiv_gr = 1000;
+  else { const eq = parseEquivFromName(nombre); equiv_gr = eq.equiv_gr || 0; }
+  const coll = col('cocina_precios');
+  const snap = await coll.get();
+  const key = normNombre(nombre);
+  const exist = snap.docs.find(d => normNombre(String(d.data().ingrediente || '')) === key);
+  const now = new Date().toISOString();
+  const data = { precio: p, precio_compra: p, ultimo_precio_compra: p, ultimo_precio_compra_fecha: now.slice(0, 10), unidad: u, equiv_ml: 0, equiv_gr, updated_at: now };
+  if (exist) {
+    await exist.ref.update(data);
+  } else {
+    const maxId = snap.docs.length ? Math.max(...snap.docs.map(d => Number(d.id) || 0)) + 1 : 1;
+    await coll.doc(String(maxId)).set({ id: maxId, ingrediente: nombre, created_at: now, ...data });
+  }
+  invalidarCache('precios_cocina', 'basedatos_unificada');
 }
 
 // Actualiza el DIARIO de cocina (lo que muestra COCINA/STOCK) tras un porcionamiento:

@@ -6797,16 +6797,23 @@ function aplicarTransformacionPorcionamiento() {
   const esPulpo = ctx.item.nombre === 'PULPO X KG';
   const salidas = [];
   let sinDefinir = false;
+  // Precio por kg de cada salida (igual que muestra el editor): (bruto×precio/kg ÷ peso) + recargo R.B/kg
+  const precioKiloBaseCtx = ctx.item.precioKiloBase || 0;
+  const rbCostoCtx = _rbCostoActivo ? (_rbCosto || 0) : 0;
+  const sumaOtrosCtx = secciones.filter(s => !/PESO BRUTO/.test(s.nombre.toUpperCase())).reduce((x, s) => x + (s.peso || 0), 0);
+  const recargoRBCtx = (rbCostoCtx > 0 && sumaOtrosCtx > 0) ? rbCostoCtx / sumaOtrosCtx : 0;
+  const precioKgDe = (peso) => (peso > 0 && precioKiloBaseCtx > 0) ? (precioKiloBaseCtx * pesoBruto) / peso + recargoRBCtx : 0;
   if (esPulpo) {
     // PULPO: COLITAS DE PULPO -> PORC. COLITAS DE PULPO X KG; PULPO NETO -> packs PORC. PACK - PULPO NETO X <GR> GR
     const temp = _porcionamientoTemperatura === 'CALIENTE' ? 'CALIENTE' : 'FRIA';
     const familia = _TEMPERATURA_FAMILIA[temp];
     const colitas = secciones.find(s => /COLITAS DE PULPO/.test(s.nombre.toUpperCase()))?.peso || 0;
+    const neto = secciones.find(s => /PULPO NETO/.test(s.nombre.toUpperCase()))?.peso || 0;
     const packCount = parseInt(document.getElementById('pack-cantidad')?.value) || 0;
     const gramos = parseFloat(document.getElementById('pack-gramos')?.value) || 0;
     if (colitas <= 0 && packCount <= 0) { alert('Ingresa COLITAS DE PULPO o PACKS (cantidad de packs) para transformar'); return; }
-    if (colitas > 0) salidas.push({ item: 'PORC. COLITAS DE PULPO X KG', grupo: familia, peso: colitas, unidad: 'kg' });
-    if (packCount > 0 && gramos > 0) salidas.push({ item: 'PORC. PACK - PULPO NETO X ' + gramos + ' GR', grupo: familia, peso: packCount, unidad: 'unidad' });
+    if (colitas > 0) salidas.push({ item: 'PORC. COLITAS DE PULPO X KG', grupo: familia, peso: colitas, unidad: 'kg', precio: precioKgDe(colitas) });
+    if (packCount > 0 && gramos > 0) salidas.push({ item: 'PORC. PACK - PULPO NETO X ' + gramos + ' GR', grupo: familia, peso: packCount, unidad: 'unidad', precio: precioKgDe(neto) * (gramos / 1000) });
     let msg = 'APLICAR TRANSFORMACIÓN de ' + ctx.item.nombre + ' -> ' + temp + ':\n\n'
       + '- PESO BRUTO: ' + pesoBruto + ' kg (sale de COCINA/STOCK)\n';
     salidas.forEach(s => { msg += '  · ' + s.item + ' +' + s.peso + (s.unidad === 'kg' ? ' kg' : ' packs') + '\n'; });
@@ -6826,10 +6833,11 @@ function aplicarTransformacionPorcionamiento() {
     const temp = (_PORCIONAMIENTO_PESCA_BLANCA_CALIENTE.has(ctx.item.nombre) || _porcionamientoTemperatura === 'CALIENTE') ? 'CALIENTE' : 'FRIA';
     const familia = _TEMPERATURA_FAMILIA[temp];
     const merma = secciones.find(s => /MERMA UTIL/.test(s.nombre.toUpperCase()))?.peso || 0;
+    const filetes = secciones.find(s => /FILETE/.test(s.nombre.toUpperCase()))?.peso || 0;
     const packCount = parseInt(document.getElementById('pack-cantidad')?.value) || 0;
     if (merma <= 0 && packCount <= 0) { alert('Ingresa MERMA UTIL o PACKS (cantidad de packs) para transformar'); return; }
-    if (merma > 0) salidas.push({ item: 'PORC. MERMA UTIL - PESCA BLANCA X KG ' + temp, grupo: familia, peso: merma, unidad: 'kg' });
-    if (packCount > 0) salidas.push({ item: 'PORC. PACK - PESCA BLANCA X 200 GR ' + temp, grupo: familia, peso: packCount, unidad: 'unidad' });
+    if (merma > 0) salidas.push({ item: 'PORC. MERMA UTIL - PESCA BLANCA X KG ' + temp, grupo: familia, peso: merma, unidad: 'kg', precio: precioKgDe(merma) });
+    if (packCount > 0) salidas.push({ item: 'PORC. PACK - PESCA BLANCA X 200 GR ' + temp, grupo: familia, peso: packCount, unidad: 'unidad', precio: precioKgDe(filetes) * 0.2 });
     let msg = 'APLICAR TRANSFORMACIÓN de ' + ctx.item.nombre + ' -> ' + temp + ':\n\n'
       + '- PESO BRUTO: ' + pesoBruto + ' kg (sale de COCINA/STOCK)\n';
     salidas.forEach(s => { msg += '  · ' + s.item + ' +' + s.peso + (s.unidad === 'kg' ? ' kg' : ' packs') + '\n'; });
@@ -6850,7 +6858,7 @@ function aplicarTransformacionPorcionamiento() {
     def.salidas.forEach(s => {
       const sec = secciones.find(x => x.nombre.toUpperCase() === s.nombre.toUpperCase());
       const peso = sec ? sec.peso : 0;
-      if (peso > 0) salidas.push({ item: s.item, grupo: def.grupo, peso, unidad: 'kg' });
+      if (peso > 0) salidas.push({ item: s.item, grupo: def.grupo, peso, unidad: 'kg', precio: precioKgDe(peso) });
     });
   } else {
     sinDefinir = true;
