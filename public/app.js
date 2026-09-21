@@ -6571,9 +6571,10 @@ function renderPorcionamientoEditor(secciones) {
   // PACKS: se ocultan en LANGOSTINO (ocultarPacks), y en PESCA BLANCA cuando el destino es BARRA FRIA
   // (en FRIA el FILETES sale como PESCA BLANCA LIMPIA X KG, no en packs).
   const ocultarPacks = (def && def.ocultarPacks) || (esPB && _porcionamientoTemperatura === 'FRIA');
+  const packsFuente = (def && def.packsDesde) || 'FILETES';
   const packsHtml = ocultarPacks ? ''
     : '<div id="porcionamiento-packs" style="margin-top:0.75rem;padding:0.75rem;background:#e8f5e9;border-radius:8px;border:1px solid #c8e6c9;">'
-    + '<strong style="color:#2e7d32;">📦 GENERAR PACKS desde FILETES</strong>'
+    + '<strong style="color:#2e7d32;">📦 GENERAR PACKS desde ' + esc(packsFuente) + '</strong>'
     + '<div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-top:0.5rem;">'
     + '<label>Tamaño del pack (gr):</label>'
     + '<input id="pack-gramos" type="number" step="1" min="1" value="150" style="width:80px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;" oninput="calcularPacksPorcionamiento()">'
