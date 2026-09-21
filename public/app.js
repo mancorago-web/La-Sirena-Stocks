@@ -6430,6 +6430,12 @@ function cargarPorcionamientoItem() {
   // Al cambiar de item se reinicia el costo R.B agregado y la temperatura (FRIA por defecto)
   _rbCostoActivo = false; _rbCosto = 0; _rbNombre = '';
 _porcionamientoTemperatura = _PORCIONAMIENTO_PESCA_BLANCA_CALIENTE.has(nombre) ? 'CALIENTE' : 'FRIA';
+  // Si el porcionamiento guardado tenía el botón R.B aplicado, se restaura (precio + botón)
+  if (porc && porc.rb_activo === true) {
+    _rbCostoActivo = true;
+    _rbCosto = parseFloat(porc.rb_costo) || 0;
+    _rbNombre = _PORCIONAMIENTO_RB[nombre] || '';
+  }
   // Cada item tiene su FORMA INDEPENDIENTE de porcionamiento (secciones propias según el tipo).
   // Si el item tiene una definición, se usan SUS secciones; si no, las genéricas de respaldo.
   const seccionesConfig = seccionesDeDefinicion(nombre);
@@ -6841,7 +6847,7 @@ function aplicarTransformacionPorcionamiento() {
       peso_bruto: pesoBruto,
       salidas,
       secciones
-    }).then(() => {
+    rb_activo: _rbCostoActivo, rb_costo: _rbCosto    }).then(() => {
       showToast('Transformación aplicada');
       cargarPorcionamientoCocina();
     }).catch(() => alert('Error al aplicar transformación'));
@@ -6866,7 +6872,7 @@ function aplicarTransformacionPorcionamiento() {
       peso_bruto: pesoBruto,
       salidas,
       secciones
-    }).then(() => {
+    rb_activo: _rbCostoActivo, rb_costo: _rbCosto    }).then(() => {
       showToast('Transformación aplicada');
       cargarPorcionamientoCocina();
     }).catch(() => alert('Error al aplicar transformación'));
@@ -6897,7 +6903,8 @@ function aplicarTransformacionPorcionamiento() {
       nombre: ctx.item.nombre, fecha: ctx.fecha,
       peso_bruto: pesoBruto,
       salidas,
-      secciones
+      secciones,
+      rb_activo: _rbCostoActivo, rb_costo: _rbCosto
     }).then(() => {
       showToast('Transformación aplicada');
       cargarPorcionamientoCocina();
@@ -6922,10 +6929,11 @@ function aplicarTransformacionPorcionamiento() {
   if (!confirm(msg + '\n¿Continuar?')) return;
   api('POST', '/api/cocina/porcionamiento/transformar', {
     nombre: ctx.item.nombre, fecha: ctx.fecha,
-    peso_bruto: pesoBruto,
-    salidas,
-    secciones
-  }).then(() => {
+peso_bruto: pesoBruto,
+      salidas,
+      secciones,
+      rb_activo: _rbCostoActivo, rb_costo: _rbCosto
+    }).then(() => {
     showToast('Transformación aplicada');
     cargarPorcionamientoCocina();
   }).catch(() => alert('Error al aplicar transformación'));

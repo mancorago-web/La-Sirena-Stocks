@@ -3655,8 +3655,11 @@ app.post('/api/cocina/porcionamiento/transformar', async (req, res) => {
       .filter(s => s && s.item && (parseFloat(s.peso) || 0) > 0)
       .map(s => ({ item: String(s.item).trim(), grupo: String(s.grupo || '').toUpperCase(), peso: Math.round((parseFloat(s.peso) || 0) * 100) / 100, unidad: s.unidad || 'kg' }));
     const now = new Date().toISOString();
-    if (porcDoc) await col('porcionamientos').doc(porcDoc.id).update({ secciones: secs, peso_bruto: pbGuardado, salidas: salidasGuardadas, updated_at: now });
-    else await col('porcionamientos').doc().set({ nombre: String(nombre).trim(), fecha, secciones: secs, peso_bruto: pbGuardado, salidas: salidasGuardadas, created_at: now, updated_at: now });
+    // Estado del botón R.B (si se aplicó su costo al porcionamiento) para restaurarlo al abrir.
+    const rbActivo = req.body.rb_activo === true;
+    const rbCosto = Math.round((parseFloat(req.body.rb_costo) || 0) * 100) / 100;
+    if (porcDoc) await col('porcionamientos').doc(porcDoc.id).update({ secciones: secs, peso_bruto: pbGuardado, salidas: salidasGuardadas, rb_activo: rbActivo, rb_costo: rbCosto, updated_at: now });
+    else await col('porcionamientos').doc().set({ nombre: String(nombre).trim(), fecha, secciones: secs, peso_bruto: pbGuardado, salidas: salidasGuardadas, rb_activo: rbActivo, rb_costo: rbCosto, created_at: now, updated_at: now });
 
     // NUEVA lógica: peso_bruto + salidas (los productos PORC. ya resueltos con su grupo destino).
     if (peso_bruto !== undefined || (Array.isArray(salidas) && salidas.length)) {
