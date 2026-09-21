@@ -6425,7 +6425,8 @@ const _PORCIONAMIENTO_DEFINICIONES = {
     packsDesde: 'PESO NETO',
     salidas: [
       { nombre: 'PESO NETO', item: 'PORC. LOMO FINO X KG' }
-    ]
+    ],
+    registros: ['MERMA NO UTIL']
   }
 };
 function seccionesDeDefinicion(nombre) {
