@@ -6552,7 +6552,21 @@ function cargarPorcionamientoExistente(nombre) {
   cargarPorcionamientoItem();
 }
 
+// Ordena las secciones del porcionamiento: PESO BRUTO primero, luego lo normal, luego MERMA NO UTIL,
+// y al final todo lo que sea NETO (PULPO NETO / PESO NETO) o FILETES.
+function ordenarSeccionesPorc(secciones) {
+  const prio = s => {
+    const n = String((s && s.nombre) || '').toUpperCase();
+    if (/PESO BRUTO/.test(n)) return 0;
+    if (/MERMA NO UTIL/.test(n)) return 2;
+    if (/\bNETO\b/.test(n) || /FILETE/.test(n)) return 3;
+    return 1;
+  };
+  return (secciones || []).slice().sort((a, b) => prio(a) - prio(b));
+}
+
 function renderPorcionamientoEditor(secciones) {
+  secciones = ordenarSeccionesPorc(secciones);
   const ctx = _porcionamientoCtx;
   const editor = document.getElementById('porcionamiento-editor');
   if (!editor || !ctx || !ctx.item) return;
