@@ -440,7 +440,8 @@ function verVariacionPrecios() {
       + '<div style="margin:0.5rem 0;display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;">'
         + '<label style="font-size:0.8rem;color:#555;">Desde: <input type="date" id="variacion-fecha-ini" onchange="filtrarVariacion(document.getElementById(\'buscar-variacion\').value)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></label>'
         + '<label style="font-size:0.8rem;color:#555;">Hasta: <input type="date" id="variacion-fecha-fin" onchange="filtrarVariacion(document.getElementById(\'buscar-variacion\').value)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></label>'
-        + '<input type="text" id="buscar-variacion" placeholder="🔍 Buscar item..." style="flex:1;min-width:150px;padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;" oninput="filtrarVariacion(this.value)">'
+        + '<input type="text" id="buscar-variacion" list="variacion-sugerencias" placeholder="🔍 Buscar item..." style="flex:1;min-width:150px;padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;" oninput="filtrarVariacion(this.value)">'
+        + '<datalist id="variacion-sugerencias"></datalist>'
       + '</div>'
       + '<p style="font-size:0.75rem;color:#888;margin:0 0 0.4rem 0;">Las fechas filtran por la fecha de la <b>última compra</b>.</p>'
       + '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Precio anterior (fecha)</th><th>Último precio (fecha)</th><th>Variación</th></tr></thead><tbody id="variacion-precios-body">' + filas + '</tbody></table></div>'
@@ -450,6 +451,18 @@ function verVariacionPrecios() {
     const mc = document.querySelector('.modal-content');
     if (mc) mc.classList.add('modal-wide');
     document.getElementById('modal').style.display = 'block';
+    // Sugerencias del buscador desde la BASE DE DATOS UNIFICADA (para encontrar items exactos)
+    api('GET', '/api/basedatos/unificada').then(uni => {
+      const dl = document.getElementById('variacion-sugerencias');
+      if (!dl) return;
+      const seen = new Set();
+      dl.innerHTML = (uni || []).map(x => {
+        const n = String(x.nombre || '').trim();
+        if (!n || seen.has(n.toUpperCase())) return '';
+        seen.add(n.toUpperCase());
+        return '<option value="' + n.replace(/"/g, '&quot;') + '">';
+      }).join('');
+    }).catch(() => {});
   }).catch(() => { alert('Error al cargar variación de precios'); });
 }
 
