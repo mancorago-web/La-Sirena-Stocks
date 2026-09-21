@@ -5043,6 +5043,12 @@ app.post('/api/basedatos/renombrar', async (req, res) => {
       if (unidad_venta !== undefined) upd.unidad_venta = unidad_venta;
       if (precio_venta !== undefined) upd.precio_venta = precio_venta || 0;
       await col('base_unificada').doc(String(id)).update(upd);
+    } else if (origen === 'barra_stock') {
+      // Items que vienen de BARRA/STOCK en la base unificada: actualizar el stock (no precios)
+      await col('barra_stock').doc(String(id)).update({ ingrediente: nuevo, updated_at: now });
+    } else if (origen === 'cocina_stock') {
+      // Items que vienen de COCINA/STOCK en la base unificada: actualizar el stock (no precios)
+      await col('cocina_stock').doc(String(id)).update({ ingrediente: nuevo, updated_at: now });
     } else {
       const upd = { ingrediente: nuevo, updated_at: now };
       if (unidad_compra !== undefined) upd.unidad_compra = unidad_compra;
