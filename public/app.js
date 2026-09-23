@@ -5585,7 +5585,7 @@ function renderConteoBarra() {
   }).join('');
   modal.style.display = 'block';
   body.innerHTML = `
-    <h3>📋 CONEO FÍSICO SEMANAL — BARRA</h3>
+    <h3>📋 CONTEO SEMANAL — BARRA</h3>
     <p style="color:#666;font-size:0.85rem;margin-top:0.5rem;">Compara el stock del sistema contra el conteo físico. <b>Diferencia = Conteo − Sistema</b>. Al guardar, el stock se ajusta al conteo físico.</p>
     <label style="display:block;margin-top:0.75rem;">Fecha del conteo:
       <input type="date" id="fecha-conteo-barra" value="${todayStr()}" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-left:0.5rem;">
