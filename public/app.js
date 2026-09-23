@@ -1170,7 +1170,7 @@ function renderVentasAsignacion(items, containerId) {
       '<option value="__excel__"' + (ya && !candidatos.some(c => normMatch(c.n) === normMatch(ya)) ? ' selected' : '') + '>Usar nombre del Excel</option>' +
       '<option value="__nuevo__">Crear nuevo' + (i.destino === 'barra' || i.destino === 'cocina' ? ' (receta)' : '') + '</option>';
     return '<select class="select-match-import" data-item="' + esc(i.nombre) + '" onchange="onMatchSelectChange(this)">' +
-      (ya ? '' : '<option value="">— Emparejar —</option>') + opts + '</select>' +
+      (ya ? '' : '<option value="">— Auto: emparejar o crear —</option>') + opts + '</select>' +
       '<input class="input-match-nuevo" data-item="' + esc(i.nombre) + '" placeholder="Nombre nuevo..." style="display:none;margin-top:0.3rem;padding:0.3rem;border:1px solid #ccc;border-radius:4px;width:90%;">';
   };
   const almacen = (i) => {
@@ -1374,7 +1374,7 @@ function guardarVentasAsignadas(containerId, filas, onDone) {
   const ingAlmacenes = {};
   const recetasNuevas = [];
   const recetasCreadas = new Set();
-  const sinEmparejar = [];
+  const autoCreadas = [];
   document.querySelectorAll('#' + containerId + ' tbody tr').forEach(tr => {
     const itemNombre = tr.querySelector('td') ? tr.querySelector('td').textContent.replace(/ *\*?$/, '').trim() : '';
     if (!itemNombre) return;
@@ -1410,9 +1410,22 @@ function guardarVentasAsignadas(containerId, filas, onDone) {
       } else if (sel.value && sel.value !== '__excel__') {
         matched = sel.value;
       } else {
-        // Sin emparejar o "usar nombre del Excel" en STOCKS sin item existente → bloquear
-        if (!sel.value || (sel.value === '__excel__' && destino === 'stocks' && !stockSet.has(norm(itemNombre)))) {
-          sinEmparejar.push(itemNombre);
+        // NUNCA se pierde una venta: si no se emparejó ni se eligió "crear nueva receta",
+        // se fuerza el emparejamiento al mejor candidato o se crea la receta/item nuevo.
+        const fuzzy = candidatosTodos(itemNombre, destino).find(c => similitud(itemNombre, c.n) >= 0.6) || null;
+        if (fuzzy) {
+          matched = fuzzy.n;
+        } else if (destino === 'barra' || destino === 'cocina') {
+          matched = itemNombre;
+          const key = 'R:' + destino + ':' + norm(matched);
+          if (!recetasCreadas.has(key)) {
+            recetasNuevas.push({ nombre: matched, tipo: destino });
+            recetasCreadas.add(key);
+          }
+          autoCreadas.push({ nombre: itemNombre, destino, creado: matched });
+        } else {
+          matched = itemNombre;
+          autoCreadas.push({ nombre: itemNombre, destino: 'stocks', creado: itemNombre });
         }
       }
     }
@@ -1427,10 +1440,8 @@ function guardarVentasAsignadas(containerId, filas, onDone) {
       if (lista.length) ingAlmacenes[norm(itemNombre)] = lista;
     }
   });
-  if (sinEmparejar.length) {
-    alert('Debes emparejar estos items antes de guardar (elige el item de la app):\n\n- ' + sinEmparejar.join('\n- '));
-    return;
-  }
+  // NUNCA se pierde una venta: los items sin emparejar se auto-emparejaron o se crearon
+  // como receta/item nuevo (autoCreadas). No se aborta el guardado.
   if (!Object.keys(mapping).length) { alert('No hay items para guardar'); return; }
   filas.forEach(r => {
     const k = norm(r.item);
@@ -1455,7 +1466,14 @@ function guardarVentasAsignadas(containerId, filas, onDone) {
       return api('POST', '/api/ventas/import-match', { match });
     })
     .then(() => api('POST', '/api/ventas/import-mapping', { mapping }))
-    .then(() => { registrarVentasFilas(filas, onDone); })
+    .then(() => {
+      if (autoCreadas.length) {
+        const lista = autoCreadas.map(a => '• ' + a.nombre + ' (' + a.destino + ')' + (a.creado && a.creado !== a.nombre ? ' → ' + a.creado : '')).join('\n');
+        showToast('⚠ ' + autoCreadas.length + ' item(s) sin emparejar: se registraron igualmente (receta/item nuevo).');
+        console.warn('Items auto-emparejados/creados en VENTAS:\n' + lista);
+      }
+      registrarVentasFilas(filas, onDone);
+    })
     .catch(() => alert('Error al guardar'));
 }
 
