@@ -5586,13 +5586,15 @@ function renderConteoBarra() {
   modal.style.display = 'block';
   body.innerHTML = `
     <h3>📋 CONTEO SEMANAL — BARRA</h3>
-    <p style="color:#666;font-size:0.85rem;margin-top:0.5rem;">Compara el stock del sistema contra el conteo físico. <b>Diferencia = Conteo − Sistema</b>. Al guardar, el stock se ajusta al conteo físico.</p>
+    <p style="color:#666;font-size:0.85rem;margin-top:0.5rem;">Compara el stock del sistema contra el conteo físico. <b>Diferencia = Conteo − Sistema</b>. <b>GUARDAR</b> solo registra el conteo de la fecha. <b>INFORME</b> muestra las diferencias. <b>AJUSTAR</b> registra y modifica el stock de la app.</p>
     <label style="display:block;margin-top:0.75rem;">Fecha del conteo:
       <input type="date" id="fecha-conteo-barra" value="${todayStr()}" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-left:0.5rem;">
     </label>
     ${filas}
-    <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
-      <button onclick="guardarConteoBarra()" style="flex:1;padding:0.6rem;background:#6a1b9a;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">💾 GUARDAR CONTEO Y AJUSTAR</button>
+    <div style="margin-top:1.5rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+      <button onclick="guardarConteoBarra('guardar')" style="flex:1;padding:0.6rem;background:#2e7d32;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">💾 GUARDAR</button>
+      <button onclick="guardarConteoBarra('informe')" style="flex:1;padding:0.6rem;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">📊 INFORME</button>
+      <button onclick="guardarConteoBarra('ajustar')" style="flex:1;padding:0.6rem;background:#e65100;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">⚙️ AJUSTAR</button>
       <button onclick="cerrarModal()" style="flex:1;padding:0.6rem;background:#666;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancelar</button>
     </div>
     <p style="font-size:0.8rem;color:#999;margin-top:0.75rem;">Los items en 0 (vacíos) también aparecen: déjalos en vacío o 0 si siguen vacíos.</p>`;
@@ -5610,7 +5612,7 @@ function actualizarDiferenciaConteo(input) {
   td.style.fontWeight = diff === 0 ? 'normal' : '700';
 }
 
-function guardarConteoBarra() {
+function guardarConteoBarra(accion) {
   const fecha = document.getElementById('fecha-conteo-barra').value;
   if (!fecha) { alert('Selecciona la fecha del conteo'); return; }
   const items = [];
@@ -5624,13 +5626,26 @@ function guardarConteoBarra() {
     items.push({ id, conteo: parseFloat(val) || 0 });
   });
   if (!contados) { alert('Ingresa al menos un conteo físico'); return; }
-  if (!confirm('Ajustar ' + contados + ' item(s) al conteo físico del ' + fecha + '? El stock del sistema se sobrescribirá.')) return;
-  api('POST', '/api/barra/conteo', { fecha, items }).then(r => {
-    mostrarResultadoConteo(r, fecha);
-  }).catch(() => alert('Error al guardar el conteo'));
+  if (accion === 'guardar') {
+    if (!confirm('Guardar el conteo de ' + contados + ' item(s) para el ' + fecha + '? (NO modifica el stock de la app)')) return;
+  } else if (accion === 'informe') {
+    // El informe no guarda ni modifica: solo compara y muestra
+  } else if (accion === 'ajustar') {
+    if (!confirm('Ajustar ' + contados + ' item(s) al conteo físico del ' + fecha + '? El stock del sistema se sobrescribirá.')) return;
+  }
+  api('POST', '/api/barra/conteo', { fecha, items, accion }).then(r => {
+    if (accion === 'informe') {
+      mostrarResultadoConteo(r, fecha, false);
+    } else if (accion === 'guardar') {
+      showToast('Conteo guardado para el ' + fecha + ' (sin ajustar stock)');
+      cerrarModal();
+    } else {
+      mostrarResultadoConteo(r, fecha, true);
+    }
+  }).catch(() => alert('Error al procesar el conteo'));
 }
 
-function mostrarResultadoConteo(r, fecha) {
+function mostrarResultadoConteo(r, fecha, ajustado) {
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
   const difs = (r.diferencias || []).filter(d => Math.abs(d.diff) > 0.0001);
@@ -5653,9 +5668,9 @@ function mostrarResultadoConteo(r, fecha) {
     '<p style="color:#2e7d32;font-weight:700;margin-top:0.75rem;">✅ Sin diferencias: el stock del sistema coincide con el conteo físico.</p>';
   modal.style.display = 'block';
   body.innerHTML = `
-    <h3>📋 Resultado Conteo — ${fecha}</h3>
+    <h3>📊 INFORME — CONTEO ${fecha}</h3>
     ${resumen}
-    <p style="color:#666;font-size:0.9rem;">Ajustados: <b>${(r.ajustes || []).length}</b> item(s) | Faltantes: <b style="color:#c62828;">${faltantes.length}</b> | Sobrantes: <b style="color:#2e7d32;">${sobrantes.length}</b></p>
+    <p style="color:#666;font-size:0.9rem;">${ajustado ? 'Ajustados: <b>' + (r.ajustes || []).length + '</b> item(s) al físico.' : 'Conteo comparado (sin modificar stock).'} Faltantes: <b style="color:#c62828;">${faltantes.length}</b> | Sobrantes: <b style="color:#2e7d32;">${sobrantes.length}</b></p>
     <p style="font-size:0.8rem;color:#666;">FALTANTE = el sistema decía más de lo físico (se consumió sin registrar o falla en receta). SOBRANTE = físico mayor al sistema (ingreso no registrado o receta descontó de más).</p>
     <div class="table-wrap"><table>
       <thead><tr><th>Item</th><th>Mueble</th><th>Sistema</th><th>Físico</th><th>Dif.</th><th>Estado</th><th>Ventas/Ingresos</th></tr></thead>

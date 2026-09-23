@@ -3549,11 +3549,14 @@ app.delete('/api/barra/stock/:id', async (req, res) => {
 });
 
 // --- BARRA: Conteo físico semanal (faltantes/sobrantes) ---
-// Recibe el conteo físico de los items de BARRA/STOCK. Compara contra el stock del sistema,
-// guarda el conteo en barra_conteos y ajusta barra_stock al valor físico.
+// Recibe el conteo físico de los items de BARRA/STOCK. Según la acción:
+//   'informe' -> solo compara (no guarda ni ajusta)
+//   'guardar' -> guarda el conteo en barra_conteos (sin tocar stock)
+//   'ajustar' -> guarda el conteo Y ajusta barra_stock al valor físico
 app.post('/api/barra/conteo', authMiddleware, async (req, res) => {
   try {
-    const { fecha, items } = req.body;
+    const { fecha, items, accion } = req.body;
+    const accionFinal = ['informe', 'guardar', 'ajustar'].includes(accion) ? accion : 'guardar';
     if (!fecha || !Array.isArray(items) || !items.length) return res.status(400).json({ error: 'fecha e items requeridos' });
     const savedBy = req.user?.name || req.user?.email || 'unknown';
 
@@ -3586,8 +3589,8 @@ app.post('/api/barra/conteo', authMiddleware, async (req, res) => {
       const fisico = parseFloat(it.conteo) || 0;
       const sistema = parseFloat(s.cantidad) || 0;
       const diff = Math.round((fisico - sistema) * 100) / 100;
-      // Solo ajustar si cambió
-      if (Math.abs(diff) > 0.0001) {
+      // Solo ajustar si cambió (solo en accion 'ajustar')
+      if (accionFinal === 'ajustar' && Math.abs(diff) > 0.0001) {
         batch.update(col('barra_stock').doc(String(id)), { cantidad: fisico, updated_at: new Date().toISOString() });
         ajustes.push({ id, ingrediente: s.ingrediente, grupo: s.grupo || '', sistema, fisico, diff });
       }
@@ -3601,18 +3604,21 @@ app.post('/api/barra/conteo', authMiddleware, async (req, res) => {
 
     if (ajustes.length) await batch.commit();
 
-    // Guardar el conteo (histórico)
-    await col('barra_conteos').add({
-      fecha,
-      items: diferencias.filter(d => Math.abs(d.diff) > 0.0001).map(d => ({
-        id: d.id, ingrediente: d.ingrediente, grupo: d.grupo, sistema: d.sistema, fisico: d.fisico, diff: d.diff
-      })),
-      saved_by: savedBy,
-      created_at: new Date().toISOString()
-    });
+    // Guardar el conteo (histórico) - solo en 'guardar' o 'ajustar'
+    if (accionFinal === 'guardar' || accionFinal === 'ajustar') {
+      await col('barra_conteos').add({
+        fecha,
+        accion: accionFinal,
+        items: diferencias.filter(d => Math.abs(d.diff) > 0.0001).map(d => ({
+          id: d.id, ingrediente: d.ingrediente, grupo: d.grupo, sistema: d.sistema, fisico: d.fisico, diff: d.diff
+        })),
+        saved_by: savedBy,
+        created_at: new Date().toISOString()
+      });
+    }
 
     invalidarCachesLectura();
-    res.json({ ok: true, ajustes, diferencias: diferencias.filter(d => Math.abs(d.diff) > 0.0001) });
+    res.json({ ok: true, accion: accionFinal, ajustes, diferencias: diferencias.filter(d => Math.abs(d.diff) > 0.0001) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
