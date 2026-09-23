@@ -3548,6 +3548,82 @@ app.delete('/api/barra/stock/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// --- BARRA: Conteo físico semanal (faltantes/sobrantes) ---
+// Recibe el conteo físico de los items de BARRA/STOCK. Compara contra el stock del sistema,
+// guarda el conteo en barra_conteos y ajusta barra_stock al valor físico.
+app.post('/api/barra/conteo', authMiddleware, async (req, res) => {
+  try {
+    const { fecha, items } = req.body;
+    if (!fecha || !Array.isArray(items) || !items.length) return res.status(400).json({ error: 'fecha e items requeridos' });
+    const savedBy = req.user?.name || req.user?.email || 'unknown';
+
+    // Cargar stock actual
+    const stockSnap = await col('barra_stock').get();
+    const stockById = {};
+    stockSnap.docs.forEach(d => { stockById[Number(d.id)] = d; });
+
+    // Cargar movimientos de venta/ingreso del item (para el detalle semanal)
+    const bmSnap = await col('barra_movimientos').get();
+    const movPorItem = {};
+    bmSnap.docs.forEach(d => {
+      const a = d.data();
+      const n = String(a.ingrediente || '').trim().toUpperCase();
+      if (!movPorItem[n]) movPorItem[n] = { ventas: 0, ingresos: 0 };
+      const cant = parseFloat(a.cantidad) || 0;
+      if (a.tipo === 'ventas' && a.es_receta !== true && a.fecha <= fecha) movPorItem[n].ventas += cant;
+      else if (a.tipo === 'ingresos' && a.fecha <= fecha) movPorItem[n].ingresos += cant;
+    });
+
+    const batch = db.batch();
+    const ajustes = [];
+    const diferencias = [];
+
+    items.forEach(it => {
+      const id = Number(it.id);
+      const doc = stockById[id];
+      if (!doc) return;
+      const s = doc.data();
+      const fisico = parseFloat(it.conteo) || 0;
+      const sistema = parseFloat(s.cantidad) || 0;
+      const diff = Math.round((fisico - sistema) * 100) / 100;
+      // Solo ajustar si cambió
+      if (Math.abs(diff) > 0.0001) {
+        batch.update(col('barra_stock').doc(String(id)), { cantidad: fisico, updated_at: new Date().toISOString() });
+        ajustes.push({ id, ingrediente: s.ingrediente, grupo: s.grupo || '', sistema, fisico, diff });
+      }
+      diferencias.push({
+        id, ingrediente: s.ingrediente, grupo: s.grupo || '', unidad: s.unidad || 'unidad',
+        sistema, fisico, diff,
+        ventas: movPorItem[String(s.ingrediente || '').trim().toUpperCase()]?.ventas || 0,
+        ingresos: movPorItem[String(s.ingrediente || '').trim().toUpperCase()]?.ingresos || 0
+      });
+    });
+
+    if (ajustes.length) await batch.commit();
+
+    // Guardar el conteo (histórico)
+    await col('barra_conteos').add({
+      fecha,
+      items: diferencias.filter(d => Math.abs(d.diff) > 0.0001).map(d => ({
+        id: d.id, ingrediente: d.ingrediente, grupo: d.grupo, sistema: d.sistema, fisico: d.fisico, diff: d.diff
+      })),
+      saved_by: savedBy,
+      created_at: new Date().toISOString()
+    });
+
+    invalidarCachesLectura();
+    res.json({ ok: true, ajustes, diferencias: diferencias.filter(d => Math.abs(d.diff) > 0.0001) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Historial de conteos de BARRA
+app.get('/api/barra/conteo', async (req, res) => {
+  try {
+    const snap = await col('barra_conteos').orderBy('fecha', 'desc').limit(30).get();
+    res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- COCINA: Stock con familias ---
 app.get('/api/cocina/stock', async (req, res) => {
   try {

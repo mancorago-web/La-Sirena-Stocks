@@ -5547,6 +5547,125 @@ function guardarStockBarra() {
   }).catch(() => alert('Error al guardar'));
 }
 
+// --- BARRA: CONEO FÍSICO SEMANAL ---
+let _conteoBarraItems = [];
+
+function abrirConteoBarra() {
+  api('GET', '/api/barra/stock').then(data => {
+    _conteoBarraItems = data.map(s => ({ ...s, conteo: '' }));
+    renderConteoBarra();
+  }).catch(() => alert('Error cargando stock'));
+}
+
+function renderConteoBarra() {
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modal-body');
+  const groups = {};
+  _conteoBarraItems.forEach(s => {
+    const g = (s.grupo || 'SIN CLASIFICAR').toUpperCase();
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(s);
+  });
+  const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  const filas = Object.keys(groups).sort().map(g => {
+    groups[g].sort((a, b) => String(a.ingrediente).localeCompare(String(b.ingrediente), 'es'));
+    const rows = groups[g].map(s => {
+      const sistema = parseFloat(s.cantidad) || 0;
+      const uniqId = s.id + '_' + norm(s.ingrediente);
+      return `<tr data-conteo-id="${uniqId}">
+        <td>${esc(s.ingrediente)}</td>
+        <td style="text-align:center;font-weight:700;">${sistema}</td>
+        <td style="text-align:center;"><input type="number" step="0.01" min="0" class="input-conteo-fisico" data-sistema="${sistema}" value="" placeholder="${sistema}" style="width:80px;padding:0.35rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarDiferenciaConteo(this)"></td>
+        <td style="text-align:center;" class="td-conteo-diff" data-diff="0">0</td>
+        <td style="text-align:center;">${(s.unidad || 'unidad')}</td>
+      </tr>`;
+    }).join('');
+    return `<div style="margin-top:0.75rem;"><h4 style="margin:0 0 0.25rem;color:#0f3460;">${esc(g)}</h4>
+      <div class="table-wrap"><table><thead><tr><th>Item</th><th>Sistema</th><th>Conteo Físico</th><th>Diferencia</th><th>Unidad</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  }).join('');
+  modal.style.display = 'block';
+  body.innerHTML = `
+    <h3>📋 CONEO FÍSICO SEMANAL — BARRA</h3>
+    <p style="color:#666;font-size:0.85rem;margin-top:0.5rem;">Compara el stock del sistema contra el conteo físico. <b>Diferencia = Conteo − Sistema</b>. Al guardar, el stock se ajusta al conteo físico.</p>
+    <label style="display:block;margin-top:0.75rem;">Fecha del conteo:
+      <input type="date" id="fecha-conteo-barra" value="${todayStr()}" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-left:0.5rem;">
+    </label>
+    ${filas}
+    <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+      <button onclick="guardarConteoBarra()" style="flex:1;padding:0.6rem;background:#6a1b9a;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">💾 GUARDAR CONTEO Y AJUSTAR</button>
+      <button onclick="cerrarModal()" style="flex:1;padding:0.6rem;background:#666;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancelar</button>
+    </div>
+    <p style="font-size:0.8rem;color:#999;margin-top:0.75rem;">Los items en 0 (vacíos) también aparecen: déjalos en vacío o 0 si siguen vacíos.</p>`;
+}
+
+function actualizarDiferenciaConteo(input) {
+  const tr = input.closest('tr');
+  const sistema = parseFloat(input.getAttribute('data-sistema')) || 0;
+  const conteo = parseFloat(input.value);
+  const diff = isNaN(conteo) ? 0 : Math.round((conteo - sistema) * 100) / 100;
+  const td = tr.querySelector('.td-conteo-diff');
+  if (!td) return;
+  td.textContent = diff;
+  td.style.color = diff > 0.0001 ? '#2e7d32' : (diff < -0.0001 ? '#c62828' : '#666');
+  td.style.fontWeight = diff === 0 ? 'normal' : '700';
+}
+
+function guardarConteoBarra() {
+  const fecha = document.getElementById('fecha-conteo-barra').value;
+  if (!fecha) { alert('Selecciona la fecha del conteo'); return; }
+  const items = [];
+  let contados = 0;
+  document.querySelectorAll('.input-conteo-fisico').forEach(input => {
+    const tr = input.closest('tr');
+    const id = Number(tr.getAttribute('data-conteo-id').split('_')[0]);
+    const val = input.value.trim();
+    if (val === '') return; // vacío = no contado
+    contados++;
+    items.push({ id, conteo: parseFloat(val) || 0 });
+  });
+  if (!contados) { alert('Ingresa al menos un conteo físico'); return; }
+  if (!confirm('Ajustar ' + contados + ' item(s) al conteo físico del ' + fecha + '? El stock del sistema se sobrescribirá.')) return;
+  api('POST', '/api/barra/conteo', { fecha, items }).then(r => {
+    mostrarResultadoConteo(r, fecha);
+  }).catch(() => alert('Error al guardar el conteo'));
+}
+
+function mostrarResultadoConteo(r, fecha) {
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modal-body');
+  const difs = (r.diferencias || []).filter(d => Math.abs(d.diff) > 0.0001);
+  const faltantes = difs.filter(d => d.diff < -0.0001); // físico < sistema
+  const sobrantes = difs.filter(d => d.diff > 0.0001);  // físico > sistema
+  const rows = difs.map(d => {
+    const estado = d.diff < -0.0001 ? '<span style="color:#c62828;font-weight:700;">FALTANTE</span>' : '<span style="color:#2e7d32;font-weight:700;">SOBRANTE</span>';
+    const sem = `ventas: <b>${d.ventas}</b> | ingresos: <b>${d.ingresos}</b>`;
+    return `<tr>
+      <td>${esc(d.ingrediente)}</td>
+      <td>${(d.grupo || '').toUpperCase()}</td>
+      <td style="text-align:center;">${d.sistema}</td>
+      <td style="text-align:center;font-weight:700;">${d.fisico}</td>
+      <td style="text-align:center;color:${d.diff < 0 ? '#c62828' : '#2e7d32'};font-weight:700;">${d.diff}</td>
+      <td style="text-align:center;">${estado}</td>
+      <td>${sem}</td>
+    </tr>`;
+  }).join('');
+  const resumen = difs.length ? '' :
+    '<p style="color:#2e7d32;font-weight:700;margin-top:0.75rem;">✅ Sin diferencias: el stock del sistema coincide con el conteo físico.</p>';
+  modal.style.display = 'block';
+  body.innerHTML = `
+    <h3>📋 Resultado Conteo — ${fecha}</h3>
+    ${resumen}
+    <p style="color:#666;font-size:0.9rem;">Ajustados: <b>${(r.ajustes || []).length}</b> item(s) | Faltantes: <b style="color:#c62828;">${faltantes.length}</b> | Sobrantes: <b style="color:#2e7d32;">${sobrantes.length}</b></p>
+    <p style="font-size:0.8rem;color:#666;">FALTANTE = el sistema decía más de lo físico (se consumió sin registrar o falla en receta). SOBRANTE = físico mayor al sistema (ingreso no registrado o receta descontó de más).</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Item</th><th>Mueble</th><th>Sistema</th><th>Físico</th><th>Dif.</th><th>Estado</th><th>Ventas/Ingresos</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+      <button onclick="cerrarModal(); cargarStockBarra();" style="flex:1;padding:0.6rem;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">CERRAR</button>
+    </div>`;
+}
+
 function editarItemStock(id) {
   const tr = document.querySelector('#barra-stock-container tr[data-stock-id="' + id + '"]');
   if (!tr) return;
