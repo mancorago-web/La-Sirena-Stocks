@@ -6529,9 +6529,15 @@ app.get('/api/auth/users', authMiddleware, async (req, res) => {
 
 function normalizeUnit(u) {
   if (!u) return 'unidad';
-  const lower = u.trim().toLowerCase();
-  const map = { 'oz': 'onzas', 'onz': 'onzas', 'und': 'unidad', 'unidades': 'unidad', 'gr': 'gramos', 'gramo': 'gramos' };
-  return map[lower] || lower;
+  const t = String(u).trim().toLowerCase();
+  if (/unidad|unid|und|pieza/.test(t)) return 'unidad';
+  if (/onza/.test(t)) return 'onzas';
+  if (/ml|cc/.test(t)) return 'ml';
+  if (/lt|l|litro/.test(t)) return 'lt';
+  if (/gr|gramo/.test(t)) return 'gramos';
+  if (/kg|kilo/.test(t)) return 'kg';
+  if (/botella|bot/.test(t)) return 'botella';
+  return t || 'unidad';
 }
 
 function getUnitToMl(unit) {
