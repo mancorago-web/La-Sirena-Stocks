@@ -5576,12 +5576,10 @@ function renderConteoBarra() {
         <td>${esc(s.ingrediente)}</td>
         <td style="text-align:center;font-weight:700;">${sistema}</td>
         <td style="text-align:center;"><input type="number" step="0.01" min="0" class="input-conteo-fisico" data-sistema="${sistema}" value="" placeholder="${sistema}" style="width:80px;padding:0.35rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarDiferenciaConteo(this)"></td>
-        <td style="text-align:center;" class="td-conteo-diff" data-diff="0">0</td>
-        <td style="text-align:center;">${(s.unidad || 'unidad')}</td>
       </tr>`;
     }).join('');
     return `<div style="margin-top:0.75rem;"><h4 style="margin:0 0 0.25rem;color:#0f3460;">${esc(g)}</h4>
-      <div class="table-wrap"><table><thead><tr><th>Item</th><th>Sistema</th><th>Conteo Físico</th><th>Diferencia</th><th>Unidad</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+      <div class="table-wrap"><table><thead><tr><th>Item</th><th>Sistema</th><th>Conteo Físico</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
   }).join('');
   modal.style.display = 'block';
   body.innerHTML = `
