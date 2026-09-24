@@ -5914,7 +5914,10 @@ function cargarInformeConteo() {
   if (!fecha) { alert('Selecciona una fecha'); return; }
   api('GET', '/api/barra/conteo?fecha=' + encodeURIComponent(fecha)).then(list => {
     const c = (list || [])[0];
-    if (!c) { showToast('No hay informe guardado para el ' + fecha); return; }
+    if (!c || !Array.isArray(c.items) || !c.items.length) {
+      mostrarSinInformeConteo(fecha);
+      return;
+    }
     const diferencias = (c.items || []).map(it => ({ ...it, estado: it.diff < 0 ? 'FALTANTE' : 'SOBRANTE' }));
     mostrarResultadoConteo({
       diferencias,
@@ -5924,8 +5927,8 @@ function cargarInformeConteo() {
   }).catch(() => alert('Error cargando el informe'));
 }
 
-// Desde el botón INFORME del modal de conteo: SIEMPRE muestra el informe GUARDADO de esa fecha
-// (con los valores del sistema ANTES del ajuste). Si aún no se guardó, muestra el cálculo en vivo.
+// Desde el botón INFORME del modal de conteo: muestra SOLO el informe GUARDADO de esa fecha.
+// Si no hay informe guardado, no se muestra nada (solo un aviso dentro del modal).
 function verInformeConteo() {
   const fecha = document.getElementById('fecha-conteo-barra')?.value || todayStr();
   api('GET', '/api/barra/conteo?fecha=' + encodeURIComponent(fecha)).then(list => {
@@ -5938,10 +5941,30 @@ function verInformeConteo() {
         fecha_desde: c.fecha_desde || ''
       }, fecha, c.accion === 'ajustar', false);
     } else {
-      // No hay informe guardado aún: mostrar cálculo en vivo (conteo ingresado en el modal)
-      guardarConteoBarra('informe');
+      mostrarSinInformeConteo(fecha);
     }
-  }).catch(() => guardarConteoBarra('informe'));
+  }).catch(() => mostrarSinInformeConteo(fecha));
+}
+
+// Muestra un aviso de que no hay informe guardado para la fecha (sin cálculo en vivo)
+function mostrarSinInformeConteo(fecha) {
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modal-body');
+  abrirModalDesdeArriba();
+  const mc = modal.querySelector('.modal-content');
+  if (mc) mc.classList.add('modal-wide');
+  body.innerHTML = `
+    <h3>📊 INFORME — ${fecha}</h3>
+    <p style="color:#888;font-size:1rem;margin-top:1.5rem;text-align:center;">No hay informe guardado para el <b>${fecha}</b>.</p>
+    <p style="color:#999;font-size:0.85rem;text-align:center;">Los informes se generan al guardar un conteo semanal. Cambia la fecha para ver uno existente.</p>
+    <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;margin-top:1rem;background:#e3f2fd;padding:0.4rem 0.6rem;border-radius:6px;">
+      <label style="font-size:0.78rem;color:#0f3460;font-weight:700;margin:0;">Ver informe:</label>
+      <input type="date" id="fecha-informe-conteo" value="${fecha}" style="width:auto;margin:0;padding:0.25rem 0.4rem;border:1px solid #90caf9;border-radius:4px;font-size:0.78rem;">
+      <button onclick="cargarInformeConteo()" style="width:auto;margin:0;padding:0.3rem 0.7rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700;font-size:0.78rem;">BUSCAR</button>
+    </div>
+    <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+      <button onclick="cerrarModal(); cargarStockBarra();" style="flex:1;padding:0.6rem;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">CERRAR</button>
+    </div>`;
 }
 
 // Arma el texto del informe y lo abre en WHATSAPP
