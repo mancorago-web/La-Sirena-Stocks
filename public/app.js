@@ -5667,8 +5667,9 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
   const difs = (r.diferencias || []).filter(d => Math.abs(d.diff) > 0.0001);
   const faltantes = difs.filter(d => d.diff < -0.0001); // físico < sistema
   const sobrantes = difs.filter(d => d.diff > 0.0001);  // físico > sistema
-  // Orden: primero FALTANTES, luego SOBRANTES (y dentro, alfabético por item)
-  const ordenadas = [...faltantes, ...sobrantes].sort((a, b) => String(a.ingrediente).localeCompare(String(b.ingrediente), 'es'));
+  // Orden: primero FALTANTES, luego SOBRANTES (cada grupo ordenado alfabéticamente)
+  const ordenarAlpha = (a, b) => String(a.ingrediente).localeCompare(String(b.ingrediente), 'es');
+  const ordenadas = [...faltantes.sort(ordenarAlpha), ...sobrantes.sort(ordenarAlpha)];
   const rows = ordenadas.map(d => {
     const esFaltante = d.diff < -0.0001;
     const estado = `<span style="display:inline-block;white-space:nowrap;background:${esFaltante ? '#ffebee' : '#e8f5e9'};color:${esFaltante ? '#c62828' : '#2e7d32'};font-weight:700;padding:0.15rem 0.6rem;border-radius:10px;font-size:0.78rem;">${esFaltante ? 'FALTANTE' : 'SOBRANTE'}</span>`;
