@@ -5573,7 +5573,7 @@ function abrirConteoBarra() {
       }
       renderConteoBarra();
     });
-  }).catch(() => alert('Error cargando stock'));
+  }).catch(e => alert('Error cargando stock: ' + (e && e.message ? e.message : e)));
 }
 
 function renderConteoBarra() {
