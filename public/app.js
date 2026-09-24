@@ -3331,7 +3331,7 @@ function cerrarModal() {
 // Fuerza que el modal se muestre desde el inicio (scroll arriba)
 function abrirModalDesdeArriba() {
   const modal = document.getElementById('modal');
-  abrirModalDesdeArriba();
+  modal.style.display = 'block';
   // Scroll del fondo del modal al inicio + scroll de la página al inicio
   modal.scrollTop = 0;
   window.scrollTo(0, 0);
