@@ -5684,7 +5684,7 @@ function renderConteoBarra() {
     </table></div>
     <div style="margin-top:1.5rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
       <button onclick="guardarConteoBarra('guardar')" style="flex:1;padding:0.6rem;background:#2e7d32;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">💾 GUARDAR</button>
-      <button onclick="verInformeConteo('${fecha}')" style="flex:1;padding:0.6rem;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">📊 INFORME</button>
+      <button onclick="verInformeConteo()" style="flex:1;padding:0.6rem;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">📊 INFORME</button>
       <button onclick="cerrarModal()" style="flex:1;padding:0.6rem;background:#666;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancelar</button>
     </div>
     <p style="font-size:0.8rem;color:#999;margin-top:0.75rem;">Los items en 0 (vacíos) también aparecen: déjalos en vacío o 0 si siguen vacíos. El AJUSTAR ahora está en el INFORME.</p>`;
@@ -5926,7 +5926,8 @@ function cargarInformeConteo() {
 
 // Desde el botón INFORME del modal de conteo: SIEMPRE muestra el informe GUARDADO de esa fecha
 // (con los valores del sistema ANTES del ajuste). Si aún no se guardó, muestra el cálculo en vivo.
-function verInformeConteo(fecha) {
+function verInformeConteo() {
+  const fecha = document.getElementById('fecha-conteo-barra')?.value || todayStr();
   api('GET', '/api/barra/conteo?fecha=' + encodeURIComponent(fecha)).then(list => {
     const c = (list || [])[0];
     if (c && Array.isArray(c.items) && c.items.length) {
