@@ -1733,7 +1733,7 @@ function mostrarAlertaAperturas(alerts) {
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
   if (!modal || !body) return;
-  modal.style.display = 'block';
+  abrirModalDesdeArriba();
   if (esDiverge) {
     body.innerHTML = '<h3 style="color:#c62828;">⚠️ ALERTA: aperturas manuales alejadas de la cadena</h3>' +
       '<p style="color:#666;margin-top:0.75rem;">Estas aperturas (EDITAR APERTURA) se guardaron MUY distintas al cierre del día anterior. Suele ser un conteo físico mal tipeado o un ingreso mal registrado:</p>' +
@@ -3151,7 +3151,7 @@ function selectUnidades(id, valor, opciones) {
 function showModal(tipo, data) {
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
-  modal.style.display = 'block';
+  abrirModalDesdeArriba();
 
   if (tipo === 'almacen') {
     body.innerHTML = `
@@ -3326,6 +3326,15 @@ function cerrarModal() {
   const mc = document.querySelector('.modal-content');
   if (mc) mc.classList.remove('modal-wide');
   document.getElementById('modal').style.display = 'none';
+}
+
+// Fuerza que el modal se muestre desde el inicio (scroll arriba)
+function abrirModalDesdeArriba() {
+  const modal = document.getElementById('modal');
+  abrirModalDesdeArriba();
+  // Scroll del fondo del modal al inicio + scroll de la página al inicio
+  modal.scrollTop = 0;
+  window.scrollTo(0, 0);
 }
 
 function guardarAlmacen(id) {
@@ -5594,7 +5603,7 @@ function renderConteoBarra() {
     }).join('');
     return header + rows;
   }).join('');
-  modal.style.display = 'block';
+  abrirModalDesdeArriba();
   const mc = modal.querySelector('.modal-content');
   if (mc) mc.classList.add('modal-wide');
   body.innerHTML = `
@@ -5721,7 +5730,7 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
   const volverBtn = volver
     ? '<button onclick="renderConteoBarra()" style="flex:1;padding:0.6rem;background:#455a64;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">⬅ VOLVER AL CONTEO</button>'
     : '';
-  modal.style.display = 'block';
+  abrirModalDesdeArriba();
   const mc = modal.querySelector('.modal-content');
   if (mc) mc.classList.add('modal-wide');
   // Guardar datos del informe para el WHATSAPP (agrupado por mueble)
@@ -5772,7 +5781,7 @@ function abrirBajasBarra(fecha) {
       </select></td>
     </tr>`;
   }).join('');
-  modal.style.display = 'block';
+  abrirModalDesdeArriba();
   const mc = modal.querySelector('.modal-content');
   if (mc) mc.classList.add('modal-wide');
   body.innerHTML = `
@@ -8866,7 +8875,7 @@ function editarCompra(id) {
   const precioUni = parseFloat(r.precio) || 0;
   const precioTot = parseFloat(r.precio_total) || (precioUni * (r.cantidad || 0));
   const docOpts = ['FACTURA', 'BOLETA', 'NOTA DE VENTA'].map(d => '<option value="' + d + '" ' + (String(r.documento || '').toUpperCase() === d ? 'selected' : '') + '>' + d + '</option>').join('');
-  modal.style.display = 'block';
+  abrirModalDesdeArriba();
   body.innerHTML = `
     <h3>Editar Compra/Ingreso</h3>
     <p style="color:#666;margin-top:0.5rem;font-size:0.85rem;"><b>${esc(r.nombre)}</b> · ${esc(r.destino || '').toUpperCase()} · Fecha ${r.fecha || '—'}</p>
@@ -8952,7 +8961,7 @@ function guardarEdicionCompra(id) {
 function confirmarEliminarCompra(id) {
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
-  modal.style.display = 'block';
+  abrirModalDesdeArriba();
   body.innerHTML = `
     <h3>Eliminar Compra/Ingreso</h3>
     <p style="color:#666;margin-top:0.75rem;">¿Seguro que quieres eliminar este registro? Se revertirá el ingreso en STOCKS/BARRA correspondiente.</p>
@@ -9169,7 +9178,7 @@ function cargarVentasDetalle(fecha) {
 function confirmarEliminarVenta(id) {
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
-  modal.style.display = 'block';
+  abrirModalDesdeArriba();
   body.innerHTML = `
     <h3>Eliminar Venta</h3>
     <p style="color:#666;margin-top:0.75rem;">¿Seguro que quieres eliminar esta venta? Se revertirá en STOCKS/BARRA correspondiente.</p>
@@ -9323,7 +9332,7 @@ let CATEGORIAS_COSTOS = {};
 function agregarCampo(prefix) {
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
-  modal.style.display = 'block';
+  abrirModalDesdeArriba();
   body.innerHTML = `
     <h3>Agregar Campo</h3>
     <label style="display:block;margin-top:1rem;">
@@ -9350,7 +9359,7 @@ function guardarCampo(prefix) {
 function editarTitulo(prefix, viejo) {
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
-  modal.style.display = 'block';
+  abrirModalDesdeArriba();
   body.innerHTML = `
     <h3>Renombrar Campo</h3>
     <label style="display:block;margin-top:1rem;">
@@ -9386,7 +9395,7 @@ function confirmarEliminarTitulo(prefix, idx) {
   if (!nombre) return;
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
-  modal.style.display = 'block';
+  abrirModalDesdeArriba();
   body.innerHTML = `
     <h3>Eliminar Campo</h3>
     <p style="color:#666;margin-top:0.75rem;">¿Seguro que quieres eliminar el campo <b>${esc(nombre)}</b>? Se eliminarán también sus registros asociados.</p>
@@ -9457,7 +9466,7 @@ function renderizarPestanas(pestanas) {
 function nuevaPestana() {
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
-  modal.style.display = 'block';
+  abrirModalDesdeArriba();
   body.innerHTML = `
     <h3>Nueva Pestaña</h3>
     <label style="display:block;margin-top:1rem;">
@@ -9488,7 +9497,7 @@ function editarPestana(id) {
   if (!cfg) return;
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
-  modal.style.display = 'block';
+  abrirModalDesdeArriba();
   body.innerHTML = `
     <h3>Renombrar Pestaña</h3>
     <label style="display:block;margin-top:1rem;">
