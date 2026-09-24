@@ -5667,15 +5667,18 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
   const difs = (r.diferencias || []).filter(d => Math.abs(d.diff) > 0.0001);
   const faltantes = difs.filter(d => d.diff < -0.0001); // físico < sistema
   const sobrantes = difs.filter(d => d.diff > 0.0001);  // físico > sistema
-  const rows = difs.map(d => {
-    const estado = d.diff < -0.0001 ? '<span style="color:#c62828;font-weight:700;">FALTANTE</span>' : '<span style="color:#2e7d32;font-weight:700;">SOBRANTE</span>';
+  // Orden: primero FALTANTES, luego SOBRANTES (y dentro, alfabético por item)
+  const ordenadas = [...faltantes, ...sobrantes].sort((a, b) => String(a.ingrediente).localeCompare(String(b.ingrediente), 'es'));
+  const rows = ordenadas.map(d => {
+    const esFaltante = d.diff < -0.0001;
+    const estado = `<span style="display:inline-block;white-space:nowrap;background:${esFaltante ? '#ffebee' : '#e8f5e9'};color:${esFaltante ? '#c62828' : '#2e7d32'};font-weight:700;padding:0.15rem 0.6rem;border-radius:10px;font-size:0.78rem;">${esFaltante ? 'FALTANTE' : 'SOBRANTE'}</span>`;
     const sem = `ventas: <b>${d.ventas}</b> | ingresos: <b>${d.ingresos}</b>`;
     return `<tr>
       <td>${esc(d.ingrediente)}</td>
       <td>${(d.grupo || '').toUpperCase()}</td>
       <td style="text-align:center;">${d.sistema}</td>
       <td style="text-align:center;font-weight:700;">${d.fisico}</td>
-      <td style="text-align:center;color:${d.diff < 0 ? '#c62828' : '#2e7d32'};font-weight:700;">${d.diff}</td>
+      <td style="text-align:center;color:${esFaltante ? '#c62828' : '#2e7d32'};font-weight:700;">${d.diff}</td>
       <td style="text-align:center;">${estado}</td>
       <td>${sem}</td>
     </tr>`;
