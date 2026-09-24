@@ -3662,6 +3662,48 @@ app.get('/api/barra/conteo', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- BARRA: registrar BAJAS (rotura/merma/pérdida) desde el INFORME ---
+// Solo documenta el faltante: crea movimientos tipo 'bajas' pero NO modifica el stock.
+app.post('/api/barra/bajas', authMiddleware, async (req, res) => {
+  try {
+    const { fecha, items } = req.body;
+    if (!fecha || !Array.isArray(items) || !items.length) return res.status(400).json({ error: 'fecha e items requeridos' });
+    const savedBy = req.user?.name || req.user?.email || 'unknown';
+
+    const stockSnap = await col('barra_stock').get();
+    const stockById = {};
+    stockSnap.docs.forEach(d => { stockById[Number(d.id)] = d; });
+
+    const batch = db.batch();
+    const registradas = [];
+    items.forEach(it => {
+      const id = Number(it.id);
+      const doc = stockById[id];
+      if (!doc) return;
+      const s = doc.data();
+      const cant = parseFloat(it.cantidad) || 0;
+      if (cant <= 0) return;
+      const motivo = String(it.motivo || 'OTRO').toUpperCase();
+      batch.set(col('barra_movimientos').doc(), {
+        fecha,
+        tipo: 'bajas',
+        ingrediente: s.ingrediente,
+        cantidad: cant,
+        unidad: s.unidad || 'unidad',
+        motivo,
+        es_receta: false,
+        saved_by: savedBy,
+        created_at: new Date().toISOString()
+      });
+      registradas.push({ id, ingrediente: s.ingrediente, cantidad: cant, motivo });
+    });
+    if (!registradas.length) return res.json({ ok: true, registradas: [] });
+    await batch.commit();
+    invalidarCachesLectura();
+    res.json({ ok: true, registradas });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- COCINA: Stock con familias ---
 app.get('/api/cocina/stock', async (req, res) => {
   try {

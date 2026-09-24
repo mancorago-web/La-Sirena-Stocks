@@ -5610,10 +5610,9 @@ function renderConteoBarra() {
     <div style="margin-top:1.5rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
       <button onclick="guardarConteoBarra('guardar')" style="flex:1;padding:0.6rem;background:#2e7d32;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">💾 GUARDAR</button>
       <button onclick="guardarConteoBarra('informe')" style="flex:1;padding:0.6rem;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">📊 INFORME</button>
-      <button onclick="guardarConteoBarra('ajustar')" style="flex:1;padding:0.6rem;background:#e65100;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">⚙️ AJUSTAR</button>
       <button onclick="cerrarModal()" style="flex:1;padding:0.6rem;background:#666;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancelar</button>
     </div>
-    <p style="font-size:0.8rem;color:#999;margin-top:0.75rem;">Los items en 0 (vacíos) también aparecen: déjalos en vacío o 0 si siguen vacíos.</p>`;
+    <p style="font-size:0.8rem;color:#999;margin-top:0.75rem;">Los items en 0 (vacíos) también aparecen: déjalos en vacío o 0 si siguen vacíos. El AJUSTAR ahora está en el INFORME.</p>`;
 }
 
 function actualizarDiferenciaConteo(input) {
@@ -5739,10 +5738,99 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
     <p style="color:#666;font-size:0.9rem;">${ajustado ? 'Ajustados: <b>' + (r.ajustes || []).length + '</b> item(s) al físico.' : 'Conteo comparado (sin modificar stock).'} Faltantes: <b style="color:#c62828;">${faltantes.length}</b> | Sobrantes: <b style="color:#2e7d32;">${sobrantes.length}</b></p>
     <p style="font-size:0.8rem;color:#666;">Ventas/Ingresos del periodo${periodo}. FALTANTE = el sistema decía más de lo físico (se consumió sin registrar o falla en receta). SOBRANTE = físico mayor al sistema (ingreso no registrado o receta descontó de más).</p>
     ${rows}
-    <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+    <div style="margin-top:1.5rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+      <button onclick="abrirBajasBarra('${fecha}')" style="flex:1;padding:0.6rem;background:#ef6c00;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">🗑️ BAJA</button>
+      <button onclick="ajustarDesdeInforme('${fecha}')" style="flex:1;padding:0.6rem;background:#e65100;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">⚙️ AJUSTAR</button>
       ${volverBtn}
       <button onclick="cerrarModal(); cargarStockBarra();" style="flex:1;padding:0.6rem;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">CERRAR</button>
+    </div>
+    <p style="font-size:0.78rem;color:#999;margin-top:0.5rem;">BAJA: registra un faltante (rotura/merma/pérdida) sin tocar el stock. AJUSTAR: deja BARRA/STOCK en los montos físicos del conteo.</p>`;
+}
+
+// Abre el modal para registrar BAJAS de items con faltante
+function abrirBajasBarra(fecha) {
+  const data = window._conteoInformeData;
+  const difs = (data && Array.isArray(data.difs)) ? data.difs : [];
+  const faltantes = difs.filter(d => d.diff < -0.0001);
+  if (!faltantes.length) { alert('No hay items con faltante para dar de baja'); return; }
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modal-body');
+  const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  const rows = faltantes.map((d, i) => {
+    const bajaMax = Math.abs(d.diff);
+    return `<tr data-baja-id="${d.id}" data-baja-nombre="${esc(d.ingrediente)}">
+      <td>${esc(d.ingrediente)}</td>
+      <td style="text-align:center;">${d.sistema}</td>
+      <td style="text-align:center;font-weight:700;color:#c62828;">${d.fisico}</td>
+      <td style="text-align:center;color:#c62828;font-weight:700;">${d.diff}</td>
+      <td style="text-align:center;"><input type="number" step="0.01" min="0" max="${bajaMax}" class="input-baja-cant" placeholder="0" style="width:80px;padding:0.35rem;border:1px solid #ccc;border-radius:4px;"></td>
+      <td><select class="select-baja-motivo" style="padding:0.35rem;border:1px solid #ccc;border-radius:4px;width:100%;">
+        <option value="ROTURA">ROTURA</option>
+        <option value="MERMA">MERMA</option>
+        <option value="PERDIDA">PERDIDA</option>
+        <option value="OTRO">OTRO</option>
+      </select></td>
+    </tr>`;
+  }).join('');
+  modal.style.display = 'block';
+  const mc = modal.querySelector('.modal-content');
+  if (mc) mc.classList.add('modal-wide');
+  body.innerHTML = `
+    <h3>🗑️ BAJA DE ITEMS — ${fecha}</h3>
+    <p style="color:#666;font-size:0.85rem;margin-top:0.5rem;">Registra la cantidad dada de baja de cada item con <b>FALTANTE</b>. Solo documenta (no modifica el stock).</p>
+    <div class="table-wrap"><table style="width:100%;table-layout:fixed;font-size:0.78rem;">
+      <thead><tr>
+        <th style="width:40%;text-align:left;">Item</th>
+        <th style="width:8%;text-align:center;">Sistema</th>
+        <th style="width:8%;text-align:center;">Físico</th>
+        <th style="width:8%;text-align:center;">Dif.</th>
+        <th style="width:14%;text-align:center;">Baja</th>
+        <th style="width:22%;">Motivo</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+      <button onclick="guardarBajasBarra('${fecha}')" style="flex:1;padding:0.6rem;background:#ef6c00;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">💾 GUARDAR BAJAS</button>
+      <button onclick="mostrarResultadoConteo({diferencias: ${JSON.stringify(difs)}, ajustes: [], fecha_desde: ''}, '${fecha}', false, false)" style="flex:1;padding:0.6rem;background:#666;color:#fff;border:none;border-radius:6px;cursor:pointer;">CANCELAR</button>
     </div>`;
+}
+
+function guardarBajasBarra(fecha) {
+  const items = [];
+  document.querySelectorAll('tr[data-baja-id]').forEach(tr => {
+    const cant = parseFloat(tr.querySelector('.input-baja-cant').value);
+    if (!cant || cant <= 0) return;
+    items.push({
+      id: Number(tr.getAttribute('data-baja-id')),
+      cantidad: Math.round(cant * 100) / 100,
+      motivo: tr.querySelector('.select-baja-motivo').value
+    });
+  });
+  if (!items.length) { alert('Ingresa al menos una cantidad de baja'); return; }
+  if (!confirm('Registrar ' + items.length + ' baja(s) del ' + fecha + '? (No modifica el stock)')) return;
+  api('POST', '/api/barra/bajas', { fecha, items }).then(r => {
+    const n = (r.registradas || []).length;
+    showToast('✓ ' + n + ' baja(s) registrada(s)');
+    // Volver al informe
+    const data = window._conteoInformeData;
+    mostrarResultadoConteo({ diferencias: data.difs, ajustes: [], fecha_desde: data.fecha_desde || '' }, fecha, false, false);
+  }).catch(() => alert('Error al registrar las bajas'));
+}
+
+// AJUSTAR desde el INFORME: toma el conteo guardado (todos los items) y ajusta BARRA/STOCK
+function ajustarDesdeInforme(fecha) {
+  if (!confirm('AJUSTAR BARRA/STOCK al conteo físico del ' + fecha + '? El stock se sobrescribirá con los montos físicos.')) return;
+  // Cargar el conteo guardado completo (todos los items, no solo diferencias)
+  api('GET', '/api/barra/conteo?fecha=' + encodeURIComponent(fecha)).then(list => {
+    const c = (list || [])[0];
+    const items = (c && Array.isArray(c.items) && c.items.length)
+      ? c.items.map(it => ({ id: Number(it.id), conteo: it.fisico }))
+      : ((window._conteoInformeData && window._conteoInformeData.difs || []).map(d => ({ id: Number(d.id), conteo: d.fisico })));
+    if (!items.length) { alert('No hay items para ajustar'); return; }
+    api('POST', '/api/barra/conteo', { fecha, items, accion: 'ajustar' }).then(r => {
+      mostrarResultadoConteo(r, fecha, true, false);
+    }).catch(() => alert('Error al ajustar'));
+  }).catch(() => alert('Error cargando el conteo'));
 }
 
 // Carga el INFORME guardado de una fecha (desde barra_conteos) y lo muestra
