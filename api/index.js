@@ -3952,11 +3952,32 @@ app.get('/api/cocina/stock/con-inventario', async (req, res) => {
   if (!fecha) return res.json([]);
   try {
     const out = await cached('cocina_inv_' + fecha, 5000, async () => {
-    const [stockSnap, diaSnap, prevSnap] = await Promise.all([
+    const [stockSnap, diaSnap, prevSnap, cpSnap, spSnap, bpSnap, comprasSnap] = await Promise.all([
       col('cocina_stock').orderBy('id').get(),
       col('cocina_stock_diario').where('fecha', '==', fecha).get(),
       col('cocina_stock_diario').where('fecha', '==', prevWorkingDay(fecha)).get(),
+      col('cocina_precios').get(),
+      col('stock_precios').get(),
+      col('barra_precios').get(),
+      col('compras').get(),
     ]);
+    // PRECIO UNIFICADO para COCINA: cocina_precios > stock_precios > barra_precios > última compra
+    const precioGlobal = {};
+    const addPrecioG = (nombre, precio, unidad, equiv_ml, equiv_gr) => {
+      const k = normNombre(nombre || '');
+      if (!k || !(parseFloat(precio) > 0)) return;
+      if (!precioGlobal[k]) precioGlobal[k] = { precio: parseFloat(precio), unidad: normalizeUnit(unidad || 'unidad'), equiv_ml: parseFloat(equiv_ml) || 0, equiv_gr: parseFloat(equiv_gr) || 0 };
+    };
+    cpSnap.docs.forEach(d => { const p = d.data(); addPrecioG(p.ingrediente, p.precio, p.unidad, p.equiv_ml, p.equiv_gr); });
+    spSnap.docs.forEach(d => { const p = d.data(); addPrecioG(p.nombre, p.ultimo_precio_compra || p.precio, p.unidad, p.equiv_ml, p.equiv_gr); });
+    bpSnap.docs.forEach(d => { const p = d.data(); addPrecioG(p.ingrediente, p.ultimo_precio_compra || p.precio_compra || p.precio, p.unidad, p.equiv_ml, p.equiv_gr); });
+    const compraUlt = {};
+    comprasSnap.docs.forEach(d => { const a = d.data(); const k = normNombre(a.nombre || ''); const cant = parseFloat(a.cantidad) || 0; const pu = cant > 0 && parseFloat(a.precio_total) > 0 ? (parseFloat(a.precio_total) / cant) : (parseFloat(a.precio) || 0); if (pu > 0 && (!compraUlt[k] || (a.fecha || '') > compraUlt[k].fecha)) compraUlt[k] = { precio: pu, fecha: a.fecha || '' }; });
+    Object.keys(compraUlt).forEach(k => addPrecioG(k, compraUlt[k].precio, 'unidad', 0, 0));
+    const precioDe = (nombre) => {
+      const f = precioGlobal[normNombre(nombre || '')];
+      return f ? { precio: f.precio, unidad: f.unidad, equiv_ml: f.equiv_ml, equiv_gr: f.equiv_gr } : { precio: 0, unidad: 'unidad', equiv_ml: 0, equiv_gr: 0 };
+    };
     const diaMap = {};
     diaSnap.docs.forEach(d => { const dd = d.data(); diaMap[Number(dd.item_id)] = dd; });
     const prevMap = {};
@@ -3975,6 +3996,7 @@ app.get('/api/cocina/stock/con-inventario', async (req, res) => {
       const baja = dia.stock_baja ?? 0;
       const cierre = apertura + ingreso - salida - ventas - falta - baja;
       if (!groups[fam]) groups[fam] = [];
+      const precioInfo = precioDe(item.ingrediente);
       groups[fam].push({
         id: Number(item.id),
         nombre: item.ingrediente,
@@ -3982,6 +4004,8 @@ app.get('/api/cocina/stock/con-inventario', async (req, res) => {
         familia: fam,
         subgrupo: item.subgrupo || '',
         cantidad: item.cantidad || 0,
+        precio: precioInfo.precio,
+        precio_unidad: precioInfo.unidad,
         stock_apertura: apertura,
         stock_ingreso: ingreso,
         salida_almacen: salida,
@@ -4830,6 +4854,32 @@ app.put('/api/cocina/precios/:id', async (req, res) => {
 app.delete('/api/cocina/precios/:id', async (req, res) => {
   try {
     await col('cocina_precios').doc(req.params.id).delete();
+    invalidarCachesLectura();
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Upsert de precio en COCINA (busca por nombre; si no existe lo crea)
+app.post('/api/cocina/precios/upsert', async (req, res) => {
+  try {
+    const { ingrediente, precio } = req.body;
+    if (!ingrediente) return res.status(400).json({ error: 'Nombre requerido' });
+    const snap = await col('cocina_precios').get();
+    const key = normNombre(String(ingrediente).trim());
+    const precioVal = Math.round((parseFloat(precio) || 0) * 100) / 100;
+    const now = new Date().toISOString();
+    const doc = snap.docs.find(d => normNombre(d.data().ingrediente || '') === key);
+    if (doc) {
+      await doc.ref.update({ precio: precioVal, precio_compra: precioVal, ultimo_precio_compra: precioVal, updated_at: now });
+    } else {
+      const nextId = snap.docs.length ? Math.max(...snap.docs.map(d => Number(d.id) || 0)) + 1 : 1;
+      await col('cocina_precios').doc(String(nextId)).set({
+        id: nextId, ingrediente: String(ingrediente).trim(), unidad: 'unidad', precio: precioVal,
+        precio_compra: precioVal, unidad_compra: 'UNIDAD', ultimo_precio_compra: precioVal,
+        created_at: now, updated_at: now
+      });
+    }
+    await ensureIngredienteCocinaStock(ingrediente, 'unidad');
     invalidarCachesLectura();
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }

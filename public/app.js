@@ -671,6 +671,7 @@ function api(method, url, data) {
 let _aperturaEditable = false;
 let _verPrecios = false;
 let _verPreciosBarra = false;
+let _verPreciosCocina = false;
 // Muestra/oculta las columnas PRECIO U y PRECIO T en BARRA/STOCK (ocultas por defecto)
 function toggleColumnasPrecioBarra() {
   _verPreciosBarra = !_verPreciosBarra;
@@ -707,6 +708,53 @@ function toggleColumnasPrecio() {
     btn.title = _verPrecios ? 'Ocultar columnas de precios' : 'Ver columnas de precios';
   }
   actualizarTotalesPrecio();
+}
+// Muestra/oculta las columnas PRECIO U y PRECIO T en COCINA/STOCK (ocultas por defecto)
+function toggleColumnasPrecioCocina() {
+  _verPreciosCocina = !_verPreciosCocina;
+  const c = document.getElementById('cocina-stock-container');
+  if (c) c.classList.toggle('ocultar-precios', !_verPreciosCocina);
+  const btn = document.getElementById('btn-toggle-precios-cocina');
+  if (btn) {
+    btn.textContent = _verPreciosCocina ? '💰 PRECIOS ✓' : '💰 PRECIOS';
+    btn.style.background = _verPreciosCocina ? '#2e7d32' : '#0f3460';
+    btn.style.color = '#fff';
+    btn.title = _verPreciosCocina ? 'Ocultar columnas de precios' : 'Ver columnas de precios';
+  }
+  actualizarTotalesPrecioCocina();
+}
+// Recalcula PRECIO T = PRECIO U x Cierre al editar en COCINA/STOCK
+function actualizarPrecioTotalCocina(inputEl) {
+  const tr = inputEl.closest('tr');
+  if (!tr) return;
+  const pu = parseFloat(tr.querySelector('.input-precio-cocina')?.value) || 0;
+  const cant = parseFloat(tr.querySelector('.input-cierre')?.value) || 0;
+  const pt = tr.querySelector('.input-precio-total-cocina');
+  if (pt) pt.value = (pu * cant).toFixed(2);
+  actualizarTotalesPrecioCocina();
+}
+// Suma PRECIO T por familia y el total general de COCINA/STOCK
+function actualizarTotalesPrecioCocina() {
+  const acc = document.getElementById('cocina-stock-container');
+  if (!acc) return;
+  let granTotal = 0;
+  acc.querySelectorAll('.accordion-item').forEach(item => {
+    const key = item.dataset.familia;
+    let sub = 0;
+    item.querySelectorAll('tr[data-cocina-id]').forEach(tr => {
+      const inp = tr.querySelector('.input-precio-total-cocina');
+      if (inp) sub += parseFloat(inp.value) || 0;
+      else {
+        const cps = tr.querySelectorAll('.col-precio');
+        if (cps[1]) sub += parseFloat(cps[1].textContent) || 0;
+      }
+    });
+    const h = document.getElementById('total-cocina-header-' + String(key || '').replace(/\s+/g, '-'));
+    if (h) h.textContent = sub.toFixed(2);
+    granTotal += sub;
+  });
+  const g = document.getElementById('total-cocina-inv-val');
+  if (g) g.textContent = granTotal.toFixed(2);
 }
 function setAperturaEditable(val) {
   _aperturaEditable = !!val;
@@ -754,8 +802,12 @@ function calcCierre(el) {
   const precio = parseFloat(tr.querySelector('.input-precio')?.value) || 0;
   const pt = tr.querySelector('.input-precio-total');
   if (pt) pt.value = (precio * cierre).toFixed(2);
+  const precioC = parseFloat(tr.querySelector('.input-precio-cocina')?.value) || 0;
+  const ptC = tr.querySelector('.input-precio-total-cocina');
+  if (ptC) ptC.value = (precioC * cierre).toFixed(2);
   compararCierre(tr.querySelector('.input-cierre'));
   actualizarTotalesPrecio();
+  actualizarTotalesPrecioCocina();
 }
 
 // Recalcula los totales de dinero por almacén y el total invertido en STOCK (suma de PRECIO T)
@@ -3225,6 +3277,20 @@ function showModal(tipo, data) {
       </label>
       <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
         <button onclick="guardarEdicionPrecioBarra(${data.id})" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+        <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
+      </div>
+    `;
+  } else if (tipo === 'editar-precio-cocina') {
+    body.innerHTML = `
+      <h3>Precio Unitario — COCINA</h3>
+      <p style="color:#666;font-size:0.9rem;margin-top:0.5rem;">${esc(data.nombre)}</p>
+      <input type="hidden" id="fc-precio-nombre" value="${esc(data.nombre)}">
+      <label style="display:block;margin-top:1rem;">
+        PRECIO U (S/) — precio unitario de compra
+        <input type="number" id="fc-precio-precio" step="0.01" min="0" value="${data.precio || ''}" placeholder="0.00" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
+      </label>
+      <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+        <button onclick="guardarEdicionPrecioCocina(${data.id})" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
         <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
       </div>
     `;
@@ -5955,6 +6021,28 @@ function guardarEdicionPrecioBarra(id) {
   }).catch(() => alert('Error al guardar el precio'));
 }
 
+function editarPrecioCocina(id) {
+  const tr = document.querySelector('#cocina-stock-container tr[data-cocina-id="' + id + '"]');
+  if (!tr) return;
+  showModal('editar-precio-cocina', {
+    id,
+    nombre: tr.querySelector('td')?.textContent.trim() || '',
+    precio: parseFloat(tr.querySelector('.input-precio-cocina')?.value) || 0
+  });
+}
+
+function guardarEdicionPrecioCocina(id) {
+  const nombre = document.getElementById('fc-precio-nombre')?.value.trim();
+  const precio = parseFloat(document.getElementById('fc-precio-precio')?.value);
+  if (!nombre) { alert('Ingresa el nombre'); return; }
+  if (precio === undefined || isNaN(precio)) { alert('Ingresa el precio unitario'); return; }
+  api('POST', '/api/cocina/precios/upsert', { ingrediente: nombre, precio }).then(() => {
+    cerrarModal();
+    showToast('✓ Precio actualizado');
+    cargarStockCocina();
+  }).catch(() => alert('Error al guardar el precio'));
+}
+
 // --- COCINA: Stock con familias (flujo diario estilo ALMACENES) ---
 const FAMILIAS_COCINA = ['FRUTAS', 'VERDURAS', 'CARNE', 'PESCADO - BRUTO', 'PESCADO PORC. - BARRA FRIA', 'PESCADO PORC. - BARRA CALIENTE', 'POLLO', 'LACTEOS', 'VINOS', 'CERVEZAS', 'ABARROTES', 'LIMPIEZA', 'RECETAS BASE', 'SEMILLAS', 'ACEITES'];
 
@@ -6019,8 +6107,15 @@ function cargarStockCocina(familiasAbrir) {
       return (SUB_GRUPOS_SIN_PORCIONAR_SET[fam] && SUB_GRUPOS_SIN_PORCIONAR_SET[fam].has(normCocina(i.nombre))) ? 'SIN PORCIONAR' : 'PORCIONADOS';
     }
     function fila(i) {
+      const pu = parseFloat(i.precio) || 0;
+      const cant = parseFloat(i.stock_cierre) || 0;
+      const pt = Math.round(pu * cant * 100) / 100;
+      const tdPrecioU = `<td class="col-precio"><input type="number" class="input-num input-precio-cocina" value="${pu}" step="0.01" readonly title="${pu ? 'Precio unitario (de compras / base de datos)' : 'SIN PRECIO'}" style="background:${pu ? '#fff9c4' : '#ffcdd2'};color:${pu ? '#555' : '#b71c1c'};cursor:not-allowed;font-weight:${pu ? 'normal' : '700'};width:72px;"></td>`;
+      const tdPrecioT = `<td class="col-precio"><input type="number" class="input-num input-precio-total-cocina" value="${pt.toFixed(2)}" step="0.01" readonly title="Precio total = Precio U x Cierre" style="background:#fff9c4;color:#555;cursor:not-allowed;font-weight:700;width:82px;"></td>`;
       return `<tr data-cocina-id="${i.id}" data-cantidad="${i.cantidad}" data-unidad="${esc(i.unidad)}" data-familia="${esc(i.familia)}" data-subgrupo="${esc(i.subgrupo || '')}">
         <td>${esc(i.nombre)}</td>
+        ${tdPrecioU}
+        ${tdPrecioT}
         <td><input type="number" class="input-num input-apertura" value="${fmt3(i.stock_apertura)}" step="0.001" oninput="calcCierre(this)"></td>
         <td><input type="number" class="input-num input-ingreso" value="${fmt3(i.stock_ingreso)}" step="0.001" oninput="calcCierre(this)"></td>
         <td><input type="number" class="input-num input-salida" value="${fmt3(i.salida_almacen)}" step="0.001" oninput="calcCierre(this)"></td>
@@ -6029,15 +6124,17 @@ function cargarStockCocina(familiasAbrir) {
         <td><input type="hidden" class="input-baja" value="${fmt3(i.stock_baja)}">
         <td><input type="number" class="input-num input-cierre" value="${fmt3(i.stock_cierre)}" step="0.001" readonly></td>
         <td style="white-space:nowrap">
+          <button onclick="editarPrecioCocina(${i.id})" title="Poner/editar el precio unitario" style="background:#e65100;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">💰</button>
           <button onclick="editarStockCocina(${i.id})" style="background:#0f3460;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">EDITAR</button>
           <button onclick="eliminarStockCocina(${i.id})" style="background:#c62828;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">✕</button>
         </td>
       </tr>`;
     }
     function subTabla(items) {
+      const colPrecio = '<th class="col-precio">PRECIO U</th><th class="col-precio">PRECIO T</th>';
       return `<div class="table-wrap"><table>
-        <thead><tr><th>Item</th><th>Apertura</th><th>Ingreso</th><th>Salida</th><th>Ventas</th><th>Falta</th><th>Cierre</th><th></th></tr></thead>
-        <tbody>${items.map(fila).join('') || '<tr><td colspan="8">Vacío.</td></tr>'}</tbody>
+        <thead><tr><th>Item</th>${colPrecio}<th>Apertura</th><th>Ingreso</th><th>Salida</th><th>Ventas</th><th>Falta</th><th>Cierre</th><th></th></tr></thead>
+        <tbody>${items.map(fila).join('') || '<tr><td colspan="10">Vacío.</td></tr>'}</tbody>
       </table></div>`;
     }
     function familiaAccordion(f, items, extraClass) {
@@ -6059,6 +6156,7 @@ function cargarStockCocina(familiasAbrir) {
         <div class="accordion-item" data-familia="${esc(f)}">
           <div class="accordion-header" onclick="toggleAcordeon(this)">
             <span class="accordion-title">${f} <span style="font-weight:400;font-size:0.85rem;color:#777;">— ${items.length} item(s)</span></span>
+            <span style="font-weight:700;color:#1a237e;font-size:0.9rem;margin-left:0.6rem;white-space:nowrap;">💰 S/ <span id="total-cocina-header-${String(f).replace(/\s+/g, '-')}">0.00</span></span>
             <span class="accordion-arrow">▶</span>
           </div>
           <div class="accordion-body">
@@ -6067,7 +6165,12 @@ function cargarStockCocina(familiasAbrir) {
           </div>
         </div>`;
     }
-    container.innerHTML = FAMILIAS_COCINA.map(f => familiaAccordion(f, byFam[f])).join('') +
+    container.classList.toggle('ocultar-precios', !_verPreciosCocina);
+    const totalCocina = `<div style="margin-bottom:0.75rem;padding:0.75rem 1rem;background:#1a237e;color:#fff;border-radius:8px;font-weight:700;font-size:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem;">
+      <span>💰 TOTAL INVERTIDO EN COCINA/STOCK</span>
+      <span>S/ <span id="total-cocina-inv-val">0.00</span></span>
+    </div>`;
+    container.innerHTML = totalCocina + FAMILIAS_COCINA.map(f => familiaAccordion(f, byFam[f])).join('') +
       (byFam['SIN CLASIFICAR'].length ? familiaAccordion('SIN CLASIFICAR', byFam['SIN CLASIFICAR'], 'c62828') : '');
     // Reabrir las categorías que estaban abiertas + las pedidas al llamar (ej. la nueva del item editado)
     (familiasAbrir || []).forEach(f => abiertas.add(f));
@@ -6079,6 +6182,7 @@ function cargarStockCocina(familiasAbrir) {
       }
     });
     container.querySelectorAll('tr[data-cocina-id]').forEach(tr => calcCierre(tr.querySelector('.input-apertura')));
+    actualizarTotalesPrecioCocina();
   }).catch(e => console.error(e));
 }
 

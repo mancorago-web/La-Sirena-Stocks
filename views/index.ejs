@@ -478,9 +478,10 @@
       <div id="sub-cocina-stock" class="sub-tab-content">
         <div class="header-actions">
           <h2>Stock Cocina</h2>
-          <div class="controles-dia">
+          <div class="controles-dia" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
             <label>Fecha: <input type="date" id="fecha-cocina-stock" onchange="cargarStockCocina()"></label>
             <input type="text" id="buscar-cocina-stock" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'cocina-stock-container')">
+            <button id="btn-toggle-precios-cocina" onclick="toggleColumnasPrecioCocina()" title="Ver columnas de precios" style="padding:0.5rem 1rem;background:#0f3460;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;">💰 PRECIOS</button>
             <button class="btn-guardar-dia" onclick="guardarCocinaDia()">💾 GUARDAR</button>
           </div>
         </div>
