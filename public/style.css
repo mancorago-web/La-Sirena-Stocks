@@ -232,6 +232,11 @@ td button.danger { border-color: #c62828; color: #c62828; }
 .modal-content { background: #fff; margin: 2rem auto; padding: 2rem; max-width: 500px; max-height: 85vh; overflow-y: auto; border-radius: 8px; position: relative; }
 .close { position: absolute; top: 1rem; right: 1.5rem; font-size: 1.5rem; cursor: pointer; }
 .modal-content.modal-wide { max-width: 1200px; max-height: 92vh; }
+/* Tablas dentro de modales wide: se ajustan al ancho sin barra horizontal */
+.modal-content.modal-wide .table-wrap { overflow-x: hidden; }
+.modal-content.modal-wide .table-wrap table { min-width: 0; width: 100%; table-layout: auto; }
+.modal-content.modal-wide .table-wrap th,
+.modal-content.modal-wide .table-wrap td { word-break: break-word; white-space: normal; }
 .modal-content table button { width: auto; margin-top: 0; padding: 0.4rem 0.7rem; white-space: nowrap; }
 .modal-content table input[type="date"] { width: auto; margin-top: 0; }
 .modal-content label { display: block; margin-top: 1rem; font-size: 0.9rem; color: #666; }

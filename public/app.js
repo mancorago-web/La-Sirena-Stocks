@@ -5593,6 +5593,8 @@ function renderConteoBarra() {
       <div class="table-wrap"><table><thead><tr><th>Item</th><th>Sistema</th><th>Conteo Físico</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
   }).join('');
   modal.style.display = 'block';
+  const mc = modal.querySelector('.modal-content');
+  if (mc) mc.classList.add('modal-wide');
   body.innerHTML = `
     <h3>📋 CONTEO SEMANAL — BARRA</h3>
     <p style="color:#666;font-size:0.85rem;margin-top:0.5rem;">Compara el stock del sistema contra el conteo físico. <b>Diferencia = Conteo − Sistema</b>. <b>GUARDAR</b> solo registra el conteo de la fecha. <b>INFORME</b> muestra las diferencias. <b>AJUSTAR</b> registra y modifica el stock de la app.</p>
@@ -5679,6 +5681,8 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
     ? '<button onclick="renderConteoBarra()" style="flex:1;padding:0.6rem;background:#455a64;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">⬅ VOLVER AL CONTEO</button>'
     : '';
   modal.style.display = 'block';
+  const mc = modal.querySelector('.modal-content');
+  if (mc) mc.classList.add('modal-wide');
   body.innerHTML = `
     <h3>📊 INFORME — CONTEO ${fecha}</h3>
     ${resumen}
