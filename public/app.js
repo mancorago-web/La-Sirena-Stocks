@@ -5553,7 +5553,17 @@ let _conteoBarraItems = [];
 function abrirConteoBarra() {
   api('GET', '/api/barra/stock').then(data => {
     _conteoBarraItems = data.map(s => ({ ...s, conteo: '' }));
-    renderConteoBarra();
+    // Pre-cargar el último conteo guardado (para que los montos físicos ya queden anotados)
+    return api('GET', '/api/barra/conteo').then(list => {
+      const ult = (list || [])[0];
+      if (ult && Array.isArray(ult.items)) {
+        ult.items.forEach(it => {
+          const item = _conteoBarraItems.find(x => Number(x.id) === Number(it.id));
+          if (item) item.conteo = it.fisico;
+        });
+      }
+      renderConteoBarra();
+    });
   }).catch(() => alert('Error cargando stock'));
 }
 
@@ -5572,10 +5582,11 @@ function renderConteoBarra() {
     const rows = groups[g].map(s => {
       const sistema = parseFloat(s.cantidad) || 0;
       const uniqId = s.id + '_' + norm(s.ingrediente);
+      const valorPre = (s.conteo !== '' && s.conteo !== undefined && s.conteo !== null) ? parseFloat(s.conteo) : '';
       return `<tr data-conteo-id="${uniqId}">
         <td>${esc(s.ingrediente)}</td>
         <td style="text-align:center;font-weight:700;">${sistema}</td>
-        <td style="text-align:center;"><input type="number" step="0.01" min="0" class="input-conteo-fisico" data-sistema="${sistema}" value="" placeholder="${sistema}" style="width:80px;padding:0.35rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarDiferenciaConteo(this)"></td>
+        <td style="text-align:center;"><input type="number" step="0.01" min="0" class="input-conteo-fisico" data-sistema="${sistema}" value="${valorPre}" placeholder="${sistema}" style="width:80px;padding:0.35rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarDiferenciaConteo(this)"></td>
       </tr>`;
     }).join('');
     return `<div style="margin-top:0.75rem;"><h4 style="margin:0 0 0.25rem;color:#0f3460;">${esc(g)}</h4>
@@ -5632,18 +5643,18 @@ function guardarConteoBarra(accion) {
     if (!confirm('Ajustar ' + contados + ' item(s) al conteo físico del ' + fecha + '? El stock del sistema se sobrescribirá.')) return;
   }
   api('POST', '/api/barra/conteo', { fecha, items, accion }).then(r => {
-    if (accion === 'informe') {
-      mostrarResultadoConteo(r, fecha, false);
-    } else if (accion === 'guardar') {
+    if (accion === 'guardar') {
       showToast('Conteo guardado para el ' + fecha + ' (sin ajustar stock)');
-      cerrarModal();
+      mostrarResultadoConteo(r, fecha, false, true);
+    } else if (accion === 'informe') {
+      mostrarResultadoConteo(r, fecha, false, false);
     } else {
-      mostrarResultadoConteo(r, fecha, true);
+      mostrarResultadoConteo(r, fecha, true, true);
     }
   }).catch(() => alert('Error al procesar el conteo'));
 }
 
-function mostrarResultadoConteo(r, fecha, ajustado) {
+function mostrarResultadoConteo(r, fecha, ajustado, volver) {
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
   const difs = (r.diferencias || []).filter(d => Math.abs(d.diff) > 0.0001);
@@ -5664,6 +5675,9 @@ function mostrarResultadoConteo(r, fecha, ajustado) {
   }).join('');
   const resumen = difs.length ? '' :
     '<p style="color:#2e7d32;font-weight:700;margin-top:0.75rem;">✅ Sin diferencias: el stock del sistema coincide con el conteo físico.</p>';
+  const volverBtn = volver
+    ? '<button onclick="renderConteoBarra()" style="flex:1;padding:0.6rem;background:#455a64;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">⬅ VOLVER AL CONTEO</button>'
+    : '';
   modal.style.display = 'block';
   body.innerHTML = `
     <h3>📊 INFORME — CONTEO ${fecha}</h3>
@@ -5675,6 +5689,7 @@ function mostrarResultadoConteo(r, fecha, ajustado) {
       <tbody>${rows}</tbody>
     </table></div>
     <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
+      ${volverBtn}
       <button onclick="cerrarModal(); cargarStockBarra();" style="flex:1;padding:0.6rem;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">CERRAR</button>
     </div>`;
 }
