@@ -237,6 +237,23 @@ td button.danger { border-color: #c62828; color: #c62828; }
 .modal-content.modal-wide .table-wrap table { min-width: 0; width: 100%; table-layout: auto; }
 .modal-content.modal-wide .table-wrap th,
 .modal-content.modal-wide .table-wrap td { word-break: break-word; white-space: normal; }
+
+/* Tabla de CONTEO SEMANAL: columnas alineadas (item amplio, sistema y conteo fijos) */
+.tabla-conteo { border-collapse: collapse; }
+.tabla-conteo th, .tabla-conteo td { padding: 0.45rem 0.6rem; border-bottom: 1px solid #e0e0e0; }
+.tabla-conteo .conteo-item { text-align: left; width: 60%; }
+.tabla-conteo .conteo-sistema { text-align: center; font-weight: 700; width: 15%; white-space: nowrap; }
+.tabla-conteo .conteo-input { text-align: center; width: 25%; }
+.tabla-conteo .conteo-input input {
+  width: 110px;
+  max-width: 100%;
+  padding: 0.4rem;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  text-align: center;
+  font-weight: 600;
+}
+.tabla-conteo .conteo-grupo-header td { border-bottom: 2px solid #bbdefb; }
 .modal-content table button { width: auto; margin-top: 0; padding: 0.4rem 0.7rem; white-space: nowrap; }
 .modal-content table input[type="date"] { width: auto; margin-top: 0; }
 .modal-content label { display: block; margin-top: 1rem; font-size: 0.9rem; color: #666; }

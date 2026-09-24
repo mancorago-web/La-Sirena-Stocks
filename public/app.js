@@ -5577,20 +5577,22 @@ function renderConteoBarra() {
     groups[g].push(s);
   });
   const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-  const filas = Object.keys(groups).sort().map(g => {
+  // Una SOLA tabla para todo el modal (columnas alineadas verticalmente entre muebles)
+  const gruposOrden = Object.keys(groups).sort();
+  const filas = gruposOrden.map(g => {
     groups[g].sort((a, b) => String(a.ingrediente).localeCompare(String(b.ingrediente), 'es'));
+    const header = `<tr class="conteo-grupo-header"><td colspan="3" style="background:#e3f2fd;font-weight:700;color:#0f3460;padding:0.45rem 0.5rem;">${esc(g)}</td></tr>`;
     const rows = groups[g].map(s => {
       const sistema = parseFloat(s.cantidad) || 0;
       const uniqId = s.id + '_' + norm(s.ingrediente);
       const valorPre = (s.conteo !== '' && s.conteo !== undefined && s.conteo !== null) ? parseFloat(s.conteo) : '';
       return `<tr data-conteo-id="${uniqId}">
-        <td>${esc(s.ingrediente)}</td>
-        <td style="text-align:center;font-weight:700;">${sistema}</td>
-        <td style="text-align:center;"><input type="number" step="0.01" min="0" class="input-conteo-fisico" data-sistema="${sistema}" value="${valorPre}" placeholder="${sistema}" style="width:80px;padding:0.35rem;border:1px solid #ccc;border-radius:4px;" oninput="actualizarDiferenciaConteo(this)"></td>
+        <td class="conteo-item">${esc(s.ingrediente)}</td>
+        <td class="conteo-sistema">${sistema}</td>
+        <td class="conteo-input"><input type="number" step="0.01" min="0" class="input-conteo-fisico" data-sistema="${sistema}" value="${valorPre}" placeholder="${sistema}" oninput="actualizarDiferenciaConteo(this)"></td>
       </tr>`;
     }).join('');
-    return `<div style="margin-top:0.75rem;"><h4 style="margin:0 0 0.25rem;color:#0f3460;">${esc(g)}</h4>
-      <div class="table-wrap"><table><thead><tr><th>Item</th><th>Sistema</th><th>Conteo Físico</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+    return header + rows;
   }).join('');
   modal.style.display = 'block';
   const mc = modal.querySelector('.modal-content');
@@ -5601,7 +5603,10 @@ function renderConteoBarra() {
     <label style="display:block;margin-top:0.75rem;">Fecha del conteo:
       <input type="date" id="fecha-conteo-barra" value="${todayStr()}" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-left:0.5rem;">
     </label>
-    ${filas}
+    <div class="table-wrap"><table class="tabla-conteo">
+      <thead><tr><th style="text-align:left;">Item</th><th style="text-align:center;">Sistema</th><th style="text-align:center;">Conteo Físico</th></tr></thead>
+      <tbody>${filas}</tbody>
+    </table></div>
     <div style="margin-top:1.5rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
       <button onclick="guardarConteoBarra('guardar')" style="flex:1;padding:0.6rem;background:#2e7d32;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">💾 GUARDAR</button>
       <button onclick="guardarConteoBarra('informe')" style="flex:1;padding:0.6rem;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">📊 INFORME</button>
