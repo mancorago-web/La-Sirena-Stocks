@@ -5876,15 +5876,15 @@ function enviarInformeWhatsApp(fecha) {
     if (b === 'COMPRAS DIARIAS') return -1;
     return a.localeCompare(b, 'es');
   });
-  let txt = '*REPORTE DE BARRA - ' + (fecha || (data ? data.fecha : '')) + '*\n';
+  let txt = '*REPORTE DE BARRA - ' + (fecha || (data ? data.fecha : '')).toUpperCase() + '*\n';
   muebleOrder.forEach(g => {
     const faltantes = grupos[g].filter(x => x.diff < -0.0001).sort(ordenarAlpha);
     const sobrantes = grupos[g].filter(x => x.diff > 0.0001).sort(ordenarAlpha);
-    txt += '\n*MUEBLE: ' + g + '*\n';
+    txt += '\n*MUEBLE: ' + g.toUpperCase() + '*\n';
     let n = 1;
     [...faltantes, ...sobrantes].forEach(d => {
       const signo = d.diff < 0 ? '' : '+';
-      txt += n + '. ' + d.ingrediente + ' - (' + signo + d.diff + ')\n';
+      txt += n + '. ' + String(d.ingrediente).toUpperCase() + ' - (' + signo + d.diff + ')\n';
       n++;
     });
   });
