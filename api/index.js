@@ -1708,7 +1708,7 @@ app.get('/api/compras/anteriores', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Último precio por unidad de compra de un item (promedio simple de las últimas 3 compras con precio).
+// Último precio por unidad de compra de un item (la compra más reciente con cantidad y precio válido).
 // Sirve para ESTIMAR la cantidad/peso cuando en COMPRAS solo se conoce el MONTO total.
 app.get('/api/compras/ultimo-precio', async (req, res) => {
   try {
@@ -1728,8 +1728,12 @@ app.get('/api/compras/ultimo-precio', async (req, res) => {
     });
     if (!rows.length) return res.json({ precio: 0, unidad: 'unidad', muestras: 0 });
     rows.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+    // Usar la ÚLTIMA compra con precio válido (cantidad > 0 y precio > 0). NO se promedian las
+    // últimas 3: promediar incluía compras a S/0 y desfasaba el estimado del monto total vs lo
+    // que realmente se pagó en la compra anterior.
     const ult = rows.slice(0, 3);
-    const precio = Math.round((ult.reduce((s, r) => s + r.pu, 0) / ult.length) * 100) / 100;
+    const conPrecio = ult.find(r => r.pu > 0);
+    const precio = conPrecio ? conPrecio.pu : 0;
     res.json({ precio, unidad: ult[0].unidad, muestras: rows.length });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
