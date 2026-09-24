@@ -5805,7 +5805,7 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
     <h3>📊 INFORME — CONTEO ${fecha}</h3>
     <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;margin-top:0.5rem;background:#e3f2fd;padding:0.4rem 0.6rem;border-radius:6px;">
       <label style="font-size:0.78rem;color:#0f3460;font-weight:700;margin:0;">Ver informe:</label>
-      <input type="date" id="fecha-informe-conteo" value="${fecha}" style="width:auto;margin:0;padding:0.25rem 0.4rem;border:1px solid #90caf9;border-radius:4px;font-size:0.78rem;">
+      <input type="date" id="fecha-informe-conteo" value="${fecha}" onchange="cargarInformeConteo()" style="width:auto;margin:0;padding:0.25rem 0.4rem;border:1px solid #90caf9;border-radius:4px;font-size:0.78rem;">
       <button onclick="cargarInformeConteo()" style="width:auto;margin:0;padding:0.3rem 0.7rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700;font-size:0.78rem;">BUSCAR</button>
       <button onclick="enviarInformeWhatsApp('${fecha}')" style="width:auto;margin:0;padding:0.3rem 0.7rem;background:#25D366;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700;font-size:0.78rem;">📲 WHATSAPP</button>
     </div>
@@ -5959,7 +5959,7 @@ function mostrarSinInformeConteo(fecha) {
     <p style="color:#999;font-size:0.85rem;text-align:center;">Los informes se generan al guardar un conteo semanal. Cambia la fecha para ver uno existente.</p>
     <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;margin-top:1rem;background:#e3f2fd;padding:0.4rem 0.6rem;border-radius:6px;">
       <label style="font-size:0.78rem;color:#0f3460;font-weight:700;margin:0;">Ver informe:</label>
-      <input type="date" id="fecha-informe-conteo" value="${fecha}" style="width:auto;margin:0;padding:0.25rem 0.4rem;border:1px solid #90caf9;border-radius:4px;font-size:0.78rem;">
+      <input type="date" id="fecha-informe-conteo" value="${fecha}" onchange="cargarInformeConteo()" style="width:auto;margin:0;padding:0.25rem 0.4rem;border:1px solid #90caf9;border-radius:4px;font-size:0.78rem;">
       <button onclick="cargarInformeConteo()" style="width:auto;margin:0;padding:0.3rem 0.7rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700;font-size:0.78rem;">BUSCAR</button>
     </div>
     <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
