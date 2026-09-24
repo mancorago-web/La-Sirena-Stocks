@@ -3569,16 +3569,32 @@ app.post('/api/barra/conteo', authMiddleware, async (req, res) => {
     const stockById = {};
     stockSnap.docs.forEach(d => { stockById[Number(d.id)] = d; });
 
-    // Cargar movimientos de venta/ingreso del item (para el detalle semanal)
+    // Buscar la fecha del ÚLTIMO conteo guardado anterior a este (para VENTAS/INGRESOS desde ese día)
+    const conteoHist = await col('barra_conteos').get();
+    let fechaDesde = '';
+    conteoHist.docs.forEach(d => {
+      const f = String(d.data().fecha || '');
+      if (f && f < fecha && (!fechaDesde || f > fechaDesde)) fechaDesde = f;
+    });
+    // Si no hay conteo anterior, usar 7 días atrás del conteo actual
+    if (!fechaDesde) {
+      const d = new Date(fecha + 'T00:00:00');
+      d.setDate(d.getDate() - 7);
+      fechaDesde = d.toISOString().split('T')[0];
+    }
+
+    // Cargar movimientos de venta/ingreso del item entre el último conteo y este conteo
     const bmSnap = await col('barra_movimientos').get();
     const movPorItem = {};
     bmSnap.docs.forEach(d => {
       const a = d.data();
+      const f = String(a.fecha || '');
+      if (f < fechaDesde || f > fecha) return;
       const n = String(a.ingrediente || '').trim().toUpperCase();
       if (!movPorItem[n]) movPorItem[n] = { ventas: 0, ingresos: 0 };
       const cant = parseFloat(a.cantidad) || 0;
-      if (a.tipo === 'ventas' && a.es_receta !== true && a.fecha <= fecha) movPorItem[n].ventas += cant;
-      else if (a.tipo === 'ingresos' && a.fecha <= fecha) movPorItem[n].ingresos += cant;
+      if (a.tipo === 'ventas' && a.es_receta !== true) movPorItem[n].ventas += cant;
+      else if (a.tipo === 'ingresos') movPorItem[n].ingresos += cant;
     });
 
     const batch = db.batch();
@@ -3612,9 +3628,11 @@ app.post('/api/barra/conteo', authMiddleware, async (req, res) => {
     if (accionFinal === 'guardar' || accionFinal === 'ajustar') {
       await col('barra_conteos').add({
         fecha,
+        fecha_desde: fechaDesde,
         accion: accionFinal,
-        items: diferencias.filter(d => Math.abs(d.diff) > 0.0001).map(d => ({
-          id: d.id, ingrediente: d.ingrediente, grupo: d.grupo, sistema: d.sistema, fisico: d.fisico, diff: d.diff
+        items: diferencias.map(d => ({
+          id: d.id, ingrediente: d.ingrediente, grupo: d.grupo, unidad: d.unidad,
+          sistema: d.sistema, fisico: d.fisico, diff: d.diff, ventas: d.ventas, ingresos: d.ingresos
         })),
         saved_by: savedBy,
         created_at: new Date().toISOString()
@@ -3622,14 +3640,24 @@ app.post('/api/barra/conteo', authMiddleware, async (req, res) => {
     }
 
     invalidarCachesLectura();
-    res.json({ ok: true, accion: accionFinal, ajustes, diferencias: diferencias.filter(d => Math.abs(d.diff) > 0.0001) });
+    res.json({ ok: true, accion: accionFinal, fecha_desde: fechaDesde, ajustes, diferencias: diferencias.filter(d => Math.abs(d.diff) > 0.0001) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Historial de conteos de BARRA
+// Historial de conteos de BARRA (opcional filtrar por fecha exacta)
 app.get('/api/barra/conteo', async (req, res) => {
   try {
-    const snap = await col('barra_conteos').orderBy('fecha', 'desc').limit(30).get();
+    const { fecha } = req.query;
+    let snap;
+    if (fecha) {
+      // Último conteo registrado para esa fecha (el más reciente en el tiempo)
+      const all = await col('barra_conteos').get();
+      const filtrados = all.docs.filter(d => String(d.data().fecha || '') === String(fecha));
+      filtrados.sort((a, b) => String(b.data().created_at || '').localeCompare(String(a.data().created_at || '')));
+      snap = { docs: filtrados.slice(0, 1) };
+    } else {
+      snap = await col('barra_conteos').orderBy('fecha', 'desc').limit(30).get();
+    }
     res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

@@ -5682,6 +5682,7 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
   }).join('');
   const resumen = difs.length ? '' :
     '<p style="color:#2e7d32;font-weight:700;margin-top:0.75rem;">✅ Sin diferencias: el stock del sistema coincide con el conteo físico.</p>';
+  const periodo = r.fecha_desde ? ' (desde el conteo del <b>' + r.fecha_desde + '</b>)' : '';
   const volverBtn = volver
     ? '<button onclick="renderConteoBarra()" style="flex:1;padding:0.6rem;background:#455a64;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">⬅ VOLVER AL CONTEO</button>'
     : '';
@@ -5690,9 +5691,15 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
   if (mc) mc.classList.add('modal-wide');
   body.innerHTML = `
     <h3>📊 INFORME — CONTEO ${fecha}</h3>
+    <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem;background:#e3f2fd;padding:0.5rem 0.75rem;border-radius:6px;">
+      <label style="font-size:0.85rem;color:#0f3460;font-weight:700;">Ver informe de la fecha:</label>
+      <input type="date" id="fecha-informe-conteo" value="${fecha}" style="padding:0.4rem;border:1px solid #90caf9;border-radius:4px;">
+      <button onclick="cargarInformeConteo()" style="padding:0.4rem 1rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700;">BUSCAR</button>
+      <button onclick="enviarInformeWhatsApp('${fecha}')" style="padding:0.4rem 1rem;background:#25D366;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700;">📲 WHATSAPP</button>
+    </div>
     ${resumen}
     <p style="color:#666;font-size:0.9rem;">${ajustado ? 'Ajustados: <b>' + (r.ajustes || []).length + '</b> item(s) al físico.' : 'Conteo comparado (sin modificar stock).'} Faltantes: <b style="color:#c62828;">${faltantes.length}</b> | Sobrantes: <b style="color:#2e7d32;">${sobrantes.length}</b></p>
-    <p style="font-size:0.8rem;color:#666;">FALTANTE = el sistema decía más de lo físico (se consumió sin registrar o falla en receta). SOBRANTE = físico mayor al sistema (ingreso no registrado o receta descontó de más).</p>
+    <p style="font-size:0.8rem;color:#666;">Ventas/Ingresos del periodo${periodo}. FALTANTE = el sistema decía más de lo físico (se consumió sin registrar o falla en receta). SOBRANTE = físico mayor al sistema (ingreso no registrado o receta descontó de más).</p>
     <div class="table-wrap"><table>
       <thead><tr><th>Item</th><th>Mueble</th><th>Sistema</th><th>Físico</th><th>Dif.</th><th>Estado</th><th>Ventas/Ingresos</th></tr></thead>
       <tbody>${rows}</tbody>
@@ -5701,6 +5708,51 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
       ${volverBtn}
       <button onclick="cerrarModal(); cargarStockBarra();" style="flex:1;padding:0.6rem;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">CERRAR</button>
     </div>`;
+}
+
+// Carga el INFORME guardado de una fecha (desde barra_conteos) y lo muestra
+function cargarInformeConteo() {
+  const fecha = document.getElementById('fecha-informe-conteo').value;
+  if (!fecha) { alert('Selecciona una fecha'); return; }
+  api('GET', '/api/barra/conteo?fecha=' + encodeURIComponent(fecha)).then(list => {
+    const c = (list || [])[0];
+    if (!c) { showToast('No hay informe guardado para el ' + fecha); return; }
+    const diferencias = (c.items || []).map(it => ({ ...it, estado: it.diff < 0 ? 'FALTANTE' : 'SOBRANTE' }));
+    mostrarResultadoConteo({
+      diferencias,
+      ajustes: [],
+      fecha_desde: c.fecha_desde || ''
+    }, fecha, c.accion === 'ajustar', false);
+  }).catch(() => alert('Error cargando el informe'));
+}
+
+// Arma el texto del informe y lo abre en WHATSAPP
+function enviarInformeWhatsApp(fecha) {
+  const difs = [];
+  document.querySelectorAll('#modal-body tbody tr').forEach(tr => {
+    const tds = tr.querySelectorAll('td');
+    if (tds.length < 7) return;
+    difs.push({
+      item: tds[0].textContent.trim(),
+      mueble: tds[1].textContent.trim(),
+      sistema: tds[2].textContent.trim(),
+      fisico: tds[3].textContent.trim(),
+      diff: tds[4].textContent.trim(),
+      estado: tds[5].textContent.trim(),
+      sem: tds[6].textContent.trim()
+    });
+  });
+  if (!difs.length) { alert('No hay diferencias para enviar'); return; }
+  const faltantes = difs.filter(d => d.estado.includes('FALTANTE')).length;
+  const sobrantes = difs.filter(d => d.estado.includes('SOBRANTE')).length;
+  let txt = '*📊 INFORME CONTEO SEMANAL — BARRA*\n';
+  txt += '*Fecha:* ' + fecha + '\n';
+  txt += '*Faltantes:* ' + faltantes + ' | *Sobrantes:* ' + sobrantes + '\n\n';
+  txt += difs.map(d => {
+    const icono = d.estado.includes('FALTANTE') ? '🔴' : '🟢';
+    return icono + ' *' + d.item + '*\n  Sistema: ' + d.sistema + ' | Físico: ' + d.fisico + ' | Dif: ' + d.diff + ' (' + d.estado + ')\n  ' + d.sem;
+  }).join('\n');
+  window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
 }
 
 function editarItemStock(id) {
