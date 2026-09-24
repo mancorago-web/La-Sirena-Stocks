@@ -228,10 +228,10 @@ tr:hover { background: #f8f9fa; }
 td button { background: transparent; border: 1px solid #1a237e; color: #1a237e; padding: 0.25rem 0.5rem; border-radius: 3px; cursor: pointer; font-size: 0.8rem; margin-right: 0.25rem; }
 td button.danger { border-color: #c62828; color: #c62828; }
 
-.modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; }
-.modal-content { background: #fff; margin: 2rem auto; padding: 2rem; max-width: 500px; max-height: 85vh; overflow-y: auto; border-radius: 8px; position: relative; }
+.modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; overflow-y: auto; }
+.modal-content { background: #fff; margin: 1.5rem auto 2rem; padding: 2rem; max-width: 500px; max-height: none; border-radius: 8px; position: relative; }
 .close { position: absolute; top: 1rem; right: 1.5rem; font-size: 1.5rem; cursor: pointer; }
-.modal-content.modal-wide { max-width: 1200px; max-height: 92vh; }
+.modal-content.modal-wide { max-width: 1200px; max-height: none; }
 /* Tablas dentro de modales wide: se ajustan al ancho sin barra horizontal */
 .modal-content.modal-wide .table-wrap { overflow-x: hidden; }
 .modal-content.modal-wide .table-wrap table { min-width: 0; width: 100%; table-layout: auto; }
@@ -653,7 +653,7 @@ td button.danger { border-color: #c62828; color: #c62828; }
   }
   .modal-content.modal-wide {
     max-width: 96vw;
-    max-height: 92vh;
+    max-height: none;
   }
   .modal-content h3 { font-size: 1rem; }
   .modal-content input, .modal-content select {
