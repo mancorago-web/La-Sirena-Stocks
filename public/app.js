@@ -5667,22 +5667,54 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
   const difs = (r.diferencias || []).filter(d => Math.abs(d.diff) > 0.0001);
   const faltantes = difs.filter(d => d.diff < -0.0001); // físico < sistema
   const sobrantes = difs.filter(d => d.diff > 0.0001);  // físico > sistema
-  // Orden: primero FALTANTES, luego SOBRANTES (cada grupo ordenado alfabéticamente)
+  // Agrupar por MUEBLE en cajas (estilo COMPRAS) y dentro de cada caja: FALTANTES luego SOBRANTES
   const ordenarAlpha = (a, b) => String(a.ingrediente).localeCompare(String(b.ingrediente), 'es');
-  const ordenadas = [...faltantes.sort(ordenarAlpha), ...sobrantes.sort(ordenarAlpha)];
-  const rows = ordenadas.map(d => {
+  const gruposMueble = {};
+  difs.forEach(d => {
+    const g = String(d.grupo || 'SIN MUEBLE').toUpperCase();
+    if (!gruposMueble[g]) gruposMueble[g] = [];
+    gruposMueble[g].push(d);
+  });
+  const filaInforme = (d) => {
     const esFaltante = d.diff < -0.0001;
     const estado = `<span style="display:inline-block;white-space:nowrap;background:${esFaltante ? '#ffebee' : '#e8f5e9'};color:${esFaltante ? '#c62828' : '#2e7d32'};font-weight:700;padding:0.15rem 0.6rem;border-radius:10px;font-size:0.78rem;">${esFaltante ? 'FALTANTE' : 'SOBRANTE'}</span>`;
     const sem = `ventas: <b>${d.ventas}</b> | ingresos: <b>${d.ingresos}</b>`;
     return `<tr>
       <td>${esc(d.ingrediente)}</td>
-      <td>${(d.grupo || '').toUpperCase()}</td>
       <td style="text-align:center;">${d.sistema}</td>
       <td style="text-align:center;font-weight:700;">${d.fisico}</td>
       <td style="text-align:center;color:${esFaltante ? '#c62828' : '#2e7d32'};font-weight:700;">${d.diff}</td>
       <td style="text-align:center;">${estado}</td>
       <td>${sem}</td>
     </tr>`;
+  };
+  const muebleOrder = Object.keys(gruposMueble).sort((a, b) => {
+    if (a === 'COMPRAS DIARIAS') return 1;
+    if (b === 'COMPRAS DIARIAS') return -1;
+    return a.localeCompare(b, 'es');
+  });
+  const rows = muebleOrder.map(g => {
+    const gRows = [...gruposMueble[g].filter(x => x.diff < -0.0001).sort(ordenarAlpha),
+                    ...gruposMueble[g].filter(x => x.diff > 0.0001).sort(ordenarAlpha)];
+    const totalF = gruposMueble[g].filter(x => x.diff < -0.0001).length;
+    const totalS = gruposMueble[g].filter(x => x.diff > 0.0001).length;
+    return `<div style="margin-bottom:0.75rem;border:2px solid #000;border-radius:8px;overflow:hidden;">
+      <div style="background:#eef2ff;padding:0.4rem 0.6rem;font-weight:700;color:#1a237e;font-size:0.85rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.3rem;">
+        <span>MUEBLE: ${esc(g)}</span>
+        <span style="font-size:0.78rem;color:#0f3460;">Faltantes: <b style="color:#c62828;">${totalF}</b> · Sobrantes: <b style="color:#2e7d32;">${totalS}</b></span>
+      </div>
+      <div class="table-wrap"><table style="width:100%;table-layout:fixed;font-size:0.78rem;">
+        <thead><tr>
+          <th style="width:40%;text-align:left;">Item</th>
+          <th style="width:8%;text-align:center;">Sistema</th>
+          <th style="width:8%;text-align:center;">Físico</th>
+          <th style="width:8%;text-align:center;">Dif.</th>
+          <th style="width:14%;text-align:center;">Estado</th>
+          <th style="width:22%;">Ventas/Ingresos</th>
+        </tr></thead>
+        <tbody>${gRows.map(filaInforme).join('')}</tbody>
+      </table></div>
+    </div>`;
   }).join('');
   const resumen = difs.length ? '' :
     '<p style="color:#2e7d32;font-weight:700;margin-top:0.75rem;">✅ Sin diferencias: el stock del sistema coincide con el conteo físico.</p>';
@@ -5704,10 +5736,7 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
     ${resumen}
     <p style="color:#666;font-size:0.9rem;">${ajustado ? 'Ajustados: <b>' + (r.ajustes || []).length + '</b> item(s) al físico.' : 'Conteo comparado (sin modificar stock).'} Faltantes: <b style="color:#c62828;">${faltantes.length}</b> | Sobrantes: <b style="color:#2e7d32;">${sobrantes.length}</b></p>
     <p style="font-size:0.8rem;color:#666;">Ventas/Ingresos del periodo${periodo}. FALTANTE = el sistema decía más de lo físico (se consumió sin registrar o falla en receta). SOBRANTE = físico mayor al sistema (ingreso no registrado o receta descontó de más).</p>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Item</th><th>Mueble</th><th>Sistema</th><th>Físico</th><th>Dif.</th><th>Estado</th><th>Ventas/Ingresos</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>
+    ${rows}
     <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
       ${volverBtn}
       <button onclick="cerrarModal(); cargarStockBarra();" style="flex:1;padding:0.6rem;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">CERRAR</button>
@@ -5735,15 +5764,14 @@ function enviarInformeWhatsApp(fecha) {
   const difs = [];
   document.querySelectorAll('#modal-body tbody tr').forEach(tr => {
     const tds = tr.querySelectorAll('td');
-    if (tds.length < 7) return;
+    if (tds.length < 6) return;
     difs.push({
       item: tds[0].textContent.trim(),
-      mueble: tds[1].textContent.trim(),
-      sistema: tds[2].textContent.trim(),
-      fisico: tds[3].textContent.trim(),
-      diff: tds[4].textContent.trim(),
-      estado: tds[5].textContent.trim(),
-      sem: tds[6].textContent.trim()
+      sistema: tds[1].textContent.trim(),
+      fisico: tds[2].textContent.trim(),
+      diff: tds[3].textContent.trim(),
+      estado: tds[4].textContent.trim(),
+      sem: tds[5].textContent.trim()
     });
   });
   if (!difs.length) { alert('No hay diferencias para enviar'); return; }
