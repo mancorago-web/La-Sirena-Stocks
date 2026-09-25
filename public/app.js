@@ -722,6 +722,8 @@ function toggleColumnasPrecioCocina() {
     btn.title = _verPreciosCocina ? 'Ocultar columnas de precios' : 'Ver columnas de precios';
   }
   actualizarTotalesPrecioCocina();
+  // Re-renderiza para mostrar/ocultar el botón 💰 de cada item (solo editable con PRECIOS activo)
+  cargarStockCocina();
 }
 // Recalcula PRECIO T = PRECIO U x Cierre al editar en COCINA/STOCK
 function actualizarPrecioTotalCocina(inputEl) {
@@ -6167,7 +6169,7 @@ function cargarStockCocina(familiasAbrir) {
         <td><input type="hidden" class="input-baja" value="${fmt3(i.stock_baja)}">
         <td><input type="number" class="input-num input-cierre" value="${fmt3(i.stock_cierre)}" step="0.001" readonly></td>
         <td style="white-space:nowrap">
-          <button onclick="editarPrecioCocina(${i.id})" title="Poner/editar el precio unitario" style="background:#e65100;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">💰</button>
+          ${_verPreciosCocina ? '<button onclick="editarPrecioCocina(' + i.id + ')" title="Poner/editar el precio unitario" style="background:#e65100;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">💰</button>' : ''}
           <button onclick="editarStockCocina(${i.id})" style="background:#0f3460;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">EDITAR</button>
           <button onclick="eliminarStockCocina(${i.id})" style="background:#c62828;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">✕</button>
         </td>
