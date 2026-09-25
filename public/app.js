@@ -5154,9 +5154,9 @@ function cargarSugerenciasStock() {
     if (!dl) return;
     const seen = new Set();
     dl.innerHTML = data.map(s => {
-      const n = (s.ingrediente || '').trim();
-      if (!n || seen.has(n.toLowerCase())) return '';
-      seen.add(n.toLowerCase());
+      const n = (s.ingrediente || '').trim().toUpperCase();
+      if (!n || seen.has(n)) return '';
+      seen.add(n);
       return '<option value="' + n.replace(/"/g, '&quot;') + '"></option>';
     }).join('');
   }).catch(e => console.error('Error cargando sugerencias de stock:', e));
@@ -5165,9 +5165,9 @@ function cargarSugerenciasStock() {
     if (!dl) return;
     const seen = new Set();
     dl.innerHTML = data.map(s => {
-      const n = (s.ingrediente || '').trim();
-      if (!n || seen.has(n.toLowerCase())) return '';
-      seen.add(n.toLowerCase());
+      const n = (s.ingrediente || '').trim().toUpperCase();
+      if (!n || seen.has(n)) return '';
+      seen.add(n);
       const g = (s.grupo || 'SIN CLASIFICAR').toUpperCase();
       const c = parseFloat(s.cantidad) || 0;
       return '<option value="' + n.replace(/"/g, '&quot;') + ' — ' + esc(g) + ' (' + c + ')"></option>';
