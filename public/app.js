@@ -7602,8 +7602,8 @@ function cargarPreciosCocina() {
           <td><input type="number" class="input-cocina-precio-val" value="${s.precio || 0}" step="0.01" style="width:90px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
           <td style="white-space:nowrap">
             <button onclick="guardarFilaPrecioCocina(this)" style="background:#2e7d32;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">GUARDAR</button>
-            <button onclick="editarPrecioCocina(${s.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">EDITAR</button>
-            <button onclick="eliminarPrecioCocina(${s.id})" title="Eliminar" style="background:#c62828;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">✕</button>
+            <button onclick="editarPrecioBaseDatosCocina(${s.id})" style="background:#0f3460;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">EDITAR</button>
+            <button onclick="eliminarPrecioBaseDatosCocina(${s.id})" title="Eliminar" style="background:#c62828;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.85rem;">✕</button>
           </td>
         </tr>`).join('');
     }
@@ -7725,7 +7725,7 @@ function guardarPreciosBaseCocina() {
   });
 }
 
-function editarPrecioCocina(id) {
+function editarPrecioBaseDatosCocina(id) {
   api('GET', '/api/cocina/precios').then(data => {
     const item = data.find(d => d.id === id);
     if (!item) { alert('Item no encontrado'); return; }
@@ -7757,15 +7757,15 @@ function editarPrecioCocina(id) {
         <input type="number" id="edit-cocina-precio-valor" value="${item.precio || 0}" step="0.01" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.3rem;">
       </label>
       <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
-        <button onclick="guardarEdicionPrecioCocina(${id})" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
-        <button onclick="eliminarPrecioCocina(${id})" style="flex:1;padding:0.5rem;background:#c62828;color:#fff;border:none;border-radius:4px;cursor:pointer;">Eliminar</button>
+        <button onclick="guardarEdicionPrecioBaseDatosCocina(${id})" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar</button>
+        <button onclick="eliminarPrecioBaseDatosCocina(${id})" style="flex:1;padding:0.5rem;background:#c62828;color:#fff;border:none;border-radius:4px;cursor:pointer;">Eliminar</button>
       </div>
     `;
     document.getElementById('modal').style.display = 'block';
   });
 }
 
-function guardarEdicionPrecioCocina(id) {
+function guardarEdicionPrecioBaseDatosCocina(id) {
   const ingrediente = document.getElementById('edit-cocina-precio-nombre').value.trim();
   const unidad = document.getElementById('edit-cocina-precio-unidad').value;
   const precio = parseFloat(document.getElementById('edit-cocina-precio-valor').value) || 0;
@@ -7779,7 +7779,7 @@ function guardarEdicionPrecioCocina(id) {
   }).catch(() => alert('Error al actualizar'));
 }
 
-function eliminarPrecioCocina(id) {
+function eliminarPrecioBaseDatosCocina(id) {
   if (!confirm('¿Eliminar este ingrediente de la base de datos?')) return;
   api('DELETE', '/api/cocina/precios/' + id).then(() => cargarPreciosCocina()).catch(() => alert('Error al eliminar'));
 }
