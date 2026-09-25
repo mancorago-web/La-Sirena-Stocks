@@ -2173,9 +2173,42 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
         }
       }
     }
-    // 3) BARRA/STOCK NO jala de COCINA/STOCK: si aún sobra, se reporta (y se permite NEGATIVO).
+    // 3) BARRA/STOCK no alcanza: SIEMPRE que el item exista en COCINA/STOCK, consumir de ahí
+    //    (evita falsos faltantes cuando el item es compartido, ej. HUEVOS X UND). Solo si NO
+    //    existe en COCINA se reporta como no descontado (y se permite NEGATIVO).
     if (restante > 0.0001) {
-      noDescontados.push({ ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: uRec, motivo: 'sin_conversion_o_insuficiente' });
+      const pendiente = { ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: c.unidad || 'unidad' };
+      const cocinaSnap = await col('cocina_stock').get();
+      const cocinaStock = cocinaSnap.docs.map(d => ({ ref: d.ref, key: d.id, data: d.data() }));
+      const cByNombre = {};
+      cocinaStock.forEach(s => { const k = String(s.data.ingrediente || '').trim().toUpperCase(); if (!cByNombre[k]) cByNombre[k] = []; cByNombre[k].push(s); });
+      let cMatches = cByNombre[key] || [];
+      if (!cMatches.length) cMatches = matchStockFuzzy(nombre, cocinaStock);
+      if (cMatches.length) {
+        let cRest = restante;
+        for (const m of cMatches) {
+          if (cRest <= 0.0001) break;
+          const uStock = normalizeUnit(m.data.unidad || 'unidad');
+          const eq = { equiv_ml: m.data.equiv_ml, equiv_gr: m.data.equiv_gr };
+          const conv = cocinaAjustar(cRest, uRec, uStock, eq);
+          if (conv === null || conv === undefined) continue;
+          const disp = parseFloat(m.data.cantidad) || 0;
+          const aDescontar = Math.min(disp, conv);
+          if (aDescontar <= 0) continue;
+          const nueva = Math.max(0, Math.round((disp - aDescontar) * 100) / 100);
+          batch.update(m.ref, { cantidad: nueva, updated_at: new Date().toISOString() });
+          ops++;
+          if (ops >= 450) { await batch.commit(); batch = db.batch(); ops = 0; }
+          const consumidoRec = cocinaAjustar(aDescontar, uStock, uRec, eq) || aDescontar;
+          cRest = Math.max(0, Math.round((cRest - consumidoRec) * 100) / 100);
+          ajustados++;
+        }
+        if (cRest > 0.0001) {
+          noDescontados.push({ ingrediente: nombre, cantidad: Math.round(cRest * 100) / 100, unidad: uRec, motivo: 'sin_conversion_o_insuficiente' });
+        }
+      } else {
+        noDescontados.push({ ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: uRec, motivo: 'sin_conversion_o_insuficiente' });
+      }
     }
   }
   if (ops) await batch.commit();
