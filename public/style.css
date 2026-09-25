@@ -232,11 +232,10 @@ td button.danger { border-color: #c62828; color: #c62828; }
 .modal-content { background: #fff; margin: 1.5rem auto 2rem; padding: 2rem; max-width: 500px; max-height: none; border-radius: 8px; position: relative; }
 .close { position: absolute; top: 1rem; right: 1.5rem; font-size: 1.5rem; cursor: pointer; }
 .modal-content.modal-wide { max-width: 1200px; max-height: none; }
-/* Tablas dentro de modales wide: se ajustan al ancho sin barra horizontal */
-.modal-content.modal-wide .table-wrap { overflow-x: hidden; }
-.modal-content.modal-wide .table-wrap table { min-width: 0; width: 100%; table-layout: auto; }
-.modal-content.modal-wide .table-wrap th,
-.modal-content.modal-wide .table-wrap td { word-break: break-word; white-space: normal; }
+/* Tabla de CONTEO SEMANAL: se ajusta al ancho sin barra horizontal */
+.modal-content.modal-wide .table-wrap .tabla-conteo { min-width: 0; width: 100%; table-layout: auto; }
+.modal-content.modal-wide .table-wrap .tabla-conteo th,
+.modal-content.modal-wide .table-wrap .tabla-conteo td { word-break: break-word; white-space: normal; }
 
 /* Tabla de CONTEO SEMANAL: columnas alineadas (item amplio, sistema y conteo fijos) */
 .tabla-conteo { border-collapse: collapse; }
@@ -389,6 +388,9 @@ td button.danger { border-color: #c62828; color: #c62828; }
 }
 .btn-agregar-item:hover {
   background: #388e3c;
+}
+.table-wrap {
+  overflow-x: auto;
 }
 .accordion-body .table-wrap {
   overflow-x: auto;
