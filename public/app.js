@@ -9023,9 +9023,24 @@ function editarCompra(id) {
   const precioTot = parseFloat(r.precio_total) || (precioUni * (r.cantidad || 0));
   const docOpts = ['FACTURA', 'BOLETA', 'NOTA DE VENTA'].map(d => '<option value="' + d + '" ' + (String(r.documento || '').toUpperCase() === d ? 'selected' : '') + '>' + d + '</option>').join('');
   abrirModalDesdeArriba();
+  // Cargar sugerencias de items del sistema para el campo Nombre
+  api('GET', '/api/basedatos/unificada').then(list => {
+    const dl = document.getElementById('editar-compra-sugerencias');
+    if (!dl) return;
+    const seen = new Set();
+    dl.innerHTML = (list || []).map(x => {
+      const n = String(x.nombre || '').trim().toUpperCase();
+      if (!n || seen.has(n)) return '';
+      seen.add(n);
+      return '<option value="' + n.replace(/"/g, '&quot;') + '"></option>';
+    }).join('');
+  }).catch(() => {});
   body.innerHTML = `
     <h3>Editar Compra/Ingreso</h3>
-    <p style="color:#666;margin-top:0.5rem;font-size:0.85rem;"><b>${esc(r.nombre)}</b> · ${esc(r.destino || '').toUpperCase()} · Fecha ${r.fecha || '—'}</p>
+    <label style="font-size:0.82rem;color:#555;">Nombre del Item
+      <input type="text" id="edit-compra-nombre" value="${esc(r.nombre)}" list="editar-compra-sugerencias" autocomplete="off" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
+      <datalist id="editar-compra-sugerencias"></datalist>
+    </label>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-top:1rem;">
       <label style="font-size:0.82rem;color:#555;">Cantidad
         <input type="number" id="edit-compra-cant" step="0.01" min="0" value="${r.cantidad}" oninput="onEditCompraCantidad()" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
@@ -9048,7 +9063,7 @@ function editarCompra(id) {
         <input type="text" id="edit-compra-proveedor" value="${esc(r.proveedor || '')}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
       </label>
     </div>
-    <p style="font-size:0.75rem;color:#888;margin-top:0.75rem;">El item, destino y fecha no se cambian desde aquí. El stock se ajusta automáticamente (revierte el valor anterior y aplica el nuevo).</p>
+    <p style="font-size:0.75rem;color:#888;margin-top:0.75rem;">Puedes cambiar el nombre del item (con sugerencias). El stock se ajusta automáticamente (revierte el valor anterior y aplica el nuevo).</p>
     <div style="margin-top:1.25rem;display:flex;gap:0.5rem;">
       <button onclick="guardarEdicionCompra('${id}')" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar cambios</button>
       <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
@@ -9083,6 +9098,8 @@ function guardarEdicionCompra(id) {
   const fecha = (r && r.fecha) || todayStr();
   const cantidad = parseFloat(document.getElementById('edit-compra-cant')?.value);
   if (!cantidad || cantidad <= 0) { alert('Cantidad inválida'); return; }
+  const nombre = document.getElementById('edit-compra-nombre')?.value.trim() || (r && r.nombre) || '';
+  if (!nombre) { alert('Nombre inválido'); return; }
   const precioUni = parseFloat(document.getElementById('edit-compra-precio-uni')?.value) || 0;
   const precioTotal = parseFloat(document.getElementById('edit-compra-precio-total')?.value) || 0;
   const documento = document.getElementById('edit-compra-documento')?.value || '';
@@ -9090,7 +9107,7 @@ function guardarEdicionCompra(id) {
   const proveedor = document.getElementById('edit-compra-proveedor')?.value.trim() || '';
   if (window._guardandoEdicionCompra) { showToast('Ya hay un registro en curso, espera...'); return; }
   window._guardandoEdicionCompra = true;
-  api('PUT', '/api/compras/' + id, { fecha, cantidad, precio: precioUni, precio_total: precioTotal, documento, numero, proveedor }).then(() => {
+  api('PUT', '/api/compras/' + id, { fecha, cantidad, nombre, precio: precioUni, precio_total: precioTotal, documento, numero, proveedor }).then(() => {
     window._guardandoEdicionCompra = false;
     cerrarModal();
     showToast('Compra/Ingreso actualizado');

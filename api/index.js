@@ -1868,13 +1868,14 @@ app.delete('/api/compras/:id', authMiddleware, async (req, res) => {
 app.put('/api/compras/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const { fecha, cantidad, precio, precio_total, documento, numero, proveedor, categoria } = req.body;
+    const { fecha, cantidad, precio, precio_total, documento, numero, proveedor, categoria, nombre: nombreNuevo } = req.body;
     if (String(id).startsWith('inv:')) return res.status(400).json({ error: 'Los ingresos manuales se editan desde STOCK/INGRESOS' });
     const logRef = col('compras').doc(id);
     const logSnap = await logRef.get();
     if (!logSnap.exists) return res.status(404).json({ error: 'Registro no encontrado' });
     const log = logSnap.data();
     const nombre = log.nombre;
+    const nuevoNombre = String(nombreNuevo || '').trim();
     const oldCantidad = parseFloat(log.cantidad) || 0;
     const newCantidad = parseFloat(cantidad) || 0;
     const savedBy = req.user?.name || req.user?.email || 'unknown';
@@ -2014,11 +2015,21 @@ app.put('/api/compras/:id', authMiddleware, async (req, res) => {
       proveedor: String(proveedor || '').trim(),
       updated_at: now
     };
+    if (nuevoNombre && nuevoNombre !== nombre) {
+      // El stock ya se revirtió con el nombre viejo y se aplicó con el nuevo (en las ramas anteriores).
+      // Actualizar el nombre del registro y propagar el renombre a toda la app.
+      upd.nombre = nuevoNombre;
+    }
     if (categoria !== undefined) upd.categoria = String(categoria || '').trim().toUpperCase();
     await logRef.update(upd);
     // Al editar una compra (cantidad/precio), actualizar el precio del item en las recetas (BARRA/COCINA)
     const nuevoPrecio = parseFloat(precio) || 0;
-    if (nuevoPrecio > 0) await registrarUltimoPrecioCompra(nombre, nuevoPrecio, log.destino, fechaLog);
+    const nombreFinal = nuevoNombre && nuevoNombre !== nombre ? nuevoNombre : nombre;
+    if (nuevoPrecio > 0) await registrarUltimoPrecioCompra(nombreFinal, nuevoPrecio, log.destino, fechaLog);
+    // Si cambió el nombre, propagar el renombre en toda la app (stock, barra, cocina, recetas, movimientos)
+    if (nuevoNombre && nuevoNombre !== nombre) {
+      try { await renombrarEnTodaLaApp(nombre, nuevoNombre); } catch (e) { console.error('renombrar tras editar compra:', e.message); }
+    }
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
