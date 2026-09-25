@@ -3509,13 +3509,23 @@ app.get('/api/barra/stock', async (req, res) => {
     return res.json(snap.docs.map(d => ({ ...d.data() })));
   }
   const snap = await col('barra_stock').orderBy('id').get();
-  const precSnap = await col('barra_precios').get();
+  const [precSnap, spSnap, comprasSnap] = await Promise.all([
+    col('barra_precios').get(),
+    col('stock_precios').get(),
+    col('compras').get(),
+  ]);
   const precBy = {};
   precSnap.docs.forEach(d => { const p = d.data(); const k = normNombre(p.ingrediente || ''); if (k && !precBy[k]) precBy[k] = p; });
+  // Respaldo de precio: stock_precios y última compra (para items de BARRA que solo tienen precio ahí)
+  const precioGlobal = {};
+  spSnap.docs.forEach(d => { const p = d.data(); const k = normNombre(p.nombre || ''); if (k && parseFloat(p.ultimo_precio_compra || p.precio || 0) > 0 && !precioGlobal[k]) precioGlobal[k] = parseFloat(p.ultimo_precio_compra || p.precio); });
+  const compraUlt = {};
+  comprasSnap.docs.forEach(d => { const a = d.data(); const k = normNombre(a.nombre || ''); const cant = parseFloat(a.cantidad) || 0; const pu = cant > 0 && parseFloat(a.precio_total) > 0 ? (parseFloat(a.precio_total) / cant) : (parseFloat(a.precio) || 0); if (pu > 0 && (!compraUlt[k] || (a.fecha || '') > compraUlt[k].fecha)) compraUlt[k] = pu; });
   res.json(snap.docs.map(d => {
     const s = d.data();
-    const p = precBy[normNombre(s.ingrediente || '')] || {};
-    const pu = parseFloat(p.ultimo_precio_compra) || parseFloat(p.precio_compra) || parseFloat(p.precio) || 0;
+    const k = normNombre(s.ingrediente || '');
+    const p = precBy[k] || {};
+    const pu = parseFloat(p.ultimo_precio_compra) || parseFloat(p.precio_compra) || parseFloat(p.precio) || precioGlobal[k] || compraUlt[k] || 0;
     return { id: Number(d.id), ...s, precio: Math.round(pu * 100) / 100 };
   }));
 });
