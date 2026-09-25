@@ -5258,7 +5258,7 @@ function cargarStockBarra() {
         </tr>`;
       }
       const bloqueado = _barraBloqueo.bloqueado && GRUPOS_BARRA.includes((s.grupo || '').toUpperCase());
-      const btnPrecio = `<button onclick="editarPrecioBarra(${s.id})" title="Poner/editar el precio unitario" style="padding:0.3rem 0.6rem;background:#e65100;color:#fff;border:none;border-radius:4px;cursor:pointer;">💰 PRECIO</button>`;
+      const btnPrecio = `<button class="btn-precio-barra" onclick="editarPrecioBarra(${s.id})" title="Poner/editar el precio unitario" style="padding:0.3rem 0.6rem;background:#e65100;color:#fff;border:none;border-radius:4px;cursor:pointer;">💰 PRECIO</button>`;
       if (bloqueado) {
         return `<tr data-stock-id="${s.id}" data-bloqueado="1">
           <td class="stock-nombre">${nombreConNota}</td>
