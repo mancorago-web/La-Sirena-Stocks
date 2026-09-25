@@ -508,6 +508,7 @@ td button.danger { border-color: #c62828; color: #c62828; }
 }
 
 .ocultar-precios .col-precio { display: none; }
+.ocultar-precios .btn-precio-cocina { display: none; }
 
 /* ===== Responsive / Mobile ===== */
 @media (max-width: 768px) {
