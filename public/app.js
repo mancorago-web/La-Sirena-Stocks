@@ -9200,12 +9200,17 @@ function onBuscarItemVenta(valor) {
   }
 }
 
-function renderVentasAlmacenes(lista) {
+function renderVentasAlmacenes(lista, barraInfo) {
   const cont = document.getElementById('ventas-almacenes-lista');
   if (!cont) return;
   const chk = (x) => '<label style="font-size:0.82rem;display:flex;align-items:center;gap:0.25rem;padding:0.18rem 0;"><input type="checkbox" class="venta-almacen" value="' + Number(x.id) + '"> ' + esc(x.nombre) + (x.cantidad !== null && x.cantidad !== undefined ? ' <span style="color:#c62828;font-weight:700;">(' + x.cantidad + ')</span>' : '') + '</label>';
   const izquierda = lista.filter(x => !/ARRIBA/i.test(x.nombre));
   const derecha = lista.filter(x => /ARRIBA/i.test(x.nombre));
+  const barraHtml = (barraInfo && barraInfo.nombre)
+    ? '<div style="border-top:1px dashed #b39ddb;margin-top:0.4rem;padding-top:0.4rem;">' +
+        '<label style="font-size:0.82rem;display:flex;align-items:center;gap:0.25rem;padding:0.18rem 0;font-weight:700;color:#6a1b9a;"><input type="checkbox" class="venta-almacen" value="barra" id="venta-desde-barra"> BARRA/STOCK <span style="color:#c62828;font-weight:700;">(' + barraInfo.cantidad + ' ' + (barraInfo.unidad || 'und') + ')</span></label>' +
+      '</div>'
+    : '';
   cont.innerHTML =
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem 1.5rem;align-items:start;">' +
       '<div>' +
@@ -9218,7 +9223,7 @@ function renderVentasAlmacenes(lista) {
         derecha.map(chk).join('') +
         (!derecha.length ? '<div style="color:#999;font-size:0.78rem;">Sin almacenes</div>' : '') +
       '</div>' +
-    '</div>';
+    '</div>' + barraHtml;
 }
 
 function actualizarAlmacenesVenta(nombre) {
@@ -9238,7 +9243,16 @@ function actualizarAlmacenesVenta(nombre) {
         list.push({ id: a.id, nombre: a.nombre, cantidad: cant });
       }
     });
-    renderVentasAlmacenes(list);
+    // Buscar el item también en BARRA/STOCK (para poder jalar la venta de ahí)
+    return api('GET', '/api/barra/stock').then(barraStock => {
+      const qn = (nombre || '').trim().toUpperCase().replace(/\s+/g, ' ');
+      let barraInfo = null;
+      if (q) {
+        const item = (barraStock || []).find(s => String(s.ingrediente || '').toUpperCase().replace(/\s+/g, ' ').includes(qn));
+        if (item) barraInfo = { nombre: item.ingrediente, cantidad: parseFloat(item.cantidad) || 0, unidad: item.unidad || 'und' };
+      }
+      renderVentasAlmacenes(list, barraInfo);
+    }).catch(() => renderVentasAlmacenes(list, null));
   }).catch(() => {});
 }
 
@@ -9262,16 +9276,29 @@ function agregarVenta() {
   if (window._guardandoVentaAgregar) { showToast('Ya hay un registro en curso, espera...'); return; }
   window._guardandoVentaAgregar = true;
   let almacenes;
+  let desdeBarraStock = false;
   if (destino === 'stocks') {
     const ids = ventasAlmacenesSeleccionados();
-    if (!ids.length) { window._guardandoVentaAgregar = false; alert('Selecciona al menos un almacén de donde sale esta venta'); return; }
-    almacenes = ventasAlmacenes.filter(a => ids.includes(Number(a.id))).map(a => Number(a.id));
+    if (ids.includes('barra')) {
+      // Se eligió BARRA/STOCK: la venta sale de BARRA (se descuenta directo de barra_stock)
+      desdeBarraStock = true;
+    }
+    const alIds = ids.filter(i => i !== 'barra');
+    if (!alIds.length && !desdeBarraStock) { window._guardandoVentaAgregar = false; alert('Selecciona al menos un almacén o BARRA/STOCK de donde sale esta venta'); return; }
+    almacenes = ventasAlmacenes.filter(a => alIds.includes(Number(a.id))).map(a => Number(a.id));
   }
   const btn = document.getElementById('btn-agregar-venta');
   if (btn) btn.disabled = true;
+  const items = [];
+  if (desdeBarraStock) {
+    // Venta de BARRA/STOCK: descontar directo el item de barra_stock
+    items.push({ nombre, cantidad, destino: 'barra', desdeBarraStock: true });
+  } else {
+    items.push({ nombre, cantidad, destino, almacenes });
+  }
   // Esta operación SUMA al valor actual (cur + cantidad), así que ante un timeout NO se
   // reintenta automáticamente (evita duplicar la venta). Solo se advierte con claridad.
-  api('POST', '/api/ventas/guardar', { fecha, items: [{ nombre, cantidad, destino, almacenes }] }).then(r => {
+  api('POST', '/api/ventas/guardar', { fecha, items }).then(r => {
     window._guardandoVentaAgregar = false;
     if (btn) btn.disabled = false;
     const res = r.resumen || {};

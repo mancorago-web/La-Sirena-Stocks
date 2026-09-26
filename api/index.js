@@ -2503,6 +2503,10 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
               es_receta: false, receta: recNombre, saved_by: savedBy, created_at: new Date().toISOString()
             });
           });
+        } else if (v.desdeBarraStock) {
+          // Item directo de BARRA/STOCK elegido en el selector (ej. "CONEJO NEGRO MALBEC - COPA").
+          // Se descuenta directamente de barra_stock (como 1:1 por la cantidad vendida).
+          consumos.push({ ingrediente: v.nombre, cantidad: v.cantidad, unidad: 'unidad' });
         }
       }
       await batch.commit();
