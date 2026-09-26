@@ -360,7 +360,6 @@
             <label style="display:flex;align-items:center;gap:0.3rem;">Fecha:
               <input type="date" id="fecha-stock-barra" onchange="cargarStockBarra()" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
             </label>
-            <button onclick="exportarStockBarra()" style="padding:0.5rem 1rem;background:#2e7d32;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;">📊 EXPORTAR EXCEL</button>
             <button onclick="verStockBarraGeneral()" style="padding:0.5rem 1rem;background:#0f3460;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;" title="Ver todos los items sin diferenciar por muebles, agrupados por categoría de licor">🎛️ GENERAL</button>
             <button onclick="verStockBajoBarra()" style="padding:0.5rem 1rem;background:#e65100;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;" title="Ver todas las botellas con stock bajo (cantidad <= 0.2)">📉 STOCK BAJO</button>
             <button onclick="abrirConteoBarra()" style="padding:0.5rem 1rem;background:#6a1b9a;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;" title="Conteo físico semanal de BARRA: compara el stock del sistema contra el conteo físico y detecta faltantes/sobrantes">📋 CONTEO SEMANAL</button>
