@@ -5809,6 +5809,7 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
       <button onclick="cargarInformeConteo()" style="width:auto;margin:0;padding:0.3rem 0.7rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700;font-size:0.78rem;">BUSCAR</button>
       <button onclick="enviarInformeWhatsApp('${fecha}')" style="width:auto;margin:0;padding:0.3rem 0.7rem;background:#25D366;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700;font-size:0.78rem;">📲 WHATSAPP</button>
     </div>
+    <div id="calendario-informes" style="margin-top:0.5rem;"></div>
     ${resumen}
     <p style="color:#666;font-size:0.9rem;">${ajustado ? 'Ajustados: <b>' + (r.ajustes || []).length + '</b> item(s) al físico.' : 'Conteo comparado (sin modificar stock).'} Faltantes: <b style="color:#c62828;">${faltantes.length}</b> | Sobrantes: <b style="color:#2e7d32;">${sobrantes.length}</b></p>
     <p style="font-size:0.8rem;color:#666;">Ventas/Ingresos del periodo${periodo}. FALTANTE = el sistema decía más de lo físico (se consumió sin registrar o falla en receta). SOBRANTE = físico mayor al sistema (ingreso no registrado o receta descontó de más).</p>
@@ -5820,6 +5821,7 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
       <button onclick="cerrarModal(); cargarStockBarra();" style="flex:1;padding:0.6rem;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">CERRAR</button>
     </div>
     <p style="font-size:0.78rem;color:#999;margin-top:0.5rem;">BAJA: registra un faltante (rotura/merma/pérdida) sin tocar el stock. AJUSTAR: deja BARRA/STOCK en los montos físicos del conteo.</p>`;
+  renderCalendarioInformes('calendario-informes', fecha);
 }
 
 // Abre el modal para registrar BAJAS de items con faltante
@@ -5908,6 +5910,47 @@ function ajustarDesdeInforme(fecha) {
   }).catch(() => alert('Error cargando el conteo'));
 }
 
+// Renderiza un mini calendario con punto rojo en las fechas que tienen informe guardado
+function renderCalendarioInformes(containerId, fechaActiva) {
+  const cont = document.getElementById(containerId);
+  if (!cont) return;
+  api('GET', '/api/barra/conteo').then(list => {
+    const fechas = [...new Set((list || []).map(c => String(c.fecha || '')).filter(Boolean))];
+    const setFechas = new Set(fechas);
+    const [fy, fm] = String(fechaActiva || todayStr()).split('-').map(Number);
+    const anyo = fy || new Date().getFullYear();
+    const mes = fm || (new Date().getMonth() + 1);
+    const diasMes = new Date(anyo, mes, 0).getDate();
+    const primerDia = new Date(anyo, mes - 1, 1).getDay(); // 0 = domingo
+    const nombresDias = ['DO', 'LU', 'MA', 'MI', 'JU', 'VI', 'SA'];
+    let html = '<div style="background:#f5f7fa;border:1px solid #e0e0e0;border-radius:8px;padding:0.6rem;">';
+    html += '<div style="font-weight:700;color:#0f3460;font-size:0.8rem;text-align:center;margin-bottom:0.4rem;">📅 INFORMES GUARDADOS — ' + ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'][mes - 1] + ' ' + anyo + '</div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;">';
+    nombresDias.forEach(n => { html += '<div style="font-size:0.65rem;color:#90a4ae;font-weight:700;padding:2px;">' + n + '</div>'; });
+    for (let i = 0; i < primerDia; i++) html += '<div></div>';
+    for (let d = 1; d <= diasMes; d++) {
+      const fechaStr = anyo + '-' + String(mes).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+      const tiene = setFechas.has(fechaStr);
+      const hoy = fechaStr === todayStr();
+      html += '<div style="padding:2px;border-radius:4px;cursor:' + (tiene ? 'pointer' : 'default') + ';' + (hoy ? 'background:#e3f2fd;' : '') + '">';
+      html += '<div style="font-size:0.75rem;color:' + (tiene ? '#0f3460' : '#666') + ';font-weight:' + (tiene ? '700' : '400') + ';" onclick="' + (tiene ? "cargarInformeFecha('" + fechaStr + "')" : '') + '">' + d + '</div>';
+      html += '<div style="margin:2px auto 0;width:6px;height:6px;border-radius:50%;background:' + (tiene ? '#e53935' : 'transparent') + ';"></div>';
+      html += '</div>';
+    }
+    html += '</div>';
+    html += '<div style="font-size:0.7rem;color:#90a4ae;margin-top:0.4rem;display:flex;align-items:center;gap:0.3rem;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#e53935;"></span> tiene informe guardado — haz clic en el día para verlo.</div>';
+    html += '</div>';
+    cont.innerHTML = html;
+  }).catch(() => { cont.innerHTML = ''; });
+}
+
+// Cambia el input de fecha a la fecha elegida en el calendario y carga ese informe
+function cargarInformeFecha(fecha) {
+  const inp = document.getElementById('fecha-informe-conteo');
+  if (inp) inp.value = fecha;
+  cargarInformeConteo();
+}
+
 // Carga el INFORME guardado de una fecha (desde barra_conteos) y lo muestra
 function cargarInformeConteo() {
   const fecha = document.getElementById('fecha-informe-conteo').value;
@@ -5962,9 +6005,11 @@ function mostrarSinInformeConteo(fecha) {
       <input type="date" id="fecha-informe-conteo" value="${fecha}" onchange="cargarInformeConteo()" style="width:auto;margin:0;padding:0.25rem 0.4rem;border:1px solid #90caf9;border-radius:4px;font-size:0.78rem;">
       <button onclick="cargarInformeConteo()" style="width:auto;margin:0;padding:0.3rem 0.7rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700;font-size:0.78rem;">BUSCAR</button>
     </div>
+    <div id="calendario-informes" style="margin-top:0.5rem;"></div>
     <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
       <button onclick="cerrarModal(); cargarStockBarra();" style="flex:1;padding:0.6rem;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">CERRAR</button>
     </div>`;
+  renderCalendarioInformes('calendario-informes', fecha);
 }
 
 // Arma el texto del informe y lo abre en WHATSAPP
