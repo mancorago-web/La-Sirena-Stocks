@@ -5439,7 +5439,7 @@ function verStockBarraGeneral() {
     });
     window._stockBarraGeneral = { fecha, filas: filasExport };
     const body = document.getElementById('modal-body');
-    let html = '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;"><h3 style="margin:0;">🎛️ BARRA — VISTA GENERAL (' + fecha + ')</h3><button onclick="exportarStockBarraGeneral()" style="padding:0.5rem 1rem;background:#2e7d32;color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;">📊 EXPORTAR</button></div>';
+    let html = '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;"><h3 style="margin:0;">🎛️ BARRA — VISTA GENERAL (' + fecha + ')</h3><button onclick="exportarStockBarraGeneral()" style="width:auto;padding:0.4rem 0.8rem;background:#2e7d32;color:#fff;border:none;border-radius:6px;font-size:0.85rem;font-weight:700;cursor:pointer;white-space:nowrap;">📊 EXPORTAR EXCEL</button></div>';
     html += '<p style="font-size:0.8rem;color:#666;margin:0.4rem 0 0.6rem;">Todos los items de BARRA/STOCK (muebles + COMPRAS DIARIAS + ALMACÉN GENERAL ABAJO grupo BARRA). Las cantidades son los totales.</p>';
     CATEGORIAS.forEach(c => {
       const lista = cats[c.label];
