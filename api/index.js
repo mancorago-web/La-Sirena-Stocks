@@ -2418,6 +2418,7 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
     };
 
     const registrosStocks = [];
+    const ventasAcumStocks = {};
     const ventasBarra = [];
     const cocinaVentas = [];
     const resumen = { stocks: [], barra: [], cocina: [], noEncontrados: [] };
@@ -2447,12 +2448,11 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
             await col('inventario').doc(docId('inventario', maxItemId, alId)).set({ item_id: maxItemId, almacen_id: alId, nombre, categoria: '', stock_apertura: 0, cantidad_minima: 0 });
             match = { item_id: maxItemId, almacen_id: alId };
           }
-          // SUMAR a las ventas ya registradas del día (no sobrescribir)
-          const diaId = docId('invdiario', fecha, match.almacen_id, match.item_id);
-          const diaSnap = await col('inventario_diario').doc(diaId).get();
-          const cur = diaSnap.exists ? (parseFloat(diaSnap.data().total_ventas) || 0) : 0;
-          const nuevoTotal = cur + cantidad;
-          registrosStocks.push({ almacen_id: match.almacen_id, item_id: match.item_id, total_ventas: nuevoTotal });
+          // ACUMULAR la cantidad por item+almacén (evita sobrescribir cuando el Excel trae el
+          // mismo item en varias líneas el mismo día: ej. INKA COLA x4 y x1). La suma con lo ya
+          // registrado se hace UNA sola vez al construir registrosStocks, tras el loop.
+          const acumKey = Number(match.almacen_id) + '_' + Number(match.item_id);
+          ventasAcumStocks[acumKey] = Math.round(((ventasAcumStocks[acumKey] || 0) + cantidad) * 100) / 100;
           almacenes.push(match.almacen_id);
         }
         if (almacenes.length) resumen.stocks.push({ nombre, cantidad, almacenes });
@@ -2471,6 +2471,17 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
     // Aplicar a STOCKS (total_ventas en inventario_diario + propagación)
     if (registrosStocks.length) {
       await guardarDiaInterno(fecha, registrosStocks, savedBy);
+    } else if (Object.keys(ventasAcumStocks).length) {
+      // Construir los registros sumando la cantidad acumulada a lo ya registrado del día
+      for (const k of Object.keys(ventasAcumStocks)) {
+        const [alStr, itemStr] = k.split('_');
+        const al = Number(alStr), item = Number(itemStr);
+        const diaId = docId('invdiario', fecha, al, item);
+        const diaSnap = await col('inventario_diario').doc(diaId).get();
+        const cur = diaSnap.exists ? (parseFloat(diaSnap.data().total_ventas) || 0) : 0;
+        registrosStocks.push({ almacen_id: al, item_id: item, total_ventas: Math.round((cur + ventasAcumStocks[k]) * 100) / 100 });
+      }
+      if (registrosStocks.length) await guardarDiaInterno(fecha, registrosStocks, savedBy);
     }
 
     // Aplicar a BARRA (movimientos de venta de recetas + descontar stock)
