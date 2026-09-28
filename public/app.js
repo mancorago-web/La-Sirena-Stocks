@@ -3480,7 +3480,7 @@ function verReporteStocksBajos() {
       const totalBajo = g.min > 0 && g.total < g.min;
       if (algunAlmacenBajo || totalBajo) bajos.push(g);
     });
-    // Prioridad de grupos: CERVEZAS → AGUAS → LÁCTEOS → COCINA → SERVICIO → resto
+    // Prioridad de grupos: CERVEZAS → AGUAS → LÁCTEOS → COCINA → SERVICIO → resto → VINOS (al final)
     const gruposPrioridad = [
       { label: 'CERVEZAS', re: /CUSQUEÑA|PILSEN|CORONA|BUDWEISER|CRISTAL|BRAHMA|CUZQUEÑA|CERVEZA|HEINEKEN/i },
       { label: 'AGUAS', re: /^AGUA\b|AGUA CON GAS|AGUA MINERAL|SAN LUIS|SAN MATEO|SAN CARLOS|CIELO|EVERVESS|GASEOSA|COCA COLA|INCA KOLA|SPRITE|FANTA|TONIC|BRITVIC/i },
@@ -3488,9 +3488,11 @@ function verReporteStocksBajos() {
       { label: 'COCINA', re: /AZUCAR|SAL |ARROZ|ACEITE|HARINA|AJI|LIMON|CEBOLLA|TOMATE|PAPA |HUEVO|VERDURA|KION|JENGIBRE|HIERBA|ESPECIA/i },
       { label: 'SERVICIO', re: /SERVICIO|VASO|SERVILLETA|PAJILLA|SORBETE|BOLSA/i },
     ];
+    const RE_VINOS = /VINO|CHARDONNAY|CHARDONAY|MALBEC|MONTGRAS|MONTGRASS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|PINOT|ALBARIÑO|CABERNET|MERLOT|CARMENERE|CRIANZA|BRUT|CHAMPAGNE|NARANJO|RESERVA/i;
     const prioridad = nombre => {
       const n = String(nombre || '').toUpperCase();
       for (let i = 0; i < gruposPrioridad.length; i++) if (gruposPrioridad[i].re.test(n)) return i;
+      if (RE_VINOS.test(n)) return gruposPrioridad.length + 1;
       return gruposPrioridad.length;
     };
     bajos.sort((x, y) => {
@@ -3502,11 +3504,11 @@ function verReporteStocksBajos() {
     if (!bajos.length) {
       html += '<p>No hay productos con stock bajo.</p>';
     } else {
-      html += '<p style="font-size:0.8rem;color:#666;">Stock TOTAL de los ALMACENES GENERALES (Abajo + Arriba) por debajo de la cantidad mínima. Orden: prioridad de grupos (CERVEZAS, AGUAS, LÁCTEOS, COCINA, SERVICIO).</p>';
+      html += '<p style="font-size:0.8rem;color:#666;">Stock TOTAL de los ALMACENES GENERALES (Abajo + Arriba) por debajo de la cantidad mínima. Orden: prioridad de grupos (CERVEZAS, AGUAS, LÁCTEOS, COCINA, SERVICIO) y los VINOS al final.</p>';
       html += '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Grupo</th><th>Stock Total</th><th>Cant. Mínima</th><th>Por almacén</th></tr></thead><tbody>';
       bajos.forEach(g => {
         const pr = prioridad(g.nombre);
-        const label = pr < gruposPrioridad.length ? gruposPrioridad[pr].label : '';
+        const label = pr < gruposPrioridad.length ? gruposPrioridad[pr].label : (pr === gruposPrioridad.length + 1 ? 'VINOS' : '');
         const badge = label ? '<span style="display:inline-block;font-size:0.68rem;font-weight:700;background:#0f3460;color:#fff;border-radius:3px;padding:0.1rem 0.4rem;margin-left:0.4rem;">' + label + '</span>' : '';
         const detalle = g.detalles.map(d => {
           const bajo = d.min > 0 && d.cantidad < d.min;
