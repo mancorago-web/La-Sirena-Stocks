@@ -6910,10 +6910,13 @@ function cargarPorcionamientoCocina(seleccionarItem) {
     if (porc.length) {
       html += '<div class="table-wrap" style="margin-bottom:0.5rem;"><table><thead><tr><th>Item</th><th>Stock</th><th>Secciones</th><th></th></tr></thead><tbody>';
       porc.forEach(p => {
+        // Mostrar el stock REAL según COCINA/STOCK (cierre del día), no el campo simple de cocina_stock
+        const stockReal = invMap[String(p.nombre || '').trim().toUpperCase()];
+        const stockMostrar = (stockReal !== undefined && stockReal !== null) ? stockReal : (p.stock || 0);
         const abierto = _porcionamientoCtx && _porcionamientoCtx.item && String(_porcionamientoCtx.item.nombre || '').trim().toUpperCase() === String(p.nombre || '').trim().toUpperCase();
         html += `<tr>
           <td>${esc(p.nombre)}</td>
-          <td>${p.stock}</td>
+          <td>${stockMostrar}</td>
           <td style="font-size:0.8rem;">${(p.secciones || []).map(s => esc(s.nombre) + ' ' + s.peso).join(' · ') || '—'}</td>
           <td style="white-space:nowrap;">
             <button onclick="cargarPorcionamientoExistente('${esc(p.nombre)}')" style="background:${abierto ? '#b71c1c' : '#0f3460'};color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.75rem;">${abierto ? 'CERRAR' : 'ABRIR'}</button>
