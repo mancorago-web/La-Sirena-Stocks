@@ -7144,8 +7144,8 @@ function seccionesDeDefinicion(nombre) {
 // TODAS las salidas (precio/kg salida = (bruto×precio/kg + costo R.B) ÷ peso de esa salida).
 // El costo R.B es FIJO por porcionamiento (la misma sopa sirve para 8, 10 o 12 kg).
 const _PORCIONAMIENTO_RB = {
-  'PULPO X KG': 'R.B PULPO (OBS)',
-  'PANCETA X KG': 'R.B PANCETA (OBS)',
+  'PULPO X KG': 'R.B PULPO',
+  'PANCETA X KG': 'R.B PANCETA',
   'ASADO DE TIRA X KG': 'R.B ASADO DE TIRA (OBS)'
 };
 // Pescados que al porcionar SALEN como "PESCA BLANCA" (FRIA o CALIENTE)
