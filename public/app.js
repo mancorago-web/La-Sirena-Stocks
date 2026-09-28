@@ -7543,7 +7543,10 @@ function aplicarTransformacionPorcionamiento() {
     // ATUN / ESPADA / CALAMAR: secciones genéricas (MERMA UTIL, DESPERDICIO, FILETES); al salir:
     // MERMA UTIL -> PORC. MERMA UTIL - <PESCADO> X KG; FILETES -> packs PORC. PACK - <PESCADO> X <GR> GR
     // CALAMAR además usa el selector BARRA FRIA / BARRA CALIENTE (familia según temperatura).
-    const temp = def.conTemperatura ? (_porcionamientoTemperatura === 'CALIENTE' ? 'CALIENTE' : 'FRIA') : 'FRIA';
+    // Se lee el valor ACTUAL del selector (no la variable global) para que coincida con lo elegido.
+    const selTemp = document.getElementById('porcionamiento-temperatura');
+    const tempSel = selTemp ? String(selTemp.value || '').toUpperCase() : '';
+    const temp = def.conTemperatura ? (tempSel === 'CALIENTE' ? 'CALIENTE' : 'FRIA') : 'FRIA';
     const familia = def.conTemperatura ? _TEMPERATURA_FAMILIA[temp] : def.grupo;
     const merma = secciones.find(s => /MERMA UTIL/.test(s.nombre.toUpperCase()))?.peso || 0;
     const filetes = secciones.find(s => /FILETE/.test(s.nombre.toUpperCase()))?.peso || 0;
