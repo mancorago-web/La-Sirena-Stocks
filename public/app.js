@@ -6884,7 +6884,7 @@ function cargarPorcionamientoCocina(seleccionarItem) {
     const esBruto = s => String(s.familia || '').trim().toUpperCase() === 'PESCADO - BRUTO';
     const esCarneSin = s => String(s.familia || '').trim().toUpperCase() === 'CARNE' && CARNE_SIN_PORCIONAR.has(nrm(s.ingrediente));
     const esPolloSin = s => String(s.familia || '').trim().toUpperCase() === 'POLLO' && POLLO_SIN_PORCIONAR.has(nrm(s.ingrediente));
-    const bruto = (stock || []).filter(esBruto);
+    const bruto = (stock || []).filter(esBruto).sort((a, b) => String(a.ingrediente || '').localeCompare(String(b.ingrediente || ''), 'es'));
     const carne = (stock || []).filter(esCarneSin);
     const pollo = (stock || []).filter(esPolloSin);
     const opcItem = s => `<option value="${esc(s.ingrediente)}">${esc(s.ingrediente)} (${s.cantidad || 0})</option>`;
