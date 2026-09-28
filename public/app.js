@@ -6945,6 +6945,7 @@ function cargarPorcionamientoCocina(seleccionarItem) {
 const _PORCIONAMIENTO_DEFINICIONES = {
   'LANGOSTINO X KG': {
     grupo: 'PESCADO PORC. - BARRA CALIENTE',
+    conTemperatura: true,
     ocultarPacks: true,
     salidas: [
       { nombre: 'LANGOSTINO JUMBO', item: 'PORC. LANGOSTINO JUMBO X KG' },
@@ -7033,8 +7034,8 @@ const _PORCIONAMIENTO_RB = {
 };
 // Pescados que al porcionar SALEN como "PESCA BLANCA" (FRIA o CALIENTE)
 const _PORCIONAMIENTO_PESCA_BLANCA = new Set(['PESCADO - ROBALO X KG', 'PESCADO - ECHERELA X KG', 'PESCADO - PLUMA X KG', 'PESCADO - CHITA X KG', 'PESCADO - LORO X KG', 'PESCADO - ESPADA X KG']);
-// Items que muestran el selector BARRA FRIA / BARRA CALIENTE (PESCA BLANCA + PULPO + CALAMAR + CONCHAS + LANGOSTA)
-const _PORCIONAMIENTO_CON_TEMPERATURA = new Set([..._PORCIONAMIENTO_PESCA_BLANCA, 'PULPO X KG', 'CALAMAR X KG', 'CONCHAS DE ABANICO X KG', 'LANGOSTA X KG']);
+// Items que muestran el selector BARRA FRIA / BARRA CALIENTE (PESCA BLANCA + PULPO + CALAMAR + CONCHAS + LANGOSTA + LANGOSTINO)
+const _PORCIONAMIENTO_CON_TEMPERATURA = new Set([..._PORCIONAMIENTO_PESCA_BLANCA, 'PULPO X KG', 'CALAMAR X KG', 'CONCHAS DE ABANICO X KG', 'LANGOSTA X KG', 'LANGOSTINO X KG']);
 // Pescados PESCA BLANCA que SIEMPRE salen a BARRA CALIENTE (no usan BARRA FRIA)
 const _PORCIONAMIENTO_PESCA_BLANCA_CALIENTE = new Set(['PESCADO - ESPADA X KG']);
 const _TEMPERATURA_FAMILIA = { FRIA: 'PESCADO PORC. - BARRA FRIA', CALIENTE: 'PESCADO PORC. - BARRA CALIENTE' };
@@ -7589,32 +7590,35 @@ function aplicarTransformacionPorcionamiento() {
     }).catch(() => alert('Error al aplicar transformación'));
     return;
   }
-  // Construir las salidas según la definición del item (nombre destino "PORC. ..." + grupo)
+// Construir las salidas según la definición del item (nombre destino "PORC. ..." + grupo)
   if (def) {
+    const defTemp = def.conTemperatura ? (_porcionamientoTemperatura === 'CALIENTE' ? 'CALIENTE' : 'FRIA') : '';
+    const defFamilia = def.conTemperatura ? _TEMPERATURA_FAMILIA[defTemp] : def.grupo;
     def.salidas.forEach(s => {
       const sec = secciones.find(x => x.nombre.toUpperCase() === s.nombre.toUpperCase());
       const peso = sec ? sec.peso : 0;
-      if (peso > 0) salidas.push({ item: s.item, grupo: def.grupo, peso, unidad: 'kg', precio: precioKgDe(peso) });
+      if (peso > 0) salidas.push({ item: s.item, grupo: defFamilia, peso, unidad: 'kg', precio: precioKgDe(peso) });
     });
-  } else {
-    sinDefinir = true;
-  }
-  if (sinDefinir || !salidas.length) { alert('Este item aún no tiene una definición de transformación (salidas por grupo).'); return; }
-  let msg = 'APLICAR TRANSFORMACIÓN de ' + ctx.item.nombre + ':\n\n'
-    + '- PESO BRUTO: ' + pesoBruto + ' kg (sale de COCINA/STOCK)\n'
-    + '-> ' + def.grupo + ':\n';
-  salidas.forEach(s => { msg += '  · ' + s.item + ' +' + s.peso + ' kg\n'; });
-  if (!confirm(msg + '\n¿Continuar?')) return;
-  api('POST', '/api/cocina/porcionamiento/transformar', {
-    nombre: ctx.item.nombre, fecha: ctx.fecha,
-peso_bruto: pesoBruto,
+    let msg = 'APLICAR TRANSFORMACIÓN de ' + ctx.item.nombre + (def.conTemperatura ? ' -> ' + defTemp : '') + ':\n\n'
+      + '- PESO BRUTO: ' + pesoBruto + ' kg (sale de COCINA/STOCK)\n'
+      + '-> ' + defFamilia + ':\n';
+    salidas.forEach(s => { msg += '  · ' + s.item + ' +' + s.peso + ' kg\n'; });
+    if (!confirm(msg + '\n¿Continuar?')) return;
+    api('POST', '/api/cocina/porcionamiento/transformar', {
+      nombre: ctx.item.nombre, fecha: ctx.fecha,
+      peso_bruto: pesoBruto,
       salidas,
       secciones,
       rb_activo: _rbCostoActivo, rb_costo: _rbCosto
     }).then(() => {
-    showToast('Transformación aplicada');
-    cargarPorcionamientoCocina();
-  }).catch(() => alert('Error al aplicar transformación'));
+      showToast('Transformación aplicada');
+      cargarPorcionamientoCocina();
+    }).catch(() => alert('Error al aplicar transformación'));
+    return;
+} else {
+    sinDefinir = true;
+  }
+  if (sinDefinir || !salidas.length) { alert('Este item aún no tiene una definición de transformación (salidas por grupo).'); return; }
 }
 
 // --- COCINA: DESPERDICIOS ---
