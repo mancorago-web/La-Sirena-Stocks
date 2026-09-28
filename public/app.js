@@ -5051,6 +5051,11 @@ function cambiarSubTab(nombre, prefix) {
   if (prefix === 'cocina' && ['ingresos','salidas','ventas'].includes(nombre)) {
     cargarCocinaMovimientos(nombre);
   }
+  // COCINA/STOCK siempre fresco al entrar: los PORCIONAMIENTOS/INGRESOS cambian el stock y debe
+  // verse reflejado sin necesidad de F5.
+  if (prefix === 'cocina' && nombre === 'stock') {
+    cargarStockCocina();
+  }
   // Lazy load EVENTOS/LIMPIEZA movements (siempre frescos al entrar)
   if ((prefix === 'eventos' || prefix === 'limpieza') && ['ingresos','salidas'].includes(nombre)) {
     cargarExtraMovimientos(prefix, nombre);
