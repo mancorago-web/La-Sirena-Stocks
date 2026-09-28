@@ -5056,6 +5056,10 @@ function cambiarSubTab(nombre, prefix) {
   if (prefix === 'cocina' && nombre === 'stock') {
     cargarStockCocina();
   }
+  // COCINA STOCKS MÍNIMOS (guardar mínimos + reportes)
+  if (prefix === 'cocina' && nombre === 'stocks') {
+    cargarMinimosCocina();
+  }
   // Lazy load EVENTOS/LIMPIEZA movements (siempre frescos al entrar)
   if ((prefix === 'eventos' || prefix === 'limpieza') && ['ingresos','salidas'].includes(nombre)) {
     cargarExtraMovimientos(prefix, nombre);
@@ -6279,6 +6283,114 @@ function cargarStockCocina(familiasAbrir) {
     container.querySelectorAll('tr[data-cocina-id]').forEach(tr => calcCierre(tr.querySelector('.input-apertura')));
     actualizarTotalesPrecioCocina();
   }).catch(e => console.error(e));
+}
+
+// --- COCINA: STOCKS MÍNIMOS (guardar mínimos + reportes de stock bajo) ---
+let _cocinaMinimosData = null;
+
+function cargarMinimosCocina() {
+  const container = document.getElementById('cocina-minimos-container');
+  if (!container) return;
+  container.innerHTML = '<p>Cargando...</p>';
+  api('GET', '/api/cocina/stock/con-inventario?fecha=' + todayStr()).then(grupos => {
+    const byFam = {};
+    FAMILIAS_COCINA.forEach(f => { byFam[f] = []; });
+    byFam['SIN CLASIFICAR'] = [];
+    (grupos || []).forEach(g => {
+      const fam = (g.familia || 'SIN CLASIFICAR').toUpperCase();
+      const target = byFam[fam] || byFam['SIN CLASIFICAR'];
+      (g.items || []).forEach(i => target.push(i));
+    });
+    // Filas editables: cada item con su cantidad mínima
+    function fila(i) {
+      const min = parseFloat(i.cantidad_minima) || 0;
+      const bajo = min > 0 && (parseFloat(i.stock_cierre) || 0) < min;
+      return `<tr data-min-item-id="${i.id}">
+        <td>${esc(i.nombre)}</td>
+        <td>${fmt3(i.stock_cierre)}</td>
+        <td><input type="number" class="input-minimo-cocina" value="${min}" step="0.01" min="0" style="width:90px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
+        <td style="color:${bajo ? '#c62828' : '#2e7d32'};font-weight:${bajo ? '700' : '400'};">${min > 0 ? (bajo ? '🔴 BAJO' : 'OK') : '—'}</td>
+      </tr>`;
+    }
+    function familiaAccordionMin(f, items) {
+      return `<div class="accordion-item" data-familia="${esc(f)}">
+        <div class="accordion-header" onclick="toggleAcordeon(this)">
+          <span class="accordion-title">${f} <span style="font-weight:400;font-size:0.85rem;color:#777;">— ${items.length} item(s)</span></span>
+          <span class="accordion-arrow">▶</span>
+        </div>
+        <div class="accordion-body open"><div class="table-wrap"><table>
+          <thead><tr><th>Item</th><th>Stock</th><th>Cant. Mínima</th><th>Estado</th></tr></thead>
+          <tbody>${items.map(fila).join('') || '<tr><td colspan="4">Vacío.</td></tr>'}</tbody>
+        </table></div></div>
+      </div>`;
+    }
+    container.innerHTML = FAMILIAS_COCINA.map(f => familiaAccordionMin(f, byFam[f])).join('') +
+      (byFam['SIN CLASIFICAR'].length ? familiaAccordionMin('SIN CLASIFICAR', byFam['SIN CLASIFICAR']) : '');
+    _cocinaMinimosData = { grupos };
+  }).catch(() => { container.innerHTML = '<p style="color:#c62828;">Error cargando COCINA/STOCK.</p>'; });
+}
+
+function guardarMinimosCocina() {
+  const btn = document.querySelector('#sub-cocina-stocks .btn-guardar-dia');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+  const minimos = [];
+  document.querySelectorAll('#cocina-minimos-container tr[data-min-item-id]').forEach(tr => {
+    const itemId = parseInt(tr.dataset.minItemId);
+    if (isNaN(itemId)) return;
+    const val = parseFloat(tr.querySelector('.input-minimo-cocina').value) || 0;
+    minimos.push({ item_id: itemId, cantidad_minima: val });
+  });
+  if (!minimos.length) {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR MINIMOS'; }
+    alert('No hay items para guardar');
+    return;
+  }
+  api('PUT', '/api/cocina/stock/minimos', { minimos }).then(() => {
+    if (btn) {
+      btn.textContent = '✓ Guardado';
+      setTimeout(() => { btn.disabled = false; btn.textContent = '💾 GUARDAR MINIMOS'; }, 2000);
+    }
+    showToast('Mínimos guardados');
+    cargarMinimosCocina();
+  }).catch(() => {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR MINIMOS'; }
+    alert('Error al guardar');
+  });
+}
+
+function verReporteStocksBajosCocina() {
+  const data = _cocinaMinimosData;
+  if (!data || !data.grupos) { alert('Primero carga la pestaña STOCKS MÍNIMOS'); return; }
+  const bajos = [];
+  (data.grupos || []).forEach(g => {
+    (g.items || []).forEach(i => {
+      const min = parseFloat(i.cantidad_minima) || 0;
+      const cant = parseFloat(i.stock_cierre) || 0;
+      if (min > 0 && cant < min) bajos.push({ nombre: i.nombre, familia: g.familia || '', stock: cant, min });
+    });
+  });
+  bajos.sort((a, b) => {
+    const fa = (a.familia || '').localeCompare(b.familia || '', 'es');
+    if (fa !== 0) return fa;
+    return a.nombre.localeCompare(b.nombre, 'es');
+  });
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modal-body');
+  const mc = modal.querySelector('.modal-content');
+  if (mc) mc.classList.add('modal-wide');
+  abrirModalDesdeArriba();
+  if (!bajos.length) {
+    body.innerHTML = '<h3>📋 STOCK BAJO — COCINA</h3><p style="margin-top:1.5rem;text-align:center;color:#2e7d32;font-weight:700;">No hay items por debajo de su cantidad mínima. ✅</p><div style="margin-top:1.5rem;text-align:center;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">CERRAR</button></div>';
+    return;
+  }
+  let html = '<h3>📋 STOCK BAJO — COCINA (' + bajos.length + ')</h3>';
+  html += '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Familia</th><th>Stock</th><th>Mínimo</th></tr></thead><tbody>';
+  bajos.forEach(b => {
+    html += `<tr class="stock-bajo"><td>${esc(b.nombre)}</td><td style="font-size:0.8rem;color:#888;">${esc(b.familia)}</td><td><b style="color:#c62828;">${fmt3(b.stock)}</b></td><td>${fmt3(b.min)}</td></tr>`;
+  });
+  html += '</tbody></table></div>';
+  html += '<div style="margin-top:1.5rem;text-align:center;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">CERRAR</button></div>';
+  body.innerHTML = html;
 }
 
 function guardarCocinaDia() {

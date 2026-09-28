@@ -4073,6 +4073,7 @@ app.get('/api/cocina/stock/con-inventario', async (req, res) => {
         familia: fam,
         subgrupo: item.subgrupo || '',
         cantidad: item.cantidad || 0,
+        cantidad_minima: parseFloat(item.cantidad_minima) || 0,
         precio: precioInfo.precio,
         precio_unidad: precioInfo.unidad,
         stock_apertura: apertura,
@@ -4091,6 +4092,27 @@ app.get('/api/cocina/stock/con-inventario', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Guardar cantidades mínimas de items de COCINA/STOCK (para el reporte de stock bajo)
+app.put('/api/cocina/stock/minimos', authMiddleware, async (req, res) => {
+  try {
+    const { minimos } = req.body;
+    if (!Array.isArray(minimos) || !minimos.length) return res.status(400).json({ error: 'minimos requeridos' });
+    const batch = db.batch();
+    let ops = 0;
+    for (const m of minimos) {
+      const id = Number(m.item_id);
+      if (isNaN(id)) continue;
+      const ref = col('cocina_stock').doc(String(id));
+      batch.update(ref, { cantidad_minima: Math.round((parseFloat(m.cantidad_minima) || 0) * 100) / 100, updated_at: new Date().toISOString() });
+      ops++;
+      if (ops >= 450) { await batch.commit(); batch = db.batch(); ops = 0; }
+    }
+    if (ops) await batch.commit();
+    invalidarCache('cocina_inv_*');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 async function guardarCocinaDiaInterno(fecha, registros, savedBy) {

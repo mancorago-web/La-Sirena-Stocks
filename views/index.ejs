@@ -124,6 +124,7 @@
       <button class="sub-tab" data-subtab="ventas" onclick="cambiarSubTab('ventas','cocina')">Ventas</button>
       <button class="sub-tab active" data-subtab="recetas" onclick="cambiarSubTab('recetas','cocina')">Recetas</button>
       <button class="sub-tab" data-subtab="stock" onclick="cambiarSubTab('stock','cocina')">Stock</button>
+      <button class="sub-tab" data-subtab="stocks" onclick="cambiarSubTab('stocks','cocina')">Stocks Min</button>
       <button class="sub-tab" data-subtab="basedatos" style="display:none" onclick="cambiarSubTab('basedatos','cocina')">Base de Datos</button>
       <button class="sub-tab" data-subtab="porcionamiento" onclick="cambiarSubTab('porcionamiento','cocina')">Porcionamiento</button>
       <button class="sub-tab" data-subtab="desperdicios" onclick="cambiarSubTab('desperdicios','cocina')">Desperdicios</button>
@@ -485,6 +486,18 @@
           </div>
         </div>
         <div id="cocina-stock-container"></div>
+      </div>
+
+      <div id="sub-cocina-stocks" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>Stocks Mínimos — Cocina</h2>
+          <div class="controles-dia" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+            <input type="text" id="buscar-cocina-minimos" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'cocina-minimos-container')">
+            <button class="btn-guardar-dia" onclick="guardarMinimosCocina()">💾 GUARDAR MINIMOS</button>
+            <button class="btn-detalles" onclick="verReporteStocksBajosCocina()">📋 REPORTES</button>
+          </div>
+        </div>
+        <div id="cocina-minimos-container"></div>
       </div>
 
       <div id="sub-cocina-basedatos" class="sub-tab-content">
