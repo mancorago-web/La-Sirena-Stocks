@@ -6954,6 +6954,12 @@ const _PORCIONAMIENTO_DEFINICIONES = {
     mermaItem: 'PORC. MERMA UTIL - ATUN X KG',
     packItem: 'PORC. PACK - ATUN X '
   },
+  'CALAMAR X KG': {
+    conTemperatura: true,
+    seccionesGenericas: true,
+    mermaItem: 'PORC. MERMA UTIL - CALAMAR X KG',
+    packItem: 'PORC. PACK - CALAMAR X '
+  },
   'PESCADO - ESPADA X KG': {
     grupo: 'PESCADO PORC. - BARRA FRIA',
     seccionesGenericas: true,
@@ -7010,8 +7016,8 @@ const _PORCIONAMIENTO_RB = {
 };
 // Pescados que al porcionar SALEN como "PESCA BLANCA" (FRIA o CALIENTE)
 const _PORCIONAMIENTO_PESCA_BLANCA = new Set(['PESCADO - ROBALO X KG', 'PESCADO - ECHERELA X KG', 'PESCADO - PLUMA X KG', 'PESCADO - CHITA X KG', 'PESCADO - LORO X KG', 'PESCADO - ESPADA X KG']);
-// Items que muestran el selector BARRA FRIA / BARRA CALIENTE (PESCA BLANCA + PULPO)
-const _PORCIONAMIENTO_CON_TEMPERATURA = new Set([..._PORCIONAMIENTO_PESCA_BLANCA, 'PULPO X KG']);
+// Items que muestran el selector BARRA FRIA / BARRA CALIENTE (PESCA BLANCA + PULPO + CALAMAR)
+const _PORCIONAMIENTO_CON_TEMPERATURA = new Set([..._PORCIONAMIENTO_PESCA_BLANCA, 'PULPO X KG', 'CALAMAR X KG']);
 // Pescados PESCA BLANCA que SIEMPRE salen a BARRA CALIENTE (no usan BARRA FRIA)
 const _PORCIONAMIENTO_PESCA_BLANCA_CALIENTE = new Set(['PESCADO - ESPADA X KG']);
 const _TEMPERATURA_FAMILIA = { FRIA: 'PESCADO PORC. - BARRA FRIA', CALIENTE: 'PESCADO PORC. - BARRA CALIENTE' };
@@ -7147,8 +7153,9 @@ function renderPorcionamientoEditor(secciones) {
       + '</select>')
     + '</div>' : '';
   // PACKS: se ocultan en LANGOSTINO (ocultarPacks), y en PESCA BLANCA cuando el destino es BARRA FRIA
-  // (en FRIA el FILETES sale como PESCA BLANCA LIMPIA X KG, no en packs).
-  const ocultarPacks = (def && def.ocultarPacks) || (esPB && _porcionamientoTemperatura === 'FRIA');
+  // (en FRIA el FILETES sale como PESCA BLANCA LIMPIA X KG, no en packs). CALAMAR siempre muestra packs.
+  const esPescaBlancaFria = esPB && _porcionamientoTemperatura === 'FRIA' && !(def && def.conTemperatura && def.seccionesGenericas);
+  const ocultarPacks = (def && def.ocultarPacks) || esPescaBlancaFria;
   const packsFuente = (def && def.packsDesde) || 'FILETES';
   const packsHtml = ocultarPacks ? ''
     : '<div id="porcionamiento-packs" style="margin-top:0.75rem;padding:0.75rem;background:#e8f5e9;border-radius:8px;border:1px solid #c8e6c9;">'
@@ -7533,18 +7540,21 @@ function aplicarTransformacionPorcionamiento() {
     return;
   }
   if (def && def.seccionesGenericas) {
-    // ATUN / ESPADA: secciones genéricas (MERMA UTIL, DESPERDICIO, FILETES); al salir:
+    // ATUN / ESPADA / CALAMAR: secciones genéricas (MERMA UTIL, DESPERDICIO, FILETES); al salir:
     // MERMA UTIL -> PORC. MERMA UTIL - <PESCADO> X KG; FILETES -> packs PORC. PACK - <PESCADO> X <GR> GR
+    // CALAMAR además usa el selector BARRA FRIA / BARRA CALIENTE (familia según temperatura).
+    const temp = def.conTemperatura ? (_porcionamientoTemperatura === 'CALIENTE' ? 'CALIENTE' : 'FRIA') : 'FRIA';
+    const familia = def.conTemperatura ? _TEMPERATURA_FAMILIA[temp] : def.grupo;
     const merma = secciones.find(s => /MERMA UTIL/.test(s.nombre.toUpperCase()))?.peso || 0;
     const filetes = secciones.find(s => /FILETE/.test(s.nombre.toUpperCase()))?.peso || 0;
     const packCount = parseInt(document.getElementById('pack-cantidad')?.value) || 0;
     const gramos = parseFloat(document.getElementById('pack-gramos')?.value) || 0;
     if (merma <= 0 && packCount <= 0) { alert('Ingresa MERMA UTIL o PACKS (cantidad de packs) para transformar'); return; }
-    if (merma > 0) salidas.push({ item: def.mermaItem, grupo: def.grupo, peso: merma, unidad: 'kg', precio: precioKgDe(merma) });
-    if (packCount > 0 && gramos > 0) salidas.push({ item: def.packItem + gramos + ' GR', grupo: def.grupo, peso: packCount, unidad: 'unidad', precio: precioKgDe(filetes) * (gramos / 1000) });
-    let msg = 'APLICAR TRANSFORMACIÓN de ' + ctx.item.nombre + ':\n\n'
+    if (merma > 0) salidas.push({ item: def.mermaItem, grupo: familia, peso: merma, unidad: 'kg', precio: precioKgDe(merma) });
+    if (packCount > 0 && gramos > 0) salidas.push({ item: def.packItem + gramos + ' GR', grupo: familia, peso: packCount, unidad: 'unidad', precio: precioKgDe(filetes) * (gramos / 1000) });
+    let msg = 'APLICAR TRANSFORMACIÓN de ' + ctx.item.nombre + (def.conTemperatura ? ' -> ' + temp : '') + ':\n\n'
       + '- PESO BRUTO: ' + pesoBruto + ' kg (sale de COCINA/STOCK)\n'
-      + '-> ' + def.grupo + ':\n';
+      + '-> ' + familia + ':\n';
     salidas.forEach(s => { msg += '  · ' + s.item + ' +' + s.peso + (s.unidad === 'kg' ? ' kg' : ' packs') + '\n'; });
     if (!confirm(msg + '\n¿Continuar?')) return;
     api('POST', '/api/cocina/porcionamiento/transformar', {
