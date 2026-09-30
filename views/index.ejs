@@ -97,7 +97,7 @@
       <button class="tab" data-tab="ventas">Ventas</button>
       <button class="tab" data-tab="bajas">Bajas</button>
       <button class="tab active" data-tab="almacenes">Almacenes</button>
-      <button class="tab" data-tab="stocks">Stocks</button>
+      <button class="tab" data-tab="stocks">Stocks Min</button>
       <button class="tab" data-tab="reportes">Reportes</button>
       <button class="tab" data-tab="precios" style="display:none">Base de Datos</button>
       <button class="tab" data-tab="busquedaventas" style="display:none">Búsqueda Ventas</button>
@@ -237,7 +237,7 @@
 
     <div id="tab-stocks" class="tab-content">
       <div class="header-actions">
-        <h2>Stocks</h2>
+        <h2>Stocks Min</h2>
         <div class="controles-dia">
           <label>Fecha: <input type="date" id="fecha-stocks" onchange="cargarStocks()"></label>
           <input type="text" id="buscar-stock" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-stocks')">
