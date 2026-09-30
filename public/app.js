@@ -4047,10 +4047,16 @@ function convertirFaltaAJuan(btn) {
   const fecha_falta = tr.dataset.accionFecha;
   const fecha_salida = tr.querySelector('.input-fecha-salida').value;
   if (!fecha_salida) { alert('Indica la fecha real en que se llevó el item'); return; }
-  if (!confirm('¿Registrar que JUAN se llevó ' + cantidad + ' de este item el ' + fecha_salida + '? Se registrará como SALIDA con destino JUAN (no entra a COCINA/BARRA).')) return;
+  // PROTECCIÓN: permitir verificar/editar la cantidad antes de registrar (el faltante del reporte
+  // puede ser mayor que lo que JUAN realmente se llevó, y registrar de más es grave).
+  const cantidadOk = prompt('¿Cuánto se llevó JUAN el ' + fecha_salida + '?\n(El faltante detectado fue ' + cantidad + ' — verifica antes de registrar)', cantidad);
+  if (cantidadOk === null) { btn.disabled = false; return; }
+  const cantidadFinal = parseFloat(cantidadOk);
+  if (isNaN(cantidadFinal) || cantidadFinal <= 0) { alert('Cantidad inválida'); btn.disabled = false; return; }
+  if (!confirm('¿Registrar que JUAN se llevó ' + cantidadFinal + ' de este item el ' + fecha_salida + '? Se registrará como SALIDA con destino JUAN (no entra a COCINA/BARRA).')) return;
   btn.disabled = true; btn.textContent = 'Procesando...';
   api('POST', '/api/reportes/accion/salida-juan', {
-    fecha_falta, fecha_salida, item_id, almacen_id, cantidad, saved_by: currentUserName
+    fecha_falta, fecha_salida, item_id, almacen_id, cantidad: cantidadFinal, saved_by: currentUserName
   }).then(() => {
     showToast('Registrado: SALIDA JUAN');
     refrescarAcciones();
