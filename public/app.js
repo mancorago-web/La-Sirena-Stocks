@@ -116,6 +116,7 @@ document.querySelectorAll('.tab').forEach(tab => {
       bajas: () => cargarBajas(document.getElementById('fecha-bajas')?.value),
       stocks: () => cargarStocks(),
       reportes: () => cargarReportes(),
+      juan: () => cargarJuan(),
       precios: () => cargarBaseDatosStocks(),
       busquedaventas: () => cargarSugerenciasBusquedaVentas()
     };
@@ -185,6 +186,7 @@ function refrescarVista() {
       bajas: () => cargarBajas(document.getElementById('fecha-bajas')?.value),
       stocks: () => cargarStocks(),
       reportes: () => cargarReportes(),
+      juan: () => cargarJuan(),
       precios: () => cargarBaseDatosStocks()
     };
     if (loaders[v.tab]) loaders[v.tab]();
@@ -2596,6 +2598,106 @@ function verDetallesBajas() {
     document.getElementById('modal-body').innerHTML = html;
     document.getElementById('modal').style.display = 'block';
   });
+}
+
+// --- STOCKS: pestaña JUAN (consumo del dueño, salidas con destino JUAN) ---
+let _juanData = null;
+
+function cargarJuan(fechaIni, fechaFin) {
+  const iniEl = document.getElementById('fecha-juan-ini');
+  const finEl = document.getElementById('fecha-juan-fin');
+  if (!iniEl || !finEl) return;
+  if (!iniEl.value) iniEl.value = todayStr();
+  if (!finEl.value) finEl.value = todayStr();
+  const ini = fechaIni || iniEl.value;
+  const fin = fechaFin || finEl.value;
+  const container = document.getElementById('accordion-juan');
+  if (!container) return;
+  container.innerHTML = '<p>Cargando...</p>';
+  api('GET', '/api/stocks/salidas-juan?fecha_inicio=' + encodeURIComponent(ini) + '&fecha_fin=' + encodeURIComponent(fin)).then(list => {
+    _juanData = { ini, fin, lista: list || [] };
+    renderJuan();
+  }).catch(() => { container.innerHTML = '<p style="color:#c62828;">Error cargando movimientos de JUAN.</p>'; });
+}
+
+function cargarJuanMes() {
+  const hoy = new Date();
+  const ini = hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0') + '-01';
+  const fin = hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0') + '-31';
+  const iniEl = document.getElementById('fecha-juan-ini');
+  const finEl = document.getElementById('fecha-juan-fin');
+  if (iniEl) iniEl.value = ini;
+  if (finEl) finEl.value = fin;
+  cargarJuan(ini, fin);
+}
+
+function renderJuan() {
+  const container = document.getElementById('accordion-juan');
+  if (!container || !_juanData) return;
+  const lista = _juanData.lista || [];
+  const q = (document.getElementById('buscar-juan')?.value || '').trim().toLowerCase();
+  const filtrados = q ? lista.filter(x => String(x.nombre || '').toLowerCase().includes(q)) : lista;
+  // Agrupar por fecha
+  const porFecha = {};
+  filtrados.forEach(x => {
+    const f = String(x.fecha || '');
+    if (!porFecha[f]) porFecha[f] = [];
+    porFecha[f].push(x);
+  });
+  let html = '<div style="margin-bottom:0.6rem;padding:0.6rem 0.8rem;background:#4e342e;color:#fff;border-radius:6px;font-weight:700;">'
+    + '📊 CONSUMO JUAN — ' + _juanData.ini + ' a ' + _juanData.fin + ' · ' + filtrados.length + ' salida(s)</div>';
+  const fechas = Object.keys(porFecha).sort();
+  if (!fechas.length) {
+    html += '<p style="color:#888;">No hay salidas a JUAN en el rango seleccionado.</p>';
+  } else {
+    fechas.forEach(f => {
+      const items = porFecha[f];
+      html += '<div class="accordion-item"><div class="accordion-header" onclick="toggleAcordeon(this)"><span class="accordion-title">' + f + ' <span style="font-weight:400;font-size:0.85rem;color:#777;">— ' + items.length + ' item(s)</span></span><span class="accordion-arrow">▶</span></div>';
+      html += '<div class="accordion-body open"><div class="table-wrap"><table><thead><tr><th>Item</th><th>Cant.</th><th>Almacén</th><th>Usuario</th></tr></thead><tbody>';
+      items.forEach(x => {
+        html += '<tr><td>' + esc(x.nombre) + '</td><td>' + x.cantidad + '</td><td style="font-size:0.8rem;color:#888;">' + esc(x.almacen || '') + '</td><td>' + esc(x.saved_by || '') + '</td></tr>';
+      });
+      html += '</tbody></table></div></div></div>';
+    });
+  }
+  container.innerHTML = html;
+}
+
+// Arma el texto del informe de consumo de JUAN y lo abre en WHATSAPP
+function enviarInformeJuanWhatsApp() {
+  const d = _juanData;
+  if (!d || !d.lista || !d.lista.length) { alert('No hay salidas a JUAN para informar'); return; }
+  // Agrupar por item (sumar cantidades)
+  const agg = {};
+  d.lista.forEach(x => {
+    const k = String(x.nombre || '').trim().toUpperCase();
+    if (!agg[k]) agg[k] = { nombre: x.nombre, cantidad: 0 };
+    agg[k].cantidad += parseFloat(x.cantidad) || 0;
+  });
+  const items = Object.values(agg).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  let txt = '*REPORTE DE CONSUMO JUAN*\n' + 'PERIODO: ' + d.ini + ' al ' + d.fin + '\n\n';
+  items.forEach((i, idx) => { txt += (idx + 1) + '. ' + String(i.nombre).toUpperCase() + ' - ' + i.cantidad + '\n'; });
+  window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
+}
+
+// Informe de BAJAS por WHATSAPP (según el rango de fechas de la pestaña BAJAS)
+function enviarInformeBajasWhatsApp() {
+  const ini = document.getElementById('fecha-bajas').value;
+  const fin = document.getElementById('fecha-bajas-fin')?.value || ini;
+  if (!ini) { alert('Selecciona una fecha en BAJAS'); return; }
+  api('GET', '/api/almacenes/con-inventario-rango?fecha_inicio=' + encodeURIComponent(ini) + '&fecha_fin=' + encodeURIComponent(fin)).then(data => {
+    const filas = [];
+    (data || []).forEach(a => {
+      (a.items || []).forEach(i => {
+        if ((i.stock_baja || 0) > 0) filas.push({ nombre: i.nombre, cantidad: i.stock_baja, nota: i.nota_baja || '' });
+      });
+    });
+    if (!filas.length) { alert('No hay bajas en el rango ' + ini + ' a ' + fin); return; }
+    filas.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    let txt = '*REPORTE DE BAJAS*\n' + 'PERIODO: ' + ini + ' al ' + fin + '\n\n';
+    filas.forEach((f, idx) => { txt += (idx + 1) + '. ' + String(f.nombre).toUpperCase() + ' - ' + f.cantidad + (f.nota ? ' (' + f.nota + ')' : '') + '\n'; });
+    window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
+  }).catch(() => alert('Error al obtener las bajas'));
 }
 
 function cargarVentas(fechaIni, fechaFin) {

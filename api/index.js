@@ -4308,6 +4308,40 @@ app.get('/api/barra/salidas-stock', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Salidas de STOCKS con destino JUAN (consumo del dueño, registrado desde REPORTES/ACCIONES/JUAN)
+app.get('/api/stocks/salidas-juan', async (req, res) => {
+  try {
+    const { fecha_inicio, fecha_fin } = req.query;
+    if (!fecha_inicio || !fecha_fin) return res.json([]);
+    const invSnap = await col('inventario').get();
+    const byKey = {};
+    invSnap.docs.forEach(d => { const a = d.data(); byKey[Number(a.item_id) + '_' + Number(a.almacen_id)] = a.nombre; });
+    const almsSnap = await col('almacenes').get();
+    const alNombres = {};
+    almsSnap.docs.forEach(d => { alNombres[Number(d.id)] = d.data().nombre; });
+    const ini = String(fecha_inicio).trim(), fin = String(fecha_fin).trim();
+    if (ini > fin) { [ini, fin] = [fin, ini]; }
+    const diaSnap = await col('inventario_diario').where('fecha', '>=', ini).where('fecha', '<=', fin).get();
+    const out = [];
+    diaSnap.docs.forEach(d => {
+      const a = d.data();
+      if (!((a.salida_almacen || 0) > 0)) return;
+      if (String(a.destino_salida || '').toLowerCase() !== 'juan') return;
+      out.push({
+        fecha: a.fecha,
+        nombre: byKey[Number(a.item_id) + '_' + Number(a.almacen_id)] || String(a.item_id),
+        cantidad: a.salida_almacen,
+        unidad: 'unidad',
+        almacen: alNombres[Number(a.almacen_id)] || String(a.almacen_id),
+        saved_by: a.saved_by || '-',
+        created_at: a.updated_at || ''
+      });
+    });
+    out.sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Lee la cantidad de un item que puede ser un DocumentSnapshot (con .data()) o un objeto plano
 // { ref, data: { cantidad } } (cuando el item se CREÓ durante el mismo bucle de ajustes).
 function cantDeItem(x) {

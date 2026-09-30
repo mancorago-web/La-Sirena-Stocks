@@ -95,10 +95,11 @@
       <button class="tab" data-tab="ingresos">Ingresos</button>
       <button class="tab" data-tab="salidas">Salidas</button>
       <button class="tab" data-tab="ventas">Ventas</button>
-      <button class="tab" data-tab="bajas">Bajas</button>
       <button class="tab active" data-tab="almacenes">Almacenes</button>
       <button class="tab" data-tab="stocks">Stocks Min</button>
       <button class="tab" data-tab="reportes">Reportes</button>
+      <button class="tab" data-tab="bajas">Bajas</button>
+      <button class="tab" data-tab="juan">Juan</button>
       <button class="tab" data-tab="precios" style="display:none">Base de Datos</button>
       <button class="tab" data-tab="busquedaventas" style="display:none">Búsqueda Ventas</button>
     </div>
@@ -230,9 +231,24 @@
           <input type="text" id="buscar-baja" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-bajas')">
           <button class="btn-guardar-dia" onclick="guardarBajas()">💾 GUARDAR BAJAS</button>
           <button class="btn-detalles" onclick="verDetallesBajas()">📋 DETALLES</button>
+          <button class="btn-detalles" onclick="enviarInformeBajasWhatsApp()" style="background:#25d366;color:#fff;font-weight:700;">📲 INFORME WHATSAPP</button>
         </div>
       </div>
       <div id="accordion-bajas"></div>
+    </div>
+
+    <div id="tab-juan" class="tab-content">
+      <div class="header-actions">
+        <h2>Juan — Consumo del dueño</h2>
+        <div class="controles-dia">
+          <label>Desde: <input type="date" id="fecha-juan-ini" onchange="cargarJuan()"></label>
+          <label>Hasta: <input type="date" id="fecha-juan-fin" onchange="cargarJuan()"></label>
+          <input type="text" id="buscar-juan" placeholder="Buscar item..." oninput="renderJuan()">
+          <button class="btn-detalles" onclick="cargarJuanMes()" style="background:#0f3460;color:#fff;font-weight:700;">📅 ESTE MES</button>
+          <button class="btn-detalles" onclick="enviarInformeJuanWhatsApp()" style="background:#25d366;color:#fff;font-weight:700;">📲 INFORME WHATSAPP</button>
+        </div>
+      </div>
+      <div id="accordion-juan"></div>
     </div>
 
     <div id="tab-stocks" class="tab-content">
