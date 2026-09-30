@@ -778,6 +778,13 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
     };
     const nCoc = invDocMap[Number(r.almacen_id) + '_' + Number(r.item_id)];
     const destinoPrim = String(r.destino_salida || '').toLowerCase();
+    // BLINDAJE JUAN: una salida que ya se registró con destino JUAN es permanente. Si este registro
+    // no especifica un destino EXPLÍCITO distinto (viene vacío/undefined, ej. re-guardar desde
+    // SALIDAS sin tocar el destino), se MANTIENE 'juan' y NO se deja caer a la automatización
+    // (cocina/barra). Solo un cambio explícito consciente lo puede modificar.
+    const prevDestinoJuan = String((old && old.destino_salida) || '').toLowerCase() === 'juan';
+    const juanProtegido = prevDestinoJuan && !(r.destino_salida !== undefined && String(r.destino_salida).toLowerCase() !== 'juan' && String(r.destino_salida).toLowerCase() !== '');
+    if (prevDestinoJuan) r.destino_salida = 'juan';
     const esTransferStocks = destinoPrim === 'stocks' || (Array.isArray(r.transferencias) && r.transferencias.length > 0);
     // AUTOMATIZACIÓN: los items del GRUPO BARRA van a BARRA/STOCK; TODO el resto va a COCINA/STOCK
     // por defecto (se puede cambiar manualmente). Se respetan destinos explícitos y transferencias.

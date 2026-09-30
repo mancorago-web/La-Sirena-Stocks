@@ -2664,51 +2664,44 @@ function renderJuan() {
 }
 
 // Arma el texto del informe de consumo de JUAN y lo abre en WHATSAPP.
-// Formato: cada fecha con sus items (el primero con la fecha, los siguientes alineados debajo).
+// Formato: cada línea = fecha - ITEM - cantidad (en orden cronológico).
 function enviarInformeJuanWhatsApp() {
   const d = _juanData;
   if (!d || !d.lista || !d.lista.length) { alert('No hay salidas a JUAN para informar'); return; }
-  // Agrupar por fecha (orden cronológico), y dentro de cada fecha por item (sumar cantidades)
-  const porFecha = {};
+  // Agrupar por fecha+item (sumar cantidades del mismo item en el mismo día)
+  const porFechaItem = {};
   d.lista.forEach(x => {
     const f = String(x.fecha || '');
-    if (!porFecha[f]) porFecha[f] = {};
     const k = String(x.nombre || '').trim();
-    if (!porFecha[f][k]) porFecha[f][k] = 0;
-    porFecha[f][k] += parseFloat(x.cantidad) || 0;
+    const key = f + '||' + k;
+    if (!porFechaItem[key]) porFechaItem[key] = { fecha: f, nombre: k, cantidad: 0 };
+    porFechaItem[key].cantidad += parseFloat(x.cantidad) || 0;
   });
-  const fechas = Object.keys(porFecha).sort();
+  const filas = Object.values(porFechaItem).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)) || String(a.nombre).localeCompare(String(b.nombre), 'es'));
   let txt = '*REPORTE DE CONSUMO JUAN*PERIODO: ' + d.ini + ' al ' + d.fin + '\n\n';
-  const indent = '           '; // 11 espacios = ancho de la fecha (10) + 1 espacio
-  fechas.forEach(f => {
-    const items = Object.keys(porFecha[f]).sort((a, b) => a.localeCompare(b, 'es'));
-    items.forEach((item, i) => {
-      if (i === 0) {
-        txt += f + ' ' + String(item).toUpperCase() + ' - ' + porFecha[f][item] + '\n';
-      } else {
-        txt += indent + String(item).toUpperCase() + ' - ' + porFecha[f][item] + '\n';
-      }
-    });
-  });
+  filas.forEach(f => { txt += f.fecha + ' - ' + String(f.nombre).toUpperCase() + ' - ' + f.cantidad + '\n'; });
   window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
 }
 
-// Informe de BAJAS por WHATSAPP (según el rango de fechas de la pestaña BAJAS)
+// Informe de BAJAS por WHATSAPP (según el rango de fechas de la pestaña BAJAS).
+// Formato: cada línea = fecha - ITEM - cantidad (en orden cronológico).
 function enviarInformeBajasWhatsApp() {
   const ini = document.getElementById('fecha-bajas').value;
   const fin = document.getElementById('fecha-bajas-fin')?.value || ini;
   if (!ini) { alert('Selecciona una fecha en BAJAS'); return; }
-  api('GET', '/api/almacenes/con-inventario-rango?fecha_inicio=' + encodeURIComponent(ini) + '&fecha_fin=' + encodeURIComponent(fin)).then(data => {
-    const filas = [];
-    (data || []).forEach(a => {
-      (a.items || []).forEach(i => {
-        if ((i.stock_baja || 0) > 0) filas.push({ nombre: i.nombre, cantidad: i.stock_baja, nota: i.nota_baja || '' });
-      });
+  api('GET', '/api/stocks/bajas?fecha_inicio=' + encodeURIComponent(ini) + '&fecha_fin=' + encodeURIComponent(fin)).then(list => {
+    const porFechaItem = {};
+    (list || []).forEach(x => {
+      const f = String(x.fecha || '');
+      const k = String(x.nombre || '').trim();
+      const key = f + '||' + k;
+      if (!porFechaItem[key]) porFechaItem[key] = { fecha: f, nombre: k, cantidad: 0, nota: x.nota || '' };
+      porFechaItem[key].cantidad += parseFloat(x.cantidad) || 0;
     });
+    const filas = Object.values(porFechaItem).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)) || String(a.nombre).localeCompare(String(b.nombre), 'es'));
     if (!filas.length) { alert('No hay bajas en el rango ' + ini + ' a ' + fin); return; }
-    filas.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
     let txt = '*REPORTE DE BAJAS*\n' + 'PERIODO: ' + ini + ' al ' + fin + '\n\n';
-    filas.forEach((f, idx) => { txt += (idx + 1) + '. ' + String(f.nombre).toUpperCase() + ' - ' + f.cantidad + (f.nota ? ' (' + f.nota + ')' : '') + '\n'; });
+    filas.forEach(f => { txt += f.fecha + ' - ' + String(f.nombre).toUpperCase() + ' - ' + f.cantidad + (f.nota ? ' (' + f.nota + ')' : '') + '\n'; });
     window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
   }).catch(() => alert('Error al obtener las bajas'));
 }
