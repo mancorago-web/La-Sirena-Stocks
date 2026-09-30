@@ -2701,7 +2701,7 @@ function enviarInformeBajasWhatsApp() {
     const filas = Object.values(porFechaItem).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)) || String(a.nombre).localeCompare(String(b.nombre), 'es'));
     if (!filas.length) { alert('No hay bajas en el rango ' + ini + ' a ' + fin); return; }
     let txt = '*REPORTE DE BAJAS*\n' + 'PERIODO: ' + ini + ' al ' + fin + '\n\n';
-    filas.forEach(f => { txt += f.fecha + ' - ' + String(f.nombre).toUpperCase() + ' - ' + f.cantidad + (f.nota ? ' (' + f.nota + ')' : '') + '\n'; });
+    filas.forEach(f => { txt += f.fecha + ' - ' + String(f.nombre).toUpperCase() + ' - ' + f.cantidad + '\n'; });
     window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
   }).catch(() => alert('Error al obtener las bajas'));
 }
@@ -2877,9 +2877,9 @@ function renderBajasRango(container, lista, ini, fin) {
     fechas.forEach(f => {
       const items = porFecha[f];
       html += '<div class="accordion-item"><div class="accordion-header" onclick="toggleAcordeon(this)"><span class="accordion-title">' + f + ' <span style="font-weight:400;font-size:0.85rem;color:#777;">— ' + items.length + ' item(s)</span></span><span class="accordion-arrow">▶</span></div>';
-      html += '<div class="accordion-body open"><div class="table-wrap"><table><thead><tr><th>Item</th><th>Cant.</th><th>Almacén</th><th>Motivo</th><th>Usuario</th></tr></thead><tbody>';
+      html += '<div class="accordion-body open"><div class="table-wrap"><table><thead><tr><th>Item</th><th>Cant.</th><th>Almacén</th><th>Usuario</th></tr></thead><tbody>';
       items.forEach(x => {
-        html += '<tr><td>' + esc(x.nombre) + '</td><td>' + x.cantidad + '</td><td style="font-size:0.8rem;color:#888;">' + esc(x.almacen || '') + '</td><td style="font-size:0.8rem;color:#888;max-width:200px;">' + esc(x.nota || '') + '</td><td>' + esc(x.saved_by || '') + '</td></tr>';
+        html += '<tr><td>' + esc(x.nombre) + '</td><td>' + x.cantidad + '</td><td style="font-size:0.8rem;color:#888;">' + esc(x.almacen || '') + '</td><td>' + esc(x.saved_by || '') + '</td></tr>';
       });
       html += '</tbody></table></div></div></div>';
     });
