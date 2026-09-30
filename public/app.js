@@ -2858,6 +2858,42 @@ function guardarVentas() {
   });
 }
 
+// Renderiza las BAJAS de un RANGO agrupadas por FECHA (en qué día se dio de baja cada item), como JUAN
+function buscarBajasInput() {
+  const ini = document.getElementById('fecha-bajas').value;
+  const fin = document.getElementById('fecha-bajas-fin')?.value || ini;
+  if (fin > ini) cargarBajas(ini, fin);
+}
+function renderBajasRango(container, lista, ini, fin) {
+  if (!container) return;
+  const filas = lista || [];
+  const q = (document.getElementById('buscar-baja')?.value || '').trim().toLowerCase();
+  const filtrados = q ? filas.filter(x => String(x.nombre || '').toLowerCase().includes(q)) : filas;
+  const porFecha = {};
+  filtrados.forEach(x => {
+    const f = String(x.fecha || '');
+    if (!porFecha[f]) porFecha[f] = [];
+    porFecha[f].push(x);
+  });
+  let html = '<div style="margin-bottom:0.6rem;padding:0.6rem 0.8rem;background:#c62828;color:#fff;border-radius:6px;font-weight:700;">'
+    + '🗑️ BAJAS — ' + ini + ' a ' + fin + ' · ' + filtrados.length + ' baja(s)</div>';
+  const fechas = Object.keys(porFecha).sort();
+  if (!fechas.length) {
+    html += '<p style="color:#888;">No hay bajas en el rango seleccionado.</p>';
+  } else {
+    fechas.forEach(f => {
+      const items = porFecha[f];
+      html += '<div class="accordion-item"><div class="accordion-header" onclick="toggleAcordeon(this)"><span class="accordion-title">' + f + ' <span style="font-weight:400;font-size:0.85rem;color:#777;">— ' + items.length + ' item(s)</span></span><span class="accordion-arrow">▶</span></div>';
+      html += '<div class="accordion-body open"><div class="table-wrap"><table><thead><tr><th>Item</th><th>Cant.</th><th>Almacén</th><th>Motivo</th><th>Usuario</th></tr></thead><tbody>';
+      items.forEach(x => {
+        html += '<tr><td>' + esc(x.nombre) + '</td><td>' + x.cantidad + '</td><td style="font-size:0.8rem;color:#888;">' + esc(x.almacen || '') + '</td><td style="font-size:0.8rem;color:#888;max-width:200px;">' + esc(x.nota || '') + '</td><td>' + esc(x.saved_by || '') + '</td></tr>';
+      });
+      html += '</tbody></table></div></div></div>';
+    });
+  }
+  container.innerHTML = html;
+}
+
 function cargarBajas(fechaIni, fechaFin) {
   if (!fechaIni) fechaIni = document.getElementById('fecha-bajas').value;
   if (!fechaFin) fechaFin = document.getElementById('fecha-bajas-fin')?.value || fechaIni;
@@ -2866,8 +2902,9 @@ function cargarBajas(fechaIni, fechaFin) {
   const container = document.getElementById('accordion-bajas');
   if (fechaFin > fechaIni) {
     if (btnGuardar) { btnGuardar.disabled = true; btnGuardar.textContent = '🔒 SOLO LECTURA (RANGO)'; }
-    api('GET', '/api/almacenes/con-inventario-rango?fecha_inicio=' + encodeURIComponent(fechaIni) + '&fecha_fin=' + encodeURIComponent(fechaFin)).then(data => {
-      renderRangoDetalle(container, data, 'bajas');
+    // RANGO: mostrar las bajas por FECHA (en qué día se dio de baja cada item), como en JUAN
+    api('GET', '/api/stocks/bajas?fecha_inicio=' + encodeURIComponent(fechaIni) + '&fecha_fin=' + encodeURIComponent(fechaFin)).then(list => {
+      renderBajasRango(container, list, fechaIni, fechaFin);
     }).catch(e => console.error(e));
     return;
   }
