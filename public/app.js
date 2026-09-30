@@ -2663,20 +2663,33 @@ function renderJuan() {
   container.innerHTML = html;
 }
 
-// Arma el texto del informe de consumo de JUAN y lo abre en WHATSAPP
+// Arma el texto del informe de consumo de JUAN y lo abre en WHATSAPP.
+// Formato: cada fecha con sus items (el primero con la fecha, los siguientes alineados debajo).
 function enviarInformeJuanWhatsApp() {
   const d = _juanData;
   if (!d || !d.lista || !d.lista.length) { alert('No hay salidas a JUAN para informar'); return; }
-  // Agrupar por item (sumar cantidades)
-  const agg = {};
+  // Agrupar por fecha (orden cronológico), y dentro de cada fecha por item (sumar cantidades)
+  const porFecha = {};
   d.lista.forEach(x => {
-    const k = String(x.nombre || '').trim().toUpperCase();
-    if (!agg[k]) agg[k] = { nombre: x.nombre, cantidad: 0 };
-    agg[k].cantidad += parseFloat(x.cantidad) || 0;
+    const f = String(x.fecha || '');
+    if (!porFecha[f]) porFecha[f] = {};
+    const k = String(x.nombre || '').trim();
+    if (!porFecha[f][k]) porFecha[f][k] = 0;
+    porFecha[f][k] += parseFloat(x.cantidad) || 0;
   });
-  const items = Object.values(agg).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
-  let txt = '*REPORTE DE CONSUMO JUAN*\n' + 'PERIODO: ' + d.ini + ' al ' + d.fin + '\n\n';
-  items.forEach((i, idx) => { txt += (idx + 1) + '. ' + String(i.nombre).toUpperCase() + ' - ' + i.cantidad + '\n'; });
+  const fechas = Object.keys(porFecha).sort();
+  let txt = '*REPORTE DE CONSUMO JUAN*PERIODO: ' + d.ini + ' al ' + d.fin + '\n\n';
+  const indent = '           '; // 11 espacios = ancho de la fecha (10) + 1 espacio
+  fechas.forEach(f => {
+    const items = Object.keys(porFecha[f]).sort((a, b) => a.localeCompare(b, 'es'));
+    items.forEach((item, i) => {
+      if (i === 0) {
+        txt += f + ' ' + String(item).toUpperCase() + ' - ' + porFecha[f][item] + '\n';
+      } else {
+        txt += indent + String(item).toUpperCase() + ' - ' + porFecha[f][item] + '\n';
+      }
+    });
+  });
   window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
 }
 
