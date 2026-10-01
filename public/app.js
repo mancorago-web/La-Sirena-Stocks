@@ -10886,19 +10886,77 @@ function renderCostoGruposGlobal(prefix, container, cfg, grupos) {
 // Versión por grupo: cada grupo/campo guarda con su propia fecha y acumula por mes (GASTOS FIJOS)
 function renderCostoGruposPorCampo(prefix, container, cfg, grupos) {
   const mes = document.getElementById('mes-pestana-' + prefix)?.value || todayStr().slice(0, 7);
-  Promise.all(grupos.map(g => api('GET', '/api/costos?tipo=' + g.tipo + '&mes=' + mes))).then(lists => {
-    const built = buildCostoGruposHTML(grupos, lists, prefix, false);
-    const box = `<div class="autosuma-box" id="autosuma-${prefix}" data-base="${built.totalGeneral}">
+  // Separar grupos normales (de costos) de los grupos auto-alimentados (DETALLE DE VENTAS)
+  const gruposNormales = (grupos || []).filter(g => !g.detalleVentas);
+  const gruposDetalle = (grupos || []).filter(g => g.detalleVentas);
+  const peticiones = gruposNormales.map(g => api('GET', '/api/costos?tipo=' + g.tipo + '&mes=' + mes));
+  if (gruposDetalle.length) {
+    const [yy, mm] = mes.split('-').map(Number);
+    const ultimoDia = new Date(yy, mm, 0).getDate();
+    peticiones.push(api('GET', '/api/ventas/por-dia?fecha_inicio=' + mes + '-01&fecha_fin=' + mes + '-' + String(ultimoDia).padStart(2, '0')).catch(() => ({ dias: [], totalGeneral: 0 })));
+  }
+  Promise.all(peticiones).then(results => {
+    const lists = results.slice(0, gruposNormales.length);
+    let built = { html: '', totalGeneral: 0 };
+    if (gruposNormales.length) built = buildCostoGruposHTML(gruposNormales, lists, prefix, false);
+    // Grupo DETALLE DE VENTAS: auto-alimentado
+    let detalleHtml = '';
+    let detalleTotal = 0;
+    if (gruposDetalle.length) {
+      const resp = results[gruposNormales.length] || { dias: [], totalGeneral: 0 };
+      detalleTotal = resp.totalGeneral || 0;
+      detalleHtml = buildDetalleVentasHTML(resp.dias || [], prefix);
+    }
+    const box = `<div class="autosuma-box" id="autosuma-${prefix}" data-base="${Math.round((built.totalGeneral + detalleTotal) * 100) / 100}">
       <span class="autosuma-label">TOTAL</span>
-      <span class="autosuma-monto">S/ ${built.totalGeneral.toFixed(2)}</span>
+      <span class="autosuma-monto">S/ ${(built.totalGeneral + detalleTotal).toFixed(2)}</span>
     </div>`;
     const top = `<div class="costos-fecha-row">
       <label>MES</label>
       <input type="month" id="mes-pestana-${prefix}" value="${mes}" onchange="cargarCostoCategoria('${prefix}')">
     </div>
     <div style="font-size:0.75rem;color:#888;margin:-0.25rem 0 0.75rem 0;">Los montos se acumulan durante el mes y se reinician a S/ 0 el 1ro del mes siguiente.</div>`;
-    container.innerHTML = top + box + built.html;
+    container.innerHTML = top + box + built.html + detalleHtml;
   }).catch(e => { console.error(e); container.innerHTML = '<p>Error al cargar.</p>'; });
+}
+
+// Renderiza el grupo DETALLE DE VENTAS: ventas diarias agrupadas por fecha y categoría (STOCK/BARRA/COCINA)
+function buildDetalleVentasHTML(dias, prefix) {
+  if (!dias || !dias.length) {
+    return '<div class="grupo-header" style="margin-top:1rem;"><span>DETALLE DE VENTAS</span><span class="grupo-subtotal">S/ 0.00</span></div>' +
+      '<p style="color:#888;">No hay ventas en este mes (usa el DETALLE DE VENTAS del menú VENTAS para revisar).</p>';
+  }
+  let totalGeneral = 0;
+  dias.forEach(d => { totalGeneral += d.total || 0; });
+  let html = '<div class="grupo-header" style="margin-top:1rem;"><span>DETALLE DE VENTAS</span><span class="grupo-subtotal">S/ ' + totalGeneral.toFixed(2) + '</span></div>';
+  dias.forEach(d => {
+    const esHoy = d.fecha === todayStr();
+    const cat = (label, total) => total > 0 ? `<div style="margin-bottom:0.5rem;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;">
+      <div style="background:#eef2ff;padding:0.4rem 0.6rem;font-weight:700;color:#1a237e;font-size:0.82rem;display:flex;justify-content:space-between;align-items:center;">
+        <span>${label}</span>
+        <span style="color:#0f3460;">S/ ${total.toFixed(2)}</span>
+      </div>
+      <div style="padding:0.4rem 0.6rem;">
+        <div class="table-wrap"><table style="margin:0;">
+          <thead><tr><th>Item</th><th style="text-align:center;">Cant.</th><th style="text-align:right;">Total</th></tr></thead>
+          <tbody>${(d.items || []).filter(r => r.destino === label.toLowerCase()).map(r => `<tr>
+            <td>${esc(r.nombre)}</td>
+            <td style="text-align:center;">${r.cantidad}</td>
+            <td style="text-align:right;">S/ ${(r.monto || 0).toFixed(2)}</td>
+          </tr>`).join('') || '<tr><td colspan="3">Sin items.</td></tr>'}</tbody>
+        </table></div>
+      </div>
+    </div>` : '';
+    const cuerpo = (cat('STOCK', d.stock) + cat('BARRA', d.barra) + cat('COCINA', d.cocina)) || '<p style="color:#888;">Sin ventas este día.</p>';
+    html += `<div class="accordion-item" data-fecha="${d.fecha}">
+      <div class="accordion-header" onclick="toggleAcordeon(this)">
+        <span class="accordion-title">${fmtFechaCorta(d.fecha)}${esHoy ? ' <span style="color:#c62828;font-size:0.75rem;">(HOY)</span>' : ''} <span style="font-weight:400;font-size:0.85rem;color:#777;">— S/ ${(d.total || 0).toFixed(2)}</span></span>
+        <span class="accordion-arrow">▶</span>
+      </div>
+      <div class="accordion-body">${cuerpo}</div>
+    </div>`;
+  });
+  return html;
 }
 
 // Renderiza los grupos de una pestaña (readonly = solo vista, sin agregar ni eliminar)

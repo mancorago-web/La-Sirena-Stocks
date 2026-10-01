@@ -2864,6 +2864,82 @@ app.get('/api/ventas/busqueda', async (req, res) => {
   }
 });
 
+// --- VENTAS: detalle por día y categoría (STOCK/BARRA/COCINA) con total en soles ---
+// Para el grupo "DETALLE DE VENTAS" del CONSOLIDADO. Total = cantidad × precio de venta
+// (solo de precios_venta_excel, la fuente única de precio de venta).
+app.get('/api/ventas/por-dia', authMiddleware, async (req, res) => {
+  try {
+    const { fecha_inicio, fecha_fin } = req.query;
+    if (!fecha_inicio || !fecha_fin) return res.status(400).json({ error: 'fecha_inicio y fecha_fin requeridos' });
+    const ini = String(fecha_inicio).trim(), fin = String(fecha_fin).trim();
+    if (ini > fin) [ini, fin] = [fin, ini];
+
+    // PRECIOS DE VENTA (solo del Excel)
+    const pvSnap = await col('precios_venta_excel').get();
+    const precioVenta = new Map();
+    const normV = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    pvSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.nombre); const pv = parseFloat(a.precio_venta) || 0; if (pv > 0 && !precioVenta.has(k)) precioVenta.set(k, pv); });
+
+    // Nombres de items de STOCKS
+    const invSnap = await col('inventario').get();
+    const nombreByKey = {};
+    invSnap.docs.forEach(d => { const a = d.data(); nombreByKey[Number(a.item_id) + '_' + Number(a.almacen_id)] = a.nombre; });
+
+    const filas = [];
+    const porDia = {};
+    const add = (fecha, nombre, cantidad, destino, saved_by, created_at) => {
+      const cant = parseFloat(cantidad) || 0;
+      if (cant <= 0) return;
+      const monto = Math.round(cant * (precioVenta.get(normV(nombre)) || 0) * 100) / 100;
+      (porDia[fecha] = porDia[fecha] || []).push({ nombre, cantidad: cant, destino, monto, saved_by: saved_by || '-', created_at: created_at || '' });
+      filas.push({ fecha, nombre, cantidad: cant, destino, monto, saved_by: saved_by || '-', created_at: created_at || '' });
+    };
+
+    // STOCKS (inventario_diario)
+    const dia = await col('inventario_diario').where('fecha', '>=', ini).where('fecha', '<=', fin).get();
+    dia.docs.forEach(d => {
+      const a = d.data();
+      if (!((a.total_ventas || 0) > 0)) return;
+      const nombre = nombreByKey[Number(a.item_id) + '_' + Number(a.almacen_id)] || String(a.item_id);
+      add(a.fecha, nombre, a.total_ventas, 'stocks', a.saved_by, a.updated_at);
+    });
+
+    // Log de ventas BARRA/COCINA
+    const log = await col('ventas').where('fecha', '>=', ini).where('fecha', '<=', fin).get();
+    const seen = new Set();
+    const push = (r) => {
+      const key = r.fecha + '|' + r.destino + '|' + String(r.nombre || '') + '|' + (r.cantidad || 0);
+      if (seen.has(key)) return;
+      seen.add(key);
+      add(r.fecha, r.nombre, r.cantidad, r.destino, r.saved_by, r.created_at);
+    };
+    log.docs.forEach(d => { const a = d.data(); if (a.destino === 'barra' || a.destino === 'cocina') push({ fecha: a.fecha, nombre: a.nombre, cantidad: a.cantidad, destino: a.destino, saved_by: a.saved_by, created_at: a.created_at }); });
+    // BARRA movimientos (recetas) si no está en el log
+    const bm = await col('barra_movimientos').where('tipo', '==', 'ventas').get();
+    bm.docs.forEach(d => {
+      const a = d.data();
+      if (a.es_receta === false) return;
+      if (a.fecha < ini || a.fecha > fin) return;
+      push({ fecha: a.fecha, nombre: a.ingrediente, cantidad: a.cantidad, destino: 'barra', saved_by: a.saved_by, created_at: a.created_at });
+    });
+    // COCINA ventas si no está en el log
+    const cv = await col('cocina_ventas').where('fecha', '>=', ini).where('fecha', '<=', fin).get();
+    cv.docs.forEach(d => { const a = d.data(); push({ fecha: a.fecha, nombre: a.nombre, cantidad: a.cantidad, destino: 'cocina', saved_by: a.saved_by, created_at: a.created_at }); });
+
+    // Agrupar por día con subtotales por categoría
+    const dias = Object.keys(porDia).sort();
+    const out = dias.map(f => {
+      const rows = porDia[f].sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')) || String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'));
+      const cat = (dest) => rows.filter(r => r.destino === dest).reduce((s, r) => s + r.monto, 0);
+      const total = rows.reduce((s, r) => s + r.monto, 0);
+      return { fecha: f, stock: Math.round(cat('stocks') * 100) / 100, barra: Math.round(cat('barra') * 100) / 100, cocina: Math.round(cat('cocina') * 100) / 100, total: Math.round(total * 100) / 100, items: rows };
+    });
+    res.json({ dias, totalGeneral: Math.round(filas.reduce((s, r) => s + r.monto, 0) * 100) / 100 });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- VENTAS: búsqueda total (STOCKS + BARRA + COCINA) por rango de fechas e item ---
 app.get('/api/ventas/busqueda-total', async (req, res) => {
   try {
