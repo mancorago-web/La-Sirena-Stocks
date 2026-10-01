@@ -568,6 +568,10 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .menu-eventos { grid-column: 1; grid-row: 3; }
   .menu-limpieza { grid-column: 3; grid-row: 3; }
   .menu-ventas { grid-column: 2; grid-row: 4; }
+  /* Android: BASE DE DATOS, ANALISIS y CONSOLIDADO juntos en la última fila (ANALISIS entre los dos) */
+  .menu-bd { grid-column: 1; grid-row: 5; }
+  .menu-analisis { grid-column: 2; grid-row: 5; align-self: stretch; }
+  .menu-costos { grid-column: 3; grid-row: 5; align-self: stretch; }
 /* En PC (pantalla amplia) BASE DE DATOS y CONSOLIDADO se pegan al borde derecho, fuera de la cuadrícula */
 @media (min-width: 1300px) {
   .menu-bd,
