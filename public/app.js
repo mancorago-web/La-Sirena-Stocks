@@ -10625,18 +10625,17 @@ function cargarComprasResumen() {
       actualizarTotalAlimentos(0);
       return;
     }
-    // Acumular el desglose por categoría (para el botón DETALLES con %)
-const clasificarStock = (nombre) => {
+// Acumular el desglose por categoría (para el botón DETALLES con %)
+    const clasificarStock = (nombre) => {
       const n = String(nombre || '').toUpperCase();
       if (/^AGUA\b|AGUA CON GAS|AGUA SIN GAS|AGUA BIDON|AGUA TONICA|AGUA MINERAL|SAN LUIS|SAN MATEO|SAN CARLOS|CIELO|EVERVESS/i.test(n)) return 'AGUAS';
       if (/COCA|INKA|SPRITE|FANTA|PINK SODA|MR\. PERKINS|TONIC WATER|BRITVIC|GASEOSA/i.test(n)) return 'GASEOSAS';
       if (/CUSQUE|CUSQUENA|PILSEN|CORONA|HEINEKEN|CERVEZA|BRAHMA|CRISTAL|BUDWEISER/i.test(n)) return 'CERVEZAS';
-      if (/VINO|MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA|SAUVIGNON|CHARDONNAY|MALBEC|CABERNET|MERLOT|PINOT|CHAMPAGNE|BRUT|CONEJO NEGRO/i.test(n)) return 'VINOS';
+      if (/VINO|INYCON|MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA|SAUVIGNON|CHARDONNAY|MALBEC|CABERNET|MERLOT|PINOT|CHAMPAGNE|BRUT|CONEJO NEGRO/i.test(n)) return 'VINOS';
       if (/^(CAFE|CAFÉ)\b|CAFE X|CAFÉ X|CHOCOLATE|CAPUCHINO|EXPRESSO|AMERICANO/i.test(n)) return 'CAFÉS';
-      if (/LECHE|GLORIA|CREMA DE LECHE|QUESO|MANTEQUILLA|YOGUR|COCO|EVAPORADA/i.test(n)) return 'LACTEOS';
-      if (/PURE DE TOMATE|TOMATE|ACEITE|ARROZ|HARINA|AZUCAR|SAL |SALSA|PASTA|FIDEOS|ESPAGUETTI|AGNESI|SPAGUEETTI|MOSTAZA|KETCHUP|MAYONESA|VINAGRE|SILLAO|AJINOMOTO|MAGGI/i.test(n)) return 'ABARROTES';
-      if (/HIELO/i.test(n)) return 'SERVICIO';
-      if (/PISCO|GIN |RON |VODKA|TEQUILA|WHISKY|LICOR|JOSE CUERVO|SMIRNOFF|TANQUERAY|BOMBAY|BACARDI|CAMPARI|BARNIDET|MARTINI|AMARGO|APEROL|JARABE/i.test(n)) return 'BARRA';
+      if (/LECHE|GLORIA|CREMA DE LECHE|CREMA DE COCO|QUESO|MANTEQUILLA|YOGUR|EVAPORADA/i.test(n)) return 'LACTEOS';
+      if (/HIELO|HUEVO|PARPADELLE|TINTA DE CALAMAR|NORTINAL|AGNESI|PURE DE TOMATE|TOMATE|ACEITE|ARROZ|HARINA|AZUCAR|SAL |SALSA|PASTA|FIDEOS|ESPAGUETTI|SPAGUEETTI|MOSTAZA|KETCHUP|MAYONESA|VINAGRE|SILLAO|AJINOMOTO|MAGGI/i.test(n)) return 'ABARROTES';
+      if (/PISCO|GIN |RON |VODKA|TEQUILA|WHISKY|LICOR|JOSE CUERVO|SMIRNOFF|TANQUERAY|BOMBAY|BACARDI|CAMPARI|BARNIDET|MARTINI|MARRASQUINO|RICCADONNA|PROSECCO|BELLS|CRANBERRY|AMARGO|APEROL|JARABE/i.test(n)) return 'BARRA';
       if (/KOMBUCHA|KEFIR/i.test(n)) return 'KOMBUCHAS';
       if (/CAFE|CAFÉ/i.test(n)) return 'CAFÉS';
       return 'SIN CLASIFICAR';
@@ -10646,6 +10645,8 @@ const clasificarStock = (nombre) => {
       (porFecha[f] || []).forEach(r => {
         const pt = precioTotal(r);
         if (pt <= 0) return;
+        // EVENTOS SIEMPRE gana: todo lo que se compró para eventos va a EVENTOS (aunque tenga categoría)
+        if (String(r.destino || '') === 'eventos') { porCategoria['EVENTOS'] = (porCategoria['EVENTOS'] || 0) + pt; return; }
         let cat = String(r.categoria || '').trim().toUpperCase();
         if (!cat) cat = famMap[String(r.nombre || '').trim().toUpperCase()];
         if (!cat) {
