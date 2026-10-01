@@ -10641,26 +10641,33 @@ function cargarComprasResumen() {
       return 'SIN CLASIFICAR';
     };
     const porCategoria = {};
+    const porCategoriaItems = {};
     fechas.forEach(f => {
       (porFecha[f] || []).forEach(r => {
-        const pt = precioTotal(r);
+const pt = precioTotal(r);
         if (pt <= 0) return;
+        let cat;
         // EVENTOS SIEMPRE gana: todo lo que se compró para eventos va a EVENTOS (aunque tenga categoría)
-        if (String(r.destino || '') === 'eventos') { porCategoria['EVENTOS'] = (porCategoria['EVENTOS'] || 0) + pt; return; }
-        let cat = String(r.categoria || '').trim().toUpperCase();
-        if (!cat) cat = famMap[String(r.nombre || '').trim().toUpperCase()];
-        if (!cat) {
-          if (String(r.destino || '') === 'stocks') cat = clasificarStock(r.nombre);
-          else if (String(r.destino || '') === 'barra') cat = 'BARRA';
-          else if (String(r.destino || '') === 'cocina') cat = 'OTROS';
-          else cat = String(r.destino || 'OTROS').toUpperCase();
+        if (String(r.destino || '') === 'eventos') { cat = 'EVENTOS'; }
+        else {
+          cat = String(r.categoria || '').trim().toUpperCase();
+          if (!cat) cat = famMap[String(r.nombre || '').trim().toUpperCase()];
+          if (!cat) {
+            if (String(r.destino || '') === 'stocks') cat = clasificarStock(r.nombre);
+            else if (String(r.destino || '') === 'barra') cat = 'BARRA';
+            else if (String(r.destino || '') === 'cocina') cat = 'OTROS';
+            else cat = String(r.destino || 'OTROS').toUpperCase();
+          }
         }
         porCategoria[cat] = (porCategoria[cat] || 0) + pt;
+        if (!porCategoriaItems[cat]) porCategoriaItems[cat] = [];
+        porCategoriaItems[cat].push({ fecha: r.fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: r.unidad || '', total: pt });
       });
     });
+    const detalleCodificado = encodeURIComponent(JSON.stringify(porCategoriaItems));
     html += `<div style="margin-top:0.75rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;background:#0f3460;color:#fff;border-radius:8px;padding:0.65rem 0.9rem;font-weight:700;">
       <span>TOTAL ALIMENTOS Y BEBIDAS (${mes}): S/ ${totalGeneral.toFixed(2)}</span>
-      <button onclick="verDetalleComprasPorCategoria('${encodeURIComponent(JSON.stringify(porCategoria))}', ${totalGeneral.toFixed(2)})" style="padding:0.4rem 1rem;background:#25d366;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:0.85rem;">📋 DETALLES</button>
+      <button onclick="verDetalleComprasPorCategoria('${encodeURIComponent(JSON.stringify(porCategoria))}', ${totalGeneral.toFixed(2)}, '${detalleCodificado}')" style="padding:0.4rem 1rem;background:#25d366;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:0.85rem;">📋 DETALLES</button>
     </div>`;
     div.innerHTML = html;
     // Abrir por defecto el acordeón de HOY
@@ -10678,9 +10685,11 @@ function cargarComprasResumen() {
 }
 
 // Muestra el desglose de COMPRAS por categoría con su % del total (para CONSOLIDADO/RESUMEN)
-function verDetalleComprasPorCategoria(encoded, total) {
+function verDetalleComprasPorCategoria(encoded, total, encodedItems) {
   let porCat = {};
+  let itemsPorCat = {};
   try { porCat = JSON.parse(decodeURIComponent(encoded)); } catch (e) { alert('Error leyendo los datos'); return; }
+  if (encodedItems) { try { itemsPorCat = JSON.parse(decodeURIComponent(encodedItems)); } catch (e) { itemsPorCat = {}; } }
   const totalG = parseFloat(total) || 0;
   const ordenFin = ['SIN CLASIFICAR', 'OTROS', 'COCINA (SIN CAT)'];
   const cats = Object.keys(porCat).sort((a, b) => {
@@ -10694,7 +10703,7 @@ function verDetalleComprasPorCategoria(encoded, total) {
   if (mc) mc.classList.add('modal-wide');
   abrirModalDesdeArriba();
   let html = '<h3>📋 DETALLE DE ALIMENTOS Y BEBIDAS</h3>';
-  html += '<p style="color:#666;font-size:0.85rem;">Total: <b>S/ ' + totalG.toFixed(2) + '</b> — desglose por categoría y % del total.</p>';
+  html += '<p style="color:#666;font-size:0.85rem;">Total: <b>S/ ' + totalG.toFixed(2) + '</b> — haz clic en cada categoría para ver sus compras.</p>';
   if (!cats.length) {
     html += '<p style="color:#888;">Sin datos.</p>';
   } else {
@@ -10707,17 +10716,25 @@ function verDetalleComprasPorCategoria(encoded, total) {
       html += '<div style="width:' + pct + '%;background:' + colores[i % colores.length] + ';" title="' + esc(c) + ' — ' + pct.toFixed(1) + '%"></div>';
     });
     html += '</div>';
-    html += '<div class="table-wrap"><table><thead><tr><th>Categoría</th><th style="text-align:right;">Monto</th><th style="text-align:right;">% del Total</th></tr></thead><tbody>';
+    // Cada categoría es un acordeón expandible con el detalle de sus compras
+    html += '<div id="detalle-categorias">';
     cats.forEach((c, i) => {
       const pct = totalG > 0 ? (porCat[c] / totalG) * 100 : 0;
-      html += `<tr>
-        <td><span style="display:inline-block;width:12px;height:12px;background:${colores[i % colores.length]};border-radius:2px;margin-right:0.4rem;"></span>${esc(c)}</td>
-        <td style="text-align:right;font-weight:700;">S/ ${porCat[c].toFixed(2)}</td>
-        <td style="text-align:right;">${pct.toFixed(1)}%</td>
-      </tr>`;
+      const items = (itemsPorCat[c] || []).slice().sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+      html += '<div class="accordion-item" data-cat="' + esc(c) + '">';
+      html += '<div class="accordion-header" onclick="toggleAcordeon(this)"><span class="accordion-title"><span style="display:inline-block;width:12px;height:12px;background:' + colores[i % colores.length] + ';border-radius:2px;margin-right:0.4rem;"></span>' + esc(c) + ' <span style="font-weight:400;font-size:0.85rem;color:#777;">— ' + items.length + ' compra(s)</span></span><span style="font-weight:700;color:#0f3460;margin-left:0.6rem;white-space:nowrap;">S/ ' + porCat[c].toFixed(2) + ' (' + pct.toFixed(1) + '%)</span><span class="accordion-arrow">▶</span></div>';
+      html += '<div class="accordion-body"><div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Producto</th><th style="text-align:center;">Cant.</th><th style="text-align:right;">Total</th></tr></thead><tbody>';
+      if (!items.length) {
+        html += '<tr><td colspan="4" style="color:#888;">Sin detalle.</td></tr>';
+      } else {
+        items.forEach(it => {
+          html += '<tr><td>' + esc(it.fecha) + '</td><td>' + esc(it.nombre) + '</td><td style="text-align:center;">' + it.cantidad + (it.unidad ? ' ' + esc(it.unidad) : '') + '</td><td style="text-align:right;">S/ ' + (parseFloat(it.total) || 0).toFixed(2) + '</td></tr>';
+        });
+      }
+      html += '</tbody></table></div></div></div>';
     });
+    html += '</div>';
     html += `<tr style="font-weight:700;background:#f0f4ff;"><td>TOTAL</td><td style="text-align:right;">S/ ${totalG.toFixed(2)}</td><td style="text-align:right;">100%</td></tr>`;
-    html += '</tbody></table></div>';
   }
   html += '<div style="margin-top:1.5rem;text-align:center;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">CERRAR</button></div>';
   body.innerHTML = html;
