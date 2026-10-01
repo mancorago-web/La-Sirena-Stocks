@@ -1875,6 +1875,14 @@ function registrarVentasFilas(filas, onDone) {
 function guardarDia() {
   const fecha = document.getElementById('fecha-almacenes').value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
+  // PROTECCIÓN FECHA-DOM: la vista pudo tardar en re-renderizarse al cambiar el día (carga
+  // asíncrona). Si el picker ya muestra OTRA fecha pero el DOM aún tiene los valores del día
+  // anterior, guardar copiaría esas ventas/stock a la fecha equivocada. Se bloquea y recarga.
+  if (_almacenesRenderFecha && _almacenesRenderFecha !== fecha) {
+    alert('La vista muestra el día ' + _almacenesRenderFecha + ' y el selector pide guardar ' + fecha + '.\n\nSe recarga la fecha para que veas los valores correctos y puedas guardar.');
+    cargarAlmacenes(fecha);
+    return;
+  }
   // Protección anti doble-guardado: si ya hay un guardado en curso, no repetir.
   if (window._guardandoDia) { showToast('Ya hay un guardado en curso, espera...'); return; }
   const registros = [];
@@ -2014,6 +2022,7 @@ function guardarDiaAlmacenes({ fecha, registros, selectorBtn, textoBtn, textoOk,
 }
 
 let _almacenesRenderFecha = null; // fecha actualmente renderizada en el DOM de ALMACENES
+let _ventasRenderFecha = null; // fecha actualmente renderizada en el DOM de VENTAS del día
 // Reubica items por su categoria explicita (tiene prioridad sobre la inferida por nombre).
 // Si la categoria no es una seccion definida (ej. COCINA), el item va a "otros" (que se muestra
 // como COCINA en los almacenes no-1).
@@ -3076,12 +3085,20 @@ function cargarVentas(fechaIni, fechaFin) {
     `).join('');
     const bv = document.getElementById('buscar-venta');
     if (bv && bv.value) buscarEnTabla(bv.value, 'accordion-ventas');
+    _ventasRenderFecha = fechaIni;
   });
 }
 
 function guardarVentas() {
   const fecha = document.getElementById('fecha-ventas').value;
   if (!fecha) { alert('Selecciona una fecha'); return; }
+  // PROTECCIÓN FECHA-DOM: igual que en ALMACENES, si el DOM aún muestra los valores del día
+  // anterior y el picker ya cambió a otra fecha, no se guardan valores equivocados.
+  if (_ventasRenderFecha && _ventasRenderFecha !== fecha) {
+    alert('La vista de ventas muestra el día ' + _ventasRenderFecha + ' y el selector pide guardar ' + fecha + '.\n\nSe recarga la fecha para que veas los valores correctos y puedas guardar.');
+    cargarVentas(fecha);
+    return;
+  }
   const registros = [];
   document.querySelectorAll('#accordion-ventas .accordion-item').forEach(item => {
     const almacenId = parseInt(item.dataset.almacenId);
