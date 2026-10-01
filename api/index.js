@@ -5120,6 +5120,44 @@ app.get('/api/stock/precios/items', async (req, res) => {
 });
 
 // Guarda precios de venta de varios items de STOCKS (pestaña PRECIO VENTA). Crea el registro si falta.
+// Items de STOCK/ALMACENES que se VENDEN DIRECTAMENTE al público (destino stocks en VENTAS/Excel).
+// Solo esos se muestran en la pestaña PRECIO VENTA, con su precio de compra y de venta.
+app.get('/api/stock/precios/venta', async (req, res) => {
+  try {
+    const out = await cached('precios_venta_stocks', 5000, async () => {
+      const [invSnap, ventasSnap, spSnap] = await Promise.all([
+        col('inventario').get(),
+        col('ventas').get(),
+        col('stock_precios').get(),
+      ]);
+      const normV = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+      // Nombres de ALMACENES (un solo registro por nombre)
+      const almacenes = new Map();
+      invSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.nombre); if (k && !almacenes.has(k)) almacenes.set(k, a.nombre); });
+      // Nombres vendidos directamente (destino stocks)
+      const vendidos = new Set();
+      ventasSnap.docs.forEach(d => { const a = d.data(); if (String(a.destino || '').toLowerCase() === 'stocks' && a.nombre) vendidos.add(normV(a.nombre)); });
+      // Precios de compra/venta
+      const precios = new Map();
+      spSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.nombre); if (!precios.has(k)) precios.set(k, a); });
+      const outArr = [];
+      almacenes.forEach((nombre, k) => {
+        if (!vendidos.has(k)) return; // solo los que se venden directamente
+        const p = precios.get(k) || {};
+        outArr.push({
+          nombre,
+          unidad: p.unidad_venta || p.unidad || '',
+          precio_compra: parseFloat(p.precio) || 0,
+          precio_venta: parseFloat(p.precio_venta) || 0,
+        });
+      });
+      outArr.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+      return outArr;
+    });
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/api/stock/precios/venta', async (req, res) => {
   try {
     const { items } = req.body;

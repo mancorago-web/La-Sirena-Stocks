@@ -3578,21 +3578,9 @@ function cargarPrecioVentaStocks() {
   const container = document.getElementById('accordion-precio-venta');
   if (!container) return;
   container.innerHTML = '<p>Cargando...</p>';
-  // SOLO los items de STOCK/ALMACENES (colección inventario) que se venden por VENTAS/Excel,
-  // con su precio de compra (stock_precios) y precio de venta (stock_precios.precio_venta).
-  Promise.all([api('GET', '/api/stock/precios/items'), api('GET', '/api/stock/precios')]).then(([itemNames, precios]) => {
-    const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-    const precioPorNombre = new Map();
-    (precios || []).forEach(s => { const k = norm(s.nombre); if (!precioPorNombre.has(k)) precioPorNombre.set(k, s); });
-    const filas = (itemNames || []).map(n => {
-      const p = precioPorNombre.get(norm(n)) || {};
-      return {
-        nombre: n,
-        unidad: p.unidad_venta || p.unidad || '',
-        precio_compra: parseFloat(p.precio) || 0,
-        precio_venta: parseFloat(p.precio_venta) || 0
-      };
-    }).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  // SOLO los items de STOCK/ALMACENES que se VENDEN DIRECTAMENTE al público (aparecen en los
+  // EXCEL de VENTAS con destino stocks), con su precio de compra y de venta.
+  api('GET', '/api/stock/precios/venta').then(filas => {
     function fila(i) {
       const pc = i.precio_compra || 0;
       const pv = i.precio_venta || 0;
@@ -3606,7 +3594,7 @@ function cargarPrecioVentaStocks() {
       </tr>`;
     }
     container.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Unidad</th><th>Precio Compra</th><th>Precio Venta</th><th>Ganancia Aprox.</th></tr></thead><tbody>'
-      + filas.map(fila).join('') + '</tbody></table></div>';
+      + (filas || []).map(fila).join('') + '</tbody></table></div>';
   }).catch(() => { container.innerHTML = '<p style="color:#c62828;">Error cargando precios.</p>'; });
 }
 
