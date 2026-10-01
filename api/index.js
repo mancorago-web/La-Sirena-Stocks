@@ -8078,66 +8078,95 @@ app.get('/api/costos/pestanas', authMiddleware, async (req, res) => {
   }
 });
 
-// --- ANALISIS DEL NEGOCIO: compras vs ventas, gastos y valor invertido en stock ---
+// --- ANALISIS DEL NEGOCIO: compras vs ventas y valor invertido en stock ---
 // Compras = gastos en insumos (colección compras con precio_total). Ventas = ingresos
-// (colección ventas, destino stocks/barra/cocina). Gastos = costos operativos (costos).
-// Valor en stock = cantidad × precio de compra en ALMACENES + BARRA + COCINA.
+// (colección ventas × precio de venta del Excel). Gastos = costos operativos (costos).
+// Valor en stock = cantidad ACTUAL (cierre del día) × precio de compra unificado.
 app.get('/api/analisis/resumen', authMiddleware, async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin } = req.query;
     if (!fecha_inicio || !fecha_fin) return res.status(400).json({ error: 'fecha_inicio y fecha_fin requeridos' });
     const ini = String(fecha_inicio).trim(), fin = String(fecha_fin).trim();
     if (ini > fin) [ini, fin] = [fin, ini];
-    const [comprasSnap, ventasSnap, costosSnap, invSnap, barraStockSnap, barraPreciosSnap, cocinaStockSnap, cocinaPreciosSnap, spSnap] = await Promise.all([
+    const hoy = new Date().toISOString().split('T')[0];
+    const [comprasSnap, ventasSnap, costosSnap, pvSnap, spSnap, bpSnap, cpSnap, comprasAll, cocinaComprasAll,
+      invSnap, barraStockSnap, barraDiarioSnap, cocinaStockSnap, cocinaDiarioSnap] = await Promise.all([
       col('compras').where('fecha', '>=', ini).where('fecha', '<=', fin).get(),
       col('ventas').where('fecha', '>=', ini).where('fecha', '<=', fin).get(),
       col('costos').where('fecha', '>=', ini).where('fecha', '<=', fin).get(),
+      col('precios_venta_excel').get(),
+      col('stock_precios').get(),
+      col('barra_precios').get(),
+      col('cocina_precios').get(),
+      col('compras').get(),
+      col('cocina_compras').get(),
       col('inventario').get(),
       col('barra_stock').get(),
-      col('barra_precios').get(),
+      col('barra_stock_diario').get(),
       col('cocina_stock').get(),
-      col('cocina_precios').get(),
-      col('stock_precios').get(),
+      col('cocina_stock_diario').get(),
     ]);
-    // COMPRAS por día
+    const normV = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    // PRECIO DE COMPRA unificado (stock_precios > barra_precios > cocina_precios > última compra)
+    const precioCompraUni = new Map();
+    const addPC = (nombre, pc) => { const k = normV(nombre); if (pc > 0 && !precioCompraUni.has(k)) precioCompraUni.set(k, pc); };
+    spSnap.docs.forEach(d => { const a = d.data(); addPC(a.nombre, parseFloat(a.precio) || parseFloat(a.ultimo_precio_compra) || 0); });
+    bpSnap.docs.forEach(d => { const a = d.data(); addPC(a.ingrediente, parseFloat(a.precio_compra) || parseFloat(a.ultimo_precio_compra) || 0); });
+    cpSnap.docs.forEach(d => { const a = d.data(); addPC(a.ingrediente, parseFloat(a.precio_compra) || parseFloat(a.ultimo_precio_compra) || 0); });
+    const ultCompra = new Map();
+    const tomarC = (a) => { const k = normV(a.nombre); const cant = parseFloat(a.cantidad) || 0; const pt = parseFloat(a.precio_total) || 0; const pu = cant > 0 && pt > 0 ? pt / cant : (parseFloat(a.precio) || 0); if (pu > 0 && (!ultCompra.has(k) || (a.fecha || '') > ultCompra.get(k).fecha)) ultCompra.set(k, pu); };
+    comprasAll.docs.forEach(d => tomarC(d.data()));
+    cocinaComprasAll.docs.forEach(d => tomarC(d.data()));
+    ultCompra.forEach((pu, k) => addPC(k, pu));
+    // PRECIO DE VENTA (solo del Excel)
+    const precioVentaExcel = new Map();
+    pvSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.nombre); const pv = parseFloat(a.precio_venta) || 0; if (pv > 0 && !precioVentaExcel.has(k)) precioVentaExcel.set(k, pv); });
+
+    // COMPRAS por día (monto en soles)
     const comprasPorDia = {};
     let totalCompras = 0;
     comprasSnap.docs.forEach(d => { const a = d.data(); const monto = parseFloat(a.precio_total) || 0; if (monto > 0) { totalCompras += monto; comprasPorDia[a.fecha] = (comprasPorDia[a.fecha] || 0) + monto; } });
-    // VENTAS por día (ingresos; si el item tiene precio_venta registrado, estimar ingreso real)
+
+    // VENTAS en DINERO: cantidad × precio de venta (del Excel si existe, si no 0)
     const ventasPorDia = {};
     let totalVentas = 0;
-    ventasSnap.docs.forEach(d => { const a = d.data(); const cant = parseFloat(a.cantidad) || 0; ventasPorDia[a.fecha] = (ventasPorDia[a.fecha] || 0) + cant; });
-    totalVentas = Object.values(ventasPorDia).reduce((s, v) => s + v, 0);
-    // GASTOS (costos operativos: planilla, servicios, otros) por día
+    let ventasSinPrecio = 0;
+    ventasSnap.docs.forEach(d => {
+      const a = d.data();
+      const cant = parseFloat(a.cantidad) || 0;
+      const pv = precioVentaExcel.get(normV(a.nombre)) || 0;
+      const monto = cant * pv;
+      if (pv <= 0) ventasSinPrecio += cant;
+      totalVentas += monto;
+      ventasPorDia[a.fecha] = (ventasPorDia[a.fecha] || 0) + monto;
+    });
+    totalVentas = Math.round(totalVentas * 100) / 100;
+
+    // GASTOS (costos operativos) por día
     const gastosPorDia = {};
     let totalGastos = 0;
     costosSnap.docs.forEach(d => { const a = d.data(); const monto = parseFloat(a.monto) || 0; if (monto > 0) { totalGastos += monto; gastosPorDia[a.fecha] = (gastosPorDia[a.fecha] || 0) + monto; } });
-    // Días del periodo
-    const dias = [];
-    let d = new Date(ini + 'T12:00:00');
-    const dFin = new Date(fin + 'T12:00:00');
-    while (d <= dFin) { dias.push(d.toISOString().split('T')[0]); d.setDate(d.getDate() + 1); }
-    // Valor invertido en stock (cantidad actual × precio de compra)
-    const normV = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-    const precioCompraUni = new Map(); // nombre -> precio compra (stock > cocina > barra)
-    const addPC = (nombre, pc) => { const k = normV(nombre); if (pc > 0 && !precioCompraUni.has(k)) precioCompraUni.set(k, pc); };
-    spSnap.docs.forEach(d => { const a = d.data(); addPC(a.nombre, parseFloat(a.precio) || parseFloat(a.ultimo_precio_compra) || 0); });
-    cocinaPreciosSnap.docs.forEach(d => { const a = d.data(); addPC(a.ingrediente, parseFloat(a.precio_compra) || parseFloat(a.ultimo_precio_compra) || 0); });
-    barraPreciosSnap.docs.forEach(d => { const a = d.data(); addPC(a.ingrediente, parseFloat(a.precio_compra) || parseFloat(a.ultimo_precio_compra) || 0); });
+    totalGastos = Math.round(totalGastos * 100) / 100;
+
+    // VALOR EN STOCK (cantidad actual × precio de compra)
+    const stockPrecio = (nombre, cant) => { const pc = precioCompraUni.get(normV(nombre)) || 0; return pc > 0 && cant > 0 ? pc * cant : 0; };
     let valorAlmacenes = 0, valorBarra = 0, valorCocina = 0;
-    // ALMACENES: cantidad actual en inventario × precio compra
-    const invItems = {};
-    invSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.nombre); const pc = precioCompraUni.get(k) || 0; const cant = parseFloat(a.stock_apertura) || 0; if (pc > 0 && cant > 0) valorAlmacenes += pc * cant; });
-    // BARRA/STOCK
-    barraStockSnap.docs.forEach(d => { const a = d.data(); const pc = precioCompraUni.get(normV(a.ingrediente)) || 0; const cant = parseFloat(a.cantidad) || 0; if (pc > 0 && cant > 0) valorBarra += pc * cant; });
-    // COCINA/STOCK
-    cocinaStockSnap.docs.forEach(d => { const a = d.data(); const pc = precioCompraUni.get(normV(a.ingrediente)) || 0; const cant = parseFloat(a.cantidad) || 0; if (pc > 0 && cant > 0) valorCocina += pc * cant; });
-    // GASTO EN INSUMOS = total compras (el costo de lo comprado en el periodo)
+    // ALMACENES: stock actual (inventario.stock_apertura)
+    invSnap.docs.forEach(d => { const a = d.data(); valorAlmacenes += stockPrecio(a.nombre, parseFloat(a.stock_apertura) || 0); });
+    // BARRA/STOCK: usar el cierre del diario de hoy si existe (igual que la vista), si no cantidad
+    const barraCierre = {};
+    barraDiarioSnap.docs.forEach(d => { const a = d.data(); if (a.fecha === hoy) barraCierre[Number(a.id)] = parseFloat(a.cantidad) ?? 0; });
+    barraStockSnap.docs.forEach(d => { const a = d.data(); const cant = barraCierre[Number(d.id)] !== undefined ? barraCierre[Number(d.id)] : (parseFloat(a.cantidad) || 0); valorBarra += stockPrecio(a.ingrediente, cant); });
+    // COCINA/STOCK: usar el cierre del diario de hoy (igual que la vista de COCINA/STOCK)
+    const cocinaCierre = {};
+    cocinaDiarioSnap.docs.forEach(d => { const a = d.data(); if (a.fecha === hoy) cocinaCierre[Number(a.item_id)] = parseFloat(a.stock_cierre) ?? 0; });
+    cocinaStockSnap.docs.forEach(d => { const a = d.data(); const cant = cocinaCierre[Number(d.id)] !== undefined ? cocinaCierre[Number(d.id)] : (parseFloat(a.cantidad) || 0); valorCocina += stockPrecio(a.ingrediente, cant); });
+
     const resumen = {
-      periodo: { ini, fin, dias: dias.length },
+      periodo: { ini, fin, dias: 0 },
       compras: { total: Math.round(totalCompras * 100) / 100, porDia: comprasPorDia },
-      ventas: { total: totalVentas, porDia: ventasPorDia },
-      gastos: { total: Math.round(totalGastos * 100) / 100, porDia: gastosPorDia },
+      ventas: { total: totalVentas, porDia: ventasPorDia, sinPrecio: ventasSinPrecio },
+      gastos: { total: totalGastos, porDia: gastosPorDia },
       gananciaNeta: Math.round((totalVentas - totalCompras - totalGastos) * 100) / 100,
       stock: {
         almacenes: Math.round(valorAlmacenes * 100) / 100,

@@ -299,19 +299,10 @@ function fmtS(n) { return 'S/ ' + (parseFloat(n) || 0).toFixed(2).replace(/\B(?=
 function fmtN(n) { return (parseFloat(n) || 0).toLocaleString('es-PE'); }
 
 function renderAnalisis(cont, r) {
-  // Serie diaria: compras vs ventas vs gastos
-  const fechas = Object.keys(r.compras.porDia || {});
-  const setF = new Set([...Object.keys(r.compras.porDia || {}), ...Object.keys(r.ventas.porDia || {}), ...Object.keys(r.gastos.porDia || {})]);
-  const series = [...setF].sort();
-  const cVal = series.map(f => parseFloat((r.compras.porDia || {})[f]) || 0);
-  const vVal = series.map(f => parseFloat((r.ventas.porDia || {})[f]) || 0);
-  const gVal = series.map(f => parseFloat((r.gastos.porDia || {})[f]) || 0);
-  const etiquetas = series.map(f => f.slice(5));
-  // Tarjetas resumen
   const neto = r.gananciaNeta || 0;
   const html = `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.6rem;margin-bottom:1rem;">
-      <div style="background:#0f3460;color:#fff;border-radius:8px;padding:0.75rem 1rem;"><div style="font-size:0.78rem;opacity:.85;">VENTAS (unds)</div><div style="font-size:1.3rem;font-weight:700;">${fmtN(r.ventas.total)}</div></div>
+      <div style="background:#0f3460;color:#fff;border-radius:8px;padding:0.75rem 1rem;"><div style="font-size:0.78rem;opacity:.85;">VENTAS</div><div style="font-size:1.3rem;font-weight:700;">${fmtS(r.ventas.total)}</div>${r.ventas.sinPrecio > 0 ? `<div style="font-size:0.7rem;opacity:.7;">(${fmtN(r.ventas.sinPrecio)} unds sin precio venta)</div>` : ''}</div>
       <div style="background:#e65100;color:#fff;border-radius:8px;padding:0.75rem 1rem;"><div style="font-size:0.78rem;opacity:.85;">COMPRAS (insumos)</div><div style="font-size:1.3rem;font-weight:700;">${fmtS(r.compras.total)}</div></div>
       <div style="background:#c62828;color:#fff;border-radius:8px;padding:0.75rem 1rem;"><div style="font-size:0.78rem;opacity:.85;">GASTOS</div><div style="font-size:1.3rem;font-weight:700;">${fmtS(r.gastos.total)}</div></div>
       <div style="background:${neto >= 0 ? '#2e7d32' : '#b71c1c'};color:#fff;border-radius:8px;padding:0.75rem 1rem;"><div style="font-size:0.78rem;opacity:.85;">GANANCIA NETA APROX.</div><div style="font-size:1.3rem;font-weight:700;">${fmtS(neto)}</div></div>
@@ -324,22 +315,11 @@ function renderAnalisis(cont, r) {
         <div><span style="font-size:0.8rem;color:#666;">COCINA/STOCK</span><br><b>${fmtS(r.stock.cocina)}</b></div>
         <div><span style="font-size:0.8rem;color:#666;">TOTAL</span><br><b style="color:#0f3460;">${fmtS(r.stock.total)}</b></div>
       </div>
-      <div style="margin-top:0.75rem;"><canvas id="analisis-stock-chart" height="70"></canvas></div>
+      <div style="margin-top:0.75rem;max-width:320px;margin-left:auto;margin-right:auto;"><canvas id="analisis-stock-chart" height="150"></canvas></div>
     </div>
-    <div style="background:#f5f7fa;border:1px solid #e0e0e0;border-radius:8px;padding:0.75rem 1rem;margin-bottom:1rem;">
-      <div style="font-weight:700;color:#0f3460;margin-bottom:0.3rem;">📈 COMPRAS vs VENTAS vs GASTOS (diario)</div>
-      <div style="font-size:0.75rem;color:#666;margin-bottom:0.5rem;">
-        <span style="display:inline-block;width:12px;height:12px;background:#e65100;border-radius:2px;margin-right:0.25rem;"></span>Compras
-        <span style="display:inline-block;width:12px;height:12px;background:#0f3460;border-radius:2px;margin:0 0.25rem 0 0.75rem;"></span>Ventas
-        <span style="display:inline-block;width:12px;height:12px;background:#c62828;border-radius:2px;margin:0 0.25rem 0 0.75rem;"></span>Gastos
-      </div>
-      <canvas id="analisis-chart" height="220"></canvas>
-    </div>
-    <p style="font-size:0.78rem;color:#888;">GANANCIA NETA APROX. = Ventas − Compras (insumos) − Gastos. El valor en stock se calcula con la cantidad actual × precio de compra de cada producto.</p>`;
+    <p style="font-size:0.78rem;color:#888;">GANANCIA NETA APROX. = Ventas (precio de venta × cantidad) − Compras (insumos) − Gastos. El valor en stock se calcula con la cantidad actual × precio de compra de cada producto.</p>`;
   cont.innerHTML = html;
-  // Gráfico de barras agrupadas (canvas nativo)
-  dibujarChart('analisis-chart', etiquetas, [cVal, vVal, gVal], ['#e65100', '#0f3460', '#c62828']);
-  // Gráfico del stock (donut)
+  // Donut del stock (centrado y completo)
   dibujarDonut('analisis-stock-chart', [
     { label: 'STOCKS', valor: r.stock.almacenes, color: '#0f3460' },
     { label: 'BARRA', valor: r.stock.barra, color: '#6a1b9a' },
@@ -385,13 +365,13 @@ function dibujarDonut(id, items) {
   const cv = document.getElementById(id);
   if (!cv) return;
   const ctx = cv.getContext('2d');
-  const W = cv.width = cv.clientWidth || 600;
-  const H = cv.height = 70;
+  const W = cv.width = cv.clientWidth || 320;
+  const H = cv.height = 160;
   ctx.clearRect(0, 0, W, H);
   const total = items.reduce((s, i) => s + (parseFloat(i.valor) || 0), 0);
-  if (total <= 0) { ctx.fillStyle = '#999'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('Sin precios de compra para valorizar', W / 2, H / 2); return; }
-  const R = Math.min(W / 2, H) - 8;
   const cx = W / 2, cy = H / 2;
+  const R = Math.min(W, H) / 2 - 10;
+  if (total <= 0) { ctx.fillStyle = '#999'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('Sin precios de compra para valorizar', cx, cy); return; }
   let ang = -Math.PI / 2;
   items.forEach(it => {
     const v = parseFloat(it.valor) || 0;
@@ -401,9 +381,18 @@ function dibujarDonut(id, items) {
     ctx.fillStyle = it.color; ctx.fill();
     ang += a;
   });
-  ctx.beginPath(); ctx.arc(cx, cy, R * 0.55, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
-  ctx.fillStyle = '#0f3460'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText(fmtS(total), cx, cy + 4);
+  // Leyenda al costado derecho
+  let ly = 20;
+  items.forEach(it => {
+    ctx.fillStyle = it.color; ctx.fillRect(cx + R + 14, ly - 10, 12, 12);
+    ctx.fillStyle = '#444'; ctx.font = '11px sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText(it.label + ': ' + fmtS(it.valor), cx + R + 32, ly);
+    ly += 18;
+  });
+  // Centro
+  ctx.beginPath(); ctx.arc(cx, cy, R * 0.5, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.fillStyle = '#0f3460'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(fmtS(total), cx, cy + 5);
 }
 
 function irBaseDatos() {
