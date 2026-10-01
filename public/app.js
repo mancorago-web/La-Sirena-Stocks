@@ -10652,10 +10652,11 @@ const pt = precioTotal(r);
         else {
           cat = String(r.categoria || '').trim().toUpperCase();
           if (!cat) cat = famMap[String(r.nombre || '').trim().toUpperCase()];
-          if (!cat) {
+          // Si la familia de cocina es SIN CLASIFICAR, mejor clasificar por nombre (ej. CORONA -> CERVEZAS)
+          if (!cat || cat === 'SIN CLASIFICAR') {
             if (String(r.destino || '') === 'stocks') cat = clasificarStock(r.nombre);
             else if (String(r.destino || '') === 'barra') cat = 'BARRA';
-            else if (String(r.destino || '') === 'cocina') cat = 'OTROS';
+            else if (String(r.destino || '') === 'cocina') cat = (cat === 'SIN CLASIFICAR' ? 'OTROS' : 'OTROS');
             else cat = String(r.destino || 'OTROS').toUpperCase();
           }
         }
