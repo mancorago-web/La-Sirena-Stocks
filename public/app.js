@@ -10891,9 +10891,7 @@ function renderCostoGruposPorCampo(prefix, container, cfg, grupos) {
   const gruposDetalle = (grupos || []).filter(g => g.detalleVentas);
   const peticiones = gruposNormales.map(g => api('GET', '/api/costos?tipo=' + g.tipo + '&mes=' + mes));
   if (gruposDetalle.length) {
-    const [yy, mm] = mes.split('-').map(Number);
-    const ultimoDia = new Date(yy, mm, 0).getDate();
-    peticiones.push(api('GET', '/api/ventas/por-dia?fecha_inicio=' + mes + '-01&fecha_fin=' + mes + '-' + String(ultimoDia).padStart(2, '0')).catch(() => ({ dias: [], totalGeneral: 0 })));
+    peticiones.push(cargarDetalleVentasMes(mes, prefix));
   }
   Promise.all(peticiones).then(results => {
     const lists = results.slice(0, gruposNormales.length);
@@ -10903,9 +10901,9 @@ function renderCostoGruposPorCampo(prefix, container, cfg, grupos) {
     let detalleHtml = '';
     let detalleTotal = 0;
     if (gruposDetalle.length) {
-      const resp = results[gruposNormales.length] || { dias: [], totalGeneral: 0 };
+      const resp = results[gruposNormales.length] || { dias: [], totalGeneral: 0, mes };
       detalleTotal = resp.totalGeneral || 0;
-      detalleHtml = buildDetalleVentasHTML(resp.dias || [], prefix);
+      detalleHtml = buildDetalleVentasHTML(resp.dias || [], prefix, resp.mes || mes);
     }
     const box = `<div class="autosuma-box" id="autosuma-${prefix}" data-base="${Math.round((built.totalGeneral + detalleTotal) * 100) / 100}">
       <span class="autosuma-label">TOTAL</span>
@@ -10920,11 +10918,38 @@ function renderCostoGruposPorCampo(prefix, container, cfg, grupos) {
   }).catch(e => { console.error(e); container.innerHTML = '<p>Error al cargar.</p>'; });
 }
 
+// Carga el DETALLE DE VENTAS de un mes; si ese mes está vacío, busca automáticamente el último
+// mes con ventas hacia atrás (hasta 12 meses) para no mostrar "nada" al abrir por primera vez.
+async function cargarDetalleVentasMes(mes, prefix) {
+  const resp = await api('GET', '/api/ventas/por-dia?fecha_inicio=' + mes + '-01&fecha_fin=' + finDeMes(mes)).catch(() => null);
+  if (resp && resp.dias && resp.dias.length) return resp;
+  // Mes sin ventas: retroceder buscando el último mes con datos
+  let m = mes;
+  for (let i = 0; i < 12; i++) {
+    const [y, mm] = m.split('-').map(Number);
+    m = (mm === 1 ? (y - 1) + '-12' : y + '-' + String(mm - 1).padStart(2, '0'));
+    if (m.slice(0, 7) === mes.slice(0, 7)) break;
+    const r = await api('GET', '/api/ventas/por-dia?fecha_inicio=' + m + '-01&fecha_fin=' + finDeMes(m)).catch(() => null);
+    if (r && r.dias && r.dias.length) {
+      const sel = document.getElementById('mes-pestana-' + prefix);
+      if (sel && sel.value === mes) sel.value = m;
+      return r;
+    }
+  }
+  return resp;
+}
+
+function finDeMes(mes) {
+  const [y, mm] = mes.split('-').map(Number);
+  const ultimoDia = new Date(y, mm, 0).getDate();
+  return mes + '-' + String(ultimoDia).padStart(2, '0');
+}
+
 // Renderiza el grupo DETALLE DE VENTAS: ventas diarias agrupadas por fecha y categoría (STOCK/BARRA/COCINA)
-function buildDetalleVentasHTML(dias, prefix) {
+function buildDetalleVentasHTML(dias, prefix, mes) {
   if (!dias || !dias.length) {
     return '<div class="grupo-header" style="margin-top:1rem;"><span>DETALLE DE VENTAS</span><span class="grupo-subtotal">S/ 0.00</span></div>' +
-      '<p style="color:#888;">No hay ventas en este mes (usa el DETALLE DE VENTAS del menú VENTAS para revisar).</p>';
+      '<p style="color:#888;">No hay ventas en este mes' + (mes ? ' (' + mes + ')' : '') + '.</p>';
   }
   let totalGeneral = 0;
   dias.forEach(d => { totalGeneral += d.total || 0; });
