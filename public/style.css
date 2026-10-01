@@ -88,6 +88,15 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .category-btn.menu-costos .category-label { color: #2e7d32; }
 .category-btn.menu-costos .category-desc { color: #2e7d32; }
 .menu-bd { grid-column: 4; grid-row: 1; }
+.menu-analisis { grid-column: 4; grid-row: 3; align-self: start; }
+.category-btn.menu-analisis {
+  background: #e3f2fd;
+  border-color: #90caf9;
+}
+.category-btn.menu-analisis:hover { border-color: #1565c0; box-shadow: 0 4px 16px rgba(21,101,192,0.2); }
+.category-btn.menu-analisis .category-icon { color: #1565c0; }
+.category-btn.menu-analisis .category-label { color: #1565c0; }
+.category-btn.menu-analisis .category-desc { color: #1565c0; }
 .category-btn.menu-bd {
   background: #fff3e0;
   border-color: #ffb74d;
@@ -119,7 +128,8 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .category-btn.menu-compras,
 .category-btn.menu-ventas,
 .category-btn.menu-bd,
-.category-btn.menu-costos {
+.category-btn.menu-costos,
+.category-btn.menu-analisis {
   padding: 0.5rem 0.35rem;
   height: 96px;
   min-height: 96px;
@@ -131,15 +141,18 @@ nav { background: #1a237e; color: #fff; padding: 1rem 2rem; display: flex; align
 .category-btn.menu-compras .category-icon,
 .category-btn.menu-ventas .category-icon,
 .category-btn.menu-bd .category-icon,
-.category-btn.menu-costos .category-icon { font-size: 1.35rem; }
+.category-btn.menu-costos .category-icon,
+.category-btn.menu-analisis .category-icon { font-size: 1.35rem; }
 .category-btn.menu-compras .category-label,
 .category-btn.menu-ventas .category-label,
 .category-btn.menu-bd .category-label,
-.category-btn.menu-costos .category-label { font-size: 0.72rem; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.category-btn.menu-costos .category-label,
+.category-btn.menu-analisis .category-label { font-size: 0.72rem; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .category-btn.menu-compras .category-desc,
 .category-btn.menu-ventas .category-desc,
 .category-btn.menu-bd .category-desc,
-.category-btn.menu-costos .category-desc { display: none; }
+.category-btn.menu-costos .category-desc,
+.category-btn.menu-analisis .category-desc { display: none; }
 .menu-eventos { grid-column: 1; grid-row: 3; }
 .menu-limpieza { grid-column: 3; grid-row: 3; }
 .menu-ventas { grid-column: 2; grid-row: 4; }
@@ -573,10 +586,10 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .category-icon { font-size: 1.3rem; }
   .category-label { font-size: 0.66rem; letter-spacing: 0.5px; }
   .category-desc { display: none; }
-  .category-btn.menu-compras, .category-btn.menu-ventas, .category-btn.menu-bd, .category-btn.menu-costos { height: 58px; min-height: 58px; max-height: 58px; padding: 0.4rem 0.25rem; }
-  .category-btn.menu-compras .category-icon, .category-btn.menu-ventas .category-icon, .category-btn.menu-bd .category-icon, .category-btn.menu-costos .category-icon { font-size: 1.1rem; }
-  .category-btn.menu-compras .category-label, .category-btn.menu-ventas .category-label, .category-btn.menu-bd .category-label, .category-btn.menu-costos .category-label { font-size: 0.6rem; }
-  .category-btn.menu-compras .category-desc, .category-btn.menu-ventas .category-desc, .category-btn.menu-bd .category-desc, .category-btn.menu-costos .category-desc { display: none; }
+  .category-btn.menu-compras, .category-btn.menu-ventas, .category-btn.menu-bd, .category-btn.menu-costos, .category-btn.menu-analisis { height: 58px; min-height: 58px; max-height: 58px; padding: 0.4rem 0.25rem; }
+  .category-btn.menu-compras .category-icon, .category-btn.menu-ventas .category-icon, .category-btn.menu-bd .category-icon, .category-btn.menu-costos .category-icon, .category-btn.menu-analisis .category-icon { font-size: 1.1rem; }
+  .category-btn.menu-compras .category-label, .category-btn.menu-ventas .category-label, .category-btn.menu-bd .category-label, .category-btn.menu-costos .category-label, .category-btn.menu-analisis .category-label { font-size: 0.6rem; }
+  .category-btn.menu-compras .category-desc, .category-btn.menu-ventas .category-desc, .category-btn.menu-bd .category-desc, .category-btn.menu-costos .category-desc, .category-btn.menu-analisis .category-desc { display: none; }
   .user-info {
     width: auto;
     display: flex !important;
@@ -731,9 +744,9 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .category-icon { font-size: 1.15rem; }
   .category-label { font-size: 0.6rem; }
   .category-desc { display: none; }
-  .category-btn.menu-compras, .category-btn.menu-ventas, .category-btn.menu-bd, .category-btn.menu-costos { height: 50px; min-height: 50px; max-height: 50px; padding: 0.35rem 0.2rem; }
-  .category-btn.menu-compras .category-icon, .category-btn.menu-ventas .category-icon, .category-btn.menu-bd .category-icon, .category-btn.menu-costos .category-icon { font-size: 1rem; }
-  .category-btn.menu-compras .category-label, .category-btn.menu-ventas .category-label, .category-btn.menu-bd .category-label, .category-btn.menu-costos .category-label { font-size: 0.55rem; }
+  .category-btn.menu-compras, .category-btn.menu-ventas, .category-btn.menu-bd, .category-btn.menu-costos, .category-btn.menu-analisis { height: 50px; min-height: 50px; max-height: 50px; padding: 0.35rem 0.2rem; }
+  .category-btn.menu-compras .category-icon, .category-btn.menu-ventas .category-icon, .category-btn.menu-bd .category-icon, .category-btn.menu-costos .category-icon, .category-btn.menu-analisis .category-icon { font-size: 1rem; }
+  .category-btn.menu-compras .category-label, .category-btn.menu-ventas .category-label, .category-btn.menu-bd .category-label, .category-btn.menu-costos .category-label, .category-btn.menu-analisis .category-label { font-size: 0.55rem; }
 }
 
 /* --- Botones de acción de PORCIONAMIENTO --- */
