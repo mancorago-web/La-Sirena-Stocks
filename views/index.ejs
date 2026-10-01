@@ -100,6 +100,7 @@
       <button class="tab" data-tab="reportes">Reportes</button>
       <button class="tab" data-tab="bajas">Bajas</button>
       <button class="tab" data-tab="juan">Juan</button>
+      <button class="tab" data-tab="precioventa">Precio Venta</button>
       <button class="tab" data-tab="precios" style="display:none">Base de Datos</button>
       <button class="tab" data-tab="busquedaventas" style="display:none">Búsqueda Ventas</button>
     </div>
@@ -279,6 +280,19 @@
         </div>
       </div>
       <div id="reporte-diferencias"></div>
+    </div>
+
+    <div id="tab-precioventa" class="tab-content">
+      <div class="header-actions">
+        <h2>Precio Venta — Items de STOCKS</h2>
+        <div class="controles-dia">
+          <input type="text" id="buscar-precio-venta" placeholder="Buscar item..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:250px;" oninput="buscarTablaBarra(this.value, 'accordion-precio-venta', 'tr[data-pv-id]')">
+          <button class="btn-guardar-dia" onclick="guardarPrecioVentaStocks()">💾 GUARDAR</button>
+          <button class="btn-detalles" onclick="exportarPrecioVentaStocks()">📊 EXPORTAR</button>
+        </div>
+        <div style="font-size:0.75rem;color:#888;margin-top:0.3rem;">Precio de venta al consumidor de cada item que se vende por VENTAS (Excel). Se actualiza solo al cargar el Excel con la columna PRECIO VENTA, o manualmente aquí. Muestra la ganancia aproximada (precio venta − costo).</div>
+      </div>
+      <div id="accordion-precio-venta"></div>
     </div>
 
     <div id="tab-precios" class="tab-content">

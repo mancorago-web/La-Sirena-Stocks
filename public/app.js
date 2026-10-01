@@ -117,6 +117,7 @@ document.querySelectorAll('.tab').forEach(tab => {
       stocks: () => cargarStocks(),
       reportes: () => cargarReportes(),
       juan: () => cargarJuan(),
+      precioventa: () => cargarPrecioVentaStocks(),
       precios: () => cargarBaseDatosStocks(),
       busquedaventas: () => cargarSugerenciasBusquedaVentas()
     };
@@ -187,6 +188,7 @@ function refrescarVista() {
       stocks: () => cargarStocks(),
       reportes: () => cargarReportes(),
       juan: () => cargarJuan(),
+      precioventa: () => cargarPrecioVentaStocks(),
       precios: () => cargarBaseDatosStocks()
     };
     if (loaders[v.tab]) loaders[v.tab]();
@@ -1070,6 +1072,7 @@ function parseVentasExcel(file, esPrueba) {
       const colFecha = findKey(['fecha', 'date', 'dia']);
       const colItem = findKey(['item', 'producto', 'nombre', 'articulo', 'descripcion']);
       const colCant = findKey(['cantidad', 'cant', 'qty', 'und']);
+      const colPrecioVenta = findKey(['precioventa', 'preciodeventa', 'precio', 'pv']);
       if (!colItem || !colCant) { alert('No encontré columnas de Item y Cantidad. Usa columnas como: Fecha | Item | Cantidad'); return; }
       // Usar la FECHA del Excel (si existe) y reflejarla en el selector de fecha de VENTAS
       let fechaExcel = '';
@@ -1085,6 +1088,7 @@ function parseVentasExcel(file, esPrueba) {
         item: String(r[colItem] || '').trim(),
         cantidad: parseFloat(String(r[colCant] || '').replace(',', '.')) || 0,
         fecha: (colFecha && normalizarFechaExcel(r[colFecha])) || fechaRegistro,
+        precio_venta: colPrecioVenta ? (parseFloat(String(r[colPrecioVenta] || '').replace(',', '.')) || 0) : 0,
         destino: ''
       })).filter(x => x.item && x.cantidad > 0 && !esFilaNoProducto(x.item));
       if (esPrueba) { ventasPruebaRows = filas; } else { ventasImportRows = filas; }
@@ -1635,7 +1639,7 @@ function registrarVentasFilas(filas, onDone) {
     const destino = r.destino || 'stocks';
     const key = fecha + '|' + destino;
     if (!grupos[key]) grupos[key] = [];
-    grupos[key].push({ nombre: r.matched || r.item, cantidad: r.cantidad, destino, almacenes: r.almacenes, ingredientesStocks: r.ingredientesStocks });
+    grupos[key].push({ nombre: r.matched || r.item, cantidad: r.cantidad, destino, almacenes: r.almacenes, ingredientesStocks: r.ingredientesStocks, precio_venta: r.precio_venta || 0 });
   });
   let keys = Object.keys(grupos);
   if (!keys.length) { if (onDone) onDone(); return; }
@@ -3565,6 +3569,64 @@ function eliminarAlmacen(id) {
 
 function editarAlmacen(id, nombre, descripcion) {
   showModal('almacen', { id, nombre, descripcion });
+}
+
+// --- STOCKS: pestaña PRECIO VENTA (precio de venta de items vendidos por VENTAS/Excel) ---
+function cargarPrecioVentaStocks() {
+  const container = document.getElementById('accordion-precio-venta');
+  if (!container) return;
+  container.innerHTML = '<p>Cargando...</p>';
+  Promise.all([api('GET', '/api/stock/precios'), api('GET', '/api/cocina/precios'), api('GET', '/api/barra/precios')]).then(([stocks, cocina, barra]) => {
+    const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    const mapa = new Map();
+    (stocks || []).forEach(s => { const k = norm(s.nombre); if (!mapa.has(k)) mapa.set(k, { nombre: s.nombre, precio_compra: parseFloat(s.precio) || 0, precio_venta: parseFloat(s.precio_venta) || 0, unidad: s.unidad || s.unidad_venta || '' }); });
+    (cocina || []).forEach(s => { const k = norm(s.ingrediente); if (!mapa.has(k)) mapa.set(k, { nombre: s.ingrediente, precio_compra: parseFloat(s.precio_compra) || parseFloat(s.ultimo_precio_compra) || 0, precio_venta: parseFloat(s.precio) || 0, unidad: s.unidad || '' }); });
+    (barra || []).forEach(s => { const k = norm(s.ingrediente); if (!mapa.has(k)) mapa.set(k, { nombre: s.ingrediente, precio_compra: parseFloat(s.precio_compra) || parseFloat(s.ultimo_precio_compra) || 0, precio_venta: parseFloat(s.precio) || 0, unidad: s.unidad || '' }); });
+    const filas = [...mapa.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    function fila(i) {
+      const pc = i.precio_compra || 0;
+      const pv = i.precio_venta || 0;
+      const ganancia = pc > 0 && pv > 0 ? (pv - pc) : null;
+      return `<tr data-pv-id="${esc(i.nombre)}">
+        <td>${esc(i.nombre)}</td>
+        <td style="font-size:0.8rem;color:#888;">${esc(i.unidad)}</td>
+        <td>${pc > 0 ? 'S/' + pc.toFixed(2) : '—'}</td>
+        <td><input type="number" class="input-pv-stock" value="${pv || ''}" step="0.01" min="0" style="width:90px;padding:0.3rem;border:1px solid #ccc;border-radius:4px;"></td>
+        <td style="font-weight:700;color:${ganancia === null ? '#888' : (ganancia < 0 ? '#c62828' : '#2e7d32')};">${ganancia === null ? '—' : 'S/' + ganancia.toFixed(2)}</td>
+      </tr>`;
+    }
+    container.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Unidad</th><th>Precio Compra</th><th>Precio Venta</th><th>Ganancia Aprox.</th></tr></thead><tbody>'
+      + filas.map(fila).join('') + '</tbody></table></div>';
+  }).catch(() => { container.innerHTML = '<p style="color:#c62828;">Error cargando precios.</p>'; });
+}
+
+function guardarPrecioVentaStocks() {
+  const btn = document.querySelector('#tab-precioventa .btn-guardar-dia');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+  const updates = [];
+  document.querySelectorAll('#accordion-precio-venta tr[data-pv-id]').forEach(tr => {
+    const nombre = tr.dataset.pvId;
+    const pv = parseFloat(tr.querySelector('.input-pv-stock').value) || 0;
+    if (pv > 0) updates.push({ nombre, precio_venta: pv });
+  });
+  if (!updates.length) { if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR'; } alert('Ingresa al menos un precio de venta'); return; }
+  api('POST', '/api/stock/precios/venta', { items: updates }).then(() => {
+    if (btn) { btn.textContent = '✓ Guardado'; setTimeout(() => { btn.disabled = false; btn.textContent = '💾 GUARDAR'; }, 2000); }
+    showToast('Precios de venta guardados');
+    cargarPrecioVentaStocks();
+  }).catch(() => { if (btn) { btn.disabled = false; btn.textContent = '💾 GUARDAR'; } alert('Error al guardar'); });
+}
+
+function exportarPrecioVentaStocks() {
+  const wsData = [['Item', 'Unidad', 'Precio Compra', 'Precio Venta', 'Ganancia Aprox.']];
+  document.querySelectorAll('#accordion-precio-venta tr[data-pv-id]').forEach(tr => {
+    const tds = tr.querySelectorAll('td');
+    wsData.push([tds[0].textContent.trim(), tds[1].textContent.trim(), tds[2].textContent.trim(), tds[3].querySelector('input').value, tds[4].textContent.trim()]);
+  });
+  const libro = XLSX.utils.book_new();
+  const hoja = XLSX.utils.aoa_to_sheet(wsData);
+  XLSX.utils.book_append_sheet(libro, hoja, 'Precio Venta');
+  XLSX.writeFile(libro, 'PrecioVenta_Stocks.xlsx');
 }
 
 function guardarMinimosStocks() {

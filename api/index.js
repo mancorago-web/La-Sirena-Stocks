@@ -2593,6 +2593,40 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       await logBatch.commit();
     }
 
+    // Guardar PRECIO VENTA del Excel en la colección correspondiente (para ganancia aproximada).
+    // Se actualiza SOLO si el Excel trae precio_venta > 0 (no pisa precios ya cargados con 0).
+    const preciosAVenta = (items || []).filter(i => parseFloat(i.precio_venta) > 0);
+    if (preciosAVenta.length) {
+      const spSnap = await col('stock_precios').get();
+      const barraRecSnap = await col('recetas').get();
+      const cocinaRecSnap = await col('cocina_recetas').get();
+      const normV = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+      const spNorm = new Map(); spSnap.docs.forEach(d => { const a = d.data(); spNorm.set(normV(a.nombre), { ref: d.ref, data: a }); });
+      const barraNorm = new Map(); barraRecSnap.docs.forEach(d => { const a = d.data(); barraNorm.set(normV(a.nombre), { ref: d.ref, data: a }); });
+      const cocinaNorm = new Map(); cocinaRecSnap.docs.forEach(d => { const a = d.data(); cocinaNorm.set(normV(a.nombre), { ref: d.ref, data: a }); });
+      const batchPv = db.batch();
+      let opsPv = 0;
+      for (const it of preciosAVenta) {
+        const nombre = String(it.matched || it.nombre || '').trim();
+        const dest = String(it.destino || '').toLowerCase();
+        const pv = Math.round((parseFloat(it.precio_venta) || 0) * 100) / 100;
+        const nk = normV(nombre);
+        const clave = dest === 'barra' ? barraNorm : (dest === 'cocina' ? cocinaNorm : spNorm);
+        const entry = clave.get(nk);
+        if (entry) {
+          if (dest === 'barra' || dest === 'cocina') {
+            batchPv.update(entry.ref, { precio: pv, updated_at: new Date().toISOString() });
+          } else {
+            batchPv.update(entry.ref, { precio_venta: pv, updated_at: new Date().toISOString() });
+          }
+          opsPv++;
+          if (opsPv >= 400) { await batchPv.commit(); batchPv = db.batch(); opsPv = 0; }
+        }
+      }
+      if (opsPv) await batchPv.commit();
+      invalidarCache('precios_barra', 'precios_cocina', 'precios_stock', 'basedatos_unificada');
+    }
+
     invalidarCachesLectura();
     res.json({ ok: true, resumen });
   } catch (e) {
@@ -5075,6 +5109,40 @@ app.get('/api/stock/precios/items', async (req, res) => {
     });
     names.sort((a, b) => a.localeCompare(b));
     res.json(names);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Guarda precios de venta de varios items de STOCKS (pestaña PRECIO VENTA). Crea el registro si falta.
+app.post('/api/stock/precios/venta', async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'items requeridos' });
+    const spSnap = await col('stock_precios').get();
+    const normV = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    const mapa = new Map();
+    spSnap.docs.forEach(d => { const a = d.data(); mapa.set(normV(a.nombre), { ref: d.ref, data: a }); });
+    const batch = db.batch();
+    let ops = 0;
+    for (const it of items) {
+      const nombre = String(it.nombre || '').trim();
+      const pv = Math.round((parseFloat(it.precio_venta) || 0) * 100) / 100;
+      if (!nombre || pv <= 0) continue;
+      const k = normV(nombre);
+      const entry = mapa.get(k);
+      if (entry) {
+        batch.update(entry.ref, { precio_venta: pv, updated_at: new Date().toISOString() });
+      } else {
+        const id = String(spSnap.size + 1 + ops);
+        const ref = col('stock_precios').doc(id);
+        batch.set(ref, { id: Number(id), nombre, unidad: 'UNIDAD', precio: 0, unidad_venta: 'UNIDAD', precio_venta: pv, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+        mapa.set(k, { ref, data: {} });
+      }
+      ops++;
+      if (ops >= 400) { await batch.commit(); batch = db.batch(); ops = 0; }
+    }
+    if (ops) await batch.commit();
+    invalidarCache('precios_stock', 'basedatos_unificada');
+    res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
