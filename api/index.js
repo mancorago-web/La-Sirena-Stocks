@@ -2635,6 +2635,7 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
     invalidarCachesLectura();
     res.json({ ok: true, resumen });
   } catch (e) {
+    console.error('VENTAS/GUARDAR ERROR:', e.message, (e && e.stack ? e.stack.split('\n').slice(0,4).join(' | ') : ''));
     res.status(500).json({ error: e.message });
   }
 });
