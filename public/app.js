@@ -10653,10 +10653,14 @@ const pt = precioTotal(r);
         // EVENTOS SIEMPRE gana: todo lo que se compró para eventos va a EVENTOS (aunque tenga categoría)
         if (String(r.destino || '') === 'eventos') { cat = 'EVENTOS'; }
         else {
+          // SEMILLAS/AGUAS/otros por NOMBRE tienen prioridad sobre una categoría genérica (ABARROTES),
+          // para que LINAZA/AJONJOLI/SEMILLA DE CALABAZA vayan a SEMILLAS aunque la compra diga ABARROTES.
+          const catNombre = clasificarStock(r.nombre);
           cat = String(r.categoria || '').trim().toUpperCase();
-          // Normalizar PESCADO -> PESCADO - BRUTO (todos los pescados van a PESCADO - BRUTO)
           if (cat === 'PESCADO') cat = 'PESCADO - BRUTO';
-          if (!cat) cat = famMap[String(r.nombre || '').trim().toUpperCase()];
+          // Si el nombre es claramente de SEMILLAS (o AGUAS con HIELO), imponer esa categoría
+          if (/LINAZA|SEMILLA|AJONJOLI|PECANA|HIELO/i.test(String(r.nombre || ''))) cat = catNombre;
+          else if (!cat) cat = famMap[String(r.nombre || '').trim().toUpperCase()];
           if (cat === 'PESCADO') cat = 'PESCADO - BRUTO';
           // Si la familia de cocina es SIN CLASIFICAR, mejor clasificar por nombre (ej. CORONA -> CERVEZAS)
           if (!cat || cat === 'SIN CLASIFICAR') {
