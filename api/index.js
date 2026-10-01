@@ -8078,6 +8078,80 @@ app.get('/api/costos/pestanas', authMiddleware, async (req, res) => {
   }
 });
 
+// --- ANALISIS DEL NEGOCIO: compras vs ventas, gastos y valor invertido en stock ---
+// Compras = gastos en insumos (colección compras con precio_total). Ventas = ingresos
+// (colección ventas, destino stocks/barra/cocina). Gastos = costos operativos (costos).
+// Valor en stock = cantidad × precio de compra en ALMACENES + BARRA + COCINA.
+app.get('/api/analisis/resumen', authMiddleware, async (req, res) => {
+  try {
+    const { fecha_inicio, fecha_fin } = req.query;
+    if (!fecha_inicio || !fecha_fin) return res.status(400).json({ error: 'fecha_inicio y fecha_fin requeridos' });
+    const ini = String(fecha_inicio).trim(), fin = String(fecha_fin).trim();
+    if (ini > fin) [ini, fin] = [fin, ini];
+    const [comprasSnap, ventasSnap, costosSnap, invSnap, barraStockSnap, barraPreciosSnap, cocinaStockSnap, cocinaPreciosSnap, spSnap] = await Promise.all([
+      col('compras').where('fecha', '>=', ini).where('fecha', '<=', fin).get(),
+      col('ventas').where('fecha', '>=', ini).where('fecha', '<=', fin).get(),
+      col('costos').where('fecha', '>=', ini).where('fecha', '<=', fin).get(),
+      col('inventario').get(),
+      col('barra_stock').get(),
+      col('barra_precios').get(),
+      col('cocina_stock').get(),
+      col('cocina_precios').get(),
+      col('stock_precios').get(),
+    ]);
+    // COMPRAS por día
+    const comprasPorDia = {};
+    let totalCompras = 0;
+    comprasSnap.docs.forEach(d => { const a = d.data(); const monto = parseFloat(a.precio_total) || 0; if (monto > 0) { totalCompras += monto; comprasPorDia[a.fecha] = (comprasPorDia[a.fecha] || 0) + monto; } });
+    // VENTAS por día (ingresos; si el item tiene precio_venta registrado, estimar ingreso real)
+    const ventasPorDia = {};
+    let totalVentas = 0;
+    ventasSnap.docs.forEach(d => { const a = d.data(); const cant = parseFloat(a.cantidad) || 0; ventasPorDia[a.fecha] = (ventasPorDia[a.fecha] || 0) + cant; });
+    totalVentas = Object.values(ventasPorDia).reduce((s, v) => s + v, 0);
+    // GASTOS (costos operativos: planilla, servicios, otros) por día
+    const gastosPorDia = {};
+    let totalGastos = 0;
+    costosSnap.docs.forEach(d => { const a = d.data(); const monto = parseFloat(a.monto) || 0; if (monto > 0) { totalGastos += monto; gastosPorDia[a.fecha] = (gastosPorDia[a.fecha] || 0) + monto; } });
+    // Días del periodo
+    const dias = [];
+    let d = new Date(ini + 'T12:00:00');
+    const dFin = new Date(fin + 'T12:00:00');
+    while (d <= dFin) { dias.push(d.toISOString().split('T')[0]); d.setDate(d.getDate() + 1); }
+    // Valor invertido en stock (cantidad actual × precio de compra)
+    const normV = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    const precioCompraUni = new Map(); // nombre -> precio compra (stock > cocina > barra)
+    const addPC = (nombre, pc) => { const k = normV(nombre); if (pc > 0 && !precioCompraUni.has(k)) precioCompraUni.set(k, pc); };
+    spSnap.docs.forEach(d => { const a = d.data(); addPC(a.nombre, parseFloat(a.precio) || parseFloat(a.ultimo_precio_compra) || 0); });
+    cocinaPreciosSnap.docs.forEach(d => { const a = d.data(); addPC(a.ingrediente, parseFloat(a.precio_compra) || parseFloat(a.ultimo_precio_compra) || 0); });
+    barraPreciosSnap.docs.forEach(d => { const a = d.data(); addPC(a.ingrediente, parseFloat(a.precio_compra) || parseFloat(a.ultimo_precio_compra) || 0); });
+    let valorAlmacenes = 0, valorBarra = 0, valorCocina = 0;
+    // ALMACENES: cantidad actual en inventario × precio compra
+    const invItems = {};
+    invSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.nombre); const pc = precioCompraUni.get(k) || 0; const cant = parseFloat(a.stock_apertura) || 0; if (pc > 0 && cant > 0) valorAlmacenes += pc * cant; });
+    // BARRA/STOCK
+    barraStockSnap.docs.forEach(d => { const a = d.data(); const pc = precioCompraUni.get(normV(a.ingrediente)) || 0; const cant = parseFloat(a.cantidad) || 0; if (pc > 0 && cant > 0) valorBarra += pc * cant; });
+    // COCINA/STOCK
+    cocinaStockSnap.docs.forEach(d => { const a = d.data(); const pc = precioCompraUni.get(normV(a.ingrediente)) || 0; const cant = parseFloat(a.cantidad) || 0; if (pc > 0 && cant > 0) valorCocina += pc * cant; });
+    // GASTO EN INSUMOS = total compras (el costo de lo comprado en el periodo)
+    const resumen = {
+      periodo: { ini, fin, dias: dias.length },
+      compras: { total: Math.round(totalCompras * 100) / 100, porDia: comprasPorDia },
+      ventas: { total: totalVentas, porDia: ventasPorDia },
+      gastos: { total: Math.round(totalGastos * 100) / 100, porDia: gastosPorDia },
+      gananciaNeta: Math.round((totalVentas - totalCompras - totalGastos) * 100) / 100,
+      stock: {
+        almacenes: Math.round(valorAlmacenes * 100) / 100,
+        barra: Math.round(valorBarra * 100) / 100,
+        cocina: Math.round(valorCocina * 100) / 100,
+        total: Math.round((valorAlmacenes + valorBarra + valorCocina) * 100) / 100,
+      },
+    };
+    res.json(resumen);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/costos/pestanas', authMiddleware, async (req, res) => {
   try {
     const label = String(req.body.label || '').trim();

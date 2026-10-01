@@ -209,6 +209,8 @@ function refrescarVista() {
     cargarCompras();
   } else if (v.cat === 'costos' && v.pestana) {
     cargarCostoCategoria(v.pestana);
+  } else if (v.cat === 'analisis') {
+    cargarAnalisis();
   }
 }
 // Sin actualización automática de la vista: recargar la vista re-renderiza los formularios y
@@ -241,6 +243,168 @@ setInterval(actualizarContadoresMenu, 60000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') actualizarContadoresMenu(); });
 window.addEventListener('resize', dibujarFlujoMenu);
 setTimeout(dibujarFlujoMenu, 300);
+
+// --- ANALISIS DEL NEGOCIO ---
+function irAnalisis() {
+  const modalEl = document.getElementById('modal');
+  if (modalEl) modalEl.style.display = 'none';
+  document.body.classList.add('en-categoria');
+  document.getElementById('main-menu').style.display = 'none';
+  document.getElementById('container').style.display = 'block';
+  document.getElementById('btn-back').style.display = '';
+  window.__vista = { cat: 'analisis' };
+  document.querySelectorAll('.tabs-bar').forEach(tb => tb.style.display = 'none');
+  document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+  const tab = document.getElementById('tab-analisis');
+  if (tab) tab.classList.add('active');
+  if (!document.getElementById('analisis-fecha-ini').value) analisisPeriodo('mes');
+  else cargarAnalisis();
+}
+
+function analisisPeriodo(tipo) {
+  const hoy = new Date();
+  const iniEl = document.getElementById('analisis-fecha-ini');
+  const finEl = document.getElementById('analisis-fecha-fin');
+  if (tipo === 'semana') {
+    const d = new Date(hoy); d.setDate(d.getDate() - 6);
+    iniEl.value = d.toISOString().split('T')[0];
+    finEl.value = hoy.toISOString().split('T')[0];
+  } else if (tipo === 'mes') {
+    iniEl.value = hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0') + '-01';
+    finEl.value = hoy.toISOString().split('T')[0];
+  } else if (tipo === 'trimestre') {
+    const d = new Date(hoy); d.setMonth(d.getMonth() - 2); d.setDate(1);
+    iniEl.value = d.toISOString().split('T')[0];
+    finEl.value = hoy.toISOString().split('T')[0];
+  } else {
+    iniEl.value = hoy.getFullYear() + '-01-01';
+    finEl.value = hoy.toISOString().split('T')[0];
+  }
+  cargarAnalisis();
+}
+
+function cargarAnalisis() {
+  const cont = document.getElementById('analisis-content');
+  if (!cont) return;
+  const ini = document.getElementById('analisis-fecha-ini').value;
+  const fin = document.getElementById('analisis-fecha-fin').value;
+  if (!ini || !fin) { cont.innerHTML = '<p>Selecciona las fechas.</p>'; return; }
+  cont.innerHTML = '<p>Cargando...</p>';
+  api('GET', '/api/analisis/resumen?fecha_inicio=' + encodeURIComponent(ini) + '&fecha_fin=' + encodeURIComponent(fin)).then(r => {
+    renderAnalisis(cont, r);
+  }).catch(() => { cont.innerHTML = '<p style="color:#c62828;">Error cargando el análisis.</p>'; });
+}
+
+function fmtS(n) { return 'S/ ' + (parseFloat(n) || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+function fmtN(n) { return (parseFloat(n) || 0).toLocaleString('es-PE'); }
+
+function renderAnalisis(cont, r) {
+  // Serie diaria: compras vs ventas vs gastos
+  const fechas = Object.keys(r.compras.porDia || {});
+  const setF = new Set([...Object.keys(r.compras.porDia || {}), ...Object.keys(r.ventas.porDia || {}), ...Object.keys(r.gastos.porDia || {})]);
+  const series = [...setF].sort();
+  const cVal = series.map(f => parseFloat((r.compras.porDia || {})[f]) || 0);
+  const vVal = series.map(f => parseFloat((r.ventas.porDia || {})[f]) || 0);
+  const gVal = series.map(f => parseFloat((r.gastos.porDia || {})[f]) || 0);
+  const etiquetas = series.map(f => f.slice(5));
+  // Tarjetas resumen
+  const neto = r.gananciaNeta || 0;
+  const html = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.6rem;margin-bottom:1rem;">
+      <div style="background:#0f3460;color:#fff;border-radius:8px;padding:0.75rem 1rem;"><div style="font-size:0.78rem;opacity:.85;">VENTAS (unds)</div><div style="font-size:1.3rem;font-weight:700;">${fmtN(r.ventas.total)}</div></div>
+      <div style="background:#e65100;color:#fff;border-radius:8px;padding:0.75rem 1rem;"><div style="font-size:0.78rem;opacity:.85;">COMPRAS (insumos)</div><div style="font-size:1.3rem;font-weight:700;">${fmtS(r.compras.total)}</div></div>
+      <div style="background:#c62828;color:#fff;border-radius:8px;padding:0.75rem 1rem;"><div style="font-size:0.78rem;opacity:.85;">GASTOS</div><div style="font-size:1.3rem;font-weight:700;">${fmtS(r.gastos.total)}</div></div>
+      <div style="background:${neto >= 0 ? '#2e7d32' : '#b71c1c'};color:#fff;border-radius:8px;padding:0.75rem 1rem;"><div style="font-size:0.78rem;opacity:.85;">GANANCIA NETA APROX.</div><div style="font-size:1.3rem;font-weight:700;">${fmtS(neto)}</div></div>
+    </div>
+    <div style="background:#f5f7fa;border:1px solid #e0e0e0;border-radius:8px;padding:0.75rem 1rem;margin-bottom:1rem;">
+      <div style="font-weight:700;color:#0f3460;margin-bottom:0.3rem;">💼 VALOR INVERTIDO EN STOCK (hoy)</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.5rem;margin-top:0.5rem;">
+        <div><span style="font-size:0.8rem;color:#666;">STOCKS/ALMACENES</span><br><b>${fmtS(r.stock.almacenes)}</b></div>
+        <div><span style="font-size:0.8rem;color:#666;">BARRA/STOCK</span><br><b>${fmtS(r.stock.barra)}</b></div>
+        <div><span style="font-size:0.8rem;color:#666;">COCINA/STOCK</span><br><b>${fmtS(r.stock.cocina)}</b></div>
+        <div><span style="font-size:0.8rem;color:#666;">TOTAL</span><br><b style="color:#0f3460;">${fmtS(r.stock.total)}</b></div>
+      </div>
+      <div style="margin-top:0.75rem;"><canvas id="analisis-stock-chart" height="70"></canvas></div>
+    </div>
+    <div style="background:#f5f7fa;border:1px solid #e0e0e0;border-radius:8px;padding:0.75rem 1rem;margin-bottom:1rem;">
+      <div style="font-weight:700;color:#0f3460;margin-bottom:0.3rem;">📈 COMPRAS vs VENTAS vs GASTOS (diario)</div>
+      <div style="font-size:0.75rem;color:#666;margin-bottom:0.5rem;">
+        <span style="display:inline-block;width:12px;height:12px;background:#e65100;border-radius:2px;margin-right:0.25rem;"></span>Compras
+        <span style="display:inline-block;width:12px;height:12px;background:#0f3460;border-radius:2px;margin:0 0.25rem 0 0.75rem;"></span>Ventas
+        <span style="display:inline-block;width:12px;height:12px;background:#c62828;border-radius:2px;margin:0 0.25rem 0 0.75rem;"></span>Gastos
+      </div>
+      <canvas id="analisis-chart" height="220"></canvas>
+    </div>
+    <p style="font-size:0.78rem;color:#888;">GANANCIA NETA APROX. = Ventas − Compras (insumos) − Gastos. El valor en stock se calcula con la cantidad actual × precio de compra de cada producto.</p>`;
+  cont.innerHTML = html;
+  // Gráfico de barras agrupadas (canvas nativo)
+  dibujarChart('analisis-chart', etiquetas, [cVal, vVal, gVal], ['#e65100', '#0f3460', '#c62828']);
+  // Gráfico del stock (donut)
+  dibujarDonut('analisis-stock-chart', [
+    { label: 'STOCKS', valor: r.stock.almacenes, color: '#0f3460' },
+    { label: 'BARRA', valor: r.stock.barra, color: '#6a1b9a' },
+    { label: 'COCINA', valor: r.stock.cocina, color: '#e65100' },
+  ]);
+}
+
+function dibujarChart(id, etiquetas, series, colores) {
+  const cv = document.getElementById(id);
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const W = cv.width = cv.clientWidth || 600;
+  const H = cv.height = 220;
+  ctx.clearRect(0, 0, W, H);
+  const maxV = Math.max(1, ...series.flat());
+  const padL = 46, padB = 24, padT = 10;
+  const chartW = W - padL - 10;
+  const chartH = H - padT - padB;
+  // fondo + líneas
+  ctx.strokeStyle = '#e0e0e0'; ctx.fillStyle = '#666'; ctx.font = '11px sans-serif'; ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + chartH - (chartH * i / 4);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - 10, y); ctx.stroke();
+    ctx.fillText(fmtN(maxV * i / 4), padL - 4, y + 4);
+  }
+  const n = Math.max(1, etiquetas.length);
+  const grupoW = chartW / n;
+  const barW = Math.min(24, grupoW / 4);
+  etiquetas.forEach((lab, i) => {
+    const cx = padL + grupoW * i + grupoW / 2;
+    series.forEach((s, si) => {
+      const h = (s[i] / maxV) * chartH;
+      const x = cx - barW * 1.5 + si * barW;
+      ctx.fillStyle = colores[si];
+      ctx.fillRect(x, padT + chartH - h, barW - 2, h);
+    });
+    ctx.fillStyle = '#666'; ctx.textAlign = 'center';
+    ctx.fillText(lab, cx, H - 8);
+  });
+}
+
+function dibujarDonut(id, items) {
+  const cv = document.getElementById(id);
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const W = cv.width = cv.clientWidth || 600;
+  const H = cv.height = 70;
+  ctx.clearRect(0, 0, W, H);
+  const total = items.reduce((s, i) => s + (parseFloat(i.valor) || 0), 0);
+  if (total <= 0) { ctx.fillStyle = '#999'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('Sin precios de compra para valorizar', W / 2, H / 2); return; }
+  const R = Math.min(W / 2, H) - 8;
+  const cx = W / 2, cy = H / 2;
+  let ang = -Math.PI / 2;
+  items.forEach(it => {
+    const v = parseFloat(it.valor) || 0;
+    if (v <= 0) return;
+    const a = (v / total) * Math.PI * 2;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, ang, ang + a); ctx.closePath();
+    ctx.fillStyle = it.color; ctx.fill();
+    ang += a;
+  });
+  ctx.beginPath(); ctx.arc(cx, cy, R * 0.55, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.fillStyle = '#0f3460'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(fmtS(total), cx, cy + 4);
+}
 
 function irBaseDatos() {
   // Cerrar cualquier modal abierto
