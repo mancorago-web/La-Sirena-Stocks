@@ -10625,7 +10625,37 @@ function cargarComprasResumen() {
       actualizarTotalAlimentos(0);
       return;
     }
-    html += `<div style="margin-top:0.75rem;padding:0.65rem;background:#0f3460;color:#fff;border-radius:8px;font-weight:700;text-align:right;font-size:0.9rem;">TOTAL ALIMENTOS Y BEBIDAS (${mes}): S/ ${totalGeneral.toFixed(2)}</div>`;
+    // Acumular el desglose por categoría (para el botón DETALLES con %)
+    const clasificarStock = (nombre) => {
+      const n = String(nombre || '').toUpperCase();
+      if (/^AGUA\b|AGUA CON GAS|AGUA SIN GAS|AGUA BIDON|AGUA TONICA|AGUA MINERAL|SAN LUIS|SAN MATEO|SAN CARLOS|CIELO|EVERVESS/i.test(n)) return 'AGUAS';
+      if (/COCA|INKA|SPRITE|FANTA|PINK SODA|MR\. PERKINS|TONIC WATER|BRITVIC|GASEOSA/i.test(n)) return 'GASEOSAS';
+      if (/CUSQUE|CUSQUENA|PILSEN|CORONA|HEINEKEN|CERVEZA|BRAHMA|CRISTAL|BUDWEISER/i.test(n)) return 'CERVEZAS';
+      if (/VINO|MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA|SAUVIGNON|CHARDONNAY|MALBEC|CABERNET|MERLOT|PINOT|CHAMPAGNE|BRUT|CONEJO NEGRO/i.test(n)) return 'VINOS';
+      if (/CAFE|CAFÉ|CHOCOLATE|TÉ|TE |HIERBA|INFUSI/i.test(n)) return 'CAFÉS';
+      if (/LECHE|GLORIA|CREMA DE LECHE|QUESO|MANTEQUILLA|YOGUR/i.test(n)) return 'LACTEOS';
+      return 'STOCKS';
+    };
+    const porCategoria = {};
+    fechas.forEach(f => {
+      (porFecha[f] || []).forEach(r => {
+        const pt = precioTotal(r);
+        if (pt <= 0) return;
+        let cat = String(r.categoria || '').trim().toUpperCase();
+        if (!cat) cat = famMap[String(r.nombre || '').trim().toUpperCase()];
+        if (!cat) {
+          if (String(r.destino || '') === 'stocks') cat = clasificarStock(r.nombre);
+          else if (String(r.destino || '') === 'barra') cat = 'BARRA';
+          else if (String(r.destino || '') === 'cocina') cat = 'OTROS';
+          else cat = String(r.destino || 'OTROS').toUpperCase();
+        }
+        porCategoria[cat] = (porCategoria[cat] || 0) + pt;
+      });
+    });
+    html += `<div style="margin-top:0.75rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;background:#0f3460;color:#fff;border-radius:8px;padding:0.65rem 0.9rem;font-weight:700;">
+      <span>TOTAL ALIMENTOS Y BEBIDAS (${mes}): S/ ${totalGeneral.toFixed(2)}</span>
+      <button onclick="verDetalleComprasPorCategoria('${encodeURIComponent(JSON.stringify(porCategoria))}', ${totalGeneral.toFixed(2)})" style="padding:0.4rem 1rem;background:#25d366;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:0.85rem;">📋 DETALLES</button>
+    </div>`;
     div.innerHTML = html;
     // Abrir por defecto el acordeón de HOY
     const hoyAcc = div.querySelector('.accordion-item[data-fecha="' + todayStr() + '"]');
@@ -10639,6 +10669,48 @@ function cargarComprasResumen() {
     }
     actualizarTotalAlimentos(totalGeneral);
   }).catch(() => { div.innerHTML = '<p style="color:#c62828;">Error al cargar las compras.</p>'; });
+}
+
+// Muestra el desglose de COMPRAS por categoría con su % del total (para CONSOLIDADO/RESUMEN)
+function verDetalleComprasPorCategoria(encoded, total) {
+  let porCat = {};
+  try { porCat = JSON.parse(decodeURIComponent(encoded)); } catch (e) { alert('Error leyendo los datos'); return; }
+  const totalG = parseFloat(total) || 0;
+  const cats = Object.keys(porCat).sort((a, b) => (porCat[b] - porCat[a]) || String(a).localeCompare(String(b), 'es'));
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modal-body');
+  const mc = modal.querySelector('.modal-content');
+  if (mc) mc.classList.add('modal-wide');
+  abrirModalDesdeArriba();
+  let html = '<h3>📋 DETALLE DE ALIMENTOS Y BEBIDAS</h3>';
+  html += '<p style="color:#666;font-size:0.85rem;">Total: <b>S/ ' + totalG.toFixed(2) + '</b> — desglose por categoría y % del total.</p>';
+  if (!cats.length) {
+    html += '<p style="color:#888;">Sin datos.</p>';
+  } else {
+    // Barra 100% apilada
+    html += '<div style="display:flex;height:26px;border-radius:6px;overflow:hidden;margin-bottom:1rem;border:1px solid #ddd;">';
+    const colores = ['#0f3460','#2e7d32','#e65100','#6a1b9a','#00838f','#c62828','#f57f17','#5d4037','#455a64','#1976d2','#7cb342','#d81b60'];
+    cats.forEach((c, i) => {
+      const pct = totalG > 0 ? (porCat[c] / totalG) * 100 : 0;
+      if (pct <= 0) return;
+      html += '<div style="width:' + pct + '%;background:' + colores[i % colores.length] + ';" title="' + esc(c) + ' — ' + pct.toFixed(1) + '%"></div>';
+    });
+    html += '</div>';
+    html += '<div class="table-wrap"><table><thead><tr><th>Categoría</th><th style="text-align:right;">Monto</th><th style="text-align:right;">% del Total</th></tr></thead><tbody>';
+    cats.forEach((c, i) => {
+      const pct = totalG > 0 ? (porCat[c] / totalG) * 100 : 0;
+      html += `<tr>
+        <td><span style="display:inline-block;width:12px;height:12px;background:${colores[i % colores.length]};border-radius:2px;margin-right:0.4rem;"></span>${esc(c)}</td>
+        <td style="text-align:right;font-weight:700;">S/ ${porCat[c].toFixed(2)}</td>
+        <td style="text-align:right;">${pct.toFixed(1)}%</td>
+      </tr>`;
+    });
+    html += `<tr style="font-weight:700;background:#f0f4ff;"><td>TOTAL</td><td style="text-align:right;">S/ ${totalG.toFixed(2)}</td><td style="text-align:right;">100%</td></tr>`;
+    html += '</tbody></table></div>';
+  }
+  html += '<div style="margin-top:1.5rem;text-align:center;"><button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">CERRAR</button></div>';
+  body.innerHTML = html;
+  modal.style.display = 'block';
 }
 
 // Muestra el total de compras junto al título de ALIMENTOS Y BEBIDAS y lo suma al TOTAL de RESUMEN
