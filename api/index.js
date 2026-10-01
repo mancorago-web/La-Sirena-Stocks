@@ -8194,12 +8194,13 @@ app.get('/api/analisis/resumen', authMiddleware, async (req, res) => {
       col('cocina_stock_diario').get(),
     ]);
     const normV = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-    // PRECIO DE COMPRA unificado (stock_precios > barra_precios > cocina_precios > última compra)
+    // PRECIO DE COMPRA unificado — MISMA lógica que la vista de COCINA/STOCK:
+    // cocina_precios.precio > stock_precios(ultimo_precio_compra||precio) > barra_precios(ultimo||compra||precio) > última compra
     const precioCompraUni = new Map();
     const addPC = (nombre, pc) => { const k = normV(nombre); if (pc > 0 && !precioCompraUni.has(k)) precioCompraUni.set(k, pc); };
-    spSnap.docs.forEach(d => { const a = d.data(); addPC(a.nombre, parseFloat(a.precio) || parseFloat(a.ultimo_precio_compra) || 0); });
-    bpSnap.docs.forEach(d => { const a = d.data(); addPC(a.ingrediente, parseFloat(a.precio_compra) || parseFloat(a.ultimo_precio_compra) || 0); });
-    cpSnap.docs.forEach(d => { const a = d.data(); addPC(a.ingrediente, parseFloat(a.precio_compra) || parseFloat(a.ultimo_precio_compra) || 0); });
+    cpSnap.docs.forEach(d => { const a = d.data(); addPC(a.ingrediente, parseFloat(a.precio) || 0); });
+    spSnap.docs.forEach(d => { const a = d.data(); addPC(a.nombre, parseFloat(a.ultimo_precio_compra) || parseFloat(a.precio) || 0); });
+    bpSnap.docs.forEach(d => { const a = d.data(); addPC(a.ingrediente, parseFloat(a.ultimo_precio_compra) || parseFloat(a.precio_compra) || parseFloat(a.precio) || 0); });
     const ultCompra = new Map();
     const tomarC = (a) => { const k = normV(a.nombre); const cant = parseFloat(a.cantidad) || 0; const pt = parseFloat(a.precio_total) || 0; const pu = cant > 0 && pt > 0 ? pt / cant : (parseFloat(a.precio) || 0); if (pu > 0 && (!ultCompra.has(k) || (a.fecha || '') > ultCompra.get(k).fecha)) ultCompra.set(k, pu); };
     comprasAll.docs.forEach(d => tomarC(d.data()));
@@ -8235,7 +8236,7 @@ app.get('/api/analisis/resumen', authMiddleware, async (req, res) => {
     costosSnap.docs.forEach(d => { const a = d.data(); const monto = parseFloat(a.monto) || 0; if (monto > 0) { totalGastos += monto; gastosPorDia[a.fecha] = (gastosPorDia[a.fecha] || 0) + monto; } });
     totalGastos = Math.round(totalGastos * 100) / 100;
 
-    // VALOR EN STOCK (cantidad actual × precio de compra)
+    // VALOR EN STOCK (cantidad actual × precio de compra) — usa el MISMO cálculo que las vistas
     const stockPrecio = (nombre, cant) => { const pc = precioCompraUni.get(normV(nombre)) || 0; return pc > 0 && cant > 0 ? pc * cant : 0; };
     let valorAlmacenes = 0, valorBarra = 0, valorCocina = 0;
     // ALMACENES: stock actual (inventario.stock_apertura)
@@ -8244,10 +8245,35 @@ app.get('/api/analisis/resumen', authMiddleware, async (req, res) => {
     const barraCierre = {};
     barraDiarioSnap.docs.forEach(d => { const a = d.data(); if (a.fecha === hoy) barraCierre[Number(a.id)] = parseFloat(a.cantidad) ?? 0; });
     barraStockSnap.docs.forEach(d => { const a = d.data(); const cant = barraCierre[Number(d.id)] !== undefined ? barraCierre[Number(d.id)] : (parseFloat(a.cantidad) || 0); valorBarra += stockPrecio(a.ingrediente, cant); });
-    // COCINA/STOCK: usar el cierre del diario de hoy (igual que la vista de COCINA/STOCK)
-    const cocinaCierre = {};
-    cocinaDiarioSnap.docs.forEach(d => { const a = d.data(); if (a.fecha === hoy) cocinaCierre[Number(a.item_id)] = parseFloat(a.stock_cierre) ?? 0; });
-    cocinaStockSnap.docs.forEach(d => { const a = d.data(); const cant = cocinaCierre[Number(d.id)] !== undefined ? cocinaCierre[Number(d.id)] : (parseFloat(a.cantidad) || 0); valorCocina += stockPrecio(a.ingrediente, cant); });
+    // COCINA/STOCK: mismo cálculo que la vista con-inventario (precio × cierre del día de hoy)
+    try {
+      const cocinaSnap = await col('cocina_stock').get();
+      const diaSnap = await col('cocina_stock_diario').where('fecha', '==', hoy).get();
+      const prevSnap = await col('cocina_stock_diario').where('fecha', '==', (() => { const d = new Date(hoy + 'T12:00:00'); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0]; })()).get();
+      const [cSnap, sSnap, bSnap, compSnap] = await Promise.all([col('cocina_precios').get(), col('stock_precios').get(), col('barra_precios').get(), col('compras').get()]);
+      const normC = (n) => String(n || '').trim().toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/\s+/g, ' ');
+      const pg = {};
+      const addG = (nombre, precio) => { const k = normC(nombre); if (k && parseFloat(precio) > 0 && !pg[k]) pg[k] = parseFloat(precio); };
+      cSnap.docs.forEach(d => { const p = d.data(); addG(p.ingrediente, p.precio); });
+      sSnap.docs.forEach(d => { const p = d.data(); addG(p.nombre, p.ultimo_precio_compra || p.precio); });
+      bSnap.docs.forEach(d => { const p = d.data(); addG(p.ingrediente, p.ultimo_precio_compra || p.precio_compra || p.precio); });
+      const cu = {};
+      compSnap.docs.forEach(d => { const a = d.data(); const k = normC(a.nombre); const cant = parseFloat(a.cantidad) || 0; const pu = cant > 0 && parseFloat(a.precio_total) > 0 ? (parseFloat(a.precio_total) / cant) : (parseFloat(a.precio) || 0); if (pu > 0 && (!cu[k] || (a.fecha || '') > cu[k])) cu[k] = pu; });
+      Object.keys(cu).forEach(k => addG(k, cu[k]));
+      const diaMap = {}; diaSnap.docs.forEach(d => { diaMap[Number(d.data().item_id)] = d.data(); });
+      const prevMap = {}; prevSnap.docs.forEach(d => { prevMap[Number(d.data().item_id)] = d.data(); });
+      cocinaSnap.docs.forEach(d => {
+        const item = d.data();
+        const dia = diaMap[Number(item.id)] || {};
+        const prev = prevMap[Number(item.id)] || {};
+        const apertura = dia.stock_apertura ?? prev.stock_cierre ?? item.cantidad ?? 0;
+        const cierre = (apertura + (dia.stock_ingreso ?? 0) - (dia.salida_almacen ?? 0) - (dia.total_ventas ?? 0) - (dia.falta_almacen ?? 0) - (dia.stock_baja ?? 0));
+        const precio = pg[normC(item.ingrediente)] || 0;
+        if (precio > 0 && cierre > 0) valorCocina += precio * cierre;
+      });
+    } catch (e) {
+      console.error('valor cocina en analisis:', e.message);
+    }
 
     const resumen = {
       periodo: { ini, fin, dias: 0 },
