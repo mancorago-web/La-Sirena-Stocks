@@ -5122,13 +5122,19 @@ app.get('/api/stock/precios/items', async (req, res) => {
 // Guarda precios de venta de varios items de STOCKS (pestaña PRECIO VENTA). Crea el registro si falta.
 // Items de STOCK/ALMACENES que se VENDEN DIRECTAMENTE al público (destino stocks en VENTAS/Excel).
 // Solo esos se muestran en la pestaña PRECIO VENTA, con su precio de compra y de venta.
+// El PRECIO DE COMPRA usa la lógica unificada: stock_precios.precio > barra_precios > cocina_precios
+// > última compra (compras/cocina_compras), igual que el resto del sistema.
 app.get('/api/stock/precios/venta', async (req, res) => {
   try {
     const out = await cached('precios_venta_stocks', 5000, async () => {
-      const [invSnap, ventasSnap, spSnap] = await Promise.all([
+      const [invSnap, ventasSnap, spSnap, bpSnap, cpSnap, comprasSnap, ccSnap] = await Promise.all([
         col('inventario').get(),
         col('ventas').get(),
         col('stock_precios').get(),
+        col('barra_precios').get(),
+        col('cocina_precios').get(),
+        col('compras').get(),
+        col('cocina_compras').get(),
       ]);
       const normV = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
       // Nombres de ALMACENES (un solo registro por nombre)
@@ -5137,19 +5143,27 @@ app.get('/api/stock/precios/venta', async (req, res) => {
       // Nombres vendidos directamente (destino stocks)
       const vendidos = new Set();
       ventasSnap.docs.forEach(d => { const a = d.data(); if (String(a.destino || '').toLowerCase() === 'stocks' && a.nombre) vendidos.add(normV(a.nombre)); });
-      // Precios de compra/venta
-      const precios = new Map();
-      spSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.nombre); if (!precios.has(k)) precios.set(k, a); });
+      // Precio unificado de COMPRA por nombre
+      const precioCompra = new Map();
+      spSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.nombre); const pc = parseFloat(a.precio) || parseFloat(a.ultimo_precio_compra) || 0; if (pc > 0 && !precioCompra.has(k)) precioCompra.set(k, pc); });
+      bpSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.ingrediente); const pc = parseFloat(a.precio_compra) || parseFloat(a.ultimo_precio_compra) || 0; if (pc > 0 && !precioCompra.has(k)) precioCompra.set(k, pc); });
+      cpSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.ingrediente); const pc = parseFloat(a.precio_compra) || parseFloat(a.ultimo_precio_compra) || 0; if (pc > 0 && !precioCompra.has(k)) precioCompra.set(k, pc); });
+      // Última compra con precio (compras + cocina_compras)
+      const ultimaCompra = new Map();
+      const tomarCompra = (a) => { const k = normV(a.nombre); const cant = parseFloat(a.cantidad) || 0; const pt = parseFloat(a.precio_total) || 0; const pu = cant > 0 && pt > 0 ? pt / cant : (parseFloat(a.precio) || 0); if (pu > 0 && (!ultimaCompra.has(k) || (a.fecha || '') > ultimaCompra.get(k).fecha)) ultimaCompra.set(k, { precio: pu, fecha: a.fecha || '' }); };
+      comprasSnap.docs.forEach(d => tomarCompra(d.data()));
+      ccSnap.docs.forEach(d => tomarCompra(d.data()));
+      // Precio de VENTA (stock_precios.precio_venta; para recetas de barra/cocina es 'precio')
+      const precioVenta = new Map();
+      spSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.nombre); const pv = parseFloat(a.precio_venta) || 0; if (pv > 0 && !precioVenta.has(k)) precioVenta.set(k, pv); });
+      bpSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.ingrediente); const pv = parseFloat(a.precio) || 0; if (pv > 0 && !precioVenta.has(k)) precioVenta.set(k, pv); });
+      cpSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.ingrediente); const pv = parseFloat(a.precio) || 0; if (pv > 0 && !precioVenta.has(k)) precioVenta.set(k, pv); });
       const outArr = [];
       almacenes.forEach((nombre, k) => {
         if (!vendidos.has(k)) return; // solo los que se venden directamente
-        const p = precios.get(k) || {};
-        outArr.push({
-          nombre,
-          unidad: p.unidad_venta || p.unidad || '',
-          precio_compra: parseFloat(p.precio) || 0,
-          precio_venta: parseFloat(p.precio_venta) || 0,
-        });
+        const pc = precioCompra.get(k) || (ultimaCompra.get(k) ? ultimaCompra.get(k).precio : 0) || 0;
+        const pv = precioVenta.get(k) || 0;
+        outArr.push({ nombre, unidad: '', precio_compra: pc, precio_venta: pv });
       });
       outArr.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
       return outArr;
