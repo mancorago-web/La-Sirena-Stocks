@@ -2625,6 +2625,40 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       console.error('PRECIO VENTA EXCEL (secundario, no bloquea):', ePv.message);
     }
 
+    // Guardar CORTESÍAS: items del Excel con PRECIO DE VENTA = 0 (regalados). Se acumulan por fecha.
+    // Solo aplica a items de STOCKS (los MENU de BARRA/COCINA se manejan aparte con su propio precio).
+    try {
+      const cortesias = (items || []).filter(i =>
+        parseFloat(i.precio_venta) === 0 &&
+        String(i.destino || '').toLowerCase() === 'stocks' &&
+        (parseFloat(i.cantidad) || 0) > 0
+      );
+      if (cortesias.length) {
+        const batchC = db.batch();
+        let opsC = 0;
+        const ahoraC = new Date().toISOString();
+        for (const it of cortesias) {
+          const nombre = String(it.matched || it.nombre || '').trim();
+          if (!nombre) continue;
+          batchC.set(col('ventas_cortesias').doc(), {
+            fecha,
+            nombre,
+            cantidad: parseFloat(it.cantidad) || 0,
+            unidad: 'unidad',
+            destino: 'stocks',
+            saved_by: savedBy,
+            created_at: ahoraC,
+          });
+          opsC++;
+          if (opsC >= 400) { await batchC.commit(); batchC = db.batch(); opsC = 0; }
+        }
+        if (opsC) await batchC.commit();
+        invalidarCache('cortesias_*');
+      }
+    } catch (eC) {
+      console.error('CORTESIAS (secundario, no bloquea):', eC.message);
+    }
+
     invalidarCachesLectura();
     res.json({ ok: true, resumen });
   } catch (e) {
@@ -8076,6 +8110,20 @@ app.get('/api/costos/pestanas', authMiddleware, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// --- VENTAS: CORTESÍAS (ventas con precio 0) ---
+app.get('/api/ventas/cortesias', authMiddleware, async (req, res) => {
+  try {
+    const { fecha_inicio, fecha_fin } = req.query;
+    if (!fecha_inicio || !fecha_fin) return res.json([]);
+    const ini = String(fecha_inicio).trim(), fin = String(fecha_fin).trim();
+    if (ini > fin) [ini, fin] = [fin, ini];
+    const snap = await col('ventas_cortesias').where('fecha', '>=', ini).where('fecha', '<=', fin).get();
+    const out = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    out.sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)) || String(a.nombre).localeCompare(String(b.nombre), 'es'));
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // --- ANALISIS DEL NEGOCIO: compras vs ventas y valor invertido en stock ---

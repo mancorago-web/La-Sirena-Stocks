@@ -165,6 +165,7 @@
   <div id="tabs-ventas" class="tabs-bar" style="display:none">
     <div class="tabs">
       <button class="sub-tab active" data-subtab="registro" onclick="cambiarSubTab('registro','ventas')">Registro de Ventas</button>
+      <button class="sub-tab" data-subtab="cortesias" onclick="cambiarSubTab('cortesias','ventas')">Cortesías</button>
       <button class="sub-tab" data-subtab="busqueda" onclick="cambiarSubTab('busqueda','ventas')">Búsqueda de Ventas</button>
     </div>
   </div>
@@ -783,6 +784,20 @@
           <div style="font-size:0.8rem;color:#888;margin-top:0.4rem;">Columnas detectadas automáticamente: Fecha | Item | Cantidad. La zona (STOCKS/BARRA/COCINA) se ticlea manualmente la primera vez y se guarda para la próxima.</div>
           <div id="ventas-import-preview"></div>
         </div>
+      </div>
+
+      <div id="sub-ventas-cortesias" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>🎁 CORTESÍAS (ventas con precio 0)</h2>
+          <div class="controles-dia">
+            <label>Desde: <input type="date" id="fecha-cortesias-ini" onchange="cargarCortesias()"></label>
+            <label>Hasta: <input type="date" id="fecha-cortesias-fin" onchange="cargarCortesias()"></label>
+            <button class="btn-guardar-dia" onclick="cargarCortesiasMes()">📅 ESTE MES</button>
+            <button class="btn-detalles" onclick="enviarCortesiasWhatsApp()" style="background:#25d366;color:#fff;font-weight:700;">📲 INFORME WHATSAPP</button>
+          </div>
+          <div style="font-size:0.8rem;color:#888;margin-top:0.3rem;">Se registran automáticamente las ventas del Excel cuyo precio de venta es 0 (cortesías).</div>
+        </div>
+        <div id="cortesias-container"></div>
       </div>
 
       <div id="sub-ventas-busqueda" class="sub-tab-content">

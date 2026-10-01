@@ -204,6 +204,7 @@ function refrescarVista() {
     else if (v.sub === 'basedatos') cargarPreciosCocina();
   } else if (v.cat === 'ventas') {
     if (v.sub === 'busqueda') cargarSugerenciasBusquedaVentasTotal();
+    else if (v.sub === 'cortesias') cargarCortesias();
     else cargarVentasCentral();
   } else if (v.cat === 'compras') {
     cargarCompras();
@@ -2690,10 +2691,14 @@ function verDetallesVentas() {
     });
     return;
   }
-  getInventario(fecha).then(data => {
+  Promise.all([getInventario(fecha), api('GET', '/api/stock/precios/venta')]).then(([data, preciosVenta]) => {
+    const pvMap = {};
+    (preciosVenta || []).forEach(p => { pvMap[String(p.nombre || '').trim().toUpperCase().replace(/\s+/g, ' ')] = parseFloat(p.precio_venta) || 0; });
+    const normPv = (n) => String(n || '').trim().toUpperCase().replace(/\s+/g, ' ');
     data = data.filter(a => a.id !== 3 && a.id !== 9 && a.id !== 16);
     let html = '<h3>Detalle de Ventas — ' + fecha + '</h3>';
     let totalItems = 0;
+    let totalMonto = 0;
     data.forEach(a => {
       const itemsConVentas = a.items.filter(i => (i.total_ventas || 0) > 0);
       if (!itemsConVentas.length) return;
@@ -2701,20 +2706,105 @@ function verDetallesVentas() {
       html += '<div class="accordion-item">';
       html += '<div class="accordion-header" onclick="toggleAcordeon(this)"><span class="accordion-title">' + a.nombre + '</span><span class="accordion-arrow">▶</span></div>';
       html += '<div class="accordion-body open">';
-      html += '<table><thead><tr><th>Item</th><th>Total Ventas</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
+      html += '<table><thead><tr><th>Item</th><th>Total Ventas</th><th>P. Venta</th><th>Total S/</th><th>Usuario</th><th>Hora</th></tr></thead><tbody>';
       itemsConVentas.forEach(i => {
+        const cant = parseFloat(i.total_ventas) || 0;
+        const pv = pvMap[normPv(i.nombre)] || 0;
+        const monto = cant * pv;
+        totalMonto += monto;
         const t = i.updated_at ? new Date(i.updated_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
         const u = DISPLAY_NAMES[i.saved_by] || i.saved_by || '-';
-        html += '<tr><td>' + i.nombre + '</td><td>' + (i.total_ventas || 0) + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
+        html += '<tr><td>' + i.nombre + '</td><td>' + cant + '</td><td>' + (pv > 0 ? 'S/' + pv.toFixed(2) : (pv === 0 && monto === 0 ? '<span style="color:#c62828;font-weight:700;">CORTESÍA</span>' : '—')) + '</td><td>' + (monto > 0 ? 'S/' + monto.toFixed(2) : '—') + '</td><td>' + u + '</td><td>' + t + '</td></tr>';
       });
       html += '</tbody></table></div></div>';
     });
     if (!totalItems) {
       html += '<p>No hay ventas registradas en esta fecha.</p>';
+    } else {
+      html += '<p style="font-weight:700;color:#0f3460;margin-top:0.75rem;">TOTAL VENTAS DEL DÍA: <b style="font-size:1.1rem;">S/ ' + totalMonto.toFixed(2) + '</b></p>';
     }
     document.getElementById('modal-body').innerHTML = html;
     document.getElementById('modal').style.display = 'block';
   });
+}
+
+// --- VENTAS: CORTESÍAS (ventas del Excel con precio 0) ---
+let _cortesiasData = null;
+
+function cargarCortesias(fechaIni, fechaFin) {
+  const iniEl = document.getElementById('fecha-cortesias-ini');
+  const finEl = document.getElementById('fecha-cortesias-fin');
+  if (!iniEl || !finEl) return;
+  if (!iniEl.value) iniEl.value = todayStr();
+  if (!finEl.value) finEl.value = todayStr();
+  const ini = fechaIni || iniEl.value;
+  const fin = fechaFin || finEl.value;
+  const container = document.getElementById('cortesias-container');
+  if (!container) return;
+  container.innerHTML = '<p>Cargando...</p>';
+  api('GET', '/api/ventas/cortesias?fecha_inicio=' + encodeURIComponent(ini) + '&fecha_fin=' + encodeURIComponent(fin)).then(list => {
+    _cortesiasData = { ini, fin, lista: list || [] };
+    renderCortesias();
+  }).catch(() => { container.innerHTML = '<p style="color:#c62828;">Error cargando cortesías.</p>'; });
+}
+
+function cargarCortesiasMes() {
+  const hoy = new Date();
+  const ini = hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0') + '-01';
+  const fin = hoy.toISOString().split('T')[0];
+  const iniEl = document.getElementById('fecha-cortesias-ini');
+  const finEl = document.getElementById('fecha-cortesias-fin');
+  if (iniEl) iniEl.value = ini;
+  if (finEl) finEl.value = fin;
+  cargarCortesias(ini, fin);
+}
+
+function renderCortesias() {
+  const container = document.getElementById('cortesias-container');
+  if (!container || !_cortesiasData) return;
+  const lista = _cortesiasData.lista || [];
+  const porFecha = {};
+  let totalUnidades = 0;
+  lista.forEach(x => {
+    const f = String(x.fecha || '');
+    if (!porFecha[f]) porFecha[f] = [];
+    porFecha[f].push(x);
+    totalUnidades += parseFloat(x.cantidad) || 0;
+  });
+  let html = '<div style="margin-bottom:0.6rem;padding:0.6rem 0.8rem;background:#c62828;color:#fff;border-radius:6px;font-weight:700;">'
+    + '🎁 CORTESÍAS — ' + _cortesiasData.ini + ' a ' + _cortesiasData.fin + ' · ' + lista.length + ' regalo(s) · ' + totalUnidades + ' und</div>';
+  const fechas = Object.keys(porFecha).sort();
+  if (!fechas.length) {
+    html += '<p style="color:#888;">No hay cortesías (ventas con precio 0) en el rango seleccionado.</p>';
+  } else {
+    fechas.forEach(f => {
+      const items = porFecha[f];
+      html += '<div class="accordion-item"><div class="accordion-header" onclick="toggleAcordeon(this)"><span class="accordion-title">' + f + ' <span style="font-weight:400;font-size:0.85rem;color:#777;">— ' + items.length + ' item(s)</span></span><span class="accordion-arrow">▶</span></div>';
+      html += '<div class="accordion-body open"><div class="table-wrap"><table><thead><tr><th>Item</th><th>Cant.</th><th>Usuario</th></tr></thead><tbody>';
+      items.forEach(x => {
+        html += '<tr><td>' + esc(x.nombre) + '</td><td>' + x.cantidad + '</td><td>' + esc(x.saved_by || '') + '</td></tr>';
+      });
+      html += '</tbody></table></div></div></div>';
+    });
+  }
+  container.innerHTML = html;
+}
+
+function enviarCortesiasWhatsApp() {
+  const d = _cortesiasData;
+  if (!d || !d.lista || !d.lista.length) { alert('No hay cortesías para informar'); return; }
+  const porFechaItem = {};
+  d.lista.forEach(x => {
+    const f = String(x.fecha || '');
+    const k = String(x.nombre || '').trim();
+    const key = f + '||' + k;
+    if (!porFechaItem[key]) porFechaItem[key] = { fecha: f, nombre: k, cantidad: 0 };
+    porFechaItem[key].cantidad += parseFloat(x.cantidad) || 0;
+  });
+  const filas = Object.values(porFechaItem).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)) || String(a.nombre).localeCompare(String(b.nombre), 'es'));
+  let txt = '*REPORTE DE CORTESIAS*\n' + 'PERIODO: ' + d.ini + ' al ' + d.fin + '\n\n';
+  filas.forEach(f => { txt += f.fecha + ' - ' + String(f.nombre).toUpperCase() + ' - ' + f.cantidad + '\n'; });
+  window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
 }
 
 function verDetallesBajas() {
@@ -5451,9 +5541,10 @@ function cambiarSubTab(nombre, prefix) {
       cargarComprasResumen();
     }
   }
-  // VENTAS: registro / búsqueda
+  // VENTAS: registro / búsqueda / cortesías
   if (prefix === 'ventas') {
     if (nombre === 'registro') cargarVentasCentral();
+    else if (nombre === 'cortesias') cargarCortesias();
     else if (nombre === 'busqueda') cargarSugerenciasBusquedaVentasTotal();
   }
 }
@@ -9898,10 +9989,13 @@ function cargarVentasDetalle(fecha) {
   const c = document.getElementById('ventas-detalle-container');
   if (!c) return;
   const fechaFinal = fecha || document.getElementById('fecha-ventas-menu')?.value || todayStr();
-  api('GET', '/api/ventas/detalle?fecha=' + encodeURIComponent(fechaFinal)).then(list => {
+  Promise.all([api('GET', '/api/ventas/detalle?fecha=' + encodeURIComponent(fechaFinal)), api('GET', '/api/stock/precios/venta')]).then(([list, preciosVenta]) => {
     // Solo renderizar si la fecha aún es la seleccionada (evita que una consulta vieja sobreescriba)
     const actual = document.getElementById('fecha-ventas-menu')?.value || todayStr();
     if (actual !== fechaFinal) return;
+    const pvMap = {};
+    (preciosVenta || []).forEach(p => { pvMap[String(p.nombre || '').trim().toUpperCase().replace(/\s+/g, ' ')] = parseFloat(p.precio_venta) || 0; });
+    const normPv = (n) => String(n || '').trim().toUpperCase().replace(/\s+/g, ' ');
     if (!list || !list.length) {
       ventasDetalleMap = {};
       c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE VENTAS</h3><p style="color:#888;">Aún no hay ventas registradas en esta fecha.</p>';
@@ -9913,17 +10007,23 @@ function cargarVentasDetalle(fecha) {
     };
     ventasDetalleMap = {};
     list.forEach(r => { ventasDetalleMap[r.id] = r; });
+    let totalMonto = 0;
     const filas = list.map(r => {
       let det = '';
       if (r.destino === 'stocks') det = 'STOCKS → ' + (r.almacenes || []).map(alNombre).join(', ');
       else if (r.destino === 'barra') det = 'BARRA (receta)';
       else if (r.destino === 'cocina') det = 'COCINA';
+      const cant = parseFloat(r.cantidad) || 0;
+      const pv = pvMap[normPv(r.nombre)] || 0;
+      const monto = cant * pv;
+      totalMonto += monto;
       const t = r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
-      return `<tr><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${esc(det)}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td><button class="danger" onclick="confirmarEliminarVenta('${r.id}')">✕</button></td></tr>`;
+      return `<tr><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${pv > 0 ? 'S/' + pv.toFixed(2) : (pv === 0 && monto === 0 ? '<span style="color:#c62828;font-weight:700;">CORTESÍA</span>' : '—')}</td><td>${monto > 0 ? 'S/' + monto.toFixed(2) : '—'}</td><td>${esc(det)}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td><button class="danger" onclick="confirmarEliminarVenta('${r.id}')">✕</button></td></tr>`;
     }).join('');
     c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE VENTAS</h3>' +
-      '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>Destino</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
-      filas + '</tbody></table></div>';
+      '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>P. Venta</th><th>Total S/</th><th>Destino</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
+      filas + '</tbody></table></div>' +
+      '<p style="font-weight:700;color:#0f3460;margin-top:0.6rem;">TOTAL VENTAS: <b style="font-size:1.1rem;">S/ ' + totalMonto.toFixed(2) + '</b></p>';
   }).catch(() => { const actual = document.getElementById('fecha-ventas-menu')?.value || todayStr(); if (actual === fechaFinal) c.innerHTML = '<p style="color:#888;">DETALLE DE VENTAS</p>'; });
 }
 
