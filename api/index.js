@@ -2592,45 +2592,37 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       await logBatch.commit();
     }
 
-    // Guardar PRECIO VENTA del Excel en la colección correspondiente (para ganancia aproximada).
-    // Se actualiza SOLO si el Excel trae precio_venta > 0 (no pisa precios ya cargados con 0).
+    // Guardar PRECIO VENTA del Excel en la colección dedicada `precios_venta_excel`.
+    // Esta colección es la ÚNICA fuente de precios de venta para la pestaña PRECIO VENTA:
+    // NO se tocan stock_precios/barra_precios (esos pueden tener valores viejos/incorrectos).
+    // Se actualiza SOLO si el Excel trae precio_venta > 0.
     // Es SECUNDARIO: si algo falla aquí NUNCA debe bloquear el guardado de las ventas.
     try {
       const preciosAVenta = (items || []).filter(i => parseFloat(i.precio_venta) > 0);
       if (preciosAVenta.length) {
-        const [spSnap, barraRecSnap, cocinaRecSnap] = await Promise.all([
-          col('stock_precios').get(),
-          col('recetas').get(),
-          col('cocina_recetas').get(),
-        ]);
+        const existentes = await col('precios_venta_excel').get();
         const normV = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-        const spNorm = new Map(); spSnap.docs.forEach(d => { const a = d.data(); spNorm.set(normV(a.nombre), { ref: d.ref, data: a }); });
-        const barraNorm = new Map(); barraRecSnap.docs.forEach(d => { const a = d.data(); barraNorm.set(normV(a.nombre), { ref: d.ref, data: a }); });
-        const cocinaNorm = new Map(); cocinaRecSnap.docs.forEach(d => { const a = d.data(); cocinaNorm.set(normV(a.nombre), { ref: d.ref, data: a }); });
+        const existMap = new Map();
+        existentes.docs.forEach(d => { const a = d.data(); existMap.set(normV(a.nombre), d.ref); });
         const batchPv = db.batch();
         let opsPv = 0;
+        const ahora = new Date().toISOString();
         for (const it of preciosAVenta) {
           const nombre = String(it.matched || it.nombre || '').trim();
-          const dest = String(it.destino || '').toLowerCase();
           const pv = Math.round((parseFloat(it.precio_venta) || 0) * 100) / 100;
+          if (!nombre || pv <= 0) continue;
           const nk = normV(nombre);
-          const clave = dest === 'barra' ? barraNorm : (dest === 'cocina' ? cocinaNorm : spNorm);
-          const entry = clave.get(nk);
-          if (entry) {
-            if (dest === 'barra' || dest === 'cocina') {
-              batchPv.update(entry.ref, { precio_venta: pv, updated_at: new Date().toISOString() });
-            } else {
-              batchPv.update(entry.ref, { precio_venta: pv, updated_at: new Date().toISOString() });
-            }
-            opsPv++;
-            if (opsPv >= 400) { await batchPv.commit(); batchPv = db.batch(); opsPv = 0; }
-          }
+          const ref = existMap.get(nk) || col('precios_venta_excel').doc();
+          batchPv.set(ref, { nombre, precio_venta: pv, fecha: fecha, updated_at: ahora }, { merge: true });
+          existMap.set(nk, ref);
+          opsPv++;
+          if (opsPv >= 400) { await batchPv.commit(); batchPv = db.batch(); opsPv = 0; }
         }
         if (opsPv) await batchPv.commit();
-        invalidarCache('precios_barra', 'precios_cocina', 'precios_stock', 'basedatos_unificada');
+        invalidarCache('precios_venta_stocks');
       }
     } catch (ePv) {
-      console.error('PRECIO VENTA (secundario, no bloquea):', ePv.message);
+      console.error('PRECIO VENTA EXCEL (secundario, no bloquea):', ePv.message);
     }
 
     invalidarCachesLectura();
@@ -5121,15 +5113,16 @@ app.get('/api/stock/precios/items', async (req, res) => {
 
 // Guarda precios de venta de varios items de STOCKS (pestaña PRECIO VENTA). Crea el registro si falta.
 // Items de STOCK/ALMACENES que se VENDEN DIRECTAMENTE al público (destino stocks en VENTAS/Excel).
-// Solo esos se muestran en la pestaña PRECIO VENTA, con su precio de compra y de venta.
-// El PRECIO DE COMPRA usa la lógica unificada: stock_precios.precio > barra_precios > cocina_precios
-// > última compra (compras/cocina_compras), igual que el resto del sistema.
+// Solo esos se muestran en la pestaña PRECIO VENTA.
+// - PRECIO DE VENTA: SOLO desde la colección `precios_venta_excel` (cargada desde los EXCEL de VENTAS).
+// - PRECIO DE COMPRA: lógica unificada (stock_precios.precio > barra_precios > cocina_precios > última compra).
 app.get('/api/stock/precios/venta', async (req, res) => {
   try {
     const out = await cached('precios_venta_stocks', 5000, async () => {
-      const [invSnap, ventasSnap, spSnap, bpSnap, cpSnap, comprasSnap, ccSnap] = await Promise.all([
+      const [invSnap, ventasSnap, pvSnap, spSnap, bpSnap, cpSnap, comprasSnap, ccSnap] = await Promise.all([
         col('inventario').get(),
         col('ventas').get(),
+        col('precios_venta_excel').get(),
         col('stock_precios').get(),
         col('barra_precios').get(),
         col('cocina_precios').get(),
@@ -5143,26 +5136,24 @@ app.get('/api/stock/precios/venta', async (req, res) => {
       // Nombres vendidos directamente (destino stocks)
       const vendidos = new Set();
       ventasSnap.docs.forEach(d => { const a = d.data(); if (String(a.destino || '').toLowerCase() === 'stocks' && a.nombre) vendidos.add(normV(a.nombre)); });
-      // Precio unificado de COMPRA por nombre
+      // PRECIO DE VENTA: SOLO de los EXCEL (precios_venta_excel)
+      const precioVenta = new Map();
+      pvSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.nombre); const pv = parseFloat(a.precio_venta) || 0; if (pv > 0 && !precioVenta.has(k)) precioVenta.set(k, pv); });
+      // PRECIO DE COMPRA unificado (no incluye precios de venta de la base)
       const precioCompra = new Map();
-      spSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.nombre); const pc = parseFloat(a.precio) || parseFloat(a.ultimo_precio_compra) || 0; if (pc > 0 && !precioCompra.has(k)) precioCompra.set(k, pc); });
-      bpSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.ingrediente); const pc = parseFloat(a.precio_compra) || parseFloat(a.ultimo_precio_compra) || 0; if (pc > 0 && !precioCompra.has(k)) precioCompra.set(k, pc); });
-      cpSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.ingrediente); const pc = parseFloat(a.precio_compra) || parseFloat(a.ultimo_precio_compra) || 0; if (pc > 0 && !precioCompra.has(k)) precioCompra.set(k, pc); });
-      // Última compra con precio (compras + cocina_compras)
+      spSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.nombre); const pc = parseFloat(a.precio) || 0; if (pc > 0 && !precioCompra.has(k)) precioCompra.set(k, pc); });
+      bpSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.ingrediente); const pc = parseFloat(a.precio_compra) || 0; if (pc > 0 && !precioCompra.has(k)) precioCompra.set(k, pc); });
+      cpSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.ingrediente); const pc = parseFloat(a.precio_compra) || 0; if (pc > 0 && !precioCompra.has(k)) precioCompra.set(k, pc); });
+      // Última compra con precio (compras + cocina_compras) como respaldo
       const ultimaCompra = new Map();
       const tomarCompra = (a) => { const k = normV(a.nombre); const cant = parseFloat(a.cantidad) || 0; const pt = parseFloat(a.precio_total) || 0; const pu = cant > 0 && pt > 0 ? pt / cant : (parseFloat(a.precio) || 0); if (pu > 0 && (!ultimaCompra.has(k) || (a.fecha || '') > ultimaCompra.get(k).fecha)) ultimaCompra.set(k, { precio: pu, fecha: a.fecha || '' }); };
       comprasSnap.docs.forEach(d => tomarCompra(d.data()));
       ccSnap.docs.forEach(d => tomarCompra(d.data()));
-      // Precio de VENTA (stock_precios.precio_venta; para recetas de barra/cocina es 'precio')
-      const precioVenta = new Map();
-      spSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.nombre); const pv = parseFloat(a.precio_venta) || 0; if (pv > 0 && !precioVenta.has(k)) precioVenta.set(k, pv); });
-      bpSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.ingrediente); const pv = parseFloat(a.precio) || 0; if (pv > 0 && !precioVenta.has(k)) precioVenta.set(k, pv); });
-      cpSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.ingrediente); const pv = parseFloat(a.precio) || 0; if (pv > 0 && !precioVenta.has(k)) precioVenta.set(k, pv); });
       const outArr = [];
       almacenes.forEach((nombre, k) => {
         if (!vendidos.has(k)) return; // solo los que se venden directamente
         const pc = precioCompra.get(k) || (ultimaCompra.get(k) ? ultimaCompra.get(k).precio : 0) || 0;
-        const pv = precioVenta.get(k) || 0;
+        const pv = precioVenta.get(k) || 0; // SOLO del Excel
         outArr.push({ nombre, unidad: '', precio_compra: pc, precio_venta: pv });
       });
       outArr.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
@@ -5176,31 +5167,26 @@ app.post('/api/stock/precios/venta', async (req, res) => {
   try {
     const { items } = req.body;
     if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'items requeridos' });
-    const spSnap = await col('stock_precios').get();
     const normV = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    const pvSnap = await col('precios_venta_excel').get();
     const mapa = new Map();
-    spSnap.docs.forEach(d => { const a = d.data(); mapa.set(normV(a.nombre), { ref: d.ref, data: a }); });
+    pvSnap.docs.forEach(d => { const a = d.data(); mapa.set(normV(a.nombre), d.ref); });
     const batch = db.batch();
     let ops = 0;
+    const ahora = new Date().toISOString();
     for (const it of items) {
       const nombre = String(it.nombre || '').trim();
       const pv = Math.round((parseFloat(it.precio_venta) || 0) * 100) / 100;
       if (!nombre || pv <= 0) continue;
       const k = normV(nombre);
-      const entry = mapa.get(k);
-      if (entry) {
-        batch.update(entry.ref, { precio_venta: pv, updated_at: new Date().toISOString() });
-      } else {
-        const id = String(spSnap.size + 1 + ops);
-        const ref = col('stock_precios').doc(id);
-        batch.set(ref, { id: Number(id), nombre, unidad: 'UNIDAD', precio: 0, unidad_venta: 'UNIDAD', precio_venta: pv, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
-        mapa.set(k, { ref, data: {} });
-      }
+      const ref = mapa.get(k) || col('precios_venta_excel').doc();
+      batch.set(ref, { nombre, precio_venta: pv, updated_at: ahora }, { merge: true });
+      mapa.set(k, ref);
       ops++;
       if (ops >= 400) { await batch.commit(); batch = db.batch(); ops = 0; }
     }
     if (ops) await batch.commit();
-    invalidarCache('precios_stock', 'basedatos_unificada');
+    invalidarCache('precios_venta_stocks');
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
