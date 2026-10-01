@@ -3578,13 +3578,21 @@ function cargarPrecioVentaStocks() {
   const container = document.getElementById('accordion-precio-venta');
   if (!container) return;
   container.innerHTML = '<p>Cargando...</p>';
-  Promise.all([api('GET', '/api/stock/precios'), api('GET', '/api/cocina/precios'), api('GET', '/api/barra/precios')]).then(([stocks, cocina, barra]) => {
+  // SOLO los items de STOCK/ALMACENES (colección inventario) que se venden por VENTAS/Excel,
+  // con su precio de compra (stock_precios) y precio de venta (stock_precios.precio_venta).
+  Promise.all([api('GET', '/api/stock/precios/items'), api('GET', '/api/stock/precios')]).then(([itemNames, precios]) => {
     const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-    const mapa = new Map();
-    (stocks || []).forEach(s => { const k = norm(s.nombre); if (!mapa.has(k)) mapa.set(k, { nombre: s.nombre, precio_compra: parseFloat(s.precio) || 0, precio_venta: parseFloat(s.precio_venta) || 0, unidad: s.unidad || s.unidad_venta || '' }); });
-    (cocina || []).forEach(s => { const k = norm(s.ingrediente); if (!mapa.has(k)) mapa.set(k, { nombre: s.ingrediente, precio_compra: parseFloat(s.precio_compra) || parseFloat(s.ultimo_precio_compra) || 0, precio_venta: parseFloat(s.precio) || 0, unidad: s.unidad || '' }); });
-    (barra || []).forEach(s => { const k = norm(s.ingrediente); if (!mapa.has(k)) mapa.set(k, { nombre: s.ingrediente, precio_compra: parseFloat(s.precio_compra) || parseFloat(s.ultimo_precio_compra) || 0, precio_venta: parseFloat(s.precio) || 0, unidad: s.unidad || '' }); });
-    const filas = [...mapa.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    const precioPorNombre = new Map();
+    (precios || []).forEach(s => { const k = norm(s.nombre); if (!precioPorNombre.has(k)) precioPorNombre.set(k, s); });
+    const filas = (itemNames || []).map(n => {
+      const p = precioPorNombre.get(norm(n)) || {};
+      return {
+        nombre: n,
+        unidad: p.unidad_venta || p.unidad || '',
+        precio_compra: parseFloat(p.precio) || 0,
+        precio_venta: parseFloat(p.precio_venta) || 0
+      };
+    }).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
     function fila(i) {
       const pc = i.precio_compra || 0;
       const pv = i.precio_venta || 0;
