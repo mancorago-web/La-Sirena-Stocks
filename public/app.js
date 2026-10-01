@@ -10628,12 +10628,15 @@ function cargarComprasResumen() {
 // Acumular el desglose por categoría (para el botón DETALLES con %)
     const clasificarStock = (nombre) => {
       const n = String(nombre || '').toUpperCase();
-      if (/^AGUA\b|AGUA CON GAS|AGUA SIN GAS|AGUA BIDON|AGUA TONICA|AGUA MINERAL|SAN LUIS|SAN MATEO|SAN CARLOS|CIELO|EVERVESS/i.test(n)) return 'AGUAS';
+      if (/^AGUA\b|AGUA CON GAS|AGUA SIN GAS|AGUA BIDON|AGUA TONICA|AGUA MINERAL|SAN LUIS|SAN MATEO|SAN CARLOS|CIELO|EVERVESS|HIELO/i.test(n)) return 'AGUAS';
       if (/COCA|INKA|SPRITE|FANTA|PINK SODA|MR\. PERKINS|TONIC WATER|BRITVIC|GASEOSA/i.test(n)) return 'GASEOSAS';
       if (/CUSQUE|CUSQUENA|PILSEN|CORONA|HEINEKEN|CERVEZA|BRAHMA|CRISTAL|BUDWEISER/i.test(n)) return 'CERVEZAS';
       if (/VINO|INYCON|MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA|SAUVIGNON|CHARDONNAY|MALBEC|CABERNET|MERLOT|PINOT|CHAMPAGNE|BRUT|CONEJO NEGRO/i.test(n)) return 'VINOS';
+      if (/PESCADO|LANGOSTINO|PULPO|CONCHAS|CALAMAR|MARISCOS|ROBALO|ATUN|ESPADA|DONCELLA|FORTUNO|MOJARRA|LIZA|PLUMA|CHITA|LORO|CHERELA/i.test(n)) return 'PESCADO - BRUTO';
       if (/^(CAFE|CAFÉ)\b|CAFE X|CAFÉ X|CHOCOLATE|CAPUCHINO|EXPRESSO|AMERICANO/i.test(n)) return 'CAFÉS';
       if (/LECHE|GLORIA|CREMA DE LECHE|CREMA DE COCO|QUESO|MANTEQUILLA|YOGUR|EVAPORADA/i.test(n)) return 'LACTEOS';
+      if (/LINAZA|PECANA|SEMILLA|AJONJOLI/i.test(n)) return 'SEMILLAS';
+      if (/ACE |DETERGENTE|JABON|LEJIA|LAVA VAJILLAS|ESPONJA|AYUDIN|POET|SUAVITEL|PAPEL TOALLA|BOLSA BASURA|BOLSAS ROLLO|SACA GRASA|ARIEL/i.test(n)) return 'LIMPIEZA';
       if (/HIELO|HUEVO|PARPADELLE|TINTA DE CALAMAR|NORTINAL|AGNESI|PURE DE TOMATE|TOMATE|ACEITE|ARROZ|HARINA|AZUCAR|SAL |SALSA|PASTA|FIDEOS|ESPAGUETTI|SPAGUEETTI|MOSTAZA|KETCHUP|MAYONESA|VINAGRE|SILLAO|AJINOMOTO|MAGGI/i.test(n)) return 'ABARROTES';
       if (/PISCO|GIN |RON |VODKA|TEQUILA|WHISKY|LICOR|JOSE CUERVO|SMIRNOFF|TANQUERAY|BOMBAY|BACARDI|CAMPARI|BARNIDET|MARTINI|MARRASQUINO|RICCADONNA|PROSECCO|BELLS|CRANBERRY|AMARGO|APEROL|JARABE/i.test(n)) return 'BARRA';
       if (/KOMBUCHA|KEFIR/i.test(n)) return 'KOMBUCHAS';
@@ -10651,12 +10654,16 @@ const pt = precioTotal(r);
         if (String(r.destino || '') === 'eventos') { cat = 'EVENTOS'; }
         else {
           cat = String(r.categoria || '').trim().toUpperCase();
+          // Normalizar PESCADO -> PESCADO - BRUTO (todos los pescados van a PESCADO - BRUTO)
+          if (cat === 'PESCADO') cat = 'PESCADO - BRUTO';
           if (!cat) cat = famMap[String(r.nombre || '').trim().toUpperCase()];
+          if (cat === 'PESCADO') cat = 'PESCADO - BRUTO';
           // Si la familia de cocina es SIN CLASIFICAR, mejor clasificar por nombre (ej. CORONA -> CERVEZAS)
           if (!cat || cat === 'SIN CLASIFICAR') {
-            if (String(r.destino || '') === 'stocks') cat = clasificarStock(r.nombre);
-            else if (String(r.destino || '') === 'barra') cat = 'BARRA';
-            else if (String(r.destino || '') === 'cocina') cat = (cat === 'SIN CLASIFICAR' ? 'OTROS' : 'OTROS');
+            if (String(r.destino || '') === 'stocks' || String(r.destino || '') === 'cocina') {
+              cat = clasificarStock(r.nombre);
+              if (cat === 'SIN CLASIFICAR' && String(r.destino || '') === 'cocina') cat = 'OTROS';
+            } else if (String(r.destino || '') === 'barra') cat = 'BARRA';
             else cat = String(r.destino || 'OTROS').toUpperCase();
           }
         }
