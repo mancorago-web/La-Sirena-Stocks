@@ -1140,8 +1140,9 @@ function analizarVentas(esPrueba) {
     const uniq = {};
     filas.forEach(r => {
       const k = norm(r.item);
-      if (!uniq[k]) uniq[k] = { nombre: r.item, cantidad: 0 };
+      if (!uniq[k]) uniq[k] = { nombre: r.item, cantidad: 0, precio_venta: 0 };
       uniq[k].cantidad += r.cantidad;
+      if (parseFloat(r.precio_venta) > 0) uniq[k].precio_venta = parseFloat(r.precio_venta) || 0;
     });
     const items = Object.values(uniq).map((i, idx) => { i.idx = idx; return i; });
     // Busca el mejor candidato existente (COCINA/BARRA/STOCKS) por similitud de nombre
@@ -1252,10 +1253,11 @@ function renderVentasAsignacion(items, containerId) {
     return '<td class="celda-almacen">' + buildAlmacenSelect(nombre) + '</td>';
   };
   cont.innerHTML = '<p style="margin:0.5rem 0;">Fecha: <b>' + fecha + '</b> — Items: <b>' + items.length + '</b> — Total unidades: <b>' + total + '</b></p>' +
-    '<div class="table-wrap"><table><thead><tr><th>Item (Excel)</th><th>Cantidad</th><th>Destino</th><th>Emparejar con</th><th>Almacén (STOCKS)</th></tr></thead><tbody>' +
+    '<div class="table-wrap"><table><thead><tr><th>Item (Excel)</th><th>Cantidad</th><th>Precio Venta</th><th>Destino</th><th>Emparejar con</th><th>Almacén (STOCKS)</th></tr></thead><tbody>' +
     items.map(i => `<tr>
       <td>${esc(i.nombre)}${i.sinEmparejar ? ' <span style="color:#c62828;" title="Sin emparejar">*</span>' : ''}</td>
       <td>${i.cantidad}</td>
+      <td>${parseFloat(i.precio_venta) > 0 ? 'S/' + (parseFloat(i.precio_venta) || 0).toFixed(2) : '—'}</td>
       <td>${radios(i)}</td>
       <td>${emparejar(i)}</td>
       ${almacen(i)}

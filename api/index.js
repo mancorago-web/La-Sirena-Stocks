@@ -2595,36 +2595,41 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
 
     // Guardar PRECIO VENTA del Excel en la colección correspondiente (para ganancia aproximada).
     // Se actualiza SOLO si el Excel trae precio_venta > 0 (no pisa precios ya cargados con 0).
-    const preciosAVenta = (items || []).filter(i => parseFloat(i.precio_venta) > 0);
-    if (preciosAVenta.length) {
-      const spSnap = await col('stock_precios').get();
-      const barraRecSnap = await col('recetas').get();
-      const cocinaRecSnap = await col('cocina_recetas').get();
-      const normV = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-      const spNorm = new Map(); spSnap.docs.forEach(d => { const a = d.data(); spNorm.set(normV(a.nombre), { ref: d.ref, data: a }); });
-      const barraNorm = new Map(); barraRecSnap.docs.forEach(d => { const a = d.data(); barraNorm.set(normV(a.nombre), { ref: d.ref, data: a }); });
-      const cocinaNorm = new Map(); cocinaRecSnap.docs.forEach(d => { const a = d.data(); cocinaNorm.set(normV(a.nombre), { ref: d.ref, data: a }); });
-      const batchPv = db.batch();
-      let opsPv = 0;
-      for (const it of preciosAVenta) {
-        const nombre = String(it.matched || it.nombre || '').trim();
-        const dest = String(it.destino || '').toLowerCase();
-        const pv = Math.round((parseFloat(it.precio_venta) || 0) * 100) / 100;
-        const nk = normV(nombre);
-        const clave = dest === 'barra' ? barraNorm : (dest === 'cocina' ? cocinaNorm : spNorm);
-        const entry = clave.get(nk);
-        if (entry) {
-          if (dest === 'barra' || dest === 'cocina') {
-            batchPv.update(entry.ref, { precio: pv, updated_at: new Date().toISOString() });
-          } else {
-            batchPv.update(entry.ref, { precio_venta: pv, updated_at: new Date().toISOString() });
+    // Es SECUNDARIO: si algo falla aquí NUNCA debe bloquear el guardado de las ventas.
+    try {
+      const preciosAVenta = (items || []).filter(i => parseFloat(i.precio_venta) > 0);
+      if (preciosAVenta.length) {
+        const spSnap = await col('stock_precios').get();
+        const barraRecSnap = await col('recetas').get();
+        const cocinaRecSnap = await col('cocina_recetas').get();
+        const normV = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+        const spNorm = new Map(); spSnap.docs.forEach(d => { const a = d.data(); spNorm.set(normV(a.nombre), { ref: d.ref, data: a }); });
+        const barraNorm = new Map(); barraRecSnap.docs.forEach(d => { const a = d.data(); barraNorm.set(normV(a.nombre), { ref: d.ref, data: a }); });
+        const cocinaNorm = new Map(); cocinaRecSnap.docs.forEach(d => { const a = d.data(); cocinaNorm.set(normV(a.nombre), { ref: d.ref, data: a }); });
+        const batchPv = db.batch();
+        let opsPv = 0;
+        for (const it of preciosAVenta) {
+          const nombre = String(it.matched || it.nombre || '').trim();
+          const dest = String(it.destino || '').toLowerCase();
+          const pv = Math.round((parseFloat(it.precio_venta) || 0) * 100) / 100;
+          const nk = normV(nombre);
+          const clave = dest === 'barra' ? barraNorm : (dest === 'cocina' ? cocinaNorm : spNorm);
+          const entry = clave.get(nk);
+          if (entry) {
+            if (dest === 'barra' || dest === 'cocina') {
+              batchPv.update(entry.ref, { precio_venta: pv, updated_at: new Date().toISOString() });
+            } else {
+              batchPv.update(entry.ref, { precio_venta: pv, updated_at: new Date().toISOString() });
+            }
+            opsPv++;
+            if (opsPv >= 400) { await batchPv.commit(); batchPv = db.batch(); opsPv = 0; }
           }
-          opsPv++;
-          if (opsPv >= 400) { await batchPv.commit(); batchPv = db.batch(); opsPv = 0; }
         }
+        if (opsPv) await batchPv.commit();
+        invalidarCache('precios_barra', 'precios_cocina', 'precios_stock', 'basedatos_unificada');
       }
-      if (opsPv) await batchPv.commit();
-      invalidarCache('precios_barra', 'precios_cocina', 'precios_stock', 'basedatos_unificada');
+    } catch (ePv) {
+      console.error('PRECIO VENTA (secundario, no bloquea):', ePv.message);
     }
 
     invalidarCachesLectura();
