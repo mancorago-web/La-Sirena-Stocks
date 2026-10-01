@@ -2191,8 +2191,10 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
       }
     }
     // 3) BARRA/STOCK no alcanza: SIEMPRE que el item exista en COCINA/STOCK, consumir de ahí
-    //    (evita falsos faltantes cuando el item es compartido, ej. HUEVOS X UND). Solo si NO
-    //    existe en COCINA se reporta como no descontado (y se permite NEGATIVO).
+    //    (evita falsos faltantes cuando el item es compartido, ej. HUEVOS X UND). Luego, si tampoco
+    //    está en COCINA, se consume de STOCK/ALMACENES (inventario) registrando una SALIDA a BARRA
+    //    (ej. AGUA BIDON X 20 LT: la barra lo agota y jala del ALMACÉN GENERAL). Solo si no existe
+    //    en ninguna parte se reporta como no descontado (y se permite NEGATIVO).
     if (restante > 0.0001) {
       const pendiente = { ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: c.unidad || 'unidad' };
       const cocinaSnap = await col('cocina_stock').get();
@@ -2224,7 +2226,44 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
           noDescontados.push({ ingrediente: nombre, cantidad: Math.round(cRest * 100) / 100, unidad: uRec, motivo: 'sin_conversion_o_insuficiente' });
         }
       } else {
-        noDescontados.push({ ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: uRec, motivo: 'sin_conversion_o_insuficiente' });
+        // Fallback a STOCK/ALMACENES: si el item está en inventario, se registra una SALIDA a BARRA
+        // (la barra agota su envase y jala del almacén). El consumo se convierte según el tamaño del
+        // envase (ej. "X 20 LT" -> equiv_ml 20000) usando la unidad de la receta (ml/lt/onzas).
+        const invSnap = await col('inventario').get();
+        const invByNombre = {};
+        invSnap.docs.forEach(d => { const a = d.data(); const k = String(a.nombre || '').trim().toUpperCase(); if (!invByNombre[k]) invByNombre[k] = []; invByNombre[k].push(a); });
+        let invMatches = invByNombre[key] || [];
+        if (!invMatches.length) {
+          const invStock = invSnap.docs.map(d => ({ data: d.data() }));
+          invMatches = matchStockFuzzy(nombre, invStock).map(x => x.item);
+        }
+        if (invMatches.length && fecha) {
+          // Consumir de los almacenes (prioridad: el que tenga stock). La cantidad pedida viene en
+          // la unidad de la receta (uRec, ej. ml); la convertimos a unidades del envase.
+          const registrosSalida = [];
+          let iRest = restante;
+          for (const inv of invMatches) {
+            if (iRest <= 0.0001) break;
+            const eqInv = parseEquivFromName(inv.nombre || nombre);
+            const uInv = normalizeUnit('unidad'); // inventario siempre en unidades
+            const convInv = cocinaAjustar(iRest, uRec, uInv, eqInv);
+            if (convInv === null || convInv === undefined) continue;
+            const dispInv = parseFloat(inv.stock_apertura) || 0;
+            const aSalir = Math.min(dispInv, Math.ceil(convInv * 100) / 100);
+            if (aSalir <= 0) continue;
+            registrosSalida.push({ item_id: Number(inv.item_id), almacen_id: Number(inv.almacen_id), salida_almacen: aSalir, destino_salida: 'barra' });
+            iRest = Math.max(0, Math.round((iRest - cocinaAjustar(aSalir, uInv, uRec, eqInv)) * 100) / 100);
+            ajustados++;
+          }
+          if (registrosSalida.length) {
+            try { await guardarDiaInterno(fecha, registrosSalida, savedBy); } catch (e) { console.error('fallback stock->barra:', e.message); }
+          }
+          if (iRest > 0.0001) {
+            noDescontados.push({ ingrediente: nombre, cantidad: Math.round(iRest * 100) / 100, unidad: uRec, motivo: 'sin_conversion_o_insuficiente' });
+          }
+        } else {
+          noDescontados.push({ ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: uRec, motivo: 'sin_conversion_o_insuficiente' });
+        }
       }
     }
   }
