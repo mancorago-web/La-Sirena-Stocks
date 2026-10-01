@@ -2599,9 +2599,11 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
     try {
       const preciosAVenta = (items || []).filter(i => parseFloat(i.precio_venta) > 0);
       if (preciosAVenta.length) {
-        const spSnap = await col('stock_precios').get();
-        const barraRecSnap = await col('recetas').get();
-        const cocinaRecSnap = await col('cocina_recetas').get();
+        const [spSnap, barraRecSnap, cocinaRecSnap] = await Promise.all([
+          col('stock_precios').get(),
+          col('recetas').get(),
+          col('cocina_recetas').get(),
+        ]);
         const normV = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
         const spNorm = new Map(); spSnap.docs.forEach(d => { const a = d.data(); spNorm.set(normV(a.nombre), { ref: d.ref, data: a }); });
         const barraNorm = new Map(); barraRecSnap.docs.forEach(d => { const a = d.data(); barraNorm.set(normV(a.nombre), { ref: d.ref, data: a }); });
