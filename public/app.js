@@ -10626,15 +10626,20 @@ function cargarComprasResumen() {
       return;
     }
     // Acumular el desglose por categoría (para el botón DETALLES con %)
-    const clasificarStock = (nombre) => {
+const clasificarStock = (nombre) => {
       const n = String(nombre || '').toUpperCase();
       if (/^AGUA\b|AGUA CON GAS|AGUA SIN GAS|AGUA BIDON|AGUA TONICA|AGUA MINERAL|SAN LUIS|SAN MATEO|SAN CARLOS|CIELO|EVERVESS/i.test(n)) return 'AGUAS';
       if (/COCA|INKA|SPRITE|FANTA|PINK SODA|MR\. PERKINS|TONIC WATER|BRITVIC|GASEOSA/i.test(n)) return 'GASEOSAS';
       if (/CUSQUE|CUSQUENA|PILSEN|CORONA|HEINEKEN|CERVEZA|BRAHMA|CRISTAL|BUDWEISER/i.test(n)) return 'CERVEZAS';
       if (/VINO|MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA|SAUVIGNON|CHARDONNAY|MALBEC|CABERNET|MERLOT|PINOT|CHAMPAGNE|BRUT|CONEJO NEGRO/i.test(n)) return 'VINOS';
-      if (/CAFE|CAFÉ|CHOCOLATE|TÉ|TE |HIERBA|INFUSI/i.test(n)) return 'CAFÉS';
-      if (/LECHE|GLORIA|CREMA DE LECHE|QUESO|MANTEQUILLA|YOGUR/i.test(n)) return 'LACTEOS';
-      return 'STOCKS';
+      if (/^(CAFE|CAFÉ)\b|CAFE X|CAFÉ X|CHOCOLATE|CAPUCHINO|EXPRESSO|AMERICANO/i.test(n)) return 'CAFÉS';
+      if (/LECHE|GLORIA|CREMA DE LECHE|QUESO|MANTEQUILLA|YOGUR|COCO|EVAPORADA/i.test(n)) return 'LACTEOS';
+      if (/PURE DE TOMATE|TOMATE|ACEITE|ARROZ|HARINA|AZUCAR|SAL |SALSA|PASTA|FIDEOS|ESPAGUETTI|AGNESI|SPAGUEETTI|MOSTAZA|KETCHUP|MAYONESA|VINAGRE|SILLAO|AJINOMOTO|MAGGI/i.test(n)) return 'ABARROTES';
+      if (/HIELO/i.test(n)) return 'SERVICIO';
+      if (/PISCO|GIN |RON |VODKA|TEQUILA|WHISKY|LICOR|JOSE CUERVO|SMIRNOFF|TANQUERAY|BOMBAY|BACARDI|CAMPARI|BARNIDET|MARTINI|AMARGO|APEROL|JARABE/i.test(n)) return 'BARRA';
+      if (/KOMBUCHA|KEFIR/i.test(n)) return 'KOMBUCHAS';
+      if (/CAFE|CAFÉ/i.test(n)) return 'CAFÉS';
+      return 'SIN CLASIFICAR';
     };
     const porCategoria = {};
     fechas.forEach(f => {
@@ -10676,7 +10681,12 @@ function verDetalleComprasPorCategoria(encoded, total) {
   let porCat = {};
   try { porCat = JSON.parse(decodeURIComponent(encoded)); } catch (e) { alert('Error leyendo los datos'); return; }
   const totalG = parseFloat(total) || 0;
-  const cats = Object.keys(porCat).sort((a, b) => (porCat[b] - porCat[a]) || String(a).localeCompare(String(b), 'es'));
+  const ordenFin = ['SIN CLASIFICAR', 'OTROS', 'COCINA (SIN CAT)'];
+  const cats = Object.keys(porCat).sort((a, b) => {
+    const fa = ordenFin.indexOf(a), fb = ordenFin.indexOf(b);
+    if (fa !== -1 || fb !== -1) return (fa === -1 ? 1 : fa) - (fb === -1 ? 1 : fb);
+    return (porCat[b] - porCat[a]) || String(a).localeCompare(String(b), 'es');
+  });
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
   const mc = modal.querySelector('.modal-content');
