@@ -7665,40 +7665,62 @@ _porcionamientoTemperatura = _PORCIONAMIENTO_PESCA_BLANCA_CALIENTE.has(nombre) ?
           { nombre: 'DESPERDICIO', peso: 0 },
           { nombre: 'FILETES', peso: 0 }
         ]);
-  // Calcular el precio TOTAL y el PRECIO/KILO BASE del item (de la ultima compra).
-  // El precio por kilo de la compra (total / cantidad comprada) es la base fija de referencia
-  // para el porcionamiento, SIN importar cuantos kilos se ingresen al porcionamiento.
+  // Calcular el precio TOTAL y el PRECIO/KILO BASE del item.
+  // FUENTE MAESTRA: el precio de compra de la BASE DE DATOS UNIFICADA (cocina_precios) tiene
+  // PRIORIDAD, porque se mantiene sincronizado desde la UNIFICADA para todos los items.
+  // La compra (total/cantidad) solo se usa como respaldo cuando no hay precio en la unificada.
+  // Así, si el admin actualiza el precio en BASE DE DATOS UNIFICADA, PORCIONAMIENTO lo refleja
+  // automáticamente sin tocar nada más (misma fórmula para cualquier item).
   const normF = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
   const nombreNorm = normF(nombre);
+  const precUnif = (ctx.precios || []).find(p => normF(p.ingrediente) === nombreNorm);
+  const precioKiloUnif = precUnif ? (parseFloat(precUnif.precio_compra) || parseFloat(precUnif.ultimo_precio_compra) || parseFloat(precUnif.precio) || 0) : 0;
   const comprasItem = (ctx.compras || []).filter(c => normF(c.nombre) === nombreNorm);
   let precioTotal = 0;
   let precioKiloBase = 0;
-  if (comprasItem.length) {
+  // SIEMPRE se prioriza el precio de compra de la unificada (fuente maestra sincronizada).
+  if (precioKiloUnif > 0) {
+    precioKiloBase = precioKiloUnif;
+    const cantStock = stock > 0 ? stock : 1;
+    precioTotal = precioKiloUnif * cantStock;
+  }
+  // Respaldo: la compra más reciente (total/cantidad = precio por kilo real pagado).
+  if (precioKiloBase <= 0 && comprasItem.length) {
     comprasItem.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
     const c = comprasItem[0];
     const cantidadCompra = parseFloat(c.cantidad) || 0;
     precioTotal = parseFloat(c.precio_total) > 0 ? parseFloat(c.precio_total) : (parseFloat(c.precio) || 0) * cantidadCompra;
-    // Precio por kilo de la compra: total pagado / kilos comprados (base fija, ej. 100/5 = 20/kg)
     if (cantidadCompra > 0 && precioTotal > 0) precioKiloBase = precioTotal / cantidadCompra;
   }
   _porcionamientoCtx.item = { nombre, stock, precioTotal, precioKiloBase };
   renderPorcionamientoEditor(secciones);
-  // Consultar el precio SIEMPRE en vivo al backend y actualizar las celdas (garantiza el dato real)
-  api('GET', '/api/cocina/compras').then(comprasAll => {
+  // Consultar el precio SIEMPRE en vivo al backend y actualizar las celdas (garantiza el dato real).
+  // Usa la MISMA fórmula: precio de compra de la unificada con prioridad, compra como respaldo.
+  Promise.all([api('GET', '/api/cocina/precios'), api('GET', '/api/cocina/compras')]).then(([preciosAll, comprasAll]) => {
     const norm2 = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    const precVivo = (preciosAll || []).find(p => norm2(p.ingrediente) === nombreNorm);
+    const pvKilo = precVivo ? (parseFloat(precVivo.precio_compra) || parseFloat(precVivo.ultimo_precio_compra) || parseFloat(precVivo.precio) || 0) : 0;
     const list = (comprasAll || []).filter(c => norm2(c.nombre) === nombreNorm);
-    if (list.length) {
+    let kiloBase = pvKilo;
+    let totalBase = 0;
+    if (kiloBase > 0) {
+      totalBase = kiloBase * (stock > 0 ? stock : 1);
+    } else if (list.length) {
       list.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
       const c = list[0];
       const cantCompra = parseFloat(c.cantidad) || 0;
       const pt = parseFloat(c.precio_total) > 0 ? parseFloat(c.precio_total) : (parseFloat(c.precio) || 0) * cantCompra;
       if (pt > 0) {
-        _porcionamientoCtx.item.precioTotal = pt;
-        // Precio por kilo base de la compra (total / kilos comprados)
-        if (cantCompra > 0) _porcionamientoCtx.item.precioKiloBase = pt / cantCompra;
-        _porcionamientoCtx.compras = comprasAll || [];
-        actualizarTotalPorcionamiento();
+        totalBase = pt;
+        if (cantCompra > 0) kiloBase = pt / cantCompra;
       }
+    }
+    if (totalBase > 0 || kiloBase > 0) {
+      if (kiloBase > 0) _porcionamientoCtx.item.precioKiloBase = kiloBase;
+      if (totalBase > 0) _porcionamientoCtx.item.precioTotal = totalBase;
+      _porcionamientoCtx.compras = comprasAll || [];
+      _porcionamientoCtx.precios = preciosAll || [];
+      actualizarTotalPorcionamiento();
     }
   }).catch(() => {});
 }
@@ -7949,26 +7971,31 @@ function obtenerPesoSeccion(filtro) {
   return peso;
 }
 
-// Obtiene el precio TOTAL del peso bruto del item (el precio que se pago por la compra)
+// Obtiene el precio TOTAL del peso bruto del item.
+// FUENTE MAESTRA: precio de compra de la unificada (cocina_precios) con PRIORIDAD; la compra
+// solo como respaldo. Misma fórmula que cargarPorcionamientoItem para consistencia total.
 function obtenerPrecioItem(ctx, nombreNorm) {
   if (!ctx) return 0;
   // 0) Si ya se calculo el precioTotal al seleccionar el item, usarlo directamente
   if (ctx.item && ctx.item.precioTotal > 0) return ctx.item.precioTotal;
   const normF = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-  // 1) Buscar la compra MÁS RECIENTE del item (precio_total = el precio real pagado por el peso bruto)
+  // 1) PRIORIDAD: precio de compra de la unificada (cocina_precios) × stock
+  const prec = (ctx.precios || []).find(p => normF(p.ingrediente) === nombreNorm);
+  if (prec) {
+    const pvKilo = parseFloat(prec.precio_compra) || parseFloat(prec.ultimo_precio_compra) || parseFloat(prec.precio) || 0;
+    if (pvKilo > 0) {
+      const stock = (ctx.stock || []).find(s => normF(s.ingrediente) === nombreNorm);
+      const cant = stock ? (parseFloat(stock.cantidad) || 0) : 1;
+      return pvKilo * (cant > 0 ? cant : 1);
+    }
+  }
+  // 2) Respaldo: la compra MÁS RECIENTE del item (precio_total = el precio real pagado)
   const comprasItem = (ctx.compras || []).filter(c => normF(c.nombre) === nombreNorm);
   if (comprasItem.length) {
     comprasItem.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
     const c = comprasItem[0];
     if (parseFloat(c.precio_total) > 0) return parseFloat(c.precio_total);
     if (parseFloat(c.precio) > 0) return parseFloat(c.precio) * (parseFloat(c.cantidad) || 1);
-  }
-  // 2) Buscar en cocina_precios el precio_compra (por unidad) * cantidad del stock
-  const prec = (ctx.precios || []).find(p => normF(p.ingrediente) === nombreNorm);
-  if (prec && parseFloat(prec.precio_compra) > 0) {
-    const stock = (ctx.stock || []).find(s => normF(s.ingrediente) === nombreNorm);
-    const cant = stock ? (parseFloat(stock.cantidad) || 0) : 1;
-    return parseFloat(prec.precio_compra) * (cant > 0 ? cant : 1);
   }
   return 0;
 }

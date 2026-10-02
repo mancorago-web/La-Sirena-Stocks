@@ -4575,6 +4575,8 @@ function cantDeItem(x) {
 
 // Guarda (o actualiza) el precio de un item PORC. que sale del porcionamiento, para que las
 // recetas que lo usen calculen su costo con el precio real del porcionamiento.
+// También se sincroniza con la BASE DE DATOS UNIFICADA (base_unificada y demás zonas donde
+// exista el item), para que el precio calculado en PORCIONAMIENTO se refleje en todos lados.
 async function registrarPrecioPorcionamiento(nombre, precio, unidad) {
   const p = Math.round((parseFloat(precio) || 0) * 100) / 100;
   if (p <= 0 || !nombre) return;
@@ -4595,6 +4597,10 @@ async function registrarPrecioPorcionamiento(nombre, precio, unidad) {
     const maxId = snap.docs.length ? Math.max(...snap.docs.map(d => Number(d.id) || 0)) + 1 : 1;
     await coll.doc(String(maxId)).set({ id: maxId, ingrediente: nombre, created_at: now, ...data });
   }
+  // Sincronizar con la BASE DE DATOS UNIFICADA (todas las zonas donde exista el item)
+  try {
+    await syncPreciosEnZonas(nombre, { precio_compra: p, unidad_compra: u });
+  } catch (e) { console.error('sync porcionamiento:', e.message); }
   invalidarCache('precios_cocina', 'basedatos_unificada');
 }
 
