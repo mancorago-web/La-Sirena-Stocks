@@ -9517,6 +9517,29 @@ function getFechasCompras() {
 // --- COMPRAS: LISTA DE COMPRAS (items de COCINA y BARRA para pedir al día siguiente) ---
 let _zonaListaCompras = 'cocina';
 
+// Deriva la UNIDAD del item según su NOMBRE:
+//  - termina en X KG -> 'kg'
+//  - termina en X UND -> 'unidad'
+//  - termina en X LT -> 'lt'
+//  - termina en X <número> G (ej. X 200 GR) -> 'unidad' (se pide por unidad/pack)
+function unidadPorNombre(nombre) {
+  const n = String(nombre || '').trim().toUpperCase();
+  if (/X\s*\d*\.?\d*\s*KG\s*$/i.test(n)) return 'kg';
+  if (/X\s*UND\s*$/i.test(n)) return 'unidad';
+  if (/X\s*\d*\.?\d*\s*LT\s*$/i.test(n)) return 'lt';
+  if (/X\s*\d+\s*(G|GR|GRS|GRAMOS)\s*$/i.test(n)) return 'unidad';
+  return 'unidad';
+}
+
+// Familias de COCINA que NO se piden en la LISTA DE COMPRAS (se gestionan aparte)
+function esFamiliaExcluidaCocina(familia) {
+  const f = String(familia || '').trim().toUpperCase();
+  if (/^PESCADO/.test(f)) return true;      // PESCADO - BRUTO, PESCADO PORC. - ...
+  if (f === 'CARNE') return true;
+  if (f === 'POLLO') return true;
+  return false;
+}
+
 function cambiarZonaListaCompras(zona) {
   _zonaListaCompras = zona;
   const bC = document.getElementById('btn-lista-cocina');
@@ -9548,10 +9571,14 @@ function cargarListaCompras() {
     const conHistorial = new Set((historial || []).map(n => norm(n)));
     let items;
     if (z === 'cocina') {
-      items = (cocinaStock || []).map(s => ({ nombre: s.ingrediente, unidad: s.unidad || 'kg', cantidad: (savedCocina[norm(s.ingrediente)] !== undefined ? savedCocina[norm(s.ingrediente)] : 0) }));
+      items = (cocinaStock || []).map(s => ({ nombre: s.ingrediente, familia: s.familia || '', cantidad: (savedCocina[norm(s.ingrediente)] !== undefined ? savedCocina[norm(s.ingrediente)] : 0) }));
+      // NINGÚN PESCADO, CARNE ni POLLO entra a las compras de COCINA
+      items = items.filter(i => !esFamiliaExcluidaCocina(i.familia));
     } else {
-      items = (barraStock || []).map(s => ({ nombre: s.ingrediente, unidad: s.unidad || 'unidad', cantidad: (savedBarra[norm(s.ingrediente)] !== undefined ? savedBarra[norm(s.ingrediente)] : 0) }));
+      items = (barraStock || []).map(s => ({ nombre: s.ingrediente, familia: s.familia || '', cantidad: (savedBarra[norm(s.ingrediente)] !== undefined ? savedBarra[norm(s.ingrediente)] : 0) }));
     }
+    // Unidad derivada del NOMBRE (guía: X KG -> kg, X UND -> unidad, X LT -> lt, X N G -> unidad)
+    items = items.map(i => ({ ...i, unidad: unidadPorNombre(i.nombre) }));
     const buscarTerm = (document.getElementById('buscar-lista-compras')?.value || '').trim().toLowerCase();
     // FILTRO: por defecto solo items que ya se han comprado (historial). Si hay BÚSQUEDA, se
     // muestran todos (aunque no tengan compras aún) para poder pedir items nuevos.
