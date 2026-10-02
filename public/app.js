@@ -9646,7 +9646,8 @@ function enviarListaComprasPDF() {
     w.document.write('<h1>LISTA DE COMPRAS</h1>');
     w.document.write('<p style="color:#666;margin:0 0 16px;">Fecha: <b>' + fecha + '</b> · Generada el ' + new Date().toLocaleDateString('es-PE') + '</p>');
     const filaPdf = i => {
-      const c = (parseFloat(i.cantidad) || 0) > 0 ? i.cantidad : '';
+      const cant = parseFloat(i.cantidad) || 0;
+      const c = cant > 0 ? cant + ' ' + unidadPorNombre(i.nombre) : '';
       const s = (parseFloat(i.soles) || 0) > 0 ? 'S/ ' + i.soles : '';
       return '<tr><td>' + i.nombre + '</td><td class="cant">' + c + '</td><td class="sol">' + s + '</td></tr>';
     };
