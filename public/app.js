@@ -9564,18 +9564,18 @@ function cargarListaCompras() {
     api('GET', '/api/lista-compras/items-comprados?zona=' + z),
   ]).then(([cocinaStock, barraStock, lista, historial]) => {
     const guardadas = lista || { cocina: [], barra: [] };
-    const savedCocina = (guardadas.cocina || []).reduce((m, i) => { m[String(i.nombre).toUpperCase()] = i.cantidad; return m; }, {});
-    const savedBarra = (guardadas.barra || []).reduce((m, i) => { m[String(i.nombre).toUpperCase()] = i.cantidad; return m; }, {});
+    const savedCocina = (guardadas.cocina || []).reduce((m, i) => { m[String(i.nombre).toUpperCase()] = i; return m; }, {});
+    const savedBarra = (guardadas.barra || []).reduce((m, i) => { m[String(i.nombre).toUpperCase()] = i; return m; }, {});
     const norm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
     // Conjunto de items CON historial de compras (los habituales que se muestran por defecto)
     const conHistorial = new Set((historial || []).map(n => norm(n)));
     let items;
     if (z === 'cocina') {
-      items = (cocinaStock || []).map(s => ({ nombre: s.ingrediente, familia: s.familia || '', cantidad: (savedCocina[norm(s.ingrediente)] !== undefined ? savedCocina[norm(s.ingrediente)] : 0) }));
+      items = (cocinaStock || []).map(s => ({ nombre: s.ingrediente, familia: s.familia || '', cantidad: (savedCocina[norm(s.ingrediente)] ? savedCocina[norm(s.ingrediente)].cantidad : 0), soles: (savedCocina[norm(s.ingrediente)] ? savedCocina[norm(s.ingrediente)].soles : 0) }));
       // NINGÚN PESCADO, CARNE ni POLLO entra a las compras de COCINA
       items = items.filter(i => !esFamiliaExcluidaCocina(i.familia));
     } else {
-      items = (barraStock || []).map(s => ({ nombre: s.ingrediente, familia: s.familia || '', cantidad: (savedBarra[norm(s.ingrediente)] !== undefined ? savedBarra[norm(s.ingrediente)] : 0) }));
+      items = (barraStock || []).map(s => ({ nombre: s.ingrediente, familia: s.familia || '', cantidad: (savedBarra[norm(s.ingrediente)] ? savedBarra[norm(s.ingrediente)].cantidad : 0), soles: (savedBarra[norm(s.ingrediente)] ? savedBarra[norm(s.ingrediente)].soles : 0) }));
     }
     // Unidad derivada del NOMBRE (guía: X KG -> kg, X UND -> unidad, X LT -> lt, X N G -> unidad)
     items = items.map(i => ({ ...i, unidad: unidadPorNombre(i.nombre) }));
@@ -9597,8 +9597,9 @@ function cargarListaCompras() {
       <td>${esc(i.nombre)}</td>
       <td style="font-size:0.78rem;color:#888;">${esc(i.unidad)}</td>
       <td><input type="number" class="input-num input-lista-cant" data-nombre="${esc(i.nombre)}" value="${i.cantidad || ''}" step="0.001" min="0" style="width:90px;"></td>
+      <td><input type="number" class="input-num input-lista-soles" data-nombre="${esc(i.nombre)}" value="${i.soles || ''}" step="0.01" min="0" style="width:90px;"></td>
     </tr>`).join('');
-    container.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Unidad</th><th>Cantidad a pedir</th></tr></thead><tbody>' + filas + '</tbody></table></div>';
+    container.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Unidad</th><th>Cantidad a pedir</th><th>Soles a pedir</th></tr></thead><tbody>' + filas + '</tbody></table></div>';
   }).catch(e => { console.error(e); container.innerHTML = '<p style="color:#c62828;">Error cargando lista de compras.</p>'; });
 }
 
@@ -9610,7 +9611,9 @@ function guardarListaCompras() {
   document.querySelectorAll('#accordion-lista-compras input.input-lista-cant').forEach(inp => {
     const nombre = inp.dataset.nombre;
     const cant = parseFloat(inp.value) || 0;
-    if (nombre) items.push({ nombre, cantidad: cant });
+    const solesInp = document.querySelector('input.input-lista-soles[data-nombre="' + nombre.replace(/"/g, '\\"') + '"]');
+    const soles = solesInp ? (parseFloat(solesInp.value) || 0) : 0;
+    if (nombre) items.push({ nombre, cantidad: cant, soles });
   });
   // Guardar solo la zona actual (la otra zona ya quedó guardada aparte)
   const zona = _zonaListaCompras;
@@ -9633,23 +9636,28 @@ function enviarListaComprasPDF() {
   const fechaEl = document.getElementById('fecha-lista-compras');
   const fecha = fechaEl ? fechaEl.value : todayStr();
   api('GET', '/api/lista-compras?fecha=' + encodeURIComponent(fecha)).then(lista => {
-    const cocina = (lista.cocina || []).filter(i => (i.cantidad || 0) > 0);
-    const barra = (lista.barra || []).filter(i => (i.cantidad || 0) > 0);
-    if (!cocina.length && !barra.length) { alert('No hay items con cantidad en la lista de ' + fecha); return; }
+    const cocina = (lista.cocina || []).filter(i => (i.cantidad || 0) > 0 || (i.soles || 0) > 0);
+    const barra = (lista.barra || []).filter(i => (i.cantidad || 0) > 0 || (i.soles || 0) > 0);
+    if (!cocina.length && !barra.length) { alert('No hay items en la lista de ' + fecha); return; }
     const w = window.open('', '_blank');
     if (!w) { alert('Permite las ventanas emergentes para generar el PDF'); return; }
     w.document.write('<html><head><meta charset="utf-8"><title>Lista de Compras ' + fecha + '</title>');
-    w.document.write('<style>body{font-family:Arial,sans-serif;margin:30px;color:#222;}h1{font-size:20px;margin:0 0 4px;}h2{font-size:16px;margin:18px 0 6px;border-bottom:2px solid #333;padding-bottom:3px;}table{width:100%;border-collapse:collapse;margin-top:6px;}th,td{border:1px solid #999;padding:6px 8px;text-align:left;font-size:13px;}th{background:#f0f0f0;}td.cant{width:90px;text-align:center;}@media print{button{display:none;}}</style></head><body>');
+    w.document.write('<style>body{font-family:Arial,sans-serif;margin:30px;color:#222;}h1{font-size:20px;margin:0 0 4px;}h2{font-size:16px;margin:18px 0 6px;border-bottom:2px solid #333;padding-bottom:3px;}table{width:100%;border-collapse:collapse;margin-top:6px;}th,td{border:1px solid #999;padding:6px 8px;text-align:left;font-size:13px;}th{background:#f0f0f0;}td.cant{width:80px;text-align:center;}td.sol{width:80px;text-align:center;}@media print{button{display:none;}}</style></head><body>');
     w.document.write('<h1>LISTA DE COMPRAS</h1>');
     w.document.write('<p style="color:#666;margin:0 0 16px;">Fecha: <b>' + fecha + '</b> · Generada el ' + new Date().toLocaleDateString('es-PE') + '</p>');
+    const filaPdf = i => {
+      const c = (parseFloat(i.cantidad) || 0) > 0 ? i.cantidad : '';
+      const s = (parseFloat(i.soles) || 0) > 0 ? 'S/ ' + i.soles : '';
+      return '<tr><td>' + i.nombre + '</td><td class="cant">' + c + '</td><td class="sol">' + s + '</td></tr>';
+    };
     if (cocina.length) {
-      w.document.write('<h2>🍳 COCINA</h2><table><thead><tr><th>Item</th><th>Cantidad</th></tr></thead><tbody>');
-      cocina.forEach(i => w.document.write('<tr><td>' + i.nombre + '</td><td class="cant">' + i.cantidad + '</td></tr>'));
+      w.document.write('<h2>🍳 COCINA</h2><table><thead><tr><th>Item</th><th>Cantidad</th><th>Soles</th></tr></thead><tbody>');
+      cocina.forEach(i => w.document.write(filaPdf(i)));
       w.document.write('</tbody></table>');
     }
     if (barra.length) {
-      w.document.write('<h2>🍸 BARRA</h2><table><thead><tr><th>Item</th><th>Cantidad</th></tr></thead><tbody>');
-      barra.forEach(i => w.document.write('<tr><td>' + i.nombre + '</td><td class="cant">' + i.cantidad + '</td></tr>'));
+      w.document.write('<h2>🍸 BARRA</h2><table><thead><tr><th>Item</th><th>Cantidad</th><th>Soles</th></tr></thead><tbody>');
+      barra.forEach(i => w.document.write(filaPdf(i)));
       w.document.write('</tbody></table>');
     }
     w.document.write('<div style="margin-top:24px;text-align:right;"><button onclick="window.print()" style="padding:10px 20px;font-size:15px;cursor:pointer;">🖨️ IMPRIMIR / GUARDAR PDF</button></div>');

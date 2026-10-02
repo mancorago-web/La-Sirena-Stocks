@@ -1693,6 +1693,7 @@ app.post('/api/lista-compras', authMiddleware, async (req, res) => {
     const lista = (Array.isArray(items) ? items : []).filter(i => i && i.nombre).map(i => ({
       nombre: String(i.nombre).trim(),
       cantidad: Math.round((parseFloat(i.cantidad) || 0) * 1000) / 1000,
+      soles: Math.round((parseFloat(i.soles) || 0) * 100) / 100,
     }));
     const upd = { updated_at: new Date().toISOString(), saved_by: (req.user && (req.user.name || req.user.email)) || 'unknown' };
     upd[z] = lista;
