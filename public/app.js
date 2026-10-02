@@ -2700,7 +2700,7 @@ function verDetallesVentas() {
     });
     return;
   }
-  Promise.all([getInventario(fecha), api('GET', '/api/stock/precios/venta')]).then(([data, preciosVenta]) => {
+  Promise.all([getInventario(fecha), api('GET', '/api/ventas/precios-venta')]).then(([data, preciosVenta]) => {
     const pvMap = {};
     (preciosVenta || []).forEach(p => { pvMap[String(p.nombre || '').trim().toUpperCase().replace(/\s+/g, ' ')] = parseFloat(p.precio_venta) || 0; });
     const normPv = (n) => String(n || '').trim().toUpperCase().replace(/\s+/g, ' ');
@@ -10006,7 +10006,7 @@ function cargarVentasDetalle(fecha) {
   const c = document.getElementById('ventas-detalle-container');
   if (!c) return;
   const fechaFinal = fecha || document.getElementById('fecha-ventas-menu')?.value || todayStr();
-  Promise.all([api('GET', '/api/ventas/detalle?fecha=' + encodeURIComponent(fechaFinal)), api('GET', '/api/stock/precios/venta')]).then(([list, preciosVenta]) => {
+  Promise.all([api('GET', '/api/ventas/detalle?fecha=' + encodeURIComponent(fechaFinal)), api('GET', '/api/ventas/precios-venta')]).then(([list, preciosVenta]) => {
     // Solo renderizar si la fecha aún es la seleccionada (evita que una consulta vieja sobreescriba)
     const actual = document.getElementById('fecha-ventas-menu')?.value || todayStr();
     if (actual !== fechaFinal) return;

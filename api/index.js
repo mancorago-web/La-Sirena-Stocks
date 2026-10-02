@@ -5265,6 +5265,28 @@ app.get('/api/stock/precios/items', async (req, res) => {
 // Solo esos se muestran en la pestaña PRECIO VENTA.
 // - PRECIO DE VENTA: SOLO desde la colección `precios_venta_excel` (cargada desde los EXCEL de VENTAS).
 // - PRECIO DE COMPRA: lógica unificada (stock_precios.precio > barra_precios > cocina_precios > última compra).
+// --- VENTAS: TODOS los precios de venta del Excel (stocks + barra + cocina), sin filtrar por destino.
+// Para el DETALLE DE VENTAS: una receta de BARRA/COCINA (ej. "Pisco Sour Clasico") también tiene
+// su precio en precios_venta_excel, pero NO es un item de STOCKS, así que el endpoint
+// /api/stock/precios/venta (que solo muestra vendidos directos de almacenes) no lo incluiría.
+app.get('/api/ventas/precios-venta', async (req, res) => {
+  try {
+    const out = await cached('precios_venta_todos', 5000, async () => {
+      const pvSnap = await col('precios_venta_excel').get();
+      const normV = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+      const mapa = new Map();
+      pvSnap.docs.forEach(d => {
+        const a = d.data();
+        const k = normV(a.nombre);
+        const pv = parseFloat(a.precio_venta) || 0;
+        if (k && pv > 0 && !mapa.has(k)) mapa.set(k, { nombre: a.nombre, precio_venta: pv });
+      });
+      return Array.from(mapa.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    });
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/stock/precios/venta', async (req, res) => {
   try {
     const out = await cached('precios_venta_stocks', 5000, async () => {
