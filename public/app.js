@@ -9642,14 +9642,14 @@ function enviarListaComprasPDF() {
     const w = window.open('', '_blank');
     if (!w) { alert('Permite las ventanas emergentes para generar el PDF'); return; }
     w.document.write('<html><head><meta charset="utf-8"><title>Lista de Compras ' + fecha + '</title>');
-    w.document.write('<style>body{font-family:Arial,sans-serif;margin:30px;color:#222;}h1{font-size:20px;margin:0 0 4px;}h2{font-size:16px;margin:18px 0 6px;border-bottom:2px solid #333;padding-bottom:3px;}table{width:100%;border-collapse:collapse;margin-top:6px;}th,td{border:1px solid #999;padding:6px 8px;text-align:left;font-size:13px;}th{background:#f0f0f0;}td.cant{width:80px;text-align:center;}td.sol{width:80px;text-align:center;}@media print{button{display:none;}}</style></head><body>');
+    w.document.write('<style>body{font-family:Arial,sans-serif;margin:20px;color:#222;}h1{font-size:19px;margin:0 0 4px;}h2{font-size:15px;margin:12px 0 4px;border-bottom:2px solid #333;padding-bottom:3px;}table{width:100%;border-collapse:collapse;margin-top:4px;table-layout:auto;}th,td{border:1px solid #999;padding:3px 6px;text-align:left;font-size:12px;white-space:nowrap;}th{background:#f0f0f0;}td.item{width:auto;}td.cant{width:70px;text-align:center;white-space:nowrap;}td.sol{width:70px;text-align:center;white-space:nowrap;}@media print{button{display:none;}}</style></head><body>');
     w.document.write('<h1>LISTA DE COMPRAS</h1>');
-    w.document.write('<p style="color:#666;margin:0 0 16px;">Fecha: <b>' + fecha + '</b> · Generada el ' + new Date().toLocaleDateString('es-PE') + '</p>');
+    w.document.write('<p style="color:#666;margin:0 0 12px;">Fecha: <b>' + fecha + '</b> · Generada el ' + new Date().toLocaleDateString('es-PE') + '</p>');
     const filaPdf = i => {
       const cant = parseFloat(i.cantidad) || 0;
-      const c = cant > 0 ? cant + ' ' + unidadPorNombre(i.nombre) : '';
+      const c = cant > 0 ? cant + ' ' + String(unidadPorNombre(i.nombre)).toUpperCase() : '';
       const s = (parseFloat(i.soles) || 0) > 0 ? 'S/ ' + i.soles : '';
-      return '<tr><td>' + i.nombre + '</td><td class="cant">' + c + '</td><td class="sol">' + s + '</td></tr>';
+      return '<tr><td class="item">' + i.nombre + '</td><td class="cant">' + c + '</td><td class="sol">' + s + '</td></tr>';
     };
     if (cocina.length) {
       w.document.write('<h2>🍳 COCINA</h2><table><thead><tr><th>Item</th><th>Cantidad</th><th>Soles</th></tr></thead><tbody>');
