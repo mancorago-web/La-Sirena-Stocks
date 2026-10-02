@@ -9642,7 +9642,7 @@ function enviarListaComprasPDF() {
     const w = window.open('', '_blank');
     if (!w) { alert('Permite las ventanas emergentes para generar el PDF'); return; }
     w.document.write('<html><head><meta charset="utf-8"><title>Lista de Compras ' + fecha + '</title>');
-    w.document.write('<style>body{font-family:Arial,sans-serif;margin:20px;color:#222;}h1{font-size:19px;margin:0 0 4px;}h2{font-size:15px;margin:12px 0 4px;border-bottom:2px solid #333;padding-bottom:3px;}table{width:100%;border-collapse:collapse;margin-top:4px;table-layout:auto;}th,td{border:1px solid #999;padding:3px 6px;text-align:left;font-size:12px;white-space:nowrap;}th{background:#f0f0f0;}td.item{width:auto;}td.cant{width:70px;text-align:center;white-space:nowrap;}td.sol{width:70px;text-align:center;white-space:nowrap;}@media print{button{display:none;}}</style></head><body>');
+    w.document.write('<style>body{font-family:Arial,sans-serif;margin:15px auto;color:#222;width:420px;max-width:100%;}h1{font-size:17px;margin:0 0 4px;}h2{font-size:14px;margin:10px 0 4px;border-bottom:2px solid #333;padding-bottom:2px;}table{width:100%;border-collapse:collapse;margin-top:4px;table-layout:fixed;}th,td{border:1px solid #999;padding:3px 5px;text-align:left;font-size:11px;white-space:nowrap;overflow:hidden;}th{background:#f0f0f0;}td.item{width:auto;}td.cant{width:80px;text-align:center;white-space:nowrap;}td.sol{width:80px;text-align:center;white-space:nowrap;}@media print{button{display:none;}}</style></head><body>');
     w.document.write('<h1>LISTA DE COMPRAS</h1>');
     w.document.write('<p style="color:#666;margin:0 0 12px;">Fecha: <b>' + fecha + '</b> · Generada el ' + new Date().toLocaleDateString('es-PE') + '</p>');
     const filaPdf = i => {
