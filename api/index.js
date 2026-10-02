@@ -1659,6 +1659,48 @@ app.get('/api/compras/detalle', async (req, res) => {
   }
 });
 
+// --- LISTA DE COMPRAS: lista de items de COCINA/BARRA con cantidades para una fecha (día siguiente).
+// El administrador pone las cantidades de lo que se pide y la lista queda guardada por fecha.
+// Se usa la colección `lista_compras` con un doc por (fecha, zona) que contiene los items.
+app.get('/api/lista-compras', authMiddleware, async (req, res) => {
+  try {
+    const fecha = String(req.query.fecha || '').trim();
+    const zona = String(req.query.zona || '').trim().toLowerCase();
+    if (!fecha) return res.json({ fecha: '', cocina: [], barra: [], zonas: {} });
+    const docId = 'lista_' + fecha;
+    const doc = await col('lista_compras').doc(docId).get();
+    const data = doc.exists ? doc.data() : {};
+    const out = {
+      fecha,
+      cocina: Array.isArray(data.cocina) ? data.cocina : [],
+      barra: Array.isArray(data.barra) ? data.barra : [],
+      updated_at: data.updated_at || null,
+      saved_by: data.saved_by || null,
+    };
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/lista-compras', authMiddleware, async (req, res) => {
+  try {
+    const { fecha, zona, items } = req.body;
+    if (!fecha) return res.status(400).json({ error: 'fecha requerida' });
+    const z = String(zona || '').toLowerCase();
+    if (z !== 'cocina' && z !== 'barra') return res.status(400).json({ error: 'zona debe ser cocina o barra' });
+    const docId = 'lista_' + fecha;
+    const ref = col('lista_compras').doc(docId);
+    const cur = (await ref.get()).exists ? (await ref.get()).data() : {};
+    const lista = (Array.isArray(items) ? items : []).filter(i => i && i.nombre).map(i => ({
+      nombre: String(i.nombre).trim(),
+      cantidad: Math.round((parseFloat(i.cantidad) || 0) * 1000) / 1000,
+    }));
+    const upd = { updated_at: new Date().toISOString(), saved_by: (req.user && (req.user.name || req.user.email)) || 'unknown' };
+    upd[z] = lista;
+    await ref.set({ fecha, ...cur, ...upd }, { merge: true });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Historial completo de compras de un item (todas las fechas, descendente). Sirve para COMPARAR
 // el precio del día contra compras anteriores del mismo item.
 app.get('/api/compras/historial', async (req, res) => {

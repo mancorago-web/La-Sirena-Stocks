@@ -170,6 +170,14 @@
     </div>
   </div>
 
+  <!-- Tabs bar (COMPRAS) -->
+  <div id="tabs-compras" class="tabs-bar" style="display:none">
+    <div class="tabs">
+      <button class="sub-tab active" data-subtab="registro" onclick="cambiarSubTab('registro','compras')">COMPRAS</button>
+      <button class="sub-tab" data-subtab="listacompras" onclick="cambiarSubTab('listacompras','compras')">LISTA DE COMPRAS</button>
+    </div>
+  </div>
+
   <div class="container" id="container">
     <div id="tab-almacenes" class="tab-content active">
       <div class="header-actions">
@@ -678,8 +686,9 @@
     </div>
 
     <div id="tab-compras" class="tab-content">
-      <div class="header-actions">
-        <h2>COMPRAS</h2>
+      <div id="sub-compras-registro" class="sub-tab-content active">
+        <div class="header-actions">
+          <h2>COMPRAS</h2>
         <div class="controles-dia">
           <label>Desde: <input type="date" id="fecha-compras-ini" onchange="cargarCompras()"></label>
           <label>Hasta: <input type="date" id="fecha-compras-fin" onchange="cargarCompras()"></label>
@@ -762,6 +771,26 @@
         </div>
       </div>
       <div id="compras-detalle-container" style="margin-top:1.5rem;"></div>
+      </div>
+
+      <div id="sub-compras-listacompras" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>LISTA DE COMPRAS</h2>
+          <div class="controles-dia">
+            <label>Fecha de la lista: <input type="date" id="fecha-lista-compras" onchange="cargarListaCompras()"></label>
+            <button class="btn-guardar-dia" onclick="guardarListaCompras()">💾 GUARDAR LISTA</button>
+            <button class="btn-detalles" onclick="enviarListaComprasPDF()" style="background:#c62828;color:#fff;font-weight:700;">📄 ENVIAR POR PDF</button>
+          </div>
+        </div>
+        <div style="font-size:0.8rem;color:#888;margin-bottom:0.75rem;">Items que se piden de COCINA y de BARRA. Escribe la cantidad que necesitas para esa fecha y guarda. La lista del día siguiente queda registrada.</div>
+        <div class="controles-dia" style="margin-bottom:0.75rem;">
+          <label style="font-weight:600;">Zona:</label>
+          <button class="btn-detalles" id="btn-lista-cocina" onclick="cambiarZonaListaCompras('cocina')" style="background:#0f3460;color:#fff;">🍳 COCINA</button>
+          <button class="btn-detalles" id="btn-lista-barra" onclick="cambiarZonaListaCompras('barra')" style="background:#1565c0;color:#fff;">🍸 BARRA</button>
+          <input type="text" id="buscar-lista-compras" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-lista-compras')" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:180px;">
+        </div>
+        <div id="accordion-lista-compras"></div>
+      </div>
     </div>
 
     <div id="tab-ventas-central" class="tab-content">
