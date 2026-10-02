@@ -9544,8 +9544,10 @@ function cambiarZonaListaCompras(zona) {
   _zonaListaCompras = zona;
   const bC = document.getElementById('btn-lista-cocina');
   const bB = document.getElementById('btn-lista-barra');
+  const bL = document.getElementById('btn-lista-limpieza');
   if (bC) bC.style.background = zona === 'cocina' ? '#0f3460' : '#9e9e9e';
   if (bB) bB.style.background = zona === 'barra' ? '#1565c0' : '#9e9e9e';
+  if (bL) bL.style.background = zona === 'limpieza' ? '#00897b' : '#9e9e9e';
   cargarListaCompras();
 }
 
@@ -9561,21 +9563,20 @@ function cargarListaCompras() {
     api('GET', '/api/lista-compras?fecha=' + encodeURIComponent(fecha)),
     api('GET', '/api/lista-compras/items'),
   ]).then(([lista, itemsCfg]) => {
-    const guardadas = lista || { cocina: [], barra: [] };
-    const savedCocina = (guardadas.cocina || []).reduce((m, i) => { m[String(i.nombre).toUpperCase()] = i; return m; }, {});
-    const savedBarra = (guardadas.barra || []).reduce((m, i) => { m[String(i.nombre).toUpperCase()] = i; return m; }, {});
+    const guardadas = lista || { cocina: [], barra: [], limpieza: [] };
+    const savedZona = (guardadas[z] || []).reduce((m, i) => { m[String(i.nombre).toUpperCase()] = i; return m; }, {});
     const norm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-    const nombres = (z === 'cocina' ? ((itemsCfg && itemsCfg.cocina) || []) : ((itemsCfg && itemsCfg.barra) || []));
+    const nombres = (itemsCfg && itemsCfg[z]) || [];
     // Los items guardados con cantidad/soles siempre se incluyen aunque no estén en la config
     const nombresSet = new Set(nombres.map(n => norm(n)));
     let items = nombres.map(nombre => {
       const k = norm(nombre);
-      const g = (z === 'cocina' ? savedCocina : savedBarra)[k];
+      const g = savedZona[k];
       return { nombre, cantidad: g ? g.cantidad : 0, soles: g ? g.soles : 0 };
     });
-    (z === 'cocina' ? savedCocina : savedBarra) && Object.keys(z === 'cocina' ? savedCocina : savedBarra).forEach(k => {
+    Object.keys(savedZona).forEach(k => {
       if (!nombresSet.has(k)) {
-        const g = (z === 'cocina' ? savedCocina : savedBarra)[k];
+        const g = savedZona[k];
         items.push({ nombre: g.nombre, cantidad: g.cantidad, soles: g.soles });
       }
     });
@@ -9583,8 +9584,9 @@ function cargarListaCompras() {
     items = items.filter(i => !buscarTerm || String(i.nombre || '').toLowerCase().includes(buscarTerm));
     items = items.map(i => ({ ...i, unidad: unidadPorNombre(i.nombre) }));
     items.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    const labelZona = { cocina: 'COCINA', barra: 'BARRA', limpieza: 'LIMPIEZA' }[z] || z.toUpperCase();
     if (!items.length) {
-      container.innerHTML = '<p style="color:#888;">No hay items en la lista de ' + (z === 'cocina' ? 'COCINA' : 'BARRA') + '.</p>';
+      container.innerHTML = '<p style="color:#888;">No hay items en la lista de ' + labelZona + '.</p>';
       return;
     }
     const filas = items.map(i => `<tr>
@@ -9618,7 +9620,7 @@ function guardarListaCompras() {
   api('POST', '/api/lista-compras', { fecha, zona, items }).then(() => {
     window._guardandoListaCompras = false;
     if (btn) btn.disabled = false;
-    showToast('Lista de ' + (zona === 'cocina' ? 'COCINA' : 'BARRA') + ' guardada');
+    showToast('Lista de ' + ({ cocina: 'COCINA', barra: 'BARRA', limpieza: 'LIMPIEZA' }[zona] || zona.toUpperCase()) + ' guardada');
   }).catch(e => {
     window._guardandoListaCompras = false;
     if (btn) btn.disabled = false;
@@ -9632,7 +9634,8 @@ function enviarListaComprasPDF() {
   api('GET', '/api/lista-compras?fecha=' + encodeURIComponent(fecha)).then(lista => {
     const cocina = (lista.cocina || []).filter(i => (i.cantidad || 0) > 0 || (i.soles || 0) > 0);
     const barra = (lista.barra || []).filter(i => (i.cantidad || 0) > 0 || (i.soles || 0) > 0);
-    if (!cocina.length && !barra.length) { alert('No hay items en la lista de ' + fecha); return; }
+    const limpieza = (lista.limpieza || []).filter(i => (i.cantidad || 0) > 0 || (i.soles || 0) > 0);
+    if (!cocina.length && !barra.length && !limpieza.length) { alert('No hay items en la lista de ' + fecha); return; }
     const w = window.open('', '_blank');
     if (!w) { alert('Permite las ventanas emergentes para generar el PDF'); return; }
     w.document.write('<html><head><meta charset="utf-8"><title>Lista de Compras ' + fecha + '</title>');
@@ -9653,6 +9656,11 @@ function enviarListaComprasPDF() {
     if (barra.length) {
       w.document.write('<h2>🍸 BARRA</h2><table><thead><tr><th>Item</th><th>Cantidad</th><th>Soles</th></tr></thead><tbody>');
       barra.forEach(i => w.document.write(filaPdf(i)));
+      w.document.write('</tbody></table>');
+    }
+    if (limpieza.length) {
+      w.document.write('<h2>🧹 LIMPIEZA</h2><table><thead><tr><th>Item</th><th>Cantidad</th><th>Soles</th></tr></thead><tbody>');
+      limpieza.forEach(i => w.document.write(filaPdf(i)));
       w.document.write('</tbody></table>');
     }
     w.document.write('<div style="margin-top:24px;text-align:right;"><button onclick="window.print()" style="padding:10px 20px;font-size:15px;cursor:pointer;">🖨️ IMPRIMIR / GUARDAR PDF</button></div>');

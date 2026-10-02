@@ -782,11 +782,12 @@
             <button class="btn-detalles" onclick="enviarListaComprasPDF()" style="background:#c62828;color:#fff;font-weight:700;">📄 ENVIAR POR PDF</button>
           </div>
         </div>
-        <div style="font-size:0.8rem;color:#888;margin-bottom:0.75rem;">Items que se piden de COCINA y de BARRA. Escribe la cantidad que necesitas para esa fecha y guarda. La lista del día siguiente queda registrada.</div>
+        <div style="font-size:0.8rem;color:#888;margin-bottom:0.75rem;">Items que se piden de COCINA, BARRA y LIMPIEZA. Escribe la cantidad (o soles) que necesitas para esa fecha y guarda. La lista del día siguiente queda registrada.</div>
         <div class="controles-dia" style="margin-bottom:0.75rem;">
           <label style="font-weight:600;">Zona:</label>
           <button class="btn-detalles" id="btn-lista-cocina" onclick="cambiarZonaListaCompras('cocina')" style="background:#0f3460;color:#fff;">🍳 COCINA</button>
           <button class="btn-detalles" id="btn-lista-barra" onclick="cambiarZonaListaCompras('barra')" style="background:#1565c0;color:#fff;">🍸 BARRA</button>
+          <button class="btn-detalles" id="btn-lista-limpieza" onclick="cambiarZonaListaCompras('limpieza')" style="background:#00897b;color:#fff;">🧹 LIMPIEZA</button>
           <input type="text" id="buscar-lista-compras" placeholder="Buscar item (muestra todos)..." oninput="cargarListaCompras()" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:180px;">
         </div>
         <div id="accordion-lista-compras"></div>

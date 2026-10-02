@@ -1674,6 +1674,7 @@ app.get('/api/lista-compras', authMiddleware, async (req, res) => {
       fecha,
       cocina: Array.isArray(data.cocina) ? data.cocina : [],
       barra: Array.isArray(data.barra) ? data.barra : [],
+      limpieza: Array.isArray(data.limpieza) ? data.limpieza : [],
       updated_at: data.updated_at || null,
       saved_by: data.saved_by || null,
     };
@@ -1686,7 +1687,7 @@ app.post('/api/lista-compras', authMiddleware, async (req, res) => {
     const { fecha, zona, items } = req.body;
     if (!fecha) return res.status(400).json({ error: 'fecha requerida' });
     const z = String(zona || '').toLowerCase();
-    if (z !== 'cocina' && z !== 'barra') return res.status(400).json({ error: 'zona debe ser cocina o barra' });
+    if (z !== 'cocina' && z !== 'barra' && z !== 'limpieza') return res.status(400).json({ error: 'zona debe ser cocina, barra o limpieza' });
     const docId = 'lista_' + fecha;
     const ref = col('lista_compras').doc(docId);
     const cur = (await ref.get()).exists ? (await ref.get()).data() : {};
@@ -1712,6 +1713,7 @@ app.get('/api/lista-compras/items', async (req, res) => {
     res.json({
       cocina: Array.isArray(data.cocina) ? data.cocina : [],
       barra: Array.isArray(data.barra) ? data.barra : [],
+      limpieza: Array.isArray(data.limpieza) ? data.limpieza : [],
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
