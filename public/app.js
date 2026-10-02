@@ -9532,27 +9532,38 @@ function cargarListaCompras() {
   const fecha = fechaEl ? fechaEl.value : todayStr();
   const container = document.getElementById('accordion-lista-compras');
   if (!container) return;
-  // Cargar los items de COCINA/STOCK y BARRA/STOCK para mostrar los que se pueden pedir
+  const z = _zonaListaCompras;
+  // Cargar stock + lista guardada + historial de items comprados (para pre-cargar solo los habituales)
   Promise.all([
     api('GET', '/api/cocina/stock'),
     api('GET', '/api/barra/stock'),
     api('GET', '/api/lista-compras?fecha=' + encodeURIComponent(fecha)),
-  ]).then(([cocinaStock, barraStock, lista]) => {
+    api('GET', '/api/lista-compras/items-comprados?zona=' + z),
+  ]).then(([cocinaStock, barraStock, lista, historial]) => {
     const guardadas = lista || { cocina: [], barra: [] };
     const savedCocina = (guardadas.cocina || []).reduce((m, i) => { m[String(i.nombre).toUpperCase()] = i.cantidad; return m; }, {});
     const savedBarra = (guardadas.barra || []).reduce((m, i) => { m[String(i.nombre).toUpperCase()] = i.cantidad; return m; }, {});
     const norm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-    const z = _zonaListaCompras;
+    // Conjunto de items CON historial de compras (los habituales que se muestran por defecto)
+    const conHistorial = new Set((historial || []).map(n => norm(n)));
     let items;
     if (z === 'cocina') {
       items = (cocinaStock || []).map(s => ({ nombre: s.ingrediente, unidad: s.unidad || 'kg', cantidad: (savedCocina[norm(s.ingrediente)] !== undefined ? savedCocina[norm(s.ingrediente)] : 0) }));
-      items.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
     } else {
       items = (barraStock || []).map(s => ({ nombre: s.ingrediente, unidad: s.unidad || 'unidad', cantidad: (savedBarra[norm(s.ingrediente)] !== undefined ? savedBarra[norm(s.ingrediente)] : 0) }));
-      items.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
     }
+    const buscarTerm = (document.getElementById('buscar-lista-compras')?.value || '').trim().toLowerCase();
+    // FILTRO: por defecto solo items que ya se han comprado (historial). Si hay BÚSQUEDA, se
+    // muestran todos (aunque no tengan compras aún) para poder pedir items nuevos.
+    items = items.filter(i => {
+      if (buscarTerm) {
+        return String(i.nombre || '').toLowerCase().includes(buscarTerm) || conHistorial.has(norm(i.nombre));
+      }
+      return conHistorial.has(norm(i.nombre)) || (i.cantidad && i.cantidad > 0);
+    });
+    items.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
     if (!items.length) {
-      container.innerHTML = '<p style="color:#888;">No hay items en ' + (z === 'cocina' ? 'COCINA/STOCK' : 'BARRA/STOCK') + '.</p>';
+      container.innerHTML = '<p style="color:#888;">No hay items con compras previas en ' + (z === 'cocina' ? 'COCINA' : 'BARRA') + '.</p>';
       return;
     }
     const filas = items.map(i => `<tr>

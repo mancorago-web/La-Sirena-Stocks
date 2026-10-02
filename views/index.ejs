@@ -787,7 +787,7 @@
           <label style="font-weight:600;">Zona:</label>
           <button class="btn-detalles" id="btn-lista-cocina" onclick="cambiarZonaListaCompras('cocina')" style="background:#0f3460;color:#fff;">🍳 COCINA</button>
           <button class="btn-detalles" id="btn-lista-barra" onclick="cambiarZonaListaCompras('barra')" style="background:#1565c0;color:#fff;">🍸 BARRA</button>
-          <input type="text" id="buscar-lista-compras" placeholder="Buscar item..." oninput="buscarEnTabla(this.value, 'accordion-lista-compras')" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:180px;">
+          <input type="text" id="buscar-lista-compras" placeholder="Buscar item (muestra todos)..." oninput="cargarListaCompras()" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:180px;">
         </div>
         <div id="accordion-lista-compras"></div>
       </div>

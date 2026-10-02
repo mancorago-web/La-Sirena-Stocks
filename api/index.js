@@ -1701,6 +1701,31 @@ app.post('/api/lista-compras', authMiddleware, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- LISTA DE COMPRAS: items con historial de compras (para saber qué se pide habitualmente).
+// Devuelve los nombres únicos comprados por zona (cocina/barra) en el log `compras` y en
+// `cocina_compras`/`barra_movimientos`. Se usan para pre-cargar la LISTA DE COMPRAS solo con
+// los items que ya se han pedido (el buscador muestra TODOS, incluso sin historial).
+app.get('/api/lista-compras/items-comprados', async (req, res) => {
+  try {
+    const zona = String(req.query.zona || '').toLowerCase();
+    const norm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    const set = new Set();
+    if (!zona || zona === 'cocina') {
+      const compras = await col('compras').get();
+      compras.docs.forEach(d => { const a = d.data(); if (String(a.destino || '').toLowerCase() === 'cocina' && a.nombre) set.add(norm(a.nombre)); });
+      const cc = await col('cocina_compras').get();
+      cc.docs.forEach(d => { const a = d.data(); if (a.nombre) set.add(norm(a.nombre)); });
+    }
+    if (!zona || zona === 'barra') {
+      const compras = await col('compras').get();
+      compras.docs.forEach(d => { const a = d.data(); if (String(a.destino || '').toLowerCase() === 'barra' && a.nombre) set.add(norm(a.nombre)); });
+      const bm = await col('barra_movimientos').get();
+      bm.docs.forEach(d => { const a = d.data(); if ((String(a.tipo || '').toLowerCase() === 'ingresos' || String(a.tipo || '').toLowerCase() === 'compras') && a.ingrediente) set.add(norm(a.ingrediente)); });
+    }
+    res.json(Array.from(set).sort());
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Historial completo de compras de un item (todas las fechas, descendente). Sirve para COMPARAR
 // el precio del día contra compras anteriores del mismo item.
 app.get('/api/compras/historial', async (req, res) => {
