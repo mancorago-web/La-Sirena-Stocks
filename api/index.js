@@ -1702,6 +1702,20 @@ app.post('/api/lista-compras', authMiddleware, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- LISTA DE COMPRAS: items fijos por zona (desde los Excels del mercado) ---
+// La fuente de verdad son los items definidos en config/lista_compras_items (los que el
+// administrador pidió incluir). Se usa para mostrar la lista SIN depender del historial.
+app.get('/api/lista-compras/items', async (req, res) => {
+  try {
+    const doc = await col('config').doc('lista_compras_items').get();
+    const data = doc.exists ? doc.data() : {};
+    res.json({
+      cocina: Array.isArray(data.cocina) ? data.cocina : [],
+      barra: Array.isArray(data.barra) ? data.barra : [],
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- LISTA DE COMPRAS: items con historial de compras (para saber qué se pide habitualmente).
 // Devuelve los nombres únicos comprados por zona (cocina/barra) en el log `compras` y en
 // `cocina_compras`/`barra_movimientos`. Se usan para pre-cargar la LISTA DE COMPRAS solo con

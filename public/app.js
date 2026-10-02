@@ -9556,41 +9556,35 @@ function cargarListaCompras() {
   const container = document.getElementById('accordion-lista-compras');
   if (!container) return;
   const z = _zonaListaCompras;
-  // Cargar stock + lista guardada + historial de items comprados (para pre-cargar solo los habituales)
+  // Cargar lista guardada + items fijos definidos (desde los Excels del mercado)
   Promise.all([
-    api('GET', '/api/cocina/stock'),
-    api('GET', '/api/barra/stock'),
     api('GET', '/api/lista-compras?fecha=' + encodeURIComponent(fecha)),
-    api('GET', '/api/lista-compras/items-comprados?zona=' + z),
-  ]).then(([cocinaStock, barraStock, lista, historial]) => {
+    api('GET', '/api/lista-compras/items'),
+  ]).then(([lista, itemsCfg]) => {
     const guardadas = lista || { cocina: [], barra: [] };
     const savedCocina = (guardadas.cocina || []).reduce((m, i) => { m[String(i.nombre).toUpperCase()] = i; return m; }, {});
     const savedBarra = (guardadas.barra || []).reduce((m, i) => { m[String(i.nombre).toUpperCase()] = i; return m; }, {});
     const norm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-    // Conjunto de items CON historial de compras (los habituales que se muestran por defecto)
-    const conHistorial = new Set((historial || []).map(n => norm(n)));
-    let items;
-    if (z === 'cocina') {
-      items = (cocinaStock || []).map(s => ({ nombre: s.ingrediente, familia: s.familia || '', cantidad: (savedCocina[norm(s.ingrediente)] ? savedCocina[norm(s.ingrediente)].cantidad : 0), soles: (savedCocina[norm(s.ingrediente)] ? savedCocina[norm(s.ingrediente)].soles : 0) }));
-      // NINGÚN PESCADO, CARNE ni POLLO entra a las compras de COCINA
-      items = items.filter(i => !esFamiliaExcluidaCocina(i.familia));
-    } else {
-      items = (barraStock || []).map(s => ({ nombre: s.ingrediente, familia: s.familia || '', cantidad: (savedBarra[norm(s.ingrediente)] ? savedBarra[norm(s.ingrediente)].cantidad : 0), soles: (savedBarra[norm(s.ingrediente)] ? savedBarra[norm(s.ingrediente)].soles : 0) }));
-    }
-    // Unidad derivada del NOMBRE (guía: X KG -> kg, X UND -> unidad, X LT -> lt, X N G -> unidad)
-    items = items.map(i => ({ ...i, unidad: unidadPorNombre(i.nombre) }));
-    const buscarTerm = (document.getElementById('buscar-lista-compras')?.value || '').trim().toLowerCase();
-    // FILTRO: por defecto solo items que ya se han comprado (historial). Si hay BÚSQUEDA, se
-    // muestran todos (aunque no tengan compras aún) para poder pedir items nuevos.
-    items = items.filter(i => {
-      if (buscarTerm) {
-        return String(i.nombre || '').toLowerCase().includes(buscarTerm) || conHistorial.has(norm(i.nombre));
-      }
-      return conHistorial.has(norm(i.nombre)) || (i.cantidad && i.cantidad > 0);
+    const nombres = (z === 'cocina' ? ((itemsCfg && itemsCfg.cocina) || []) : ((itemsCfg && itemsCfg.barra) || []));
+    // Los items guardados con cantidad/soles siempre se incluyen aunque no estén en la config
+    const nombresSet = new Set(nombres.map(n => norm(n)));
+    let items = nombres.map(nombre => {
+      const k = norm(nombre);
+      const g = (z === 'cocina' ? savedCocina : savedBarra)[k];
+      return { nombre, cantidad: g ? g.cantidad : 0, soles: g ? g.soles : 0 };
     });
+    (z === 'cocina' ? savedCocina : savedBarra) && Object.keys(z === 'cocina' ? savedCocina : savedBarra).forEach(k => {
+      if (!nombresSet.has(k)) {
+        const g = (z === 'cocina' ? savedCocina : savedBarra)[k];
+        items.push({ nombre: g.nombre, cantidad: g.cantidad, soles: g.soles });
+      }
+    });
+    const buscarTerm = (document.getElementById('buscar-lista-compras')?.value || '').trim().toLowerCase();
+    items = items.filter(i => !buscarTerm || String(i.nombre || '').toLowerCase().includes(buscarTerm));
+    items = items.map(i => ({ ...i, unidad: unidadPorNombre(i.nombre) }));
     items.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
     if (!items.length) {
-      container.innerHTML = '<p style="color:#888;">No hay items con compras previas en ' + (z === 'cocina' ? 'COCINA' : 'BARRA') + '.</p>';
+      container.innerHTML = '<p style="color:#888;">No hay items en la lista de ' + (z === 'cocina' ? 'COCINA' : 'BARRA') + '.</p>';
       return;
     }
     const filas = items.map(i => `<tr>
