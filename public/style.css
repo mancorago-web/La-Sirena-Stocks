@@ -790,3 +790,19 @@ td button.danger { border-color: #c62828; color: #c62828; }
   .btn-accion { min-width: 100%; font-size: 0.82rem; padding: 0.65rem; }
 }
 
+/* Tabla de IMPORTAR VENTAS (Excel): compacta para que quepa en pantalla sin scroll horizontal */
+.ventas-import-wrap { overflow-x: visible; }
+.tabla-import-ventas { table-layout: fixed; width: 100%; }
+.tabla-import-ventas th,
+.tabla-import-ventas td { padding: 0.35rem 0.4rem; font-size: 0.72rem; white-space: normal; word-break: break-word; vertical-align: top; }
+.tabla-import-ventas th { font-size: 0.66rem; }
+.tabla-import-ventas select { width: 100%; max-width: 100%; font-size: 0.7rem; padding: 0.2rem; }
+.tabla-import-ventas input.input-match-nuevo { width: 100%; font-size: 0.7rem; }
+.tabla-import-ventas td label { font-size: 0.68rem; margin-right: 0.4rem; display: block; }
+.tabla-import-ventas th:nth-child(1), .tabla-import-ventas td:nth-child(1) { width: 20%; }
+.tabla-import-ventas th:nth-child(2), .tabla-import-ventas td:nth-child(2) { width: 6%; text-align: center; }
+.tabla-import-ventas th:nth-child(3), .tabla-import-ventas td:nth-child(3) { width: 8%; text-align: center; }
+.tabla-import-ventas th:nth-child(4), .tabla-import-ventas td:nth-child(4) { width: 16%; }
+.tabla-import-ventas th:nth-child(5), .tabla-import-ventas td:nth-child(5) { width: 28%; }
+.tabla-import-ventas th:nth-child(6), .tabla-import-ventas td:nth-child(6) { width: 22%; }
+

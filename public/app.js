@@ -1407,7 +1407,7 @@ function renderVentasAsignacion(items, containerId) {
     return '<td class="celda-almacen">' + buildAlmacenSelect(nombre) + '</td>';
   };
   cont.innerHTML = '<p style="margin:0.5rem 0;">Fecha: <b>' + fecha + '</b> — Items: <b>' + items.length + '</b> — Total unidades: <b>' + total + '</b></p>' +
-    '<div class="table-wrap"><table><thead><tr><th>Item (Excel)</th><th>Cantidad</th><th>Precio Venta</th><th>Destino</th><th>Emparejar con</th><th>Almacén (STOCKS)</th></tr></thead><tbody>' +
+    '<div class="table-wrap ventas-import-wrap"><table class="tabla-import-ventas"><thead><tr><th>Item (Excel)</th><th>Cant.</th><th>P. Venta</th><th>Destino</th><th>Emparejar con</th><th>Almacén (STOCKS)</th></tr></thead><tbody>' +
     items.map(i => `<tr>
       <td>${esc(i.nombre)}${i.sinEmparejar ? ' <span style="color:#c62828;" title="Sin emparejar">*</span>' : ''}</td>
       <td>${i.cantidad}</td>
