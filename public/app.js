@@ -1279,6 +1279,21 @@ function analizarVentas(esPrueba) {
     const stockSet = new Set((stockItems || []).map(n => norm(n)));
     const barraNombres = (barraRec || []).map(x => x.nombre);
     const cocinaNombres = (cocinaRec || []).map(x => x.nombre);
+    // Mapa nombre -> categoría de las recetas de cocina (para emparejar por GRUPO: FONDO MENU,
+    // ENTRADA MENU, POSTRE MENU...). Así un item del Excel "FONDO MENU - X" solo se empareja con
+    // una receta del grupo FONDOS MENU, y si no existe, se crea una receta nueva (no se infla otro plato).
+    const cocinaCats = {};
+    (cocinaRec || []).forEach(r => { cocinaCats[norm(r.nombre)] = String(r.categoria || '').trim().toUpperCase(); });
+    // Detecta el grupo de recetas según el prefijo del nombre del Excel
+    const detectarGrupo = (nombre) => {
+      const up = String(nombre || '').toUpperCase();
+      if (up.startsWith('FONDO MENU')) return 'FONDOS MENU';
+      if (up.startsWith('ENTRADA MENU')) return 'ENTRADAS MENU';
+      if (up.startsWith('POSTRE MENU')) return 'POSTRES MENU';
+      if (up.startsWith('PLATO DEL DIA')) return 'PLATOS';
+      if (up.startsWith('LIMONADA MENU')) return 'LIMONADA MENU';
+      return null;
+    };
     const stocksPorNombre = {};
     (invData || []).forEach(a => {
       (a.items || []).forEach(it => {
@@ -1299,16 +1314,30 @@ function analizarVentas(esPrueba) {
       if (parseFloat(r.precio_venta) > 0) uniq[k].precio_venta = parseFloat(r.precio_venta) || 0;
     });
     const items = Object.values(uniq).map((i, idx) => { i.idx = idx; return i; });
-    // Busca el mejor candidato existente (COCINA/BARRA/STOCKS) por similitud de nombre
+    // Busca el mejor candidato existente (COCINA/BARRA/STOCKS) por similitud de nombre.
+    // REGLA DE GRUPO: si el nombre del Excel tiene prefijo de grupo (FONDO MENU / ENTRADA MENU /
+    // POSTRE MENU / LIMONADA MENU...), SOLO se empareja con una receta de ese grupo y SOLO por
+    // coincidencia EXACTA de nombre. Si no existe, devuelve null (se creará una receta nueva),
+    // evitando que un plato del menú infle las ventas de otro plato parecido.
     const mejorCandidato = (nombre) => {
-      const pool = [
-        ...(cocinaNombres || []).map(n => ({ n, zona: 'cocina' })),
-        ...(barraNombres || []).map(n => ({ n, zona: 'barra' })),
-        ...(stockNombres || []).filter(n => !esBasura(n)).map(n => ({ n, zona: 'stocks' })),
-      ];
-      // La coincidencia EXACTA (nombre normalizado) siempre gana sobre el difuso
+      const grupo = detectarGrupo(nombre);
+      let pool;
+      if (grupo) {
+        pool = (cocinaNombres || [])
+          .filter(n => String(cocinaCats[norm(n)] || '').includes(grupo) || String(n).toUpperCase().startsWith(grupo))
+          .map(n => ({ n, zona: 'cocina' }));
+      } else {
+        pool = [
+          ...(cocinaNombres || []).map(n => ({ n, zona: 'cocina' })),
+          ...(barraNombres || []).map(n => ({ n, zona: 'barra' })),
+          ...(stockNombres || []).filter(n => !esBasura(n)).map(n => ({ n, zona: 'stocks' })),
+        ];
+      }
+      // La coincidencia EXACTA (nombre normalizado) siempre gana
       const exacto = pool.find(p => norm(p.n) === norm(nombre));
       if (exacto) return { ...exacto, score: 1 };
+      // Para items de grupo MENU: NO usar similitud difusa (evita inflar otro plato del menú)
+      if (grupo) return null;
       let best = null, bestS = 0;
       pool.forEach(p => { const s = similitud(nombre, p.n); if (s > bestS) { bestS = s; best = p; } });
       return best && bestS >= 0.6 ? { ...best, score: bestS } : null;
@@ -1317,17 +1346,22 @@ function analizarVentas(esPrueba) {
     items.forEach(i => {
       const k = norm(i.nombre);
       const fuzzy = mejorCandidato(i.nombre);
-      // Destino: mapeo guardado > coincidencia exacta > coincidencia difusa
+      const grupoItem = detectarGrupo(i.nombre);
+      // Destino: mapeo guardado > coincidencia exacta > coincidencia difusa.
+      // Los items de GRUPO MENU sin match van a COCINA (para crear la receta nueva del menú).
       if (mappingNorm[k]) { i.destino = mappingNorm[k]; }
       else if (cocinaSet.has(k)) i.destino = 'cocina';
       else if (barraSet.has(k)) i.destino = 'barra';
       else if (stockSet.has(k)) i.destino = 'stocks';
-      else i.destino = (fuzzy ? fuzzy.zona : 'stocks');
+      else i.destino = (fuzzy ? fuzzy.zona : (grupoItem ? 'cocina' : 'stocks'));
       // Emparejamiento: nombre del Excel ya mapeado a un item/receta real de la app.
       // Un match GUARDADO siempre gana (si el item existe en alguna zona), para no caer en el
       // emparejado difuso que a veces elige el año equivocado (ej. 2022 en vez de 2023).
+      // Para items de GRUPO MENU, el match guardado SOLO vale si apunta a una receta del MISMO
+      // grupo (evita que "FONDO MENU - ARROZ CON MARISCOS" se mapee a "Arroz Del Mar -").
       const m = matchNorm[k];
-      const matchedExiste = m && (cocinaSet.has(norm(m)) || barraSet.has(norm(m)) || stockSet.has(norm(m)));
+      const matchEnGrupo = !grupoItem || (m && (String(cocinaCats[norm(m)] || '').includes(grupoItem) || String(m).toUpperCase().startsWith(grupoItem)));
+      const matchedExiste = m && matchEnGrupo && (cocinaSet.has(norm(m)) || barraSet.has(norm(m)) || stockSet.has(norm(m)));
       if (m && matchedExiste) {
         i.matched = m;
         i.emparejado = true;
@@ -1447,6 +1481,17 @@ function onPruebaDestinoChange(radio) {
   actualizarAlmacenImport(tr);
 }
 
+// Devuelve la categoría de receta de cocina según el prefijo del nombre (FONDO MENU, ENTRADA
+// MENU, POSTRE MENU...). Se usa al crear una receta nueva desde el import de VENTAS.
+function categoriaRecetaCocina(nombre) {
+  const up = String(nombre || '').toUpperCase();
+  if (up.startsWith('FONDO MENU')) return 'FONDOS MENU';
+  if (up.startsWith('ENTRADA MENU')) return 'ENTRADAS MENU';
+  if (up.startsWith('POSTRE MENU')) return 'POSTRES MENU';
+  if (up.startsWith('LIMONADA MENU')) return 'LIMONADA MENU';
+  return 'PLATOS';
+}
+
 // Nombres basura que vienen del EXCEL (artefactos) y no deben auto-emparejarse en STOCKS
 function esBasura(nombre) {
   const n = String(nombre || '').trim();
@@ -1503,10 +1548,18 @@ function similitud(a, b) {
 function candidatosTodos(nombre, destino) {
   const ctx = window._ventasImportCtx || { barraNombres: [], cocinaNombres: [], stockNombres: [] };
   const pool = [];
+  // Para items de GRUPO MENU solo se ofrecen recetas del MISMO grupo (FONDO/ENTRADA/POSTRE MENU)
+  const prefMenu = (['FONDO MENU', 'ENTRADA MENU', 'POSTRE MENU', 'LIMONADA MENU']).find(p => String(nombre || '').toUpperCase().startsWith(p)) || null;
   if (destino === 'barra') {
     (ctx.barraNombres || []).forEach(n => pool.push({ n, zona: 'BARRA' }));
   } else if (destino === 'cocina') {
-    (ctx.cocinaNombres || []).forEach(n => pool.push({ n, zona: 'COCINA' }));
+    (ctx.cocinaNombres || []).forEach(n => {
+      if (prefMenu) {
+        if (String(n).toUpperCase().startsWith(prefMenu)) pool.push({ n, zona: 'COCINA' });
+      } else {
+        pool.push({ n, zona: 'COCINA' });
+      }
+    });
   } else {
     (ctx.stockNombres || []).forEach(n => { if (!esBasura(n)) pool.push({ n, zona: 'STOCKS' }); });
   }
@@ -1667,7 +1720,7 @@ function guardarVentasAsignadas(containerId, filas, onDone) {
   const crearRecetas = recetasNuevas.map(rec => {
     return (rec.tipo === 'barra'
       ? api('POST', '/api/recetas', { nombre: rec.nombre, categoria: 'Clásicos' })
-      : api('POST', '/api/cocina/recetas', { nombre: rec.nombre, categoria: 'PLATOS' }))
+      : api('POST', '/api/cocina/recetas', { nombre: rec.nombre, categoria: categoriaRecetaCocina(rec.nombre) }))
       .then(res => ({ pedido: rec.nombre, real: (res && res.nombre) || rec.nombre }));
   });
   Promise.all(crearRecetas)
