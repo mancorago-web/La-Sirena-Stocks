@@ -2846,9 +2846,20 @@ app.get('/api/ventas/detalle', async (req, res) => {
 
     // PRECIOS POR FECHA (del Excel de ese día, incluye 0 = promoción/cortesía).
     // Si un item aparece aquí, su precio del día es EL del Excel.
+    // El lookup normaliza a alfanumérico (ignora guiones/acentos/variantes) y si no hay
+    // match exacto busca por inclusión (ej. "Limonada Menu - Flor de jamaica" del Excel
+    // vs "LIMONADA MENU FLOR DE JAMAICA, CANELA Y KION" de la receta).
     const preciosFechaSnap = await col('precios_venta_fecha').where('fecha', '==', fecha).get();
+    const normAlfa = (s) => String(s || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     const precioPorFecha = new Map();
-    preciosFechaSnap.docs.forEach(d => { const a = d.data(); precioPorFecha.set(String(a.nombre || '').trim().toUpperCase().replace(/\s+/g, ' '), Math.round((parseFloat(a.precio_venta) || 0) * 100) / 100); });
+    const listaPreciosFecha = [];
+    preciosFechaSnap.docs.forEach(d => { const a = d.data(); const na = normAlfa(a.nombre); const p = Math.round((parseFloat(a.precio_venta) || 0) * 100) / 100; if (!precioPorFecha.has(na)) { precioPorFecha.set(na, p); listaPreciosFecha.push({ na, p }); } });
+    const lookupPrecio = (nombre) => {
+      const na = normAlfa(nombre);
+      if (precioPorFecha.has(na)) return precioPorFecha.get(na);
+      for (const x of listaPreciosFecha) { if (x.na.includes(na) || na.includes(x.na)) return x.p; }
+      return undefined;
+    };
 
     // Índice STOCKS (nombre normalizado -> items) y nombres
     const invSnap = await col('inventario').get();
@@ -2893,7 +2904,7 @@ app.get('/api/ventas/detalle', async (req, res) => {
     });
     Object.keys(stocksGroups).forEach(key => {
       const g = stocksGroups[key];
-      arr.push({ id: 'grp_stocks_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'stocks', almacenes: [g.almacen_id], item_id: g.item_id, log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at, precio_venta: precioPorFecha.get(String(g.nombre || '').trim().toUpperCase().replace(/\s+/g, ' ')) });
+      arr.push({ id: 'grp_stocks_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'stocks', almacenes: [g.almacen_id], item_id: g.item_id, log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at, precio_venta: lookupPrecio(g.nombre) });
     });
 
     // BARRA: agrupar por receta
@@ -2921,7 +2932,7 @@ app.get('/api/ventas/detalle', async (req, res) => {
     });
     Object.keys(barraGroups).forEach(key => {
       const g = barraGroups[key];
-      arr.push({ id: 'grp_barra_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'barra', log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at, precio_venta: precioPorFecha.get(String(g.nombre || '').trim().toUpperCase().replace(/\s+/g, ' ')) });
+      arr.push({ id: 'grp_barra_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'barra', log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at, precio_venta: lookupPrecio(g.nombre) });
     });
 
     // COCINA: agrupar por receta
@@ -2950,7 +2961,7 @@ app.get('/api/ventas/detalle', async (req, res) => {
     });
     Object.keys(cocinaGroups).forEach(key => {
       const g = cocinaGroups[key];
-      arr.push({ id: 'grp_cocina_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'cocina', log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at, precio_venta: precioPorFecha.get(String(g.nombre || '').trim().toUpperCase().replace(/\s+/g, ' ')) });
+      arr.push({ id: 'grp_cocina_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'cocina', log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at, precio_venta: lookupPrecio(g.nombre) });
     });
 
     arr.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
