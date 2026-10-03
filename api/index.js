@@ -2744,6 +2744,28 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         if (opsPv) await batchPv.commit();
         invalidarCache('precios_venta_stocks');
       }
+
+      // Guardar PRECIOS POR FECHA: respeta EXACTAMENTE lo que trae el Excel del día
+      // (incluye precio 0 -> promociones MENU 4x40, cortesías, etc.). Es la fuente
+      // de verdad del TOTAL VENTAS de cada fecha. Se reemplaza por completo al reimportar.
+      const todosPrecios = (items || []).filter(i => i && String(i.matched || i.nombre || '').trim() && (parseFloat(i.precio_venta) || 0) >= 0);
+      if (todosPrecios.length) {
+        const batchPf = db.batch();
+        let opsPf = 0;
+        const ahoraPf = new Date().toISOString();
+        const normP = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+        for (const it of todosPrecios) {
+          const nombre = String(it.matched || it.nombre || '').trim();
+          const pv = Math.round((parseFloat(it.precio_venta) || 0) * 100) / 100;
+          if (!nombre) continue;
+          const docId = fecha + '_' + normP(nombre).replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '') || 'x';
+          batchPf.set(col('precios_venta_fecha').doc(docId), { fecha, nombre, precio_venta: pv, updated_at: ahoraPf });
+          opsPf++;
+          if (opsPf >= 400) { await batchPf.commit(); batchPf = db.batch(); opsPf = 0; }
+        }
+        if (opsPf) await batchPf.commit();
+        invalidarCache('ventas_detalle_' + fecha);
+      }
     } catch (ePv) {
       console.error('PRECIO VENTA EXCEL (secundario, no bloquea):', ePv.message);
     }
@@ -2782,6 +2804,29 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       console.error('CORTESIAS (secundario, no bloquea):', eC.message);
     }
 
+    // Descuento GLOBAL (del RESUMEN del informe). Se reemplaza por completo para la fecha:
+    // queda UNA sola línea "Descuento global (RESUMEN)" que se resta del TOTAL VENTAS.
+    try {
+      const dg = Math.abs(parseFloat(req.body.descuento_global)) || 0;
+      if (dg > 0) {
+        const existentes = await col('ventas_descuentos').where('fecha', '==', fecha).get();
+        const batchDg = db.batch();
+        let opsDg = 0;
+        existentes.docs.forEach(d => {
+          const dd = d.data();
+          if (dd.concepto && String(dd.concepto).toUpperCase().includes('DESCUENTO GLOBAL')) {
+            batchDg.delete(d.ref);
+            opsDg++;
+          }
+        });
+        if (opsDg) await batchDg.commit();
+        await col('ventas_descuentos').doc(fecha + '_global').set({ fecha, monto: -dg, concepto: 'Descuento global (RESUMEN)', updated_at: new Date().toISOString() });
+        invalidarCache('ventas_detalle_' + fecha);
+      }
+    } catch (eDg) {
+      console.error('DESCUENTO GLOBAL (secundario, no bloquea):', eDg.message);
+    }
+
     invalidarCachesLectura();
     res.json({ ok: true, resumen });
   } catch (e) {
@@ -2798,6 +2843,12 @@ app.get('/api/ventas/detalle', async (req, res) => {
     const list = await cached('ventas_detalle_' + fecha, 5000, async () => {
 
     const arr = [];
+
+    // PRECIOS POR FECHA (del Excel de ese día, incluye 0 = promoción/cortesía).
+    // Si un item aparece aquí, su precio del día es EL del Excel.
+    const preciosFechaSnap = await col('precios_venta_fecha').where('fecha', '==', fecha).get();
+    const precioPorFecha = new Map();
+    preciosFechaSnap.docs.forEach(d => { const a = d.data(); precioPorFecha.set(String(a.nombre || '').trim().toUpperCase().replace(/\s+/g, ' '), Math.round((parseFloat(a.precio_venta) || 0) * 100) / 100); });
 
     // Índice STOCKS (nombre normalizado -> items) y nombres
     const invSnap = await col('inventario').get();
@@ -2842,7 +2893,7 @@ app.get('/api/ventas/detalle', async (req, res) => {
     });
     Object.keys(stocksGroups).forEach(key => {
       const g = stocksGroups[key];
-      arr.push({ id: 'grp_stocks_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'stocks', almacenes: [g.almacen_id], item_id: g.item_id, log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at });
+      arr.push({ id: 'grp_stocks_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'stocks', almacenes: [g.almacen_id], item_id: g.item_id, log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at, precio_venta: precioPorFecha.get(String(g.nombre || '').trim().toUpperCase().replace(/\s+/g, ' ')) });
     });
 
     // BARRA: agrupar por receta
@@ -2870,7 +2921,7 @@ app.get('/api/ventas/detalle', async (req, res) => {
     });
     Object.keys(barraGroups).forEach(key => {
       const g = barraGroups[key];
-      arr.push({ id: 'grp_barra_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'barra', log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at });
+      arr.push({ id: 'grp_barra_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'barra', log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at, precio_venta: precioPorFecha.get(String(g.nombre || '').trim().toUpperCase().replace(/\s+/g, ' ')) });
     });
 
     // COCINA: agrupar por receta
@@ -2899,7 +2950,7 @@ app.get('/api/ventas/detalle', async (req, res) => {
     });
     Object.keys(cocinaGroups).forEach(key => {
       const g = cocinaGroups[key];
-      arr.push({ id: 'grp_cocina_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'cocina', log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at });
+      arr.push({ id: 'grp_cocina_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'cocina', log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at, precio_venta: precioPorFecha.get(String(g.nombre || '').trim().toUpperCase().replace(/\s+/g, ' ')) });
     });
 
     arr.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));

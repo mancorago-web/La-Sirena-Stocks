@@ -1188,6 +1188,7 @@ function exportarBusquedaVentasTotal() {
 // --- VENTAS: importar desde Excel ---
 let ventasImportRows = [];
 let ventasPruebaRows = [];
+let ventasImportDescuentoGlobal = 0;
 
 function onVentasExcelSeleccionado(input) {
   const file = input.files[0];
@@ -1227,6 +1228,7 @@ function parseVentasExcel(file, esPrueba) {
       const colItem = findKey(['item', 'producto', 'nombre', 'articulo', 'descripcion']);
       const colCant = findKey(['cantidad', 'cant', 'qty', 'und']);
       const colPrecioVenta = findKey(['precioventa', 'preciodeventa', 'precio', 'pv']);
+      const colDescuento = findKey(['descuento', 'dsct', 'dscto']);
       if (!colItem || !colCant) { alert('No encontré columnas de Item y Cantidad. Usa columnas como: Fecha | Item | Cantidad'); return; }
       // Usar la FECHA del Excel (si existe) y reflejarla en el selector de fecha de VENTAS
       let fechaExcel = '';
@@ -1238,14 +1240,43 @@ function parseVentasExcel(file, esPrueba) {
         }
       }
       const fechaRegistro = fechaExcel || (document.getElementById('fecha-ventas-menu')?.value || todayStr());
-      const filas = rows.map(r => ({
-        item: String(r[colItem] || '').trim(),
-        cantidad: parseFloat(String(r[colCant] || '').replace(',', '.')) || 0,
-        fecha: (colFecha && normalizarFechaExcel(r[colFecha])) || fechaRegistro,
-        precio_venta: colPrecioVenta ? (parseFloat(String(r[colPrecioVenta] || '').replace(',', '.')) || 0) : 0,
-        destino: ''
-      })).filter(x => x.item && x.cantidad > 0 && !esFilaNoProducto(x.item));
+      const filas = rows.map(r => {
+        const cant = parseFloat(String(r[colCant] || '').replace(',', '.')) || 0;
+        const pv = colPrecioVenta ? (parseFloat(String(r[colPrecioVenta] || '').replace(',', '.')) || 0) : 0;
+        const desc = colDescuento ? (parseFloat(String(r[colDescuento] || '').replace(',', '.')) || 0) : 0;
+        // PRECIO EFECTIVO = (cantidad x precio - descuento) / cantidad. Respeta el TOTAL del Excel
+        // (ej. promociones MENU o items descontados: el monto que suma es lo que efectivamente cobra).
+        const precioEfectivo = cant > 0 ? Math.round(((cant * pv) - desc) * 100 / cant) / 100 : 0;
+        return {
+          item: String(r[colItem] || '').trim(),
+          cantidad: cant,
+          fecha: (colFecha && normalizarFechaExcel(r[colFecha])) || fechaRegistro,
+          precio_venta: precioEfectivo,
+          descuento: desc,
+          destino: ''
+        };
+      }).filter(x => x.item && x.cantidad > 0 && !esFilaNoProducto(x.item));
       if (esPrueba) { ventasPruebaRows = filas; } else { ventasImportRows = filas; }
+      // Detectar DESCUENTO GLOBAL del RESUMEN del informe:
+      // DESCUENTO GLOBAL = "Total Dsct" - "Total de descuentos por item".
+      // El descuento por item ya se aplicó en el precio efectivo; lo que queda es el global.
+      let totalDsct = null, descItem = 0;
+      const normCelda = (v) => String(v === null || v === undefined ? '' : v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '');
+      rows.forEach(r => {
+        const celdas = Object.values(r).map(v => String(v === null || v === undefined ? '' : v).trim());
+        celdas.forEach((c, i) => {
+          const n = normCelda(c);
+          const siguienteNum = () => { const n2 = parseFloat(String(celdas[i + 1] || '').replace(',', '.')) || 0; return n2; };
+          if (n.includes('totaldsct') || n.includes('totaldcto') || n === 'dsct' || n.includes('descuentosglobales')) {
+            if (n.includes('descuentosglobales')) { totalDsct = siguienteNum(); }
+            else { const num = siguienteNum(); if (num) totalDsct = num; }
+          }
+          if (n.includes('descuentosporitem') || n.includes('totaldedescuentosporitem')) {
+            const num = siguienteNum(); if (num) descItem = num;
+          }
+        });
+      });
+      ventasImportDescuentoGlobal = (totalDsct !== null) ? Math.max(0, totalDsct - descItem) : 0;
       analizarVentas(esPrueba);
     } catch (err) {
       alert('Error al leer el Excel: ' + err.message);
@@ -1832,8 +1863,14 @@ function renderVentasImportPreview(esPrueba) {
   if (!filas.length) { cont.innerHTML = '<p style="color:#888;margin-top:0.5rem;">No se detectaron filas válidas (item con cantidad).</p>'; return; }
   const total = filas.reduce((s, r) => s + r.cantidad, 0);
   const sinFecha = filas.filter(r => !r.fecha).length;
+  const dgInput = (esPrueba ? 'ventas-descuento-global-prueba' : 'ventas-descuento-global');
   cont.innerHTML = '<p style="margin:0.5rem 0;">Filas detectadas: <b>' + filas.length + '</b> — Total unidades: <b>' + total + '</b>' +
     (sinFecha ? ' — <span style="color:#c62828;">' + sinFecha + ' sin fecha (usarán la fecha seleccionada)</span>' : '') + '</p>' +
+    '<div style="margin:0.5rem 0;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">' +
+      '<label style="font-weight:600;">DESCUENTO GLOBAL (S/):</label>' +
+      '<input id="' + dgInput + '" type="number" step="0.01" min="0" value="' + (ventasImportDescuentoGlobal || 0) + '" style="width:100px;padding:0.35rem;border:1px solid #ccc;border-radius:4px;">' +
+      '<span style="color:#888;font-size:0.85rem;">(del RESUMEN del informe; se resta del TOTAL VENTAS)</span>' +
+    '</div>' +
     '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Item</th><th>Cantidad</th><th>Destino</th></tr></thead><tbody>' +
     filas.map(r => '<tr><td>' + (r.fecha || '—') + '</td><td>' + esc(r.item) + '</td><td>' + r.cantidad + '</td><td>' + (r.destino ? r.destino.toUpperCase() : '—') + '</td></tr>').join('') +
     '</tbody></table></div>';
@@ -1891,7 +1928,8 @@ function registrarVentasFilas(filas, onDone) {
     const fecha = partes[0];
     const destino = partes[1];
     const items = grupos[key];
-    api('POST', '/api/ventas/guardar', { fecha, items }).then(r => {
+    const descuentoGlobal = Math.abs(parseFloat(document.getElementById('ventas-descuento-global')?.value)) || 0;
+    api('POST', '/api/ventas/guardar', { fecha, items, descuento_global: descuentoGlobal }).then(r => {
       noEncontrados += (r.resumen && r.resumen.noEncontrados) ? r.resumen.noEncontrados.length : 0;
       if (r.resumen && Array.isArray(r.resumen.noDescontados)) noDescontadosTotales.push(...r.resumen.noDescontados);
       if (r.resumen && Array.isArray(r.resumen.sinReceta)) sinRecetaTotales.push(...r.resumen.sinReceta);
@@ -10297,11 +10335,13 @@ function cargarVentasDetalle(fecha) {
       else if (r.destino === 'barra') det = 'BARRA (receta)';
       else if (r.destino === 'cocina') det = 'COCINA';
       const cant = parseFloat(r.cantidad) || 0;
-      const pv = pvMap[normPv(r.nombre)] || 0;
+      const tienePrecioFecha = (typeof r.precio_venta !== 'undefined' && r.precio_venta !== null);
+      const pv = tienePrecioFecha ? (parseFloat(r.precio_venta) || 0) : (pvMap[normPv(r.nombre)] || 0);
       const monto = cant * pv;
       totalMonto += monto;
       const t = r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
-      return `<tr><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${pv > 0 ? 'S/' + pv.toFixed(2) : (pv === 0 && monto === 0 ? '<span style="color:#c62828;font-weight:700;">CORTESÍA</span>' : '—')}</td><td>${monto > 0 ? 'S/' + monto.toFixed(2) : '—'}</td><td>${esc(det)}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td><button class="danger" onclick="confirmarEliminarVenta('${r.id}')">✕</button></td></tr>`;
+      const etiqueta = (pv === 0 && monto === 0) ? (tienePrecioFecha ? '<span style="color:#1565c0;font-weight:700;">MENÚ/PROMO</span>' : '<span style="color:#c62828;font-weight:700;">CORTESÍA</span>') : '';
+      return `<tr><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${pv > 0 ? 'S/' + pv.toFixed(2) : etiqueta}</td><td>${monto > 0 ? 'S/' + monto.toFixed(2) : '—'}</td><td>${esc(det)}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td><button class="danger" onclick="confirmarEliminarVenta('${r.id}')">✕</button></td></tr>`;
     }).join('');
     c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE VENTAS</h3>' +
       '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>P. Venta</th><th>Total S/</th><th>Destino</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
