@@ -11285,12 +11285,20 @@ function buildDetalleVentasHTML(dias, prefix, mes) {
       </div>
     </div>` : '';
     const cuerpo = (cat('STOCK', d.stock) + cat('BARRA', d.barra) + cat('COCINA', d.cocina)) || '<p style="color:#888;">Sin ventas este día.</p>';
+    const subtotal = d.subtotal !== undefined ? (parseFloat(d.subtotal) || 0) : ((d.stock || 0) + (d.barra || 0) + (d.cocina || 0));
+    const descuento = parseFloat(d.descuento) || 0;
+    const totalDia = d.total !== undefined ? (parseFloat(d.total) || 0) : Math.round((subtotal + descuento) * 100) / 100;
+    const resumen = '<div style="margin-top:0.5rem;padding:0.5rem 0.6rem;background:#fff8e1;border:1px solid #ffe082;border-radius:8px;font-weight:700;color:#0f3460;font-size:0.82rem;">' +
+      '<div style="display:flex;justify-content:space-between;"><span>SUBTOTAL (items)</span><span>S/ ' + Math.round(subtotal * 100) / 100 + '</span></div>' +
+      (descuento !== 0 ? '<div style="display:flex;justify-content:space-between;margin-top:0.15rem;"><span>DESCUENTO GLOBAL</span><span style="color:#c62828;">S/ ' + Math.round(descuento * 100) / 100 + '</span></div>' : '') +
+      '<div style="display:flex;justify-content:space-between;border-top:1px solid #ffe082;margin-top:0.25rem;padding-top:0.25rem;font-size:0.9rem;">TOTAL VENTAS <span>S/ ' + Math.round(totalDia * 100) / 100 + '</span></div>' +
+    '</div>';
     html += `<div class="accordion-item" data-fecha="${d.fecha}">
       <div class="accordion-header" onclick="toggleAcordeon(this)">
-        <span class="accordion-title">${fmtFechaCorta(d.fecha)}${esHoy ? ' <span style="color:#c62828;font-size:0.75rem;">(HOY)</span>' : ''} <span style="font-weight:400;font-size:0.85rem;color:#777;">— S/ ${(d.total || 0).toFixed(2)}</span></span>
+        <span class="accordion-title">${fmtFechaCorta(d.fecha)}${esHoy ? ' <span style="color:#c62828;font-size:0.75rem;">(HOY)</span>' : ''} <span style="font-weight:400;font-size:0.85rem;color:#777;">— S/ ${Math.round(totalDia * 100) / 100}</span></span>
         <span class="accordion-arrow">▶</span>
       </div>
-      <div class="accordion-body">${cuerpo}</div>
+      <div class="accordion-body">${cuerpo}${resumen}</div>
     </div>`;
   });
   return html;

@@ -3028,11 +3028,41 @@ app.get('/api/ventas/por-dia', authMiddleware, async (req, res) => {
     const ini = String(fecha_inicio).trim(), fin = String(fecha_fin).trim();
     if (ini > fin) [ini, fin] = [fin, ini];
 
-    // PRECIOS DE VENTA (solo del Excel)
+    // PRECIOS DE VENTA (solo del Excel, global) como fallback
     const pvSnap = await col('precios_venta_excel').get();
     const precioVenta = new Map();
     const normV = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
     pvSnap.docs.forEach(d => { const a = d.data(); const k = normV(a.nombre); const pv = parseFloat(a.precio_venta) || 0; if (pv > 0 && !precioVenta.has(k)) precioVenta.set(k, pv); });
+
+    // PRECIOS POR FECHA (del Excel de cada día; incluye 0 = promoción/cortesía).
+    // Gana sobre el global, igual que en el DETALLE DE VENTAS del menú VENTAS.
+    const pvFechaSnap = await col('precios_venta_fecha').where('fecha', '>=', ini).where('fecha', '<=', fin).get();
+    const preciosPorFecha = {};
+    const normAlfa = (s) => String(s || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    pvFechaSnap.docs.forEach(d => {
+      const a = d.data();
+      const f = a.fecha;
+      if (!preciosPorFecha[f]) preciosPorFecha[f] = { map: new Map(), lista: [] };
+      const na = normAlfa(a.nombre);
+      if (!preciosPorFecha[f].map.has(na)) {
+        const p = Math.round((parseFloat(a.precio_venta) || 0) * 100) / 100;
+        preciosPorFecha[f].map.set(na, p);
+        preciosPorFecha[f].lista.push({ na, p });
+      }
+    });
+    const lookupPrecioFecha = (fecha, nombre) => {
+      const g = preciosPorFecha[fecha];
+      if (!g) return undefined;
+      const na = normAlfa(nombre);
+      if (g.map.has(na)) return g.map.get(na);
+      for (const x of g.lista) { if (x.na.includes(na) || na.includes(x.na)) return x.p; }
+      return undefined;
+    };
+
+    // DESCUENTOS globales por fecha (se restan del total del día)
+    const descSnap = await col('ventas_descuentos').where('fecha', '>=', ini).where('fecha', '<=', fin).get();
+    const descPorFecha = {};
+    descSnap.docs.forEach(d => { const a = d.data(); const m = parseFloat(a.monto) || 0; if (m !== 0) descPorFecha[a.fecha] = (descPorFecha[a.fecha] || 0) + m; });
 
     // Nombres de items de STOCKS
     const invSnap = await col('inventario').get();
@@ -3044,7 +3074,9 @@ app.get('/api/ventas/por-dia', authMiddleware, async (req, res) => {
     const add = (fecha, nombre, cantidad, destino, saved_by, created_at) => {
       const cant = parseFloat(cantidad) || 0;
       if (cant <= 0) return;
-      const monto = Math.round(cant * (precioVenta.get(normV(nombre)) || 0) * 100) / 100;
+      const pFecha = lookupPrecioFecha(fecha, nombre);
+      const pv = (pFecha !== undefined) ? pFecha : (precioVenta.get(normV(nombre)) || 0);
+      const monto = Math.round(cant * pv * 100) / 100;
       (porDia[fecha] = porDia[fecha] || []).push({ nombre, cantidad: cant, destino, monto, saved_by: saved_by || '-', created_at: created_at || '' });
       filas.push({ fecha, nombre, cantidad: cant, destino, monto, saved_by: saved_by || '-', created_at: created_at || '' });
     };
@@ -3085,10 +3117,12 @@ app.get('/api/ventas/por-dia', authMiddleware, async (req, res) => {
     const out = dias.map(f => {
       const rows = porDia[f].sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')) || String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'));
       const cat = (dest) => rows.filter(r => r.destino === dest).reduce((s, r) => s + r.monto, 0);
-      const total = rows.reduce((s, r) => s + r.monto, 0);
-      return { fecha: f, stock: Math.round(cat('stocks') * 100) / 100, barra: Math.round(cat('barra') * 100) / 100, cocina: Math.round(cat('cocina') * 100) / 100, total: Math.round(total * 100) / 100, items: rows };
+      const subtotal = rows.reduce((s, r) => s + r.monto, 0);
+      const descuento = Math.round((descPorFecha[f] || 0) * 100) / 100;
+      const total = Math.round((subtotal + descuento) * 100) / 100;
+      return { fecha: f, stock: Math.round(cat('stocks') * 100) / 100, barra: Math.round(cat('barra') * 100) / 100, cocina: Math.round(cat('cocina') * 100) / 100, subtotal: Math.round(subtotal * 100) / 100, descuento, total, items: rows };
     });
-    res.json({ dias, totalGeneral: Math.round(filas.reduce((s, r) => s + r.monto, 0) * 100) / 100 });
+    res.json({ dias: out, totalGeneral: Math.round(out.reduce((s, d) => s + d.total, 0) * 100) / 100 });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
