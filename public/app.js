@@ -1572,7 +1572,11 @@ function similitud(a, b) {
       (w.length >= 3 && t.length >= 3 && (w.startsWith(t) || t.startsWith(w))) ||
       (w.length >= 4 && t.length >= 4 && levenshtein(w, t) <= 1))) hits++;
   });
-  return hits / Math.max(1, tb.length);
+  // Jaccard: normaliza por la UNIÓN de tokens (ta + tb - hits). Evita que un nombre corto con 1
+  // token compartido gane sobre uno largo que comparte más (ej. "A.P FRESA" vs "PISCO SOUR DE
+  // FRESA": antes "A.P FRESA" obtenía 1.0 porque solo aporta "FRESA"; con Jaccard puntúa 0.5).
+  const union = ta.length + tb.length - hits;
+  return union > 0 ? hits / union : 0;
 }
 
 // Candidatos del GRUPO elegido (STOCKS/BARRA/COCINA) según el destino seleccionado
