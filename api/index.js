@@ -2903,6 +2903,14 @@ app.get('/api/ventas/detalle', async (req, res) => {
     });
 
     arr.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+
+    // DESCUENTOS de la fecha (línea negativa al final, ej. descuentos globales del RESUMEN del Excel)
+    const descSnap = await col('ventas_descuentos').where('fecha', '==', fecha).get();
+    descSnap.docs.forEach(d => {
+      const dd = d.data();
+      const monto = Math.round((parseFloat(dd.monto) || 0) * 100) / 100;
+      if (monto !== 0) arr.push({ id: 'descuento_' + d.id, tipo: 'descuento', fecha, nombre: dd.concepto || 'DESCUENTOS', cantidad: 1, unidad: 'unidad', destino: 'descuento', monto, saved_by: dd.saved_by || '-', created_at: dd.updated_at || '' });
+    });
     return arr;
     });
     res.json(list);
