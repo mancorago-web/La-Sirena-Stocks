@@ -10323,12 +10323,13 @@ function cargarVentasDetalle(fecha) {
     };
     ventasDetalleMap = {};
     list.forEach(r => { ventasDetalleMap[r.id] = r; });
-    let totalMonto = 0;
+    let subtotal = 0;
+    let totalDescuentos = 0;
     const filas = list.map(r => {
       if (r.tipo === 'descuento') {
         const d = Math.round((parseFloat(r.monto) || 0) * 100) / 100;
-        totalMonto += d;
-        return `<tr style="background:#fff3e0;"><td><b>${esc(r.nombre)}</b></td><td></td><td></td><td style="font-weight:700;color:#c62828;">S/ ${d.toFixed(2)}</td><td style="color:#888;">—</td><td>${r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : ''}</td><td>${esc(r.saved_by || '-')}</td><td></td></tr>`;
+        totalDescuentos += d;
+        return `<tr style="background:#fff3e0;"><td colspan="8" style="white-space:nowrap;"><b>${esc(r.nombre)}</b> <span style="font-weight:700;color:#c62828;margin-left:0.5rem;">S/ ${d.toFixed(2)}</span></td></tr>`;
       }
       let det = '';
       if (r.destino === 'stocks') det = 'STOCKS → ' + (r.almacenes || []).map(alNombre).join(', ');
@@ -10338,15 +10339,20 @@ function cargarVentasDetalle(fecha) {
       const tienePrecioFecha = (typeof r.precio_venta !== 'undefined' && r.precio_venta !== null);
       const pv = tienePrecioFecha ? (parseFloat(r.precio_venta) || 0) : (pvMap[normPv(r.nombre)] || 0);
       const monto = cant * pv;
-      totalMonto += monto;
+      subtotal += monto;
       const t = r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
       const etiqueta = (pv === 0 && monto === 0) ? (tienePrecioFecha ? '<span style="color:#1565c0;font-weight:700;">MENÚ/PROMO</span>' : '<span style="color:#c62828;font-weight:700;">CORTESÍA</span>') : '';
       return `<tr><td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${pv > 0 ? 'S/' + pv.toFixed(2) : etiqueta}</td><td>${monto > 0 ? 'S/' + monto.toFixed(2) : '—'}</td><td>${esc(det)}</td><td>${t}</td><td>${esc(r.saved_by || '-')}</td><td><button class="danger" onclick="confirmarEliminarVenta('${r.id}')">✕</button></td></tr>`;
     }).join('');
+    const total = Math.round((subtotal + totalDescuentos) * 100) / 100;
     c.innerHTML = '<h3 style="margin:0 0 0.5rem 0;">DETALLE DE VENTAS</h3>' +
       '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Cantidad</th><th>P. Venta</th><th>Total S/</th><th>Destino</th><th>Hora</th><th>Usuario</th><th></th></tr></thead><tbody>' +
       filas + '</tbody></table></div>' +
-      '<p style="font-weight:700;color:#0f3460;margin-top:0.6rem;">TOTAL VENTAS: <b style="font-size:1.1rem;">S/ ' + Math.round(totalMonto * 100) / 100 + '</b></p>';
+      '<div style="margin-top:0.75rem;border-top:2px solid #0f3460;padding-top:0.5rem;font-weight:700;color:#0f3460;">' +
+        '<div style="display:flex;justify-content:space-between;max-width:380px;">SUBTOTAL (items): <b>S/ ' + Math.round(subtotal * 100) / 100 + '</b></div>' +
+        (totalDescuentos !== 0 ? '<div style="display:flex;justify-content:space-between;max-width:380px;">DESCUENTO GLOBAL: <b style="color:#c62828;">S/ ' + Math.round(totalDescuentos * 100) / 100 + '</b></div>' : '') +
+        '<div style="display:flex;justify-content:space-between;max-width:380px;font-size:1.15rem;margin-top:0.25rem;">TOTAL VENTAS: <b>S/ ' + total + '</b></div>' +
+      '</div>';
   }).catch(() => { const actual = document.getElementById('fecha-ventas-menu')?.value || todayStr(); if (actual === fechaFinal) c.innerHTML = '<p style="color:#888;">DETALLE DE VENTAS</p>'; });
 }
 
