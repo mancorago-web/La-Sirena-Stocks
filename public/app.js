@@ -11272,7 +11272,8 @@ function buildDetalleVentasHTML(dias, prefix, mes) {
   let html = '<div class="grupo-header" style="margin-top:1rem;"><span>DETALLE DE VENTAS</span><span class="grupo-subtotal">S/ ' + totalGeneral.toFixed(2) + '</span></div>';
   dias.forEach(d => {
     const esHoy = d.fecha === todayStr();
-    const cat = (label, total) => total > 0 ? `<div style="margin-bottom:0.5rem;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;">
+    // destino real por label: los items de STOCKS llegan con destino 'stocks' (plural)
+    const cat = (label, total, destinoReal) => total > 0 ? `<div style="margin-bottom:0.5rem;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;">
       <div style="background:#eef2ff;padding:0.4rem 0.6rem;font-weight:700;color:#1a237e;font-size:0.82rem;display:flex;justify-content:space-between;align-items:center;">
         <span>${label}</span>
         <span style="color:#0f3460;">S/ ${total.toFixed(2)}</span>
@@ -11280,7 +11281,7 @@ function buildDetalleVentasHTML(dias, prefix, mes) {
       <div style="padding:0.4rem 0.6rem;">
         <div class="table-wrap"><table style="margin:0;">
           <thead><tr><th>Item</th><th style="text-align:center;">Cant.</th><th style="text-align:right;">Total</th></tr></thead>
-          <tbody>${(d.items || []).filter(r => r.destino === label.toLowerCase()).map(r => `<tr>
+          <tbody>${(d.items || []).filter(r => r.destino === destinoReal).map(r => `<tr>
             <td>${esc(r.nombre)}</td>
             <td style="text-align:center;">${r.cantidad}</td>
             <td style="text-align:right;">S/ ${(r.monto || 0).toFixed(2)}</td>
@@ -11288,7 +11289,7 @@ function buildDetalleVentasHTML(dias, prefix, mes) {
         </table></div>
       </div>
     </div>` : '';
-    const cuerpo = (cat('STOCK', d.stock) + cat('BARRA', d.barra) + cat('COCINA', d.cocina)) || '<p style="color:#888;">Sin ventas este día.</p>';
+    const cuerpo = (cat('STOCK', d.stock, 'stocks') + cat('BARRA', d.barra, 'barra') + cat('COCINA', d.cocina, 'cocina')) || '<p style="color:#888;">Sin ventas este día.</p>';
     const subtotal = d.subtotal !== undefined ? (parseFloat(d.subtotal) || 0) : ((d.stock || 0) + (d.barra || 0) + (d.cocina || 0));
     const descuento = parseFloat(d.descuento) || 0;
     const totalDia = d.total !== undefined ? (parseFloat(d.total) || 0) : Math.round((subtotal + descuento) * 100) / 100;
