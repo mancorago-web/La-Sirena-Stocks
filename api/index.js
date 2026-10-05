@@ -2425,6 +2425,14 @@ async function descontarStocksDesdeAlmacenes(consumos, fecha, savedBy, seleccion
   diaSnap.docs.forEach(d => { dayDocs[d.id] = d.data(); });
   const norm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, '');
   const dispDe = (d) => (parseFloat(d && d.stock_apertura) || 0) + (parseFloat(d && d.stock_ingreso) || 0) - (parseFloat(d && d.salida_almacen) || 0) - (parseFloat(d && d.total_ventas) || 0) - (parseFloat(d && d.falta_almacen) || 0) - (parseFloat(d && d.stock_baja) || 0);
+  // Equivalencias (tamaño de envase) tomadas de BARRA/COCINA STOCK, para convertir onzas/ml/gr a
+  // unidades del almacén cuando el nombre no trae el tamaño (ej. LECHE EVAPORADA DE COCO equiv_ml=360).
+  const bsSnap = await col('barra_stock').get();
+  const csSnap = await col('cocina_stock').get();
+  const equivByName = {};
+  const addEquiv = (a) => { const k = norm(a.ingrediente); if (k && !equivByName[k] && (a.equiv_ml || a.equiv_gr)) equivByName[k] = { equiv_ml: a.equiv_ml, equiv_gr: a.equiv_gr }; };
+  bsSnap.docs.forEach(d => addEquiv(d.data()));
+  csSnap.docs.forEach(d => addEquiv(d.data()));
   const deducidos = [];
   const restantes = [];
   const registros = [];
@@ -2450,11 +2458,20 @@ async function descontarStocksDesdeAlmacenes(consumos, fecha, savedBy, seleccion
     }
     let restante = cant;
     const usados = [];
-    // BOTELLA: si el consumo viene en onzas/ml/gr y el item es un envase con tamaño (ej. "X 20 LT"),
-    // la botella sale del ALMACÉN como SALIDA → BARRA (movimiento interno, NO como venta del item).
-    const consumoOz = aOnzas(cant, uRec, nombre);
-    const botellaOz = aOnzas(1, 'unidad', nombre);
-    const esBotella = normalizeUnit(uRec) !== 'unidad' && botellaOz !== null && botellaOz > 0 && consumoOz !== null && consumoOz > 0;
+    // BOTELLA: si el consumo viene en onzas/ml/gr y el item es un envase con tamaño (ej. "X 20 LT"
+    // o equiv_ml), la botella sale del ALMACÉN como SALIDA → BARRA (movimiento interno, NO venta).
+    const equiv = equivByName[k] || null;
+    const uRecNorm = normalizeUnit(uRec);
+    const esUnidad = (uRecNorm === 'unidad' || uRecNorm === 'botella');
+    const consumoOz = aOnzas(cant, uRec, nombre, equiv);
+    const botellaOz = aOnzas(1, 'unidad', nombre, equiv);
+    const esBotella = !esUnidad && botellaOz !== null && botellaOz > 0 && consumoOz !== null && consumoOz > 0;
+    // Consumo en volumen/peso sin tamaño de envase conocido: NO se puede deducir del almacén
+    // (evita descontar 7.88 onzas como 7.88 latas). Se reporta como no descontado.
+    if (!esUnidad && !esBotella) {
+      restantes.push({ ingrediente: nombre, cantidad: Math.round(cant * 100) / 100, unidad: uRec, motivo: 'sin_conversion_o_insuficiente' });
+      continue;
+    }
     let cubiertoOz = 0;
     let botellasFaltantes = esBotella ? Math.ceil(consumoOz / botellaOz) : 0;
     for (const cand of candidatos) {
@@ -2478,7 +2495,7 @@ async function descontarStocksDesdeAlmacenes(consumos, fecha, savedBy, seleccion
       const botellasSacadas = (Math.ceil(consumoOz / botellaOz)) - botellasFaltantes;
       if (botellasSacadas > 0) {
         cubiertoOz = Math.min(consumoOz, botellasSacadas * botellaOz);
-        consumosBotella.push({ nombre, delta: -desdeOnzas(cubiertoOz, 'unidad', nombre) });
+        consumosBotella.push({ nombre, delta: -desdeOnzas(cubiertoOz, 'unidad', nombre, equiv) });
       }
       cubierto = cubiertoOz > 0 ? (desdeOnzas(cubiertoOz, uRec, nombre) || cant) : 0;
     } else {
