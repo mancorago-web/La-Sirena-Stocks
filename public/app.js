@@ -1472,6 +1472,11 @@ function renderVentasAsignacion(items, containerId) {
     return '<td class="celda-almacen">' + buildAlmacenSelect(nombre) + '</td>';
   };
   cont.innerHTML = '<p style="margin:0.5rem 0;">Fecha: <b>' + fecha + '</b> — Items: <b>' + items.length + '</b> — Total unidades: <b>' + total + '</b></p>' +
+    '<div style="margin:0.5rem 0;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:0.5rem 0.6rem;">' +
+      '<label style="font-weight:700;">DESCUENTO GLOBAL (S/):</label>' +
+      '<input id="' + (containerId.includes('prueba') ? 'ventas-descuento-global-prueba' : 'ventas-descuento-global') + '" type="number" step="0.01" min="0" value="' + (ventasImportDescuentoGlobal || 0) + '" style="width:100px;padding:0.35rem;border:1px solid #ccc;border-radius:4px;">' +
+      '<span style="color:#888;font-size:0.85rem;">(detectado del RESUMEN del informe; se resta del TOTAL VENTAS — ajústalo si hace falta)</span>' +
+    '</div>' +
     '<div class="table-wrap ventas-import-wrap"><table class="tabla-import-ventas"><thead><tr><th>Item (Excel)</th><th>Cant.</th><th>P. Venta</th><th>Destino</th><th>Emparejar con</th><th>Almacén (STOCKS)</th></tr></thead><tbody>' +
     items.map(i => `<tr>
       <td>${esc(i.nombre)}${i.sinEmparejar ? ' <span style="color:#c62828;" title="Sin emparejar">*</span>' : ''}</td>
