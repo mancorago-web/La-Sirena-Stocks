@@ -2415,7 +2415,7 @@ async function descontarStockCocina(consumos) {
 }
 
 async function descontarStocksDesdeAlmacenes(consumos, fecha, savedBy, seleccionPorNombre) {
-  if (!consumos || !consumos.length) return [];
+  if (!consumos || !consumos.length) return { deducidos: [], restantes: [] };
   const invSnap = await col('inventario').get();
   const almsSnap = await col('almacenes').get();
   const alNombres = {};
@@ -2424,13 +2424,17 @@ async function descontarStocksDesdeAlmacenes(consumos, fecha, savedBy, seleccion
   const dayDocs = {};
   diaSnap.docs.forEach(d => { dayDocs[d.id] = d.data(); });
   const norm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, '');
+  const dispDe = (d) => (parseFloat(d && d.stock_apertura) || 0) + (parseFloat(d && d.stock_ingreso) || 0) - (parseFloat(d && d.salida_almacen) || 0) - (parseFloat(d && d.total_ventas) || 0) - (parseFloat(d && d.falta_almacen) || 0) - (parseFloat(d && d.stock_baja) || 0);
   const deducidos = [];
+  const restantes = [];
   const registros = [];
+  const consumosBotella = [];
   for (const c of consumos) {
     const nombre = String(c.ingrediente || '').trim();
     if (!nombre) continue;
     const cant = parseFloat(c.cantidad) || 0;
     if (cant <= 0) continue;
+    const uRec = c.unidad || 'unidad';
     const k = norm(nombre);
     let candidatos = invSnap.docs
       .map(d => d.data())
@@ -2440,24 +2444,26 @@ async function descontarStocksDesdeAlmacenes(consumos, fecha, savedBy, seleccion
     // Si el usuario eligió almacenes en la importación, solo descontar de esos
     const sel = (seleccionPorNombre || {})[k];
     if (sel && sel.length) candidatos = candidatos.filter(ca => sel.includes(ca.almacen_id));
-    if (!candidatos.length) continue;
+    if (!candidatos.length) {
+      restantes.push({ ingrediente: nombre, cantidad: Math.round(cant * 100) / 100, unidad: uRec, motivo: 'sin_stock' });
+      continue;
+    }
     let restante = cant;
     const usados = [];
-    // BOTELLA: si el consumo viene en onzas/ml/gr y el item es un envase con tamaño (ej. "X 750 ML"),
+    // BOTELLA: si el consumo viene en onzas/ml/gr y el item es un envase con tamaño (ej. "X 20 LT"),
     // la botella sale del ALMACÉN como SALIDA → BARRA (movimiento interno, NO como venta del item).
-    // La SALIDA→BARRA agrega la botella entera a BARRA/STOCK, y aquí se descuenta lo consumido por
-    // la receta, quedando solo el SOBRANTE (ej. botella 750ml = 25oz, se usan 4 -> sobran ~21oz).
-    const consumoOz = aOnzas(cant, c.unidad, nombre);
+    const consumoOz = aOnzas(cant, uRec, nombre);
     const botellaOz = aOnzas(1, 'unidad', nombre);
-    const esBotella = botellaOz !== null && botellaOz > 0 && consumoOz !== null && consumoOz > 0;
+    const esBotella = normalizeUnit(uRec) !== 'unidad' && botellaOz !== null && botellaOz > 0 && consumoOz !== null && consumoOz > 0;
+    let cubiertoOz = 0;
     let botellasFaltantes = esBotella ? Math.ceil(consumoOz / botellaOz) : 0;
-    const consumosBotella = []; // { nombre, deducirBot } para descontar el consumo en BARRA tras la salida
     for (const cand of candidatos) {
       if (esBotella ? botellasFaltantes <= 0 : restante <= 0.0001) break;
       const d = dayDocs[fecha + '_' + cand.almacen_id + '_' + cand.item_id] || {};
-      const disp = (parseFloat(d.stock_apertura) || 0) + (parseFloat(d.stock_ingreso) || 0) - (parseFloat(d.salida_almacen) || 0) - (parseFloat(d.total_ventas) || 0) - (parseFloat(d.falta_almacen) || 0) - (parseFloat(d.stock_baja) || 0);
+      const disp = dispDe(d);
       if (disp <= 0) continue;
       const aDeducir = esBotella ? Math.min(disp, botellasFaltantes) : Math.min(disp, restante);
+      if (aDeducir <= 0) continue;
       if (esBotella) {
         registros.push({ item_id: cand.item_id, almacen_id: cand.almacen_id, salida_almacen: Math.round(((parseFloat(d.salida_almacen) || 0) + aDeducir) * 100) / 100, destino_salida: 'barra' });
         botellasFaltantes -= aDeducir;
@@ -2467,20 +2473,30 @@ async function descontarStocksDesdeAlmacenes(consumos, fecha, savedBy, seleccion
       }
       usados.push(alNombres[cand.almacen_id] || ('Almacén ' + cand.almacen_id));
     }
-    if (esBotella && usados.length) {
-      consumosBotella.push({ nombre, deducirBot: Math.round((consumoOz / botellaOz) * 100) / 100 });
+    let cubierto;
+    if (esBotella) {
+      const botellasSacadas = (Math.ceil(consumoOz / botellaOz)) - botellasFaltantes;
+      if (botellasSacadas > 0) {
+        cubiertoOz = Math.min(consumoOz, botellasSacadas * botellaOz);
+        consumosBotella.push({ nombre, delta: -desdeOnzas(cubiertoOz, 'unidad', nombre) });
+      }
+      cubierto = cubiertoOz > 0 ? (desdeOnzas(cubiertoOz, uRec, nombre) || cant) : 0;
+    } else {
+      cubierto = cant - restante;
     }
     if (usados.length) {
-      deducidos.push({ ingrediente: nombre, cantidad: Math.round(cant * 100) / 100, descontado_de: usados });
+      deducidos.push({ ingrediente: nombre, cantidad: Math.round(cant * 100) / 100, cantidad_deducida: Math.round((cubierto || 0) * 100) / 100, descontado_de: [...new Set(usados)] });
     }
+    const pend = Math.round((cant - (cubierto || 0)) * 100) / 100;
+    if (pend > 0.0001) restantes.push({ ingrediente: nombre, cantidad: pend, unidad: uRec, motivo: 'sin_conversion_o_insuficiente' });
   }
   if (registros.length) await guardarDiaInterno(fecha, registros, savedBy);
-  // Descontar de BARRA/STOCK lo consumido por la receta (la SALIDA→BARRA ya sumó la botella entera).
+  // Descontar de BARRA/STOCK lo consumido por la receta (la SALIDA→BARRA ya sumó el envase entero).
   if (consumosBotella.length) {
-    try { await ajustarBarraStock(consumosBotella.map(x => ({ nombre: x.nombre, delta: -x.deducirBot, unidad: 'unidad', grupo: 'MUEBLE DE ABAJO' }))); }
+    try { await ajustarBarraStock(consumosBotella.map(x => ({ nombre: x.nombre, delta: x.delta, unidad: 'unidad', grupo: 'MUEBLE DE ABAJO' }))); }
     catch (e) { console.error('consumo botella en BARRA:', e.message); }
   }
-  return deducidos;
+  return { deducidos, restantes };
 }
 
 async function sumarStockBarra(consumos) {
@@ -2704,6 +2720,23 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         console.error('Error descontando COCINA/STOCK:', e.message);
         resumen.errorCocina = e.message;
       }
+    }
+
+    // FALLBACK A ALMACENES: los consumos que NO se pudieron descontar de BARRA/COCINA STOCK
+    // (por ejemplo AGUA BIDON X 20 LT) se toman de los STOCKS/ALMACENES, priorizando el que
+    // tenga stock (ej. ALMACÉN GENERAL ARRIBA). Se reporta en `deducidosDeAlmacenes` para avisar
+    // "se tomó X de ALMACÉN ... porque en BARRA/STOCK se terminó".
+    try {
+      const pendientes = (resumen.noDescontados || [])
+        .filter(nd => nd && (parseFloat(nd.cantidad) || 0) > 0)
+        .map(nd => ({ ingrediente: nd.ingrediente, cantidad: parseFloat(nd.cantidad) || 0, unidad: nd.unidad }));
+      if (pendientes.length) {
+        const { deducidos, restantes } = await descontarStocksDesdeAlmacenes(pendientes, fecha, savedBy, req.body.almacenes_seleccionados);
+        if (deducidos.length) resumen.deducidosDeAlmacenes = deducidos;
+        resumen.noDescontados = restantes;
+      }
+    } catch (eAlm) {
+      console.error('Fallback a ALMACENES (no bloquea):', eAlm.message);
     }
 
     // Log de ventas (detalle)

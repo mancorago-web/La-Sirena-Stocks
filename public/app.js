@@ -1910,15 +1910,15 @@ function registrarVentasFilas(filas, onDone) {
         const body = document.getElementById('modal-body');
         let html = '<h3>⚠ Ventas con avisos</h3>';
         if (deducidosAlmTotales.length) {
-          html += '<p style="color:#1565c0;font-weight:600;margin-top:0.5rem;">Descontados de ALMACENES (items de recetas de barra que están en STOCKS):</p><ul style="margin:0.3rem 0 0.75rem 1.2rem;">'
-            + deducidosAlmTotales.map(d => '<li>' + esc(d.ingrediente) + ' x' + d.cantidad + ' — descontado de: ' + esc(d.descontado_de.join(', ')) + '</li>').join('') + '</ul>';
+          html += '<p style="color:#1565c0;font-weight:600;margin-top:0.5rem;">Se tomó de ALMACENES (BARRA/COCINA STOCK se terminó):</p><ul style="margin:0.3rem 0 0.75rem 1.2rem;">'
+            + deducidosAlmTotales.map(d => '<li>' + esc(d.ingrediente) + ' x' + d.cantidad + ' — se tomó de <b>' + esc((d.descontado_de || []).join(', ')) + '</b> porque en BARRA/STOCK se terminó</li>').join('') + '</ul>';
         }
         if (sinRecetaTotales.length) {
           html += '<p style="color:#c62828;font-weight:600;margin-top:0.5rem;">Sin receta (no se expanden ingredientes):</p><ul style="margin:0.3rem 0 0.75rem 1.2rem;">'
             + sinRecetaTotales.map(s => '<li>' + esc(s.nombre) + ' x' + s.cantidad + (s.destino ? ' (' + esc(s.destino).toUpperCase() + ')' : '') + '</li>').join('') + '</ul>';
         }
         if (noDescontadosTotales.length) {
-          html += '<p style="color:#e65100;font-weight:600;margin-top:0.5rem;">Ingredientes que NO se descontaron de BARRA/COCINA STOCK:</p><ul style="margin:0.3rem 0 0.75rem 1.2rem;">'
+          html += '<p style="color:#e65100;font-weight:600;margin-top:0.5rem;">Ingredientes que NO se descontaron (no están en BARRA/COCINA STOCK ni en ningún ALMACÉN):</p><ul style="margin:0.3rem 0 0.75rem 1.2rem;">'
             + noDescontadosTotales.map(s => '<li>' + esc(s.ingrediente) + ' x' + s.cantidad + ' (' + s.unidad + ') — ' + (s.motivo === 'sin_stock' ? 'sin item en stock' : (s.motivo === 'sin_conversion_o_insuficiente' ? 'sin conversión o stock insuficiente' : s.motivo)) + (s.zona ? ' · ' + esc(s.zona).toUpperCase() : '') + '</li>').join('') + '</ul>';
         }
         html += '<button onclick="cerrarModal()" style="padding:0.5rem 1.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button>';
