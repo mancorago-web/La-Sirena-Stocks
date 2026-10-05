@@ -2485,7 +2485,9 @@ async function descontarStocksDesdeAlmacenes(consumos, fecha, savedBy, seleccion
         registros.push({ item_id: cand.item_id, almacen_id: cand.almacen_id, salida_almacen: Math.round(((parseFloat(d.salida_almacen) || 0) + aDeducir) * 100) / 100, destino_salida: 'barra' });
         botellasFaltantes -= aDeducir;
       } else {
-        registros.push({ item_id: cand.item_id, almacen_id: cand.almacen_id, total_ventas: Math.round(((parseFloat(d.total_ventas) || 0) + aDeducir) * 100) / 100 });
+        // Item consumido en UNIDAD: sale del almacén → BARRA (salida interna, NO total_ventas: no es
+        // una venta directa, es un insumo de receta). Así no infla las ventas de STOCKS.
+        registros.push({ item_id: cand.item_id, almacen_id: cand.almacen_id, salida_almacen: Math.round(((parseFloat(d.salida_almacen) || 0) + aDeducir) * 100) / 100, destino_salida: 'barra' });
         restante = Math.max(0, Math.round((restante - aDeducir) * 100) / 100);
       }
       usados.push(alNombres[cand.almacen_id] || ('Almacén ' + cand.almacen_id));
@@ -2500,6 +2502,8 @@ async function descontarStocksDesdeAlmacenes(consumos, fecha, savedBy, seleccion
       cubierto = cubiertoOz > 0 ? (desdeOnzas(cubiertoOz, uRec, nombre) || cant) : 0;
     } else {
       cubierto = cant - restante;
+      // La SALIDA→BARRA ya sumó el envase/unidad; descontar de BARRA/STOCK lo efectivamente consumido.
+      if (cubierto > 0.0001) consumosBotella.push({ nombre, delta: -cubierto });
     }
     if (usados.length) {
       deducidos.push({ ingrediente: nombre, cantidad: Math.round(cant * 100) / 100, cantidad_deducida: Math.round((cubierto || 0) * 100) / 100, descontado_de: [...new Set(usados)] });
