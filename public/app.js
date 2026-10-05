@@ -10040,17 +10040,43 @@ function editarCompra(id) {
         <input type="text" id="edit-compra-proveedor" value="${esc(r.proveedor || '')}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
       </label>
       <label style="font-size:0.82rem;color:#555;">Destino
-        <select id="edit-compra-destino" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
+        <select id="edit-compra-destino" onchange="onCambiarDestinoEditarCompra()" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
           ${['COCINA', 'BARRA', 'STOCKS', 'LIMPIEZA', 'EVENTOS'].map(d => '<option value="' + d.toLowerCase() + '"' + (String(r.destino || '').toLowerCase() === d.toLowerCase() ? ' selected' : '') + '>' + d + '</option>').join('')}
         </select>
       </label>
     </div>
-    <p style="font-size:0.75rem;color:#888;margin-top:0.75rem;">Puedes cambiar el nombre del item (con sugerencias) y el <b>destino</b>. El stock se ajusta automáticamente (revierte el valor anterior de la zona anterior y aplica el nuevo).</p>
+    <div id="edit-compra-almacenes" style="display:none;margin-top:0.75rem;">
+      <div style="font-size:0.82rem;color:#555;font-weight:600;">Almacenes donde ingresa (STOCKS)</div>
+      <div id="edit-compra-almacenes-lista" style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.3rem;color:#888;font-size:0.82rem;">Cargando almacenes...</div>
+    </div>
+    <div id="edit-compra-muebles" style="display:none;margin-top:0.75rem;">
+      <div style="font-size:0.82rem;color:#555;font-weight:600;">Muebles donde ingresa (BARRA)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.3rem;">
+        ${GRUPOS_BARRA_CON_COMPRAS.map(g => '<label style="font-size:0.82rem;display:inline-flex;align-items:center;gap:0.25rem;"><input type="checkbox" class="edit-compra-mueble" value="' + esc(g) + '"' + ((r.muebles || []).map(x => String(x).toUpperCase()).includes(g) ? ' checked' : '') + '> ' + esc(g) + '</label>').join('')}
+      </div>
+    </div>
+    <p style="font-size:0.75rem;color:#888;margin-top:0.75rem;">Puedes cambiar el nombre, el <b>destino</b> y su <b>almacén/mueble</b>. El stock se ajusta automáticamente (revierte la ubicación anterior y aplica la nueva).</p>
     <div style="margin-top:1.25rem;display:flex;gap:0.5rem;">
       <button onclick="guardarEdicionCompra('${id}')" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar cambios</button>
       <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
     </div>
   `;
+  window._editCompraActual = r;
+  onCambiarDestinoEditarCompra();
+  api('GET', '/api/almacenes').then(alms => {
+    const cont = document.getElementById('edit-compra-almacenes-lista');
+    if (!cont) return;
+    const sel = (r.almacenes || []).map(Number);
+    cont.innerHTML = (alms || []).map(al => '<label style="font-size:0.82rem;display:inline-flex;align-items:center;gap:0.25rem;"><input type="checkbox" class="edit-compra-almacen" value="' + al.id + '"' + (sel.includes(Number(al.id)) ? ' checked' : '') + '> ' + esc(al.nombre) + '</label>').join('') || '<span style="color:#888;">Sin almacenes</span>';
+  }).catch(() => { const cont = document.getElementById('edit-compra-almacenes-lista'); if (cont) cont.innerHTML = '<span style="color:#c62828;">Error al cargar almacenes</span>'; });
+}
+
+function onCambiarDestinoEditarCompra() {
+  const d = document.getElementById('edit-compra-destino')?.value || '';
+  const al = document.getElementById('edit-compra-almacenes');
+  const mu = document.getElementById('edit-compra-muebles');
+  if (al) al.style.display = d === 'stocks' ? '' : 'none';
+  if (mu) mu.style.display = d === 'barra' ? '' : 'none';
 }
 
 function onEditCompraPrecioUni() {
@@ -10088,9 +10114,12 @@ function guardarEdicionCompra(id) {
   const numero = document.getElementById('edit-compra-numero')?.value.trim() || '';
   const proveedor = document.getElementById('edit-compra-proveedor')?.value.trim() || '';
   const destino = document.getElementById('edit-compra-destino')?.value || '';
+  const almacenes = Array.from(document.querySelectorAll('.edit-compra-almacen:checked')).map(cb => Number(cb.value));
+  const muebles = Array.from(document.querySelectorAll('.edit-compra-mueble:checked')).map(cb => cb.value);
+  if (destino === 'stocks' && !almacenes.length) { alert('Selecciona al menos un almacén para el destino STOCKS'); return; }
   if (window._guardandoEdicionCompra) { showToast('Ya hay un registro en curso, espera...'); return; }
   window._guardandoEdicionCompra = true;
-  api('PUT', '/api/compras/' + id, { fecha, cantidad, nombre, precio: precioUni, precio_total: precioTotal, documento, numero, proveedor, destino }).then(() => {
+  api('PUT', '/api/compras/' + id, { fecha, cantidad, nombre, precio: precioUni, precio_total: precioTotal, documento, numero, proveedor, destino, almacenes: destino === 'stocks' ? almacenes : undefined, muebles: destino === 'barra' ? muebles : undefined }).then(() => {
     window._guardandoEdicionCompra = false;
     cerrarModal();
     showToast('Compra/Ingreso actualizado');

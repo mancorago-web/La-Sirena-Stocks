@@ -2015,11 +2015,12 @@ async function quitarIngresoCompra(log, quitar, fechaLog, savedBy) {
 }
 
 // Aplica (suma) el ingreso de una compra en un DESTINO (zona). Se usa al cambiar de destino.
-async function aplicarIngresoCompra(destino, log, cantidad, precio, precioTotal, fechaLog, savedBy) {
+async function aplicarIngresoCompra(destino, log, cantidad, precio, precioTotal, fechaLog, savedBy, extras) {
   const nombre = String(log.nombre || '').trim();
   const now = new Date().toISOString();
   if (!nombre || !(cantidad > 0)) return;
   const categoria = String(log.categoria || '').trim().toUpperCase();
+  extras = extras || {};
   if (destino === 'stocks') {
     const invSnap = await col('inventario').get();
     const stocksNorm = {};
@@ -2028,7 +2029,7 @@ async function aplicarIngresoCompra(destino, log, cantidad, precio, precioTotal,
     const norm = String(nombre).trim().toUpperCase().replace(/\s+/g, '');
     let candidatos = stocksNorm[norm] || [];
     if (!candidatos.length) { for (const [k, arr] of Object.entries(stocksNorm)) { if (k.includes(norm) || norm.includes(k)) candidatos.push(...arr); } }
-    let seleccionados = Array.isArray(log.almacenes) && log.almacenes.length ? log.almacenes.map(Number) : candidatos.map(c => Number(c.almacen_id));
+    let seleccionados = (Array.isArray(extras.almacenes) && extras.almacenes.length) ? extras.almacenes.map(Number) : (Array.isArray(log.almacenes) && log.almacenes.length ? log.almacenes.map(Number) : candidatos.map(c => Number(c.almacen_id)));
     if (!seleccionados.length) return;
     const registros = [];
     for (const alId of seleccionados) {
@@ -2041,7 +2042,7 @@ async function aplicarIngresoCompra(destino, log, cantidad, precio, precioTotal,
     }
     if (registros.length) await guardarDiaInterno(fechaLog, registros, savedBy);
   } else if (destino === 'barra') {
-    const muebles = Array.isArray(log.muebles) ? log.muebles : [];
+    const muebles = Array.isArray(extras.muebles) ? extras.muebles : (Array.isArray(log.muebles) ? log.muebles : []);
     await col('barra_movimientos').add({ fecha: fechaLog, tipo: 'ingresos', ingrediente: nombre, cantidad, unidad: log.unidad || 'unidad', muebles, precio: precio || 0, precio_total: precioTotal || 0, saved_by: savedBy, created_at: now });
     const grupos = muebles.length ? muebles.map(g => String(g).toUpperCase()) : ['COMPRAS DIARIAS'];
     const aj = []; grupos.forEach(g => aj.push({ nombre, delta: cantidad, unidad: log.unidad || 'unidad', grupo: g }));
@@ -2075,13 +2076,22 @@ app.put('/api/compras/:id', authMiddleware, async (req, res) => {
     const now = new Date().toISOString();
     const destinoViejo = String(log.destino || '').toLowerCase();
     const destinoNuevo = String(destino || log.destino || '').toLowerCase();
+    // Almacenes (STOCKS) y muebles (BARRA) elegidos en el modal, si vienen
+    const almacenesSel = Array.isArray(req.body.almacenes) ? req.body.almacenes.map(Number) : null;
+    const mueblesSel = Array.isArray(req.body.muebles) ? req.body.muebles.map(s => String(s).toUpperCase()) : null;
+    const normSet = (arr) => (arr || []).map(x => String(x).toUpperCase()).sort().join(',');
+    const cambioAlmacenes = !!almacenesSel && normSet(almacenesSel) !== normSet(log.almacenes);
+    const cambioMuebles = !!mueblesSel && normSet(mueblesSel) !== normSet(log.muebles);
     const cambioDestino = !!destinoNuevo && destinoNuevo !== destinoViejo;
+    const requiereReajuste = cambioDestino || cambioAlmacenes || cambioMuebles;
 
-    if (cambioDestino) {
-      // CAMBIO DE DESTINO (COCINA/BARRA/STOCKS/LIMPIEZA/EVENTOS): se quita el ingreso de la zona
-      // anterior y se aplica en la zona nueva.
+    if (requiereReajuste) {
+      // CAMBIO DE DESTINO y/o de ALMACENES/MUEBLES: se quita el ingreso de la zona/ubicación
+      // anterior y se aplica en la nueva.
       await quitarIngresoCompra(log, oldCantidad, fechaLog, savedBy);
-      await aplicarIngresoCompra(destinoNuevo, log, newCantidad, parseFloat(precio) || 0, parseFloat(precio_total) || 0, fechaLog, savedBy);
+      await aplicarIngresoCompra(destinoNuevo, log, newCantidad, parseFloat(precio) || 0, parseFloat(precio_total) || 0, fechaLog, savedBy, { almacenes: almacenesSel, muebles: mueblesSel });
+      if (almacenesSel) log.almacenes = almacenesSel;
+      if (mueblesSel) log.muebles = mueblesSel;
     } else if (log.destino === 'stocks') {
       const invSnap = await col('inventario').get();
       const stocksNorm = {};
@@ -2220,6 +2230,10 @@ app.put('/api/compras/:id', authMiddleware, async (req, res) => {
       upd.nombre = nuevoNombre;
     }
     if (cambioDestino) upd.destino = destinoNuevo;
+    if (requiereReajuste) {
+      if (almacenesSel) upd.almacenes = almacenesSel;
+      if (mueblesSel) upd.muebles = mueblesSel;
+    }
     if (categoria !== undefined) upd.categoria = String(categoria || '').trim().toUpperCase();
     await logRef.update(upd);
     // Al editar una compra (cantidad/precio), actualizar el precio del item en las recetas (BARRA/COCINA)
