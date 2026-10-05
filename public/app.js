@@ -10047,7 +10047,7 @@ function editarCompra(id) {
     </div>
     <div id="edit-compra-almacenes" style="display:none;margin-top:0.75rem;">
       <div style="font-size:0.82rem;color:#555;font-weight:600;">Almacenes donde ingresa (STOCKS)</div>
-      <div id="edit-compra-almacenes-lista" style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.3rem;color:#888;font-size:0.82rem;">Cargando almacenes...</div>
+      <div id="edit-compra-almacenes-lista" style="display:grid;grid-template-columns:1fr 1fr;gap:0.35rem 0.9rem;margin-top:0.4rem;color:#888;font-size:0.82rem;align-items:center;">Cargando almacenes...</div>
     </div>
     <div id="edit-compra-muebles" style="display:none;margin-top:0.75rem;">
       <div style="font-size:0.82rem;color:#555;font-weight:600;">Muebles donde ingresa (BARRA)</div>
@@ -10067,7 +10067,7 @@ function editarCompra(id) {
     const cont = document.getElementById('edit-compra-almacenes-lista');
     if (!cont) return;
     const sel = (r.almacenes || []).map(Number);
-    cont.innerHTML = (alms || []).map(al => '<label style="font-size:0.82rem;display:inline-flex;align-items:center;gap:0.25rem;"><input type="checkbox" class="edit-compra-almacen" value="' + al.id + '"' + (sel.includes(Number(al.id)) ? ' checked' : '') + '> ' + esc(al.nombre) + '</label>').join('') || '<span style="color:#888;">Sin almacenes</span>';
+    cont.innerHTML = (alms || []).map(al => '<label style="font-size:0.8rem;display:flex;align-items:center;gap:0.3rem;min-width:0;line-height:1.2;"><input type="checkbox" class="edit-compra-almacen" value="' + al.id + '"' + (sel.includes(Number(al.id)) ? ' checked' : '') + ' style="flex:0 0 auto;"> <span>' + esc(al.nombre) + '</span></label>').join('') || '<span style="color:#888;">Sin almacenes</span>';
   }).catch(() => { const cont = document.getElementById('edit-compra-almacenes-lista'); if (cont) cont.innerHTML = '<span style="color:#c62828;">Error al cargar almacenes</span>'; });
 }
 
