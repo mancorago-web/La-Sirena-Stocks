@@ -10039,8 +10039,13 @@ function editarCompra(id) {
       <label style="font-size:0.82rem;color:#555;">Proveedor
         <input type="text" id="edit-compra-proveedor" value="${esc(r.proveedor || '')}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
       </label>
+      <label style="font-size:0.82rem;color:#555;">Destino
+        <select id="edit-compra-destino" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
+          ${['COCINA', 'BARRA', 'STOCKS', 'LIMPIEZA', 'EVENTOS'].map(d => '<option value="' + d.toLowerCase() + '"' + (String(r.destino || '').toLowerCase() === d.toLowerCase() ? ' selected' : '') + '>' + d + '</option>').join('')}
+        </select>
+      </label>
     </div>
-    <p style="font-size:0.75rem;color:#888;margin-top:0.75rem;">Puedes cambiar el nombre del item (con sugerencias). El stock se ajusta automáticamente (revierte el valor anterior y aplica el nuevo).</p>
+    <p style="font-size:0.75rem;color:#888;margin-top:0.75rem;">Puedes cambiar el nombre del item (con sugerencias) y el <b>destino</b>. El stock se ajusta automáticamente (revierte el valor anterior de la zona anterior y aplica el nuevo).</p>
     <div style="margin-top:1.25rem;display:flex;gap:0.5rem;">
       <button onclick="guardarEdicionCompra('${id}')" style="flex:1;padding:0.5rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;">Guardar cambios</button>
       <button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancelar</button>
@@ -10082,9 +10087,10 @@ function guardarEdicionCompra(id) {
   const documento = document.getElementById('edit-compra-documento')?.value || '';
   const numero = document.getElementById('edit-compra-numero')?.value.trim() || '';
   const proveedor = document.getElementById('edit-compra-proveedor')?.value.trim() || '';
+  const destino = document.getElementById('edit-compra-destino')?.value || '';
   if (window._guardandoEdicionCompra) { showToast('Ya hay un registro en curso, espera...'); return; }
   window._guardandoEdicionCompra = true;
-  api('PUT', '/api/compras/' + id, { fecha, cantidad, nombre, precio: precioUni, precio_total: precioTotal, documento, numero, proveedor }).then(() => {
+  api('PUT', '/api/compras/' + id, { fecha, cantidad, nombre, precio: precioUni, precio_total: precioTotal, documento, numero, proveedor, destino }).then(() => {
     window._guardandoEdicionCompra = false;
     cerrarModal();
     showToast('Compra/Ingreso actualizado');

@@ -1954,11 +1954,112 @@ app.delete('/api/compras/:id', authMiddleware, async (req, res) => {
   }
 });
 
+// Quita el ingreso de una compra de su DESTINO (zona). `quitar` = cantidad a quitar (normalmente la
+// cantidad anterior). Se usa al cambiar de destino en DETALLE DE COMPRAS.
+async function quitarIngresoCompra(log, quitar, fechaLog, savedBy) {
+  const nombre = String(log.nombre || '').trim();
+  const destino = String(log.destino || '').toLowerCase();
+  const now = new Date().toISOString();
+  if (!nombre || !(quitar > 0)) return;
+  if (destino === 'stocks') {
+    const invSnap = await col('inventario').get();
+    const stocksNorm = {};
+    invSnap.docs.forEach(d => { const a = d.data(); const norm = String(a.nombre || '').trim().toUpperCase().replace(/\s+/g, ''); if (!norm) return; (stocksNorm[norm] = stocksNorm[norm] || []).push({ item_id: a.item_id, almacen_id: a.almacen_id }); });
+    const cands = stocksNorm[String(nombre).trim().toUpperCase().replace(/\s+/g, '')] || [];
+    const almacenes = Array.isArray(log.almacenes) && log.almacenes.length ? log.almacenes.map(Number) : cands.map(c => Number(c.almacen_id));
+    const registros = [];
+    for (const alId of almacenes) {
+      const match = cands.find(c => Number(c.almacen_id) === Number(alId));
+      if (!match) continue;
+      const diaId = docId('invdiario', fechaLog, match.almacen_id, match.item_id);
+      const diaSnap = await col('inventario_diario').doc(diaId).get();
+      const cur = diaSnap.exists ? (parseFloat(diaSnap.data().stock_ingreso) || 0) : 0;
+      registros.push({ almacen_id: match.almacen_id, item_id: match.item_id, stock_ingreso: Math.max(0, Math.round((cur - quitar) * 100) / 100) });
+    }
+    if (registros.length) await guardarDiaInterno(fechaLog, registros, savedBy);
+  } else if (destino === 'barra') {
+    const key = nombre.toUpperCase();
+    const muebles = Array.isArray(log.muebles) && log.muebles.length ? log.muebles : GRUPOS_BARRA;
+    const bm = await col('barra_movimientos').where('fecha', '==', fechaLog).where('tipo', '==', 'ingresos').get();
+    const batch = db.batch(); let borrado = false;
+    bm.docs.forEach(d => { const a = d.data(); if (String(a.ingrediente || '').toUpperCase() === key && Math.abs((parseFloat(a.cantidad) || 0) - quitar) < 0.001) { batch.delete(d.ref); borrado = true; } });
+    if (borrado) await batch.commit();
+    const qOz = aOnzas(quitar, log.unidad || 'unidad', nombre);
+    if (qOz !== null && !isNaN(qOz) && qOz !== 0) {
+      const stockSnap = await col('barra_stock').get();
+      const sb = db.batch(); let aj = 0;
+      stockSnap.docs.forEach(d => {
+        const a = d.data(); const g = String(a.grupo || '').toUpperCase();
+        if (String(a.ingrediente || '').trim().toUpperCase() === key && muebles.map(m => String(m).toUpperCase()).includes(g)) {
+          const soz = aOnzas(a.cantidad, a.unidad, a.ingrediente);
+          if (soz === null || isNaN(soz)) return;
+          const nueva = Math.round(desdeOnzas(Math.max(0, soz - qOz), a.unidad, a.ingrediente) * 100) / 100;
+          sb.update(d.ref, { cantidad: nueva, updated_at: now }); aj++;
+        }
+      });
+      if (aj) await sb.commit();
+    }
+  } else if (destino === 'cocina') {
+    const cc = await col('cocina_compras').where('fecha', '==', fechaLog).get();
+    const batch = db.batch(); let borrado = false;
+    cc.docs.forEach(d => { const a = d.data(); if (String(a.nombre || '').toUpperCase() === nombre.toUpperCase() && Math.abs((parseFloat(a.cantidad) || 0) - quitar) < 0.001) { batch.delete(d.ref); borrado = true; } });
+    if (borrado) await batch.commit();
+    await ajustarCocinaStock([{ nombre, delta: -quitar, unidad: 'unidad' }]);
+  } else if (destino === 'eventos' || destino === 'limpieza') {
+    const em = await colExtra(destino, 'movimientos').where('fecha', '==', fechaLog).where('tipo', '==', 'ingresos').get();
+    const batch = db.batch(); let borrado = false;
+    em.docs.forEach(d => { const a = d.data(); if (String(a.ingrediente || '').toUpperCase() === nombre.toUpperCase() && Math.abs((parseFloat(a.cantidad) || 0) - quitar) < 0.001) { batch.delete(d.ref); borrado = true; } });
+    if (borrado) await batch.commit();
+    await ajustarExtraStock(destino, [{ nombre, delta: -quitar, unidad: 'unidad' }]);
+  }
+}
+
+// Aplica (suma) el ingreso de una compra en un DESTINO (zona). Se usa al cambiar de destino.
+async function aplicarIngresoCompra(destino, log, cantidad, precio, precioTotal, fechaLog, savedBy) {
+  const nombre = String(log.nombre || '').trim();
+  const now = new Date().toISOString();
+  if (!nombre || !(cantidad > 0)) return;
+  const categoria = String(log.categoria || '').trim().toUpperCase();
+  if (destino === 'stocks') {
+    const invSnap = await col('inventario').get();
+    const stocksNorm = {};
+    let maxItemId = 0;
+    invSnap.docs.forEach(d => { const a = d.data(); const norm = String(a.nombre || '').trim().toUpperCase().replace(/\s+/g, ''); if (!norm) return; (stocksNorm[norm] = stocksNorm[norm] || []).push({ item_id: a.item_id, almacen_id: a.almacen_id }); if (Number(a.item_id) > maxItemId) maxItemId = Number(a.item_id); });
+    const norm = String(nombre).trim().toUpperCase().replace(/\s+/g, '');
+    let candidatos = stocksNorm[norm] || [];
+    if (!candidatos.length) { for (const [k, arr] of Object.entries(stocksNorm)) { if (k.includes(norm) || norm.includes(k)) candidatos.push(...arr); } }
+    let seleccionados = Array.isArray(log.almacenes) && log.almacenes.length ? log.almacenes.map(Number) : candidatos.map(c => Number(c.almacen_id));
+    if (!seleccionados.length) return;
+    const registros = [];
+    for (const alId of seleccionados) {
+      let match = candidatos.find(c => Number(c.almacen_id) === Number(alId));
+      if (!match) { maxItemId++; await col('inventario').doc(docId('inventario', maxItemId, alId)).set({ item_id: maxItemId, almacen_id: Number(alId), nombre, categoria, stock_apertura: 0, cantidad_minima: 0 }); match = { item_id: maxItemId, almacen_id: Number(alId) }; }
+      const diaId = docId('invdiario', fechaLog, match.almacen_id, match.item_id);
+      const diaSnap = await col('inventario_diario').doc(diaId).get();
+      const cur = diaSnap.exists ? (parseFloat(diaSnap.data().stock_ingreso) || 0) : 0;
+      registros.push({ almacen_id: match.almacen_id, item_id: match.item_id, stock_ingreso: Math.round((cur + cantidad) * 100) / 100 });
+    }
+    if (registros.length) await guardarDiaInterno(fechaLog, registros, savedBy);
+  } else if (destino === 'barra') {
+    const muebles = Array.isArray(log.muebles) ? log.muebles : [];
+    await col('barra_movimientos').add({ fecha: fechaLog, tipo: 'ingresos', ingrediente: nombre, cantidad, unidad: log.unidad || 'unidad', muebles, precio: precio || 0, precio_total: precioTotal || 0, saved_by: savedBy, created_at: now });
+    const grupos = muebles.length ? muebles.map(g => String(g).toUpperCase()) : ['COMPRAS DIARIAS'];
+    const aj = []; grupos.forEach(g => aj.push({ nombre, delta: cantidad, unidad: log.unidad || 'unidad', grupo: g }));
+    await ajustarBarraStock(aj);
+  } else if (destino === 'cocina') {
+    await col('cocina_compras').add({ fecha: fechaLog, nombre, cantidad, unidad: 'unidad', precio: precio || 0, precio_total: precioTotal || 0, categoria, saved_by: savedBy, created_at: now });
+    await ajustarCocinaStock([{ nombre, delta: cantidad, unidad: 'unidad', familia: categoria }]);
+  } else if (destino === 'eventos' || destino === 'limpieza') {
+    await colExtra(destino, 'movimientos').add({ fecha: fechaLog, tipo: 'ingresos', ingrediente: nombre, cantidad, unidad: 'unidad', precio: precio || 0, precio_total: precioTotal || 0, saved_by: savedBy, created_at: now });
+    await ajustarExtraStock(destino, [{ nombre, delta: cantidad, unidad: 'unidad' }]);
+  }
+}
+
 // --- COMPRAS: editar una compra/ingreso registrada (revertir el efecto anterior y aplicar el nuevo) ---
 app.put('/api/compras/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const { fecha, cantidad, precio, precio_total, documento, numero, proveedor, categoria, nombre: nombreNuevo } = req.body;
+    const { fecha, cantidad, precio, precio_total, documento, numero, proveedor, categoria, destino, nombre: nombreNuevo } = req.body;
     if (String(id).startsWith('inv:')) return res.status(400).json({ error: 'Los ingresos manuales se editan desde STOCK/INGRESOS' });
     const logRef = col('compras').doc(id);
     const logSnap = await logRef.get();
@@ -1972,8 +2073,16 @@ app.put('/api/compras/:id', authMiddleware, async (req, res) => {
     if (newCantidad <= 0) return res.status(400).json({ error: 'Cantidad inválida' });
     const fechaLog = log.fecha || fecha;
     const now = new Date().toISOString();
+    const destinoViejo = String(log.destino || '').toLowerCase();
+    const destinoNuevo = String(destino || log.destino || '').toLowerCase();
+    const cambioDestino = !!destinoNuevo && destinoNuevo !== destinoViejo;
 
-    if (log.destino === 'stocks') {
+    if (cambioDestino) {
+      // CAMBIO DE DESTINO (COCINA/BARRA/STOCKS/LIMPIEZA/EVENTOS): se quita el ingreso de la zona
+      // anterior y se aplica en la zona nueva.
+      await quitarIngresoCompra(log, oldCantidad, fechaLog, savedBy);
+      await aplicarIngresoCompra(destinoNuevo, log, newCantidad, parseFloat(precio) || 0, parseFloat(precio_total) || 0, fechaLog, savedBy);
+    } else if (log.destino === 'stocks') {
       const invSnap = await col('inventario').get();
       const stocksNorm = {};
       invSnap.docs.forEach(d => {
@@ -2110,6 +2219,7 @@ app.put('/api/compras/:id', authMiddleware, async (req, res) => {
       // Actualizar el nombre del registro y propagar el renombre a toda la app.
       upd.nombre = nuevoNombre;
     }
+    if (cambioDestino) upd.destino = destinoNuevo;
     if (categoria !== undefined) upd.categoria = String(categoria || '').trim().toUpperCase();
     await logRef.update(upd);
     // Al editar una compra (cantidad/precio), actualizar el precio del item en las recetas (BARRA/COCINA)
