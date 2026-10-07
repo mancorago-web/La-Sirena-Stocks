@@ -7285,12 +7285,14 @@ function verDetallesCocina(tipo) {
 function renderRecetaCocina(r) {
   const costoTotal = r.costoTotal || 0;
   const esBase = r.categoria === 'RECETAS BASE';
+  const oculta = !!r.oculta;
   const pv = parseFloat(r.precio_venta) || 0;
   const costoConPerdida = costoTotal * 1.10;
   const ganancia = pv > 0 ? (pv - costoConPerdida) : null;
-  return `<div class="accordion-item" data-receta-id="${r.id}"${esBase ? ' style="background:#e3f2fd;"' : ''}>
+  const estilo = [esBase ? 'background:#e3f2fd;' : '', oculta ? 'opacity:0.6;background:#f3f3f3;' : ''].join('');
+  return `<div class="accordion-item" data-receta-id="${r.id}"${estilo ? ` style="${estilo}"` : ''}>
     <div class="accordion-header" onclick="toggleAcordeon(this)">
-      <span class="accordion-title">${esc(r.nombre)}${costoTotal > 0 ? ` <span style="font-weight:400;font-size:0.85rem;color:#555">— COSTO: S/${costoTotal.toFixed(2)}</span>` : ''}</span>
+      <span class="accordion-title">${esc(r.nombre)}${oculta ? ' <span style="color:#c62828;font-weight:700;font-size:0.8rem;">(OCULTA)</span>' : ''}${costoTotal > 0 ? ` <span style="font-weight:400;font-size:0.85rem;color:#555">— COSTO: S/${costoTotal.toFixed(2)}</span>` : ''}</span>
       <span class="accordion-actions" onclick="event.stopPropagation()">
         <label style="font-weight:700;color:#2e7d32;font-size:0.82rem;margin-right:0.4rem;white-space:nowrap;">PV S/ <input id="pv-cocina-${r.id}" type="number" step="0.01" min="0" value="${pv ? pv : ''}" placeholder="0.00" style="width:70px;padding:0.25rem;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;" oninput="actualizarMargenVivoCocina(${r.id}, ${costoTotal})" onchange="guardarPrecioVentaCocina(${r.id})"></label>
         <button onclick="editarRecetaCocina(${r.id})" style="margin-right:0.3rem">EDITAR</button>
@@ -7343,11 +7345,21 @@ function guardarPrecioVentaCocina(id) {
   }).catch(() => alert('Error al guardar'));
 }
 
+let _mostrarRecetasOcultasCocina = false;
+function toggleRecetasOcultasCocina() {
+  _mostrarRecetasOcultasCocina = !_mostrarRecetasOcultasCocina;
+  const b = document.getElementById('btn-mostrar-ocultas-cocina');
+  if (b) { b.textContent = _mostrarRecetasOcultasCocina ? '🙈 OCULTAR OCULTAS' : '👁 MOSTRAR OCULTAS'; b.style.background = _mostrarRecetasOcultasCocina ? '#e65100' : '#666'; }
+  cargarRecetasCocina();
+}
+
 function cargarRecetasCocina(openId) {
-  api('GET', '/api/cocina/recetas').then(data => {
+  api('GET', '/api/cocina/recetas').then(dataAll => {
     const container = document.getElementById('cocina-recetas-container');
     if (!container) return;
-    if (!data.length) { container.innerHTML = '<p>No hay recetas. Agrega una nueva.</p>'; return; }
+    // Las recetas OCULTAS no se muestran salvo que el botón "MOSTRAR OCULTAS" esté activo.
+    const data = (dataAll || []).filter(r => _mostrarRecetasOcultasCocina || !r.oculta);
+    if (!data.length) { container.innerHTML = '<p>No hay recetas' + (_mostrarRecetasOcultasCocina ? '' : ' visibles') + '. Agrega una nueva.</p>'; return; }
     const grupos = {};
     data.forEach(r => { const cat = r.categoria || 'PLATOS'; if (!grupos[cat]) grupos[cat] = []; grupos[cat].push(r); });
     const ordenCat = ['RECETAS BASE', 'ENTRADAS', 'ENTRADAS MENU', 'FONDOS', 'FONDOS MENU', 'POSTRES', 'POSTRES MENU', 'PLATOS'];
@@ -7455,6 +7467,8 @@ function editarRecetaCocina(id) {
         <br>
         <button onclick="guardarEdicionRecetaCocina(${id})" style="margin-top:0.5rem">GUARDAR</button>
         <button onclick="cerrarModal()" style="margin-top:0.5rem;margin-left:0.5rem">CANCELAR</button>
+        <button onclick="toggleOcultarRecetaCocina(${id}, ${!r.oculta})" style="margin-top:0.5rem;margin-left:0.5rem;background:${r.oculta ? '#2e7d32' : '#e65100'};color:#fff;">${r.oculta ? '👁 MOSTRAR RECETA' : '🙈 OCULTAR RECETA'}</button>
+        <div style="font-size:0.75rem;color:#888;margin-top:0.5rem;">Ocultar NO borra la receta ni pierde datos: solo la esconde de la lista. Con "👁 MOSTRAR OCULTAS" (arriba) las vuelves a ver y puedes volver a mostrarlas con "👁 MOSTRAR RECETA".</div>
       `;
       document.getElementById('modal').style.display = 'block';
     }).catch(() => alert('Error cargando base de datos'));
@@ -7500,6 +7514,15 @@ function guardarEdicionRecetaCocina(id) {
     showToast('Receta actualizada');
     cargarRecetasCocina();
   }).catch(() => alert('Error al guardar receta'));
+}
+
+// Oculta / muestra una receta (NO la borra). `ocultar` = true para ocultar.
+function toggleOcultarRecetaCocina(id, ocultar) {
+  api('PUT', '/api/cocina/recetas/' + id, { oculta: !!ocultar }).then(() => {
+    cerrarModal();
+    showToast(ocultar ? 'Receta oculta' : 'Receta visible');
+    cargarRecetasCocina();
+  }).catch(() => alert('Error al actualizar la receta'));
 }
 
 function buscarRecetaCocina(q) {

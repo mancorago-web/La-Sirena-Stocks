@@ -5506,11 +5506,12 @@ app.post('/api/cocina/recetas', async (req, res) => {
 
 app.put('/api/cocina/recetas/:id', async (req, res) => {
   try {
-    const { nombre, categoria, precio_venta } = req.body;
+    const { nombre, categoria, precio_venta, oculta } = req.body;
     const upd = { updated_at: new Date().toISOString() };
     if (nombre !== undefined) upd.nombre = nombre;
     if (categoria !== undefined) upd.categoria = categoria || 'Platos';
     if (precio_venta !== undefined) upd.precio_venta = parseFloat(precio_venta) || 0;
+    if (oculta !== undefined) upd.oculta = oculta === true || oculta === 'true';
     await col('cocina_recetas').doc(req.params.id).update(upd);
     invalidarCache('cocina_recetas');
     res.json({ ok: true });

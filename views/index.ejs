@@ -500,6 +500,7 @@
           <h2>Recetas</h2>
           <div class="controles-dia" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
             <input type="text" id="buscar-receta-cocina" placeholder="Buscar receta o ingrediente..." style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;width:250px;" oninput="buscarRecetaCocina(this.value)">
+            <button id="btn-mostrar-ocultas-cocina" onclick="toggleRecetasOcultasCocina()" style="background:#666;color:#fff;">👁 MOSTRAR OCULTAS</button>
             <button onclick="exportarRecetasCocina()">EXPORTAR</button>
           </div>
         </div>
