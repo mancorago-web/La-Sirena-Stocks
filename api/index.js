@@ -1086,9 +1086,12 @@ function getNextWorkingDay(fecha) {
   return d.toISOString().split('T')[0];
 }
 function prevWorkingDay(fecha) {
+  // Día CALENDARIO anterior. (Antes saltaba los martes asumiendo cierre semanal, pero el
+  // restaurante SÍ trabaja los martes: eso rompía la cadena cada miércoles, que tomaba el
+  // cierre del lunes en vez del martes. Los llamadores que necesitan el día con datos ya
+  // retroceden con su propio bucle cuando el día anterior está vacío.)
   const d = new Date(fecha + 'T12:00:00');
   d.setDate(d.getDate() - 1);
-  while (d.getDay() === 2) d.setDate(d.getDate() - 1);
   return d.toISOString().split('T')[0];
 }
 
