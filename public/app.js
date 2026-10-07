@@ -9513,6 +9513,7 @@ let _comprasListaEditable = [];
 let _cocinaStockItems = {};
 let _ultimoPrecioItem = 0;
 let _compararCompras = false;
+let _bdUnificadaNombres = [];
 
 function onCambiarDestinoCompra() {
   const destino = document.getElementById('nueva-compra-destino').value;
@@ -9528,6 +9529,19 @@ function onCambiarDestinoCompra() {
 
 function onBuscarItemCompra(valor) {
   const v = (valor || '').trim();
+  // Aviso: ¿el item existe en la Base de Datos Unificada o es NUEVO?
+  const avisoEl = document.getElementById('compra-item-aviso');
+  if (avisoEl) {
+    const vu = v.toUpperCase().replace(/\s+/g, ' ').trim();
+    if (vu.length >= 2) {
+      const existe = (_bdUnificadaNombres || []).some(n => n === vu || n.includes(vu));
+      avisoEl.innerHTML = existe
+        ? '<span style="color:#2e7d32;">✓ Item existente en la Base de Datos Unificada</span>'
+        : '<span style="color:#e65100;font-weight:700;">➕ Item NUEVO: no hay coincidencias — se agregará a la Base de Datos Unificada</span>';
+    } else {
+      avisoEl.innerHTML = '';
+    }
+  }
   // Buscar el último precio del item (para estimar la cantidad cuando solo se conoce el MONTO total)
   _ultimoPrecioItem = 0;
   if (v.length >= 3) {
@@ -9817,6 +9831,15 @@ function cargarCompras() {
       // BASE DE DATOS UNIFICADA (refuerzo: STOCKS + BARRA + COCINA + BASE)
       (bdUnificada || []).forEach(x => addSug(x.nombre));
       dl.innerHTML = html;
+    }
+    // Lista de nombres (mayúsculas) de stocks + barra + cocina + base, para detectar items nuevos
+    {
+      const setU = new Set();
+      (inv || []).forEach(a => (a.items || []).forEach(i => { const n = String(i.nombre || '').trim().toUpperCase(); if (n) setU.add(n); }));
+      (precios || []).forEach(p => { const n = String(p.ingrediente || '').trim().toUpperCase(); if (n) setU.add(n); });
+      (cocinaStock || []).forEach(s => { const n = String(s.ingrediente || '').trim().toUpperCase(); if (n) setU.add(n); });
+      (bdUnificada || []).forEach(x => { const n = String(x.nombre || '').trim().toUpperCase(); if (n) setU.add(n); });
+      _bdUnificadaNombres = [...setU];
     }
     comprasAlmacenes = alms || [];
     renderComprasAlmacenes(comprasAlmacenes.map(a => ({ id: Number(a.id), nombre: a.nombre, cantidad: null })));
