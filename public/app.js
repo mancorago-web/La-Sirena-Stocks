@@ -6721,7 +6721,7 @@ function guardarEdicionPrecioCocina(id) {
 }
 
 // --- COCINA: Stock con familias (flujo diario estilo ALMACENES) ---
-const FAMILIAS_COCINA = ['FRUTAS', 'VERDURAS', 'CARNE', 'PESCADO - BRUTO', 'PESCADO PORC. - BARRA FRIA', 'PESCADO PORC. - BARRA CALIENTE', 'POLLO', 'LACTEOS', 'VINOS', 'CERVEZAS', 'ABARROTES', 'LIMPIEZA', 'RECETAS BASE', 'SEMILLAS', 'ACEITES'];
+const FAMILIAS_COCINA = ['FRUTAS', 'VERDURAS', 'CARNE', 'MENU', 'PESCADO - BRUTO', 'PESCADO PORC. - BARRA FRIA', 'PESCADO PORC. - BARRA CALIENTE', 'POLLO', 'LACTEOS', 'VINOS', 'CERVEZAS', 'ABARROTES', 'LIMPIEZA', 'RECETAS BASE', 'SEMILLAS', 'ACEITES'];
 
 function cargarStockCocina(familiasAbrir) {
   const fechaEl = document.getElementById('fecha-cocina-stock');
@@ -7757,6 +7757,7 @@ const _PORCIONAMIENTO_CON_TEMPERATURA = new Set([..._PORCIONAMIENTO_PESCA_BLANCA
 const _PORCIONAMIENTO_PESCA_BLANCA_CALIENTE = new Set(['PESCADO - ESPADA X KG']);
 const _TEMPERATURA_FAMILIA = { FRIA: 'PESCADO PORC. - BARRA FRIA', CALIENTE: 'PESCADO PORC. - BARRA CALIENTE' };
 let _porcionamientoTemperatura = 'FRIA';
+let _porcionamientoMenu = false;
 let _rbCosto = 0;
 let _rbCostoActivo = false;
 let _rbNombre = '';
@@ -7775,6 +7776,7 @@ function cargarPorcionamientoItem() {
   // Al cambiar de item se reinicia el costo R.B agregado y la temperatura (FRIA por defecto)
   _rbCostoActivo = false; _rbCosto = 0; _rbNombre = '';
 _porcionamientoTemperatura = _PORCIONAMIENTO_PESCA_BLANCA_CALIENTE.has(nombre) ? 'CALIENTE' : 'FRIA';
+  _porcionamientoMenu = false;
   // Si el porcionamiento guardado tenía el botón R.B aplicado, se restaura (precio + botón)
   if (porc && porc.rb_activo === true) {
     _rbCostoActivo = true;
@@ -7909,6 +7911,12 @@ function renderPorcionamientoEditor(secciones) {
       + '<option value="CALIENTE" ' + (_porcionamientoTemperatura === 'CALIENTE' ? 'selected' : '') + '>BARRA CALIENTE</option>'
       + '</select>')
     + '</div>' : '';
+  // Botón DESTINO: MENU -> los porcionados van a COCINA/STOCK/MENU (en vez de su destino normal).
+  const menuHtml = '<div style="margin:0.5rem 0;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">'
+    + '<button onclick="_porcionamientoMenu=!_porcionamientoMenu; renderPorcionamientoEditor(seccionesActualesEditor())" style="padding:0.45rem 0.9rem;border:none;border-radius:4px;cursor:pointer;font-weight:700;background:' + (_porcionamientoMenu ? '#2e7d32' : '#666') + ';color:#fff;font-size:0.85rem;">'
+    + (_porcionamientoMenu ? '✓ ' : '') + '📋 DESTINO: MENU</button>'
+    + '<span style="font-size:0.78rem;color:#666;">' + (_porcionamientoMenu ? 'Los porcionados irán a COCINA/STOCK/MENU.' : 'Actívalo para enviar los porcionados a COCINA/STOCK/MENU.') + '</span>'
+    + '</div>';
   // PACKS: se ocultan SIEMPRE cuando el destino es BARRA FRIA (regla del administrador: en FRIA
   // nunca se generan packs; las salidas son PORC. MERMA UTIL - X KG y PORC. <ITEM> X KG).
   // También se ocultan en LANGOSTINO (ocultarPacks). BARRA CALIENTE sí usa packs.
@@ -7932,6 +7940,7 @@ function renderPorcionamientoEditor(secciones) {
   editor.innerHTML = '<h3 style="margin-top:0">Porcionamiento: ' + esc(ctx.item.nombre) + '</h3>'
     + '<p style="font-size:0.85rem;color:#666;">Stock en COCINA: <b>' + stock + '</b>. Ingresa el PESO BRUTO a porcionar y el peso de cada salida.</p>'
     + tempHtml
+    + menuHtml
     + rbHtml
     + '<div class="table-wrap"><table>'
     + '<thead><tr><th>Sección / Porcionamiento</th><th>Peso</th><th>%</th><th>Precio</th><th></th></tr></thead>'
@@ -8221,7 +8230,7 @@ if (esPulpo) {
     // Regla del administrador: en BARRA FRIA NO se generan packs -> PULPO NETO sale por KG
     // (PORC. PULPO NETO X KG). En BARRA CALIENTE -> PULPO NETO sale como packs PORC. PACK - PULPO NETO X <GR> GR.
     const temp = _porcionamientoTemperatura === 'CALIENTE' ? 'CALIENTE' : 'FRIA';
-    const familia = _TEMPERATURA_FAMILIA[temp];
+    const familia = _porcionamientoMenu ? 'MENU' : _TEMPERATURA_FAMILIA[temp];
     const colitas = secciones.find(s => /COLITAS DE PULPO/.test(s.nombre.toUpperCase()))?.peso || 0;
     const neto = secciones.find(s => /PULPO NETO/.test(s.nombre.toUpperCase()))?.peso || 0;
     const packCount = parseInt(document.getElementById('pack-cantidad')?.value) || 0;
@@ -8255,7 +8264,7 @@ if (esPulpo) {
   }
   if (esAsado) {
     // ASADO DE TIRA / LOMO FINO: PESO NETO -> PORC. <BASE> X KG; packs (de PESO NETO) -> PORC. PACK - <BASE> X <GR> GR
-    const familia = 'CARNE';
+    const familia = _porcionamientoMenu ? 'MENU' : 'CARNE';
     const base = ctx.item.nombre.replace(/\s*X\s*KG\s*$/i, '').trim();
     const pesoNeto = secciones.find(s => /PESO NETO/.test(s.nombre.toUpperCase()))?.peso || 0;
     const packCount = parseInt(document.getElementById('pack-cantidad')?.value) || 0;
@@ -8281,7 +8290,7 @@ if (esPulpo) {
   }
   if (esPB) {
     const temp = (_PORCIONAMIENTO_PESCA_BLANCA_CALIENTE.has(ctx.item.nombre) || _porcionamientoTemperatura === 'CALIENTE') ? 'CALIENTE' : 'FRIA';
-    const familia = _TEMPERATURA_FAMILIA[temp];
+    const familia = _porcionamientoMenu ? 'MENU' : _TEMPERATURA_FAMILIA[temp];
     const merma = secciones.find(s => /MERMA UTIL/.test(s.nombre.toUpperCase()))?.peso || 0;
     const filetes = secciones.find(s => /FILETE/.test(s.nombre.toUpperCase()))?.peso || 0;
     const packCount = parseInt(document.getElementById('pack-cantidad')?.value) || 0;
@@ -8322,7 +8331,7 @@ if (esPulpo) {
     const selTemp = document.getElementById('porcionamiento-temperatura');
     const tempSel = selTemp ? String(selTemp.value || '').toUpperCase() : '';
     const temp = def.conTemperatura ? (tempSel === 'CALIENTE' ? 'CALIENTE' : 'FRIA') : 'FRIA';
-    const familia = def.conTemperatura ? _TEMPERATURA_FAMILIA[temp] : def.grupo;
+    const familia = _porcionamientoMenu ? 'MENU' : (def.conTemperatura ? _TEMPERATURA_FAMILIA[temp] : def.grupo);
     const merma = secciones.find(s => /MERMA UTIL/.test(s.nombre.toUpperCase()))?.peso || 0;
     const filetes = secciones.find(s => /FILETE/.test(s.nombre.toUpperCase()))?.peso || 0;
     const packCount = parseInt(document.getElementById('pack-cantidad')?.value) || 0;
@@ -8358,7 +8367,7 @@ if (esPulpo) {
 // Construir las salidas según la definición del item (nombre destino "PORC. ..." + grupo)
   if (def) {
     const defTemp = def.conTemperatura ? (_porcionamientoTemperatura === 'CALIENTE' ? 'CALIENTE' : 'FRIA') : '';
-    const defFamilia = def.conTemperatura ? _TEMPERATURA_FAMILIA[defTemp] : def.grupo;
+    const defFamilia = _porcionamientoMenu ? 'MENU' : (def.conTemperatura ? _TEMPERATURA_FAMILIA[defTemp] : def.grupo);
     def.salidas.forEach(s => {
       const sec = secciones.find(x => x.nombre.toUpperCase() === s.nombre.toUpperCase());
       const peso = sec ? sec.peso : 0;
