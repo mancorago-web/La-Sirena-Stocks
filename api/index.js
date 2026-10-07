@@ -1662,13 +1662,40 @@ app.get('/api/compras/detalle', async (req, res) => {
   }
 });
 
-// --- COMPRAS: facetas (proveedores e items únicos) para el BUSCADOR DE COMPRAS ---
+// --- COMPRAS: normaliza el nombre de un proveedor para agrupar variantes de escritura ---
+function normProveedor(p) {
+  return String(p || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/\bS\.?A\.?C\.?\b/g, ' ')
+    .replace(/\bE\.?I\.?R\.?L\.?\b/g, ' ')
+    .replace(/\bS\.?A\.?A\.?\b/g, ' ')
+    .replace(/\bS\.?R\.?L\.?\b/g, ' ')
+    .replace(/\bS\.?A\.?\b/g, ' ')
+    .replace(/[^A-Z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+function tokensProveedor(p) { return normProveedor(p).split(' ').filter(Boolean); }
+function jaccardProv(a, b) { const A = new Set(a), B = new Set(b); const inter = [...A].filter(x => B.has(x)).length; const u = new Set([...A, ...B]).size; return u ? inter / u : 0; }
+function mismoProveedor(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+  return jaccardProv(tokensProveedor(a), tokensProveedor(b)) >= 0.65;
+}
+
+// --- COMPRAS: facetas (proveedores agrupados = 1 nombre por proveedor + items únicos) ---
 app.get('/api/compras/facetas', authMiddleware, async (req, res) => {
   try {
     const snap = await col('compras').get();
-    const provs = new Set(), items = new Set();
-    snap.docs.forEach(d => { const a = d.data(); const p = String(a.proveedor || '').trim(); if (p) provs.add(p); const n = String(a.nombre || '').trim(); if (n) items.add(n); });
-    res.json({ proveedores: [...provs].sort((a, b) => a.localeCompare(b)), items: [...items].sort((a, b) => a.localeCompare(b)) });
+    const freq = {}; const items = new Set();
+    snap.docs.forEach(d => { const a = d.data(); const p = String(a.proveedor || '').trim(); if (p) freq[p] = (freq[p] || 0) + 1; const n = String(a.nombre || '').trim(); if (n) items.add(n); });
+    const claves = Object.keys(freq).map(p => ({ p, n: freq[p], k: normProveedor(p) }));
+    const grupos = [];
+    claves.forEach(c => { const g = grupos.find(g => g.some(x => mismoProveedor(x.k, c.k))); if (g) g.push(c); else grupos.push([c]); });
+    // 1 nombre por proveedor: el nombre más frecuente del grupo
+    const proveedores = grupos.map(g => g.slice().sort((a, b) => b.n - a.n)[0].p).sort((a, b) => a.localeCompare(b));
+    res.json({ proveedores, items: [...items].sort((a, b) => a.localeCompare(b)) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1678,12 +1705,13 @@ app.get('/api/compras/buscar', authMiddleware, async (req, res) => {
     const ini = String(req.query.fecha_inicio || '').trim();
     const fin = String(req.query.fecha_fin || '').trim();
     const item = String(req.query.item || '').trim().toUpperCase();
-    const proveedor = String(req.query.proveedor || '').trim().toUpperCase();
+    const provQ = normProveedor(req.query.proveedor || '');
     if (!ini || !fin) return res.json([]);
     const snap = await col('compras').where('fecha', '>=', ini).where('fecha', '<=', fin).get();
     let list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (item) list = list.filter(a => String(a.nombre || '').toUpperCase().includes(item));
-    if (proveedor) list = list.filter(a => String(a.proveedor || '').toUpperCase().includes(proveedor));
+    // El proveedor buscado se compara normalizado, así "BUENA VIDA" incluye "BUENA VIDA SAC." etc.
+    if (provQ) list = list.filter(a => mismoProveedor(normProveedor(a.proveedor), provQ));
     list.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
     res.json(list);
   } catch (e) { res.status(500).json({ error: e.message }); }
