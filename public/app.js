@@ -7899,23 +7899,27 @@ function renderPorcionamientoEditor(secciones) {
     + (_rbCostoActivo ? '✓ ' : '') + esc(rbNombre) + (_rbCostoActivo && _rbCosto > 0 ? ' — aplicando S/' + _rbCosto.toFixed(2) : '') + '</button>'
     + '<span style="font-size:0.78rem;color:#666;">Suma el costo de la sopa/caldo R.B y lo reparte entre todas las salidas.</span>'
     + '</div>' : '';
-  // Selector BARRA FRIA / BARRA CALIENTE para los pescados que salen como PESCA BLANCA
+  // DESTINO DEL PORCIONAMIENTO: BARRA FRIA / BARRA CALIENTE (según el item), el grupo natural
+  // (ej. CARNE/POLLO) y MENU (siempre disponible). Todos los porcionados van al destino elegido.
   const esPB = _PORCIONAMIENTO_CON_TEMPERATURA.has(ctx.item.nombre);
   const soloCaliente = _PORCIONAMIENTO_PESCA_BLANCA_CALIENTE.has(ctx.item.nombre);
-  const tempHtml = esPB ? '<div style="margin:0.5rem 0;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">'
+  const itemFam = (() => { const it = (ctx.stock || []).find(s => String(s.ingrediente || '') === ctx.item.nombre); return it ? String(it.familia || '').toUpperCase() : ''; })();
+  const defGrupo = def ? def.grupo : (itemFam || null);
+  const opcionesDest = [];
+  if (esPB) {
+    if (!soloCaliente) opcionesDest.push({ v: 'FRIA', label: 'BARRA FRIA' });
+    opcionesDest.push({ v: 'CALIENTE', label: 'BARRA CALIENTE' });
+  } else if (defGrupo) {
+    opcionesDest.push({ v: defGrupo, label: defGrupo });
+  }
+  opcionesDest.push({ v: 'MENU', label: 'MENU' });
+  const valorDest = _porcionamientoMenu ? 'MENU' : (esPB ? _porcionamientoTemperatura : (defGrupo || ''));
+  const destinoHtml = '<div style="margin:0.5rem 0;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">'
     + '<label style="font-weight:600;font-size:0.85rem;color:#1a237e;">Destino del porcionamiento:</label>'
-    + (soloCaliente
-      ? '<span style="font-weight:700;color:#b71c1c;">BARRA CALIENTE</span><span style="font-size:0.78rem;color:#666;">(este pescado solo se usa en BARRA CALIENTE)</span>'
-      : '<select id="porcionamiento-temperatura" onchange="_porcionamientoTemperatura=this.value; renderPorcionamientoEditor(seccionesActualesEditor())" style="padding:0.4rem;border:1px solid #ccc;border-radius:4px;font-weight:600;">'
-      + '<option value="FRIA" ' + (_porcionamientoTemperatura === 'FRIA' ? 'selected' : '') + '>BARRA FRIA</option>'
-      + '<option value="CALIENTE" ' + (_porcionamientoTemperatura === 'CALIENTE' ? 'selected' : '') + '>BARRA CALIENTE</option>'
-      + '</select>')
-    + '</div>' : '';
-  // Botón DESTINO: MENU -> los porcionados van a COCINA/STOCK/MENU (en vez de su destino normal).
-  const menuHtml = '<div style="margin:0.5rem 0;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">'
-    + '<button onclick="_porcionamientoMenu=!_porcionamientoMenu; renderPorcionamientoEditor(seccionesActualesEditor())" style="padding:0.45rem 0.9rem;border:none;border-radius:4px;cursor:pointer;font-weight:700;background:' + (_porcionamientoMenu ? '#2e7d32' : '#666') + ';color:#fff;font-size:0.85rem;">'
-    + (_porcionamientoMenu ? '✓ ' : '') + '📋 DESTINO: MENU</button>'
-    + '<span style="font-size:0.78rem;color:#666;">' + (_porcionamientoMenu ? 'Los porcionados irán a COCINA/STOCK/MENU.' : 'Actívalo para enviar los porcionados a COCINA/STOCK/MENU.') + '</span>'
+    + '<select id="porcionamiento-destino" onchange="onCambiarDestinoPorcionamiento(this.value)" style="padding:0.4rem;border:1px solid #ccc;border-radius:4px;font-weight:600;">'
+    + opcionesDest.map(o => '<option value="' + o.v + '"' + (valorDest === o.v ? ' selected' : '') + '>' + o.label + '</option>').join('')
+    + '</select>'
+    + (_porcionamientoMenu ? '<span style="font-size:0.78rem;color:#2e7d32;font-weight:600;">Los porcionados irán a COCINA/STOCK/MENU.</span>' : '')
     + '</div>';
   // PACKS: se ocultan SIEMPRE cuando el destino es BARRA FRIA (regla del administrador: en FRIA
   // nunca se generan packs; las salidas son PORC. MERMA UTIL - X KG y PORC. <ITEM> X KG).
@@ -7939,8 +7943,7 @@ function renderPorcionamientoEditor(secciones) {
     + '</div>';
   editor.innerHTML = '<h3 style="margin-top:0">Porcionamiento: ' + esc(ctx.item.nombre) + '</h3>'
     + '<p style="font-size:0.85rem;color:#666;">Stock en COCINA: <b>' + stock + '</b>. Ingresa el PESO BRUTO a porcionar y el peso de cada salida.</p>'
-    + tempHtml
-    + menuHtml
+    + destinoHtml
     + rbHtml
     + '<div class="table-wrap"><table>'
     + '<thead><tr><th>Sección / Porcionamiento</th><th>Peso</th><th>%</th><th>Precio</th><th></th></tr></thead>'
@@ -7957,6 +7960,12 @@ function renderPorcionamientoEditor(secciones) {
     + '</div>';
   actualizarTotalPorcionamiento();
   calcularPacksPorcionamiento();
+}
+
+function onCambiarDestinoPorcionamiento(v) {
+  if (v === 'MENU') { _porcionamientoMenu = true; }
+  else { _porcionamientoMenu = false; if (v === 'FRIA' || v === 'CALIENTE') _porcionamientoTemperatura = v; }
+  renderPorcionamientoEditor(seccionesActualesEditor());
 }
 
 function porcionFila(sec) {
@@ -8327,10 +8336,8 @@ if (esPulpo) {
     //  - BARRA FRIA: NUNCA packs. Salidas = MERMA UTIL -> PORC. MERMA UTIL - <ITEM> X KG, y
     //    FILETES -> PORC. <NOMBRE COMPLETO DEL ITEM> X KG (limpio por kg).
     //  - BARRA CALIENTE: MERMA UTIL + packs PORC. PACK - <ITEM> X <GR> GR (como antes).
-    // Se lee el valor ACTUAL del selector (no la variable global) para que coincida con lo elegido.
-    const selTemp = document.getElementById('porcionamiento-temperatura');
-    const tempSel = selTemp ? String(selTemp.value || '').toUpperCase() : '';
-    const temp = def.conTemperatura ? (tempSel === 'CALIENTE' ? 'CALIENTE' : 'FRIA') : 'FRIA';
+    // El destino elegido se lee de la variable (el selector lo actualiza).
+    const temp = def.conTemperatura ? (_porcionamientoTemperatura === 'CALIENTE' ? 'CALIENTE' : 'FRIA') : 'FRIA';
     const familia = _porcionamientoMenu ? 'MENU' : (def.conTemperatura ? _TEMPERATURA_FAMILIA[temp] : def.grupo);
     const merma = secciones.find(s => /MERMA UTIL/.test(s.nombre.toUpperCase()))?.peso || 0;
     const filetes = secciones.find(s => /FILETE/.test(s.nombre.toUpperCase()))?.peso || 0;
