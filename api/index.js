@@ -1709,17 +1709,29 @@ async function canonicalizarProveedor(prov) {
   } catch (e) { return p; }
 }
 
-// --- COMPRAS: facetas (proveedores agrupados = 1 nombre por proveedor + items únicos) ---
+// --- COMPRAS: facetas (proveedores agrupados = 1 nombre por proveedor + items de la BASE UNIFICADA) ---
 app.get('/api/compras/facetas', authMiddleware, async (req, res) => {
   try {
     const snap = await col('compras').get();
-    const freq = {}; const items = new Set();
-    snap.docs.forEach(d => { const a = d.data(); const p = String(a.proveedor || '').trim(); if (p) freq[p] = (freq[p] || 0) + 1; const n = String(a.nombre || '').trim(); if (n) items.add(n); });
+    const freq = {};
+    snap.docs.forEach(d => { const a = d.data(); const p = String(a.proveedor || '').trim(); if (p) freq[p] = (freq[p] || 0) + 1; });
     const claves = Object.keys(freq).map(p => ({ p, n: freq[p], k: normProveedor(p) }));
     const grupos = [];
     claves.forEach(c => { const g = grupos.find(g => g.some(x => mismoProveedor(x.k, c.k))); if (g) g.push(c); else grupos.push([c]); });
     // 1 nombre por proveedor: el nombre más frecuente del grupo
     const proveedores = grupos.map(g => g.slice().sort((a, b) => b.n - a.n)[0].p).sort((a, b) => a.localeCompare(b));
+    // ITEMS: nombres canónicos de la BASE DE DATOS UNIFICADA (no de las compras).
+    const [stock, barra, cocina, base, cstock, bstock] = await Promise.all([
+      col('stock_precios').get(), col('barra_precios').get(), col('cocina_precios').get(),
+      col('base_unificada').get(), col('cocina_stock').get(), col('barra_stock').get(),
+    ]);
+    const items = new Set();
+    stock.docs.forEach(d => { const n = String(d.data().nombre || '').trim(); if (n) items.add(n); });
+    barra.docs.forEach(d => { const n = String(d.data().ingrediente || '').trim(); if (n) items.add(n); });
+    cocina.docs.forEach(d => { const n = String(d.data().ingrediente || '').trim(); if (n) items.add(n); });
+    base.docs.forEach(d => { const n = String(d.data().nombre || '').trim(); if (n) items.add(n); });
+    cstock.docs.forEach(d => { const n = String(d.data().ingrediente || '').trim(); if (n) items.add(n); });
+    bstock.docs.forEach(d => { const n = String(d.data().ingrediente || '').trim(); if (n) items.add(n); });
     res.json({ proveedores, items: [...items].sort((a, b) => a.localeCompare(b)) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
