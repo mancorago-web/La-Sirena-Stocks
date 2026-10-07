@@ -1257,7 +1257,7 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
       const precioTotal = parseFloat(it.precio_total) || 0;
       const documento = String(it.documento || '').trim().toUpperCase();
       const numero = String(it.numero || '').trim();
-      const proveedor = String(it.proveedor || '').trim();
+      const proveedor = await canonicalizarProveedor(it.proveedor);
       const categoria = String(it.categoria || '').trim().toUpperCase();
       const key = nombre.toUpperCase();
       const destino = String(it.destino || 'stocks').toLowerCase();
@@ -1682,6 +1682,31 @@ function mismoProveedor(a, b) {
   if (a === b) return true;
   if (a.includes(b) || b.includes(a)) return true;
   return jaccardProv(tokensProveedor(a), tokensProveedor(b)) >= 0.65;
+}
+
+// Lista de proveedores CANÓNICOS (1 por proveedor, el nombre más frecuente). Cacheada en memoria.
+let _provCanonicosCache = null;
+async function proveedoresCanonicosList() {
+  if (_provCanonicosCache) return _provCanonicosCache;
+  const snap = await col('compras').get();
+  const freq = {};
+  snap.docs.forEach(d => { const p = String(d.data().proveedor || '').trim(); if (p) freq[p] = (freq[p] || 0) + 1; });
+  const claves = Object.keys(freq).map(p => ({ p, n: freq[p], k: normProveedor(p) }));
+  const grupos = [];
+  claves.forEach(c => { const g = grupos.find(g => g.some(x => mismoProveedor(x.k, c.k))); if (g) g.push(c); else grupos.push([c]); });
+  _provCanonicosCache = grupos.map(g => { const rep = g.slice().sort((a, b) => b.n - a.n || a.p.localeCompare(b.p))[0]; return { rep: rep.p, k: rep.k }; });
+  return _provCanonicosCache;
+}
+// Devuelve el nombre canónico del proveedor (si coincide con uno existente) o el mismo texto.
+async function canonicalizarProveedor(prov) {
+  const p = String(prov || '').trim();
+  if (!p) return '';
+  try {
+    const k = normProveedor(p);
+    const canonicos = await proveedoresCanonicosList();
+    const m = canonicos.find(c => mismoProveedor(c.k, k));
+    return m ? m.rep : p;
+  } catch (e) { return p; }
 }
 
 // --- COMPRAS: facetas (proveedores agrupados = 1 nombre por proveedor + items únicos) ---
@@ -2279,7 +2304,7 @@ app.put('/api/compras/:id', authMiddleware, async (req, res) => {
       precio_total: parseFloat(precio_total) || 0,
       documento: String(documento || '').trim().toUpperCase(),
       numero: String(numero || '').trim(),
-      proveedor: String(proveedor || '').trim(),
+      proveedor: await canonicalizarProveedor(proveedor),
       updated_at: now
     };
     if (nuevoNombre && nuevoNombre !== nombre) {

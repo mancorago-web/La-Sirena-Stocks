@@ -9840,6 +9840,22 @@ function comprasMueblesSeleccionados() {
 }
 
 // --- BUSCADOR DE COMPRAS ---
+let _proveedoresCanonicos = null;
+function cargarProveedoresCanonicos() {
+  if (_proveedoresCanonicos) { aplicarProveedoresCanonicos(); return; }
+  api('GET', '/api/compras/facetas').then(r => {
+    _proveedoresCanonicos = r.proveedores || [];
+    aplicarProveedoresCanonicos();
+  }).catch(() => {});
+}
+function aplicarProveedoresCanonicos() {
+  const html = (_proveedoresCanonicos || []).map(p => '<option value="' + String(p).replace(/"/g, '&quot;') + '"></option>').join('');
+  const dl1 = document.getElementById('sugerencia-proveedores');
+  if (dl1) dl1.innerHTML = html;
+  const dl2 = document.getElementById('buscar-compras-proveedores-dl');
+  if (dl2) dl2.innerHTML = html;
+}
+
 let _buscadorComprasCargado = false;
 function cargarBuscadorCompras() {
   const iniEl = document.getElementById('buscar-compras-ini');
@@ -9850,12 +9866,11 @@ function cargarBuscadorCompras() {
     iniEl.value = hace30.toISOString().split('T')[0];
     finEl.value = hoy;
   }
+  cargarProveedoresCanonicos();
   if (!_buscadorComprasCargado) {
     _buscadorComprasCargado = true;
     api('GET', '/api/compras/facetas').then(r => {
-      const dlP = document.getElementById('buscar-compras-proveedores-dl');
       const dlI = document.getElementById('buscar-compras-items-dl');
-      if (dlP) dlP.innerHTML = (r.proveedores || []).map(p => '<option value="' + String(p).replace(/"/g, '&quot;') + '"></option>').join('');
       if (dlI) dlI.innerHTML = (r.items || []).map(p => '<option value="' + String(p).replace(/"/g, '&quot;') + '"></option>').join('');
     }).catch(() => {});
   }
@@ -9907,20 +9922,7 @@ function cargarComprasDetalle(ini, fin) {
     }
     _comprasListaEditable = list;
     const totalCompra = (list || []).reduce((s, r) => s + (parseFloat(r.precio_total) || ((parseFloat(r.precio) || 0) * (r.cantidad || 0))), 0);
-    const provDl = document.getElementById('sugerencia-proveedores');
-    if (provDl) {
-      const seenP = new Set();
-      let htmlP = '';
-      (list || []).forEach(r => {
-        const p = (r.proveedor || '').trim();
-        if (!p) return;
-        const k = p.toUpperCase();
-        if (seenP.has(k)) return;
-        seenP.add(k);
-        htmlP += '<option value="' + p.replace(/"/g, '&quot;') + '"></option>';
-      });
-      provDl.innerHTML = htmlP;
-    }
+    cargarProveedoresCanonicos();
     const unicos = [...new Set((list || []).map(r => r.nombre).filter(Boolean))];
     const precioDe = r => (parseFloat(r.precio_total) || ((parseFloat(r.precio) || 0) * (parseFloat(r.cantidad) || 0)));
     const horaDe = r => r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
