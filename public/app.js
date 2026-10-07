@@ -9889,14 +9889,46 @@ function buscarCompras() {
   cont.innerHTML = '<p style="color:#888;">Buscando...</p>';
   api('GET', '/api/compras/buscar?fecha_inicio=' + encodeURIComponent(ini) + '&fecha_fin=' + encodeURIComponent(fin) + '&item=' + encodeURIComponent(item) + '&proveedor=' + encodeURIComponent(proveedor)).then(list => {
     if (!list || !list.length) { cont.innerHTML = '<p style="color:#888;">No se encontraron compras.</p>'; if (resumen) resumen.textContent = ''; return; }
-    let total = 0;
-    const filas = list.map(r => {
-      const pt = parseFloat(r.precio_total) || 0; total += pt;
-      const u = DISPLAY_NAMES[r.saved_by] || r.saved_by || '-';
-      return '<tr><td>' + esc(r.fecha) + '</td><td>' + esc(r.nombre) + '</td><td>' + (r.cantidad || '') + '</td><td>' + esc(r.unidad || '') + '</td><td>S/' + (parseFloat(r.precio) || 0).toFixed(2) + '</td><td>S/' + pt.toFixed(2) + '</td><td>' + esc(r.proveedor || '') + '</td><td>' + esc((r.destino || '').toUpperCase()) + '</td><td>' + esc(u) + '</td></tr>';
+    const precioDe = r => (parseFloat(r.precio_total) || ((parseFloat(r.precio) || 0) * (parseFloat(r.cantidad) || 0)));
+    const horaDe = r => r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
+    const zonas = ['stocks', 'barra', 'cocina', 'eventos', 'limpieza'];
+    const zonaLabel = { stocks: 'STOCKS', barra: 'BARRA', cocina: 'COCINA', eventos: 'EVENTOS', limpieza: 'LIMPIEZA' };
+    const COLGROUP = '<col style="width:30%"><col style="width:8%"><col style="width:10%"><col style="width:11%"><col style="width:17%"><col style="width:15%"><col style="width:9%">';
+    // Agrupar por FECHA (recuadros), mostrando el detalle por ZONA (STOCKS/BARRA/COCINA/LIMPIEZA/EVENTOS)
+    const gruposFecha = {};
+    list.forEach(r => { const f = r.fecha || 'SIN FECHA'; (gruposFecha[f] = gruposFecha[f] || []).push(r); });
+    const fechas = Object.keys(gruposFecha).sort((a, b) => b.localeCompare(a));
+    let totalGeneral = 0;
+    const contenido = fechas.map(f => {
+      const rows = gruposFecha[f];
+      const totalDia = rows.reduce((s, r) => s + precioDe(r), 0);
+      totalGeneral += totalDia;
+      const byZona = { stocks: [], barra: [], cocina: [], eventos: [], limpieza: [] };
+      rows.forEach(r => { if (byZona[r.destino]) byZona[r.destino].push(r); });
+      let cuerpo = '';
+      zonas.forEach(z => {
+        const zrows = byZona[z];
+        if (!zrows.length) return;
+        const zTotal = zrows.reduce((s, r) => s + precioDe(r), 0);
+        cuerpo += '<div style="border-top:1px dashed #ddd;padding:0.45rem 0 0.25rem 0;">' +
+          '<div style="font-weight:700;color:#2e7d32;font-size:0.8rem;display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem;">' +
+            '<span>' + zonaLabel[z] + '</span><span style="color:#33691e;">S/ ' + zTotal.toFixed(2) + '</span></div>' +
+          '<div class="table-wrap"><table style="width:100%;table-layout:fixed;font-size:0.78rem;"><colgroup>' + COLGROUP + '</colgroup>' +
+            '<thead><tr><th>Item</th><th style="text-align:center;">Cant.</th><th style="text-align:right;">P. Unit</th><th style="text-align:right;">P. Total</th><th>Proveedor</th><th>Documento</th><th>Hora</th></tr></thead>' +
+            '<tbody>' + zrows.map(r => {
+              const pu = parseFloat(r.precio) || 0; const pt = precioDe(r);
+              return '<tr><td>' + esc(r.nombre) + '</td><td style="text-align:center;">' + r.cantidad + '</td><td style="text-align:right;">S/ ' + pu.toFixed(2) + '</td><td style="text-align:right;">S/ ' + pt.toFixed(2) + '</td><td>' + esc(r.proveedor || '') + '</td><td>' + esc(((r.documento || '') + (r.numero ? ' ' + r.numero : '')).trim() || '—') + '</td><td>' + horaDe(r) + '</td></tr>';
+            }).join('') + '</tbody>' +
+          '</table></div></div>';
+      });
+      return '<div style="margin-bottom:0.75rem;border:2px solid #000;border-radius:8px;overflow:hidden;">' +
+        '<div style="background:#eef2ff;padding:0.4rem 0.6rem;font-weight:700;color:#1a237e;font-size:0.85rem;display:flex;justify-content:space-between;align-items:center;">' +
+          '<span>FECHA: ' + fmtFechaCorta(f) + '</span><span style="color:#0f3460;">S/ ' + totalDia.toFixed(2) + '</span></div>' +
+        '<div style="padding:0.4rem 0.6rem;">' + (cuerpo || '<p style="color:#888;">Sin items.</p>') + '</div>' +
+      '</div>';
     }).join('');
-    if (resumen) resumen.innerHTML = list.length + ' compra(s) — TOTAL: S/ ' + (Math.round(total * 100) / 100);
-    cont.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Item</th><th>Cant.</th><th>Unidad</th><th>P. Unit</th><th>P. Total</th><th>Proveedor</th><th>Destino</th><th>Usuario</th></tr></thead><tbody>' + filas + '</tbody></table></div>';
+    if (resumen) resumen.innerHTML = list.length + ' compra(s) — TOTAL: S/ ' + (Math.round(totalGeneral * 100) / 100);
+    cont.innerHTML = contenido;
   }).catch(e => { cont.innerHTML = '<p style="color:#c62828;">Error al buscar.</p>'; console.error(e); });
 }
 
