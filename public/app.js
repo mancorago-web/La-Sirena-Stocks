@@ -9862,9 +9862,8 @@ function cargarBuscadorCompras() {
   const finEl = document.getElementById('buscar-compras-fin');
   if (iniEl && !iniEl.value) {
     const hoy = todayStr();
-    const hace30 = new Date(); hace30.setDate(hace30.getDate() - 30);
-    iniEl.value = hace30.toISOString().split('T')[0];
-    finEl.value = hoy;
+    iniEl.value = hoy.slice(0, 7) + '-01'; // primer día del mes actual
+    finEl.value = hoy;                     // fecha actual
   }
   cargarProveedoresCanonicos();
   if (!_buscadorComprasCargado) {
