@@ -6199,6 +6199,9 @@ app.post('/api/basedatos/renombrar', async (req, res) => {
     // 4) Sincronizar precios/unidades en TODAS las zonas donde exista el item (BASE MAESTRA)
     if (nuevo) await syncPreciosEnZonas(nuevo, { unidad_compra, precio_compra, unidad_venta, precio_venta });
 
+    // 5) Invalidar cachés para que RECETAS/COCINA/BASE reflejen el nuevo nombre y su precio al instante
+    invalidarCachesLectura();
+
     res.json({ ok: true, renombrados });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
