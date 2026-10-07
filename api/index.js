@@ -1662,6 +1662,33 @@ app.get('/api/compras/detalle', async (req, res) => {
   }
 });
 
+// --- COMPRAS: facetas (proveedores e items únicos) para el BUSCADOR DE COMPRAS ---
+app.get('/api/compras/facetas', authMiddleware, async (req, res) => {
+  try {
+    const snap = await col('compras').get();
+    const provs = new Set(), items = new Set();
+    snap.docs.forEach(d => { const a = d.data(); const p = String(a.proveedor || '').trim(); if (p) provs.add(p); const n = String(a.nombre || '').trim(); if (n) items.add(n); });
+    res.json({ proveedores: [...provs].sort((a, b) => a.localeCompare(b)), items: [...items].sort((a, b) => a.localeCompare(b)) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- COMPRAS: buscar por rango de fechas + item + proveedor (BUSCADOR DE COMPRAS) ---
+app.get('/api/compras/buscar', authMiddleware, async (req, res) => {
+  try {
+    const ini = String(req.query.fecha_inicio || '').trim();
+    const fin = String(req.query.fecha_fin || '').trim();
+    const item = String(req.query.item || '').trim().toUpperCase();
+    const proveedor = String(req.query.proveedor || '').trim().toUpperCase();
+    if (!ini || !fin) return res.json([]);
+    const snap = await col('compras').where('fecha', '>=', ini).where('fecha', '<=', fin).get();
+    let list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (item) list = list.filter(a => String(a.nombre || '').toUpperCase().includes(item));
+    if (proveedor) list = list.filter(a => String(a.proveedor || '').toUpperCase().includes(proveedor));
+    list.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
+    res.json(list);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- LISTA DE COMPRAS: lista de items de COCINA/BARRA con cantidades para una fecha (día siguiente).
 // El administrador pone las cantidades de lo que se pide y la lista queda guardada por fecha.
 // Se usa la colección `lista_compras` con un doc por (fecha, zona) que contiene los items.

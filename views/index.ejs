@@ -175,6 +175,7 @@
     <div class="tabs">
       <button class="sub-tab active" data-subtab="registro" onclick="cambiarSubTab('registro','compras')">COMPRAS</button>
       <button class="sub-tab" data-subtab="listacompras" onclick="cambiarSubTab('listacompras','compras')">LISTA DE COMPRAS</button>
+      <button class="sub-tab" data-subtab="buscadorcompras" onclick="cambiarSubTab('buscadorcompras','compras')">BUSCADOR DE COMPRAS</button>
     </div>
   </div>
 
@@ -791,6 +792,24 @@
           <input type="text" id="buscar-lista-compras" placeholder="Buscar item (muestra todos)..." oninput="cargarListaCompras()" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;flex:1;min-width:180px;">
         </div>
         <div id="accordion-lista-compras"></div>
+      </div>
+
+      <div id="sub-compras-buscadorcompras" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>BUSCADOR DE COMPRAS</h2>
+        </div>
+        <div class="controles-dia" style="flex-wrap:wrap;gap:0.75rem;align-items:flex-end;">
+          <label>Desde: <input type="date" id="buscar-compras-ini" onchange="buscarCompras()"></label>
+          <label>Hasta: <input type="date" id="buscar-compras-fin" onchange="buscarCompras()"></label>
+          <label>Item: <input type="text" id="buscar-compras-item" placeholder="Buscar item..." list="buscar-compras-items-dl" autocomplete="off" oninput="buscarCompras()" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;min-width:180px;"></label>
+          <datalist id="buscar-compras-items-dl"></datalist>
+          <label>Proveedor: <input type="text" id="buscar-compras-proveedor" placeholder="Buscar proveedor..." list="buscar-compras-proveedores-dl" autocomplete="off" oninput="buscarCompras()" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;min-width:180px;"></label>
+          <datalist id="buscar-compras-proveedores-dl"></datalist>
+          <button class="btn-guardar-dia" onclick="buscarCompras()">🔍 BUSCAR</button>
+          <button class="btn-detalles" onclick="limpiarBuscadorCompras()">LIMPIAR</button>
+        </div>
+        <div id="buscar-compras-resumen" style="font-weight:700;color:#0f3460;margin:0.5rem 0;"></div>
+        <div id="buscar-compras-resultados"><p style="color:#888;">Elige un rango de fechas y busca.</p></div>
       </div>
     </div>
 

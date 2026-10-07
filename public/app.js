@@ -5668,6 +5668,7 @@ function cambiarSubTab(nombre, prefix) {
   if (prefix === 'compras') {
     if (nombre === 'registro') cargarCompras();
     else if (nombre === 'listacompras') cargarListaCompras();
+    else if (nombre === 'buscadorcompras') cargarBuscadorCompras();
   }
 }
 
@@ -9836,6 +9837,57 @@ function comprasAlmacenesSeleccionados() {
 
 function comprasMueblesSeleccionados() {
   return Array.from(document.querySelectorAll('.compra-mueble:checked')).map(cb => cb.value);
+}
+
+// --- BUSCADOR DE COMPRAS ---
+let _buscadorComprasCargado = false;
+function cargarBuscadorCompras() {
+  const iniEl = document.getElementById('buscar-compras-ini');
+  const finEl = document.getElementById('buscar-compras-fin');
+  if (iniEl && !iniEl.value) {
+    const hoy = todayStr();
+    const hace30 = new Date(); hace30.setDate(hace30.getDate() - 30);
+    iniEl.value = hace30.toISOString().split('T')[0];
+    finEl.value = hoy;
+  }
+  if (!_buscadorComprasCargado) {
+    _buscadorComprasCargado = true;
+    api('GET', '/api/compras/facetas').then(r => {
+      const dlP = document.getElementById('buscar-compras-proveedores-dl');
+      const dlI = document.getElementById('buscar-compras-items-dl');
+      if (dlP) dlP.innerHTML = (r.proveedores || []).map(p => '<option value="' + String(p).replace(/"/g, '&quot;') + '"></option>').join('');
+      if (dlI) dlI.innerHTML = (r.items || []).map(p => '<option value="' + String(p).replace(/"/g, '&quot;') + '"></option>').join('');
+    }).catch(() => {});
+  }
+  buscarCompras();
+}
+
+function buscarCompras() {
+  const ini = document.getElementById('buscar-compras-ini')?.value || '';
+  const fin = document.getElementById('buscar-compras-fin')?.value || '';
+  const item = (document.getElementById('buscar-compras-item')?.value || '').trim().toUpperCase();
+  const proveedor = (document.getElementById('buscar-compras-proveedor')?.value || '').trim().toUpperCase();
+  const cont = document.getElementById('buscar-compras-resultados');
+  const resumen = document.getElementById('buscar-compras-resumen');
+  if (!cont) return;
+  if (!ini || !fin) { cont.innerHTML = '<p style="color:#888;">Elige fecha de inicio y fin.</p>'; if (resumen) resumen.textContent = ''; return; }
+  cont.innerHTML = '<p style="color:#888;">Buscando...</p>';
+  api('GET', '/api/compras/buscar?fecha_inicio=' + encodeURIComponent(ini) + '&fecha_fin=' + encodeURIComponent(fin) + '&item=' + encodeURIComponent(item) + '&proveedor=' + encodeURIComponent(proveedor)).then(list => {
+    if (!list || !list.length) { cont.innerHTML = '<p style="color:#888;">No se encontraron compras.</p>'; if (resumen) resumen.textContent = ''; return; }
+    let total = 0;
+    const filas = list.map(r => {
+      const pt = parseFloat(r.precio_total) || 0; total += pt;
+      const u = DISPLAY_NAMES[r.saved_by] || r.saved_by || '-';
+      return '<tr><td>' + esc(r.fecha) + '</td><td>' + esc(r.nombre) + '</td><td>' + (r.cantidad || '') + '</td><td>' + esc(r.unidad || '') + '</td><td>S/' + (parseFloat(r.precio) || 0).toFixed(2) + '</td><td>S/' + pt.toFixed(2) + '</td><td>' + esc(r.proveedor || '') + '</td><td>' + esc((r.destino || '').toUpperCase()) + '</td><td>' + esc(u) + '</td></tr>';
+    }).join('');
+    if (resumen) resumen.innerHTML = list.length + ' compra(s) — TOTAL: S/ ' + (Math.round(total * 100) / 100);
+    cont.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Item</th><th>Cant.</th><th>Unidad</th><th>P. Unit</th><th>P. Total</th><th>Proveedor</th><th>Destino</th><th>Usuario</th></tr></thead><tbody>' + filas + '</tbody></table></div>';
+  }).catch(e => { cont.innerHTML = '<p style="color:#c62828;">Error al buscar.</p>'; console.error(e); });
+}
+
+function limpiarBuscadorCompras() {
+  ['buscar-compras-item', 'buscar-compras-proveedor'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  buscarCompras();
 }
 
 function cargarComprasDetalle(ini, fin) {
