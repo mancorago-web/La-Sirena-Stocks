@@ -909,6 +909,13 @@
       </div>
       <div style="font-size:0.8rem;color:#888;margin-bottom:0.5rem;">Items de STOCKS, BARRA y COCINA en una sola lista, en orden alfabético. Los posibles duplicados se marcan en amarillo.</div>
       <div id="bd-unificada-wrap"></div>
+      <div id="bd-unificar-flotante" style="position:fixed;bottom:0;left:0;right:0;z-index:999;display:flex;justify-content:center;padding:0.5rem;pointer-events:none;">
+        <div style="pointer-events:auto;background:#0f3460;color:#fff;border-radius:10px;padding:0.55rem 0.9rem;display:flex;align-items:center;gap:0.8rem;box-shadow:0 3px 12px rgba(0,0,0,0.4);">
+          <span id="bd-unificar-conteo" style="font-weight:700;color:#fff;">0 seleccionados</span>
+          <button id="bd-unificar-btn" class="btn-guardar-dia" onclick="unificarItemsBaseDatos()" style="background:#666;color:#fff;">🔗 UNIFICAR</button>
+          <button onclick="limpiarSeleccionBdUnificar()" style="padding:0.4rem 0.7rem;background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.4);border-radius:4px;cursor:pointer;">✕ LIMPIAR</button>
+        </div>
+      </div>
     </div>
 
     <div id="modal" class="modal">

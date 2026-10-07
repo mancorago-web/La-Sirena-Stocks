@@ -493,9 +493,7 @@ function renderBaseDatosUnificada() {
     if (!porCategoria.has(label)) porCategoria.set(label, []);
     porCategoria.get(label).push(k);
   });
-  let html = '<div style="margin-bottom:0.6rem;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">'
-    + '<button class="btn-guardar-dia" onclick="unificarItemsBaseDatos()" style="width:auto;">🔗 UNIFICAR</button>'
-    + '<span style="font-size:0.8rem;color:#888;">Marca los items que son el mismo producto y presiona UNIFICAR (se usará 1 solo nombre en toda la app).</span></div>';
+  let html = '<div style="margin-bottom:0.6rem;font-size:0.8rem;color:#888;">Marca los items que son el mismo producto y presiona <b>🔗 UNIFICAR</b> (el botón flotante abajo siempre está visible). Se usará 1 solo nombre en toda la app.</div>';
   porCategoria.forEach((ks, label) => {
     html += '<div class="diff-almacen">';
     html += '<div class="diff-header" onclick="toggleAcordeon(this)"><span class="accordion-title">' + label + ' <span style="font-weight:400;font-size:0.85rem;color:#777;">(' + ks.length + ')</span></span><span class="accordion-arrow">▶</span></div>';
@@ -513,7 +511,7 @@ function renderBaseDatosUnificada() {
         ? (ult > ant ? '<span style="color:#2e7d32;font-weight:700;">▲ +' + (ult - ant).toFixed(2) + '</span>' : '<span style="color:#c62828;font-weight:700;">▼ ' + (ult - ant).toFixed(2) + '</span>')
         : (ult > 0 ? '<span style="color:#888;">—</span>' : '');
       html += `<tr style="${dup ? 'background:#fff9c4;' : ''}">
-        <td><input type="checkbox" class="chk-bd-unificar" data-nombre="${esc(g.nombre)}" title="Marcar para unificar"></td>
+        <td><input type="checkbox" class="chk-bd-unificar" data-nombre="${esc(g.nombre)}" onchange="actualizarBotonUnificarFlotante()" title="Marcar para unificar"></td>
         <td>${esc(g.nombre)}${dup ? ' <span class="badge-observacion" style="background:#f57f17;">DUP</span>' : ''}</td>
         <td><span class="badge-zona">${zonas}</span></td>
         <td>${esc(primero.unidad_compra || '—')}</td>
@@ -531,6 +529,20 @@ function renderBaseDatosUnificada() {
   });
   html += '<p style="font-size:0.8rem;color:#666;margin-top:0.5rem;">Total: <strong>' + claves.length + '</strong> items · candidatos a unificar: <strong style="color:#f57f17;">' + esDup.size + '</strong></p>';
   wrap.innerHTML = html;
+  actualizarBotonUnificarFlotante();
+}
+
+// Botón UNIFICAR flotante: siempre visible al hacer scroll; se resalta cuando hay 2+ seleccionados.
+function actualizarBotonUnificarFlotante() {
+  const n = document.querySelectorAll('.chk-bd-unificar:checked').length;
+  const conteo = document.getElementById('bd-unificar-conteo');
+  const btn = document.getElementById('bd-unificar-btn');
+  if (conteo) conteo.textContent = n + ' seleccionado' + (n === 1 ? '' : 's');
+  if (btn) btn.style.background = n >= 2 ? '#2e7d32' : '#666';
+}
+function limpiarSeleccionBdUnificar() {
+  document.querySelectorAll('.chk-bd-unificar:checked').forEach(cb => { cb.checked = false; });
+  actualizarBotonUnificarFlotante();
 }
 
 function unificarItemsBaseDatos() {
