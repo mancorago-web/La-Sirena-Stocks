@@ -6354,6 +6354,10 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
     const esFaltante = d.diff < -0.0001;
     const estado = `<span style="display:inline-block;white-space:nowrap;background:${esFaltante ? '#ffebee' : '#e8f5e9'};color:${esFaltante ? '#c62828' : '#2e7d32'};font-weight:700;padding:0.15rem 0.6rem;border-radius:10px;font-size:0.78rem;">${esFaltante ? 'FALTANTE' : 'SOBRANTE'}</span>`;
     const sem = `ventas: <b>${d.ventas}</b> | ingresos: <b>${d.ingresos}</b>`;
+    const diffOz = calcularOnzas({ cantidad: d.diff, unidad: d.unidad || 'unidad', ingrediente: d.ingrediente });
+    const ozCel = (diffOz === null || diffOz === undefined || isNaN(diffOz))
+      ? '<td style="text-align:center;color:#aaa;">—</td>'
+      : `<td style="text-align:center;font-weight:700;color:${esFaltante ? '#c62828' : '#2e7d32'};">${diffOz.toFixed(1)}</td>`;
     return `<tr>
       <td>${esc(d.ingrediente)}</td>
       <td style="text-align:center;">${d.sistema}</td>
@@ -6361,6 +6365,7 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
       <td style="text-align:center;color:${esFaltante ? '#c62828' : '#2e7d32'};font-weight:700;">${d.diff}</td>
       <td style="text-align:center;">${estado}</td>
       <td>${sem}</td>
+      ${ozCel}
     </tr>`;
   };
   const muebleOrder = Object.keys(gruposMueble).sort((a, b) => {
@@ -6373,19 +6378,26 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
                     ...gruposMueble[g].filter(x => x.diff > 0.0001).sort(ordenarAlpha)];
     const totalF = gruposMueble[g].filter(x => x.diff < -0.0001).length;
     const totalS = gruposMueble[g].filter(x => x.diff > 0.0001).length;
+    const sumOz = (filtro) => gruposMueble[g].filter(filtro).reduce((s, x) => {
+      const o = calcularOnzas({ cantidad: x.diff, unidad: x.unidad || 'unidad', ingrediente: x.ingrediente });
+      return s + (o && !isNaN(o) ? o : 0);
+    }, 0);
+    const ozF = sumOz(x => x.diff < -0.0001);
+    const ozS = sumOz(x => x.diff > 0.0001);
     return `<div style="margin-bottom:0.75rem;border:2px solid #000;border-radius:8px;overflow:hidden;">
       <div style="background:#eef2ff;padding:0.4rem 0.6rem;font-weight:700;color:#1a237e;font-size:0.85rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.3rem;">
         <span>MUEBLE: ${esc(g)}</span>
-        <span style="font-size:0.78rem;color:#0f3460;">Faltantes: <b style="color:#c62828;">${totalF}</b> · Sobrantes: <b style="color:#2e7d32;">${totalS}</b></span>
+        <span style="font-size:0.78rem;color:#0f3460;">Faltantes: <b style="color:#c62828;">${totalF}</b> (${ozF.toFixed(1)} onzas) · Sobrantes: <b style="color:#2e7d32;">${totalS}</b> (${ozS.toFixed(1)} onzas)</span>
       </div>
       <div class="table-wrap"><table style="width:100%;table-layout:fixed;font-size:0.78rem;">
         <thead><tr>
-          <th style="width:40%;text-align:left;">Item</th>
-          <th style="width:8%;text-align:center;">Sistema</th>
-          <th style="width:8%;text-align:center;">Físico</th>
-          <th style="width:8%;text-align:center;">Dif.</th>
-          <th style="width:14%;text-align:center;">Estado</th>
-          <th style="width:22%;">Ventas/Ingresos</th>
+          <th style="width:30%;text-align:left;">Item</th>
+          <th style="width:7%;text-align:center;">Sistema</th>
+          <th style="width:7%;text-align:center;">Físico</th>
+          <th style="width:7%;text-align:center;">Dif.</th>
+          <th style="width:13%;text-align:center;">Estado</th>
+          <th style="width:18%;">Ventas/Ingresos</th>
+          <th style="width:15%;text-align:center;">Dif. Onzas</th>
         </tr></thead>
         <tbody>${gRows.map(filaInforme).join('')}</tbody>
       </table></div>
@@ -6639,7 +6651,9 @@ function enviarInformeWhatsApp(fecha) {
     let n = 1;
     [...faltantes, ...sobrantes].forEach(d => {
       const signo = d.diff < 0 ? '' : '+';
-      txt += n + '. ' + String(d.ingrediente).toUpperCase() + ' - (' + signo + d.diff + ')\n';
+      const oz = calcularOnzas({ cantidad: d.diff, unidad: d.unidad || 'unidad', ingrediente: d.ingrediente });
+      const ozTxt = (oz && !isNaN(oz)) ? ' | ' + oz.toFixed(1) + ' onzas' : '';
+      txt += n + '. ' + String(d.ingrediente).toUpperCase() + ' - (' + signo + d.diff + ozTxt + ')\n';
       n++;
     });
   });
