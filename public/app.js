@@ -6363,9 +6363,9 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
       <td style="text-align:center;">${d.sistema}</td>
       <td style="text-align:center;font-weight:700;">${d.fisico}</td>
       <td style="text-align:center;color:${esFaltante ? '#c62828' : '#2e7d32'};font-weight:700;">${d.diff}</td>
+      ${ozCel}
       <td style="text-align:center;">${estado}</td>
       <td>${sem}</td>
-      ${ozCel}
     </tr>`;
   };
   const muebleOrder = Object.keys(gruposMueble).sort((a, b) => {
@@ -6395,9 +6395,9 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
           <th style="width:7%;text-align:center;">Sistema</th>
           <th style="width:7%;text-align:center;">Físico</th>
           <th style="width:7%;text-align:center;">Dif.</th>
+          <th style="width:15%;text-align:center;">Dif. Onzas</th>
           <th style="width:13%;text-align:center;">Estado</th>
           <th style="width:18%;">Ventas/Ingresos</th>
-          <th style="width:15%;text-align:center;">Dif. Onzas</th>
         </tr></thead>
         <tbody>${gRows.map(filaInforme).join('')}</tbody>
       </table></div>
