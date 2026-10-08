@@ -5306,18 +5306,62 @@ initPicker('reporte-fecha-fin');
 });
 window.addEventListener('click', e => { if (e.target === document.getElementById('modal')) cerrarModal(); });
 
+// --- ESTRUCTURA DE COSTOS (formula: COSTO TOTAL = ALIMENTOS = 30% del PV) ---
+function htmlEstructuraCostos(costoTotal) {
+  if (!(costoTotal > 0)) return '';
+  const pv = costoTotal / 0.30;
+  const manoObra = pv * 0.20;
+  const gastos = pv * 0.20;
+  const beneficio = costoTotal;
+  const igv = pv * 0.105;
+  const tarjeta = pv * 0.035;
+  const sugerido = pv + igv + tarjeta;
+  const carta = Math.ceil(sugerido * 2) / 2;
+  const tdL = 'padding:0.3rem 0.6rem;';
+  const tdC = 'padding:0.3rem 0.3rem;text-align:center;color:#666;';
+  const tdR = 'padding:0.3rem 0.6rem;text-align:right;font-weight:700;';
+  const filaE = (l, p, v, resaltar) => `<tr style="${resaltar ? 'background:#e8eaf6;font-weight:700;color:#1a237e;' : 'border-top:1px solid #e8eaf0;'}">
+    <td style="${tdL}">${l}</td><td style="${tdC}">${p}</td><td style="${tdR}">S/${v.toFixed(2)}</td>
+  </tr>`;
+  const filaP = (l, p, v, resaltar) => `<tr style="${resaltar ? 'background:#e8f5e9;font-weight:700;color:#2e7d32;border-top:1px solid #c8e6c9;' : 'border-top:1px solid #e8eaf0;'}">
+    <td style="${tdL}">${l}</td><td style="${tdC}">${p || ''}</td><td style="${tdR}">S/${v.toFixed(2)}</td>
+  </tr>`;
+  return `
+  <div style="margin-top:0.5rem;border:2px solid #1a237e;border-radius:8px;overflow:hidden;">
+    <div style="background:#1a237e;color:#fff;padding:0.3rem 0.6rem;font-weight:700;font-size:0.82rem;">ESTRUCTURA DE COSTOS</div>
+    <table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
+      <tbody>
+        ${filaE('ALIMENTOS', '30%', costoTotal)}
+        ${filaE('MANO DE OBRA', '20%', manoObra)}
+        ${filaE('GASTOS GENERALES', '20%', gastos)}
+        ${filaE('BENEFICIO NETO', '30%', beneficio)}
+        ${filaE('PV', '100%', pv, true)}
+      </tbody>
+    </table>
+  </div>
+  <div style="margin-top:0.4rem;border:2px solid #0d47a1;border-radius:8px;overflow:hidden;">
+    <div style="background:#0d47a1;color:#fff;padding:0.3rem 0.6rem;font-weight:700;font-size:0.82rem;">PRECIO DE VENTA</div>
+    <table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
+      <tbody>
+        ${filaP('IGV', '10.5%', igv)}
+        ${filaP('TARJETA', '3.5%', tarjeta)}
+        ${filaP('PRECIO SUGERIDO', '', sugerido, true)}
+        ${filaP('PRECIO CARTA', '', carta, true)}
+      </tbody>
+    </table>
+  </div>`;
+}
+
 // --- BARRA: Recetas ---
 function renderReceta(r) {
   const costoTotal = r.costoTotal || 0;
   const esBase = r.categoria === 'RECETAS BASE';
   const pv = parseFloat(r.precio_venta) || 0;
-  const costoConPerdida = costoTotal * 1.10;
-  const ganancia = pv > 0 ? (pv - costoConPerdida) : null;
   return `<div class="accordion-item" data-receta-id="${r.id}"${esBase ? ' style="background:#e3f2fd;"' : ''}>
     <div class="accordion-header" onclick="toggleAcordeon(this)">
       <span class="accordion-title">${r.nombre}${costoTotal > 0 ? ` <span style="font-weight:400;font-size:0.85rem;color:#555">— COSTO: S/${costoTotal.toFixed(2)}</span>` : ''}</span>
       <span class="accordion-actions" onclick="event.stopPropagation()">
-        <label style="font-weight:700;color:#2e7d32;font-size:0.82rem;margin-right:0.4rem;white-space:nowrap;">PV S/ <input id="pv-${r.id}" type="number" step="0.01" min="0" value="${pv ? pv : ''}" placeholder="0.00" style="width:70px;padding:0.25rem;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;" oninput="actualizarMargenVivo(${r.id}, ${costoTotal})" onchange="guardarPrecioVenta(${r.id})"></label>
+        <label style="font-weight:700;color:#2e7d32;font-size:0.82rem;margin-right:0.4rem;white-space:nowrap;">PV S/ <input id="pv-${r.id}" type="number" step="0.01" min="0" value="${pv ? pv : ''}" placeholder="0.00" style="width:70px;padding:0.25rem;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;" onchange="guardarPrecioVenta(${r.id})"></label>
         <button onclick="editarReceta(${r.id})" style="margin-right:0.3rem">EDITAR</button>
         <button class="danger" onclick="eliminarReceta(${r.id})">ELIMINAR</button>
       </span>
@@ -5345,36 +5389,12 @@ function renderReceta(r) {
             <td colspan="4">COSTO TOTAL</td>
             <td>S/${costoTotal.toFixed(2)}</td>
             <td></td>
-          </tr>
-          <tr style="font-weight:700;background:#fdecea;color:#c62828">
-            <td colspan="4">COSTO + 10% PÉRDIDA</td>
-            <td>S/${(costoTotal * 1.10).toFixed(2)}</td>
-            <td></td>
-          </tr>
-          <tr style="font-weight:700;background:#e8f5e9;color:#2e7d32;">
-            <td colspan="4">GANANCIA APROX.</td>
-            <td id="margen-${r.id}">${ganancia !== null ? 'S/' + ganancia.toFixed(2) : '—'}</td>
-            <td></td>
           </tr>` : ''}
         </tbody>
       </table>
+      ${htmlEstructuraCostos(costoTotal)}
     </div>
   </div>`;
-}
-
-function actualizarMargenVivo(id, costoTotal) {
-  const el = document.getElementById('pv-' + id);
-  const cell = document.getElementById('margen-' + id);
-  if (!el || !cell) return;
-  const pv = parseFloat(el.value) || 0;
-  if (pv > 0) {
-    const ganancia = pv - costoTotal * 1.10;
-    cell.innerHTML = 'S/' + ganancia.toFixed(2);
-    cell.style.color = ganancia < 0 ? '#c62828' : '#2e7d32';
-  } else {
-    cell.innerHTML = '—';
-    cell.style.color = '#2e7d32';
-  }
 }
 
 function guardarPrecioVenta(id) {
@@ -7313,14 +7333,12 @@ function renderRecetaCocina(r) {
   const esBase = r.categoria === 'RECETAS BASE';
   const oculta = !!r.oculta;
   const pv = parseFloat(r.precio_venta) || 0;
-  const costoConPerdida = costoTotal * 1.10;
-  const ganancia = pv > 0 ? (pv - costoConPerdida) : null;
   const estilo = [esBase ? 'background:#e3f2fd;' : '', oculta ? 'opacity:0.6;background:#f3f3f3;' : ''].join('');
   return `<div class="accordion-item" data-receta-id="${r.id}"${estilo ? ` style="${estilo}"` : ''}>
     <div class="accordion-header" onclick="toggleAcordeon(this)">
       <span class="accordion-title">${esc(r.nombre)}${oculta ? ' <span style="color:#c62828;font-weight:700;font-size:0.8rem;">(OCULTA)</span>' : ''}${costoTotal > 0 ? ` <span style="font-weight:400;font-size:0.85rem;color:#555">— COSTO: S/${costoTotal.toFixed(2)}</span>` : ''}</span>
       <span class="accordion-actions" onclick="event.stopPropagation()">
-        <label style="font-weight:700;color:#2e7d32;font-size:0.82rem;margin-right:0.4rem;white-space:nowrap;">PV S/ <input id="pv-cocina-${r.id}" type="number" step="0.01" min="0" value="${pv ? pv : ''}" placeholder="0.00" style="width:70px;padding:0.25rem;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;" oninput="actualizarMargenVivoCocina(${r.id}, ${costoTotal})" onchange="guardarPrecioVentaCocina(${r.id})"></label>
+        <label style="font-weight:700;color:#2e7d32;font-size:0.82rem;margin-right:0.4rem;white-space:nowrap;">PV S/ <input id="pv-cocina-${r.id}" type="number" step="0.01" min="0" value="${pv ? pv : ''}" placeholder="0.00" style="width:70px;padding:0.25rem;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;" onchange="guardarPrecioVentaCocina(${r.id})"></label>
         <button onclick="editarRecetaCocina(${r.id})" style="margin-right:0.3rem">EDITAR</button>
         <button class="danger" onclick="eliminarRecetaCocina(${r.id})">ELIMINAR</button>
       </span>
@@ -7337,28 +7355,12 @@ function renderRecetaCocina(r) {
             return `<tr><td>${esc(ing.ingrediente)}</td><td>${ing.cantidad}</td><td>${ing.unidad}</td><td>${ing.precioMatch ? 'S/' + pu.toFixed(5) : '—'}${convIcon}</td><td>${ing.precioMatch ? 'S/' + pt.toFixed(2) : '—'}</td></tr>`;
           }).join('') || '<tr><td colspan="5">Sin ingredientes.</td></tr>'}
           ${costoTotal > 0 ? `
-          <tr style="font-weight:700;background:#f0f0ff"><td colspan="4">COSTO TOTAL</td><td>S/${costoTotal.toFixed(2)}</td></tr>
-          <tr style="font-weight:700;background:#fdecea;color:#c62828"><td colspan="4">COSTO + 10% PÉRDIDA</td><td>S/${(costoTotal * 1.10).toFixed(2)}</td></tr>
-          <tr style="font-weight:700;background:#e8f5e9;color:#2e7d32;"><td colspan="4">GANANCIA APROX.</td><td id="margen-cocina-${r.id}">${ganancia !== null ? 'S/' + ganancia.toFixed(2) : '—'}</td></tr>` : ''}
+          <tr style="font-weight:700;background:#f0f0ff"><td colspan="4">COSTO TOTAL</td><td>S/${costoTotal.toFixed(2)}</td></tr>` : ''}
         </tbody>
       </table></div>
+      ${htmlEstructuraCostos(costoTotal)}
     </div>
   </div>`;
-}
-
-function actualizarMargenVivoCocina(id, costoTotal) {
-  const el = document.getElementById('pv-cocina-' + id);
-  const cell = document.getElementById('margen-cocina-' + id);
-  if (!el || !cell) return;
-  const pv = parseFloat(el.value) || 0;
-  if (pv > 0) {
-    const ganancia = pv - costoTotal * 1.10;
-    cell.innerHTML = 'S/' + ganancia.toFixed(2);
-    cell.style.color = ganancia < 0 ? '#c62828' : '#2e7d32';
-  } else {
-    cell.innerHTML = '—';
-    cell.style.color = '#2e7d32';
-  }
 }
 
 function guardarPrecioVentaCocina(id) {
