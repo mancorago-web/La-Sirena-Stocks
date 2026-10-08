@@ -9928,6 +9928,8 @@ function aplicarProveedoresCanonicos() {
   if (dl1) dl1.innerHTML = html;
   const dl2 = document.getElementById('buscar-compras-proveedores-dl');
   if (dl2) dl2.innerHTML = html;
+  const dl3 = document.getElementById('editar-compra-proveedores-dl');
+  if (dl3) dl3.innerHTML = html;
 }
 
 let _buscadorComprasCargado = false;
@@ -10196,7 +10198,8 @@ function editarCompra(id) {
         <input type="text" id="edit-compra-numero" value="${esc(r.numero || '')}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
       </label>
       <label style="font-size:0.82rem;color:#555;">Proveedor
-        <input type="text" id="edit-compra-proveedor" value="${esc(r.proveedor || '')}" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
+        <input type="text" id="edit-compra-proveedor" value="${esc(r.proveedor || '')}" list="editar-compra-proveedores-dl" autocomplete="off" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
+        <datalist id="editar-compra-proveedores-dl"></datalist>
       </label>
       <label style="font-size:0.82rem;color:#555;">Destino
         <select id="edit-compra-destino" onchange="onCambiarDestinoEditarCompra()" style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-top:0.2rem;">
