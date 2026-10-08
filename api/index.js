@@ -2666,8 +2666,12 @@ async function descontarStocksDesdeAlmacenes(consumos, fecha, savedBy, seleccion
     let candidatos = invSnap.docs
       .map(d => d.data())
       .filter(a => norm(a.nombre) === k)
-      .map(a => ({ item_id: Number(a.item_id), almacen_id: Number(a.almacen_id) }))
-      .sort((a, b) => a.almacen_id - b.almacen_id);
+      .map(a => ({ item_id: Number(a.item_id), almacen_id: Number(a.almacen_id) }));
+    // PRIORIDAD DEL ALMACÉN al tomar de STOCK/ALMACENES: primero ALMACÉN GENERAL ABAJO (4), luego
+    // ALMACÉN GENERAL ARRIBA (8), y después el resto. Así bebidas como COCA COLA 192 ML se toman del
+    // almacén general en vez de las refrigeradoras. El que tenga stock se usa; el aviso se mantiene.
+    const prioridadAlmacen = al => (al === 4 ? 0 : (al === 8 ? 1 : 10 + Number(al) || 10));
+    candidatos.sort((a, b) => prioridadAlmacen(a.almacen_id) - prioridadAlmacen(b.almacen_id));
     // Si el usuario eligió almacenes en la importación, solo descontar de esos
     const sel = (seleccionPorNombre || {})[k];
     if (sel && sel.length) candidatos = candidatos.filter(ca => sel.includes(ca.almacen_id));
