@@ -5665,6 +5665,10 @@ function cambiarSubTab(nombre, prefix) {
   if (prefix === 'cocina' && ['ingresos','salidas','ventas'].includes(nombre)) {
     cargarCocinaMovimientos(nombre);
   }
+  // COCINA/INFORMES: siempre fresco al entrar
+  if (prefix === 'cocina' && nombre === 'informes') {
+    cargarInformesCocina();
+  }
   // COCINA/STOCK siempre fresco al entrar: los PORCIONAMIENTOS/INGRESOS cambian el stock y debe
   // verse reflejado sin necesidad de F5.
   if (prefix === 'cocina' && nombre === 'stock') {
@@ -5715,70 +5719,76 @@ function cambiarSubTab(nombre, prefix) {
   }
 }
 
-// --- BARRA: INFORMES de recetas (precios faltantes, mapeo de ingredientes, PV vs tablas) ---
+// --- INFORMES de recetas por ZONA (BARRA/INFORMES y COCINA/INFORMES) ---
+function renderInformesZona(cont, zona, data) {
+  const fmt = n => 'S/' + (parseFloat(n) || 0).toFixed(2);
+  const seccionPrecios = (data) => {
+    const p = data.precios;
+    const falt = (p.faltantes || []).map(f => '<tr><td>' + esc(f.nombre) + '</td><td>' + esc(f.categoria || '') + '</td></tr>').join('');
+    return `<div style="border:2px solid #1a237e;border-radius:8px;overflow:hidden;margin-bottom:1rem;">
+      <div style="background:#1a237e;color:#fff;padding:0.35rem 0.6rem;font-weight:700;font-size:0.85rem;">PRECIOS DE VENTA — ${zona}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;padding:0.6rem;background:#eef2ff;">
+        <div style="background:#fff;padding:0.5rem;border-radius:6px;text-align:center;"><div style="font-size:0.72rem;color:#666;">RECETAS TOTALES</div><div style="font-size:1.15rem;font-weight:700;">${p.total}</div></div>
+        <div style="background:#e8f5e9;padding:0.5rem;border-radius:6px;text-align:center;"><div style="font-size:0.72rem;color:#666;">CON PRECIO DE VENTA</div><div style="font-size:1.15rem;font-weight:700;color:#2e7d32;">${p.conPv}</div></div>
+        <div style="background:#ffebee;padding:0.5rem;border-radius:6px;text-align:center;"><div style="font-size:0.72rem;color:#666;">SIN PRECIO DE VENTA</div><div style="font-size:1.15rem;font-weight:700;color:#c62828;">${p.sinPv}</div></div>
+      </div>
+      ${p.faltantes.length ? `<div class="table-wrap"><table style="width:100%;font-size:0.8rem;">
+        <thead><tr><th style="text-align:left;">Receta sin precio</th><th style="text-align:left;">Categoría</th></tr></thead><tbody>${falt}</tbody></table></div>` : '<div style="padding:0.5rem 0.6rem;color:#2e7d32;font-weight:600;font-size:0.82rem;">✅ Todas las recetas (no base) tienen precio de venta.</div>'}
+    </div>`;
+  };
+  const seccionIng = (data) => {
+    const ing = data.ingredientesSinPrecio || [];
+    const filas = ing.map(e => {
+      const recs = e.recetas.map(r => '<span style="display:inline-block;background:#fff3e0;color:#e65100;padding:0.1rem 0.4rem;border-radius:8px;font-size:0.72rem;margin:0.1rem;">' + esc(r.nombre) + ' <b style="color:#666;">(' + r.zona + ')</b></span>').join(' ');
+      return '<tr><td style="vertical-align:top;"><b>' + esc(e.item) + '</b> <span style="color:#777;font-size:0.75rem;">(' + esc(e.unidad) + ')</span></td><td>' + recs + '</td></tr>';
+    }).join('');
+    return `<div style="border:2px solid #e65100;border-radius:8px;overflow:hidden;margin-bottom:1rem;">
+      <div style="background:#e65100;color:#fff;padding:0.35rem 0.6rem;font-weight:700;font-size:0.85rem;">INGREDIENTES SIN PRECIO — ${zona} (${ing.length})</div>
+      ${ing.length ? `<div class="table-wrap"><table style="width:100%;font-size:0.8rem;">
+        <thead><tr><th style="text-align:left;">Ingrediente</th><th style="text-align:left;">Aparece en las recetas</th></tr></thead><tbody>${filas}</tbody></table></div>`
+      : '<div style="padding:0.5rem 0.6rem;color:#2e7d32;font-weight:600;font-size:0.82rem;">✅ Todos los ingredientes tienen precio.</div>'}
+    </div>`;
+  };
+  const seccionComp = (data) => {
+    const c = data.comparacion || [];
+    const res = data.resumenComparacion || {};
+    const filas = c.map(x => {
+      const color = x.estado === 'debajo' ? '#c62828' : '#2e7d32';
+      const label = x.estado === 'debajo' ? 'POR DEBAJO' : (x.estado === 'encima' ? 'POR ENCIMA' : 'OK');
+      return '<tr><td>' + esc(x.receta) + '</td><td style="text-align:center;">' + fmt(x.costo) + '</td><td style="text-align:center;">' + fmt(x.pv) + '</td><td style="text-align:center;">' + fmt(x.pvTabla) + '</td><td style="text-align:center;">' + fmt(x.sugerido) + '</td><td style="text-align:center;">' + fmt(x.carta) + '</td><td style="text-align:center;color:' + color + ';font-weight:700;">' + label + (Math.abs(x.diff) >= 0.005 ? ' (' + (x.diff > 0 ? '+' : '') + x.diff.toFixed(2) + ')' : '') + '</td></tr>';
+    }).join('');
+    return `<div style="border:2px solid #0d47a1;border-radius:8px;overflow:hidden;margin-bottom:1rem;">
+      <div style="background:#0d47a1;color:#fff;padding:0.35rem 0.6rem;font-weight:700;font-size:0.85rem;">PV vs ESTRUCTURA DE COSTOS — ${zona}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;padding:0.6rem;background:#e3f2fd;">
+        <div style="background:#ffebee;padding:0.5rem;border-radius:6px;text-align:center;"><div style="font-size:0.72rem;color:#666;">POR DEBAJO del precio carta</div><div style="font-size:1.15rem;font-weight:700;color:#c62828;">${res.debajo}</div></div>
+        <div style="background:#e8f5e9;padding:0.5rem;border-radius:6px;text-align:center;"><div style="font-size:0.72rem;color:#666;">POR ENCIMA</div><div style="font-size:1.15rem;font-weight:700;color:#2e7d32;">${res.encima}</div></div>
+        <div style="background:#e8f5e9;padding:0.5rem;border-radius:6px;text-align:center;"><div style="font-size:0.72rem;color:#666;">EN EL RANGO</div><div style="font-size:1.15rem;font-weight:700;color:#2e7d32;">${res.ok}</div></div>
+      </div>
+      ${c.length ? `<div class="table-wrap"><table style="width:100%;font-size:0.78rem;">
+        <thead><tr><th style="text-align:left;">Receta</th><th>Costo</th><th>PV</th><th>PV (100%)</th><th>Sugerido</th><th>Carta</th><th>Estado (diff)</th></tr></thead><tbody>${filas}</tbody></table></div>`
+      : '<div style="padding:0.5rem 0.6rem;color:#888;font-size:0.82rem;">No hay recetas con costo y precio para comparar.</div>'}
+    </div>`;
+  };
+  const seccionVacias = (data) => {
+    const v = data.vacias || [];
+    return v.length ? `<div style="border:2px solid #c62828;border-radius:8px;overflow:hidden;margin-bottom:1rem;"><div style="background:#c62828;color:#fff;padding:0.35rem 0.6rem;font-weight:700;font-size:0.85rem;">RECETAS SIN INGREDIENTES — ${zona} (${v.length})</div><div style="padding:0.5rem 0.6rem;">${v.map(x => '<span style="display:inline-block;background:#ffebee;color:#c62828;padding:0.15rem 0.5rem;border-radius:8px;font-size:0.8rem;margin:0.15rem;">' + esc(x.nombre) + '</span>').join(' ')}</div></div>` : '';
+  };
+  cont.innerHTML =
+    seccionPrecios(data) + seccionIng(data) + seccionVacias(data) + seccionComp(data);
+}
+
 function cargarInformesBarra() {
   const cont = document.getElementById('informes-container');
   if (!cont) return;
   cont.innerHTML = '<p style="color:#888;">Cargando informes...</p>';
-  api('GET', '/api/informes/recetas').then(d => {
-    const fmt = n => 'S/' + (parseFloat(n) || 0).toFixed(2);
-    const seccionPrecios = (nom, data) => {
-      const p = data.precios;
-      const falt = (p.faltantes || []).map(f => '<tr><td>' + esc(f.nombre) + '</td><td>' + esc(f.categoria || '') + '</td></tr>').join('');
-      return `<div style="border:2px solid #1a237e;border-radius:8px;overflow:hidden;margin-bottom:1rem;">
-        <div style="background:#1a237e;color:#fff;padding:0.35rem 0.6rem;font-weight:700;font-size:0.85rem;">PRECIOS DE VENTA — ${nom}</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;padding:0.6rem;background:#eef2ff;">
-          <div style="background:#fff;padding:0.5rem;border-radius:6px;text-align:center;"><div style="font-size:0.72rem;color:#666;">RECETAS TOTALES</div><div style="font-size:1.15rem;font-weight:700;">${p.total}</div></div>
-          <div style="background:#e8f5e9;padding:0.5rem;border-radius:6px;text-align:center;"><div style="font-size:0.72rem;color:#666;">CON PRECIO DE VENTA</div><div style="font-size:1.15rem;font-weight:700;color:#2e7d32;">${p.conPv}</div></div>
-          <div style="background:#ffebee;padding:0.5rem;border-radius:6px;text-align:center;"><div style="font-size:0.72rem;color:#666;">SIN PRECIO DE VENTA</div><div style="font-size:1.15rem;font-weight:700;color:#c62828;">${p.sinPv}</div></div>
-        </div>
-        ${p.faltantes.length ? `<div class="table-wrap"><table style="width:100%;font-size:0.8rem;">
-          <thead><tr><th style="text-align:left;">Receta sin precio</th><th style="text-align:left;">Categoría</th></tr></thead><tbody>${falt}</tbody></table></div>` : '<div style="padding:0.5rem 0.6rem;color:#2e7d32;font-weight:600;font-size:0.82rem;">✅ Todas las recetas (no base) tienen precio de venta.</div>'}
-      </div>`;
-    };
-    const seccionIng = (nom, data) => {
-      const ing = data.ingredientesSinPrecio || [];
-      const filas = ing.map(e => {
-        const recs = e.recetas.map(r => '<span style="display:inline-block;background:#fff3e0;color:#e65100;padding:0.1rem 0.4rem;border-radius:8px;font-size:0.72rem;margin:0.1rem;">' + esc(r.nombre) + ' <b style="color:#666;">(' + r.zona + ')</b></span>').join(' ');
-        return '<tr><td style="vertical-align:top;"><b>' + esc(e.item) + '</b> <span style="color:#777;font-size:0.75rem;">(' + esc(e.unidad) + ')</span></td><td>' + recs + '</td></tr>';
-      }).join('');
-      return `<div style="border:2px solid #e65100;border-radius:8px;overflow:hidden;margin-bottom:1rem;">
-        <div style="background:#e65100;color:#fff;padding:0.35rem 0.6rem;font-weight:700;font-size:0.85rem;">INGREDIENTES SIN PRECIO — ${nom} (${ing.length})</div>
-        ${ing.length ? `<div class="table-wrap"><table style="width:100%;font-size:0.8rem;">
-          <thead><tr><th style="text-align:left;">Ingrediente</th><th style="text-align:left;">Aparece en las recetas</th></tr></thead><tbody>${filas}</tbody></table></div>`
-        : '<div style="padding:0.5rem 0.6rem;color:#2e7d32;font-weight:600;font-size:0.82rem;">✅ Todos los ingredientes tienen precio.</div>'}
-      </div>`;
-    };
-    const seccionComp = (nom, data) => {
-      const c = data.comparacion || [];
-      const res = data.resumenComparacion || {};
-      const filas = c.map(x => {
-        const color = x.estado === 'debajo' ? '#c62828' : '#2e7d32';
-        const label = x.estado === 'debajo' ? 'POR DEBAJO' : (x.estado === 'encima' ? 'POR ENCIMA' : 'OK');
-        return '<tr><td>' + esc(x.receta) + '</td><td style="text-align:center;">' + fmt(x.costo) + '</td><td style="text-align:center;">' + fmt(x.pv) + '</td><td style="text-align:center;">' + fmt(x.pvTabla) + '</td><td style="text-align:center;">' + fmt(x.sugerido) + '</td><td style="text-align:center;">' + fmt(x.carta) + '</td><td style="text-align:center;color:' + color + ';font-weight:700;">' + label + (Math.abs(x.diff) >= 0.005 ? ' (' + (x.diff > 0 ? '+' : '') + x.diff.toFixed(2) + ')' : '') + '</td></tr>';
-      }).join('');
-      return `<div style="border:2px solid #0d47a1;border-radius:8px;overflow:hidden;margin-bottom:1rem;">
-        <div style="background:#0d47a1;color:#fff;padding:0.35rem 0.6rem;font-weight:700;font-size:0.85rem;">PV vs ESTRUCTURA DE COSTOS — ${nom}</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;padding:0.6rem;background:#e3f2fd;">
-          <div style="background:#ffebee;padding:0.5rem;border-radius:6px;text-align:center;"><div style="font-size:0.72rem;color:#666;">POR DEBAJO del precio carta</div><div style="font-size:1.15rem;font-weight:700;color:#c62828;">${res.debajo}</div></div>
-          <div style="background:#e8f5e9;padding:0.5rem;border-radius:6px;text-align:center;"><div style="font-size:0.72rem;color:#666;">POR ENCIMA</div><div style="font-size:1.15rem;font-weight:700;color:#2e7d32;">${res.encima}</div></div>
-          <div style="background:#e8f5e9;padding:0.5rem;border-radius:6px;text-align:center;"><div style="font-size:0.72rem;color:#666;">EN EL RANGO</div><div style="font-size:1.15rem;font-weight:700;color:#2e7d32;">${res.ok}</div></div>
-        </div>
-        ${c.length ? `<div class="table-wrap"><table style="width:100%;font-size:0.78rem;">
-          <thead><tr><th style="text-align:left;">Receta</th><th>Costo</th><th>PV</th><th>PV (100%)</th><th>Sugerido</th><th>Carta</th><th>Estado (diff)</th></tr></thead><tbody>${filas}</tbody></table></div>`
-        : '<div style="padding:0.5rem 0.6rem;color:#888;font-size:0.82rem;">No hay recetas con costo y precio para comparar.</div>'}
-      </div>`;
-    };
-    const seccionVacias = (nom, data) => {
-      const v = data.vacias || [];
-      return v.length ? `<div style="border:2px solid #c62828;border-radius:8px;overflow:hidden;margin-bottom:1rem;"><div style="background:#c62828;color:#fff;padding:0.35rem 0.6rem;font-weight:700;font-size:0.85rem;">RECETAS SIN INGREDIENTES — ${nom} (${v.length})</div><div style="padding:0.5rem 0.6rem;">${v.map(x => '<span style="display:inline-block;background:#ffebee;color:#c62828;padding:0.15rem 0.5rem;border-radius:8px;font-size:0.8rem;margin:0.15rem;">' + esc(x.nombre) + '</span>').join(' ')}</div></div>` : '';
-    };
-    cont.innerHTML =
-      seccionPrecios('BARRA', d.barra) + seccionPrecios('COCINA', d.cocina) +
-      seccionIng('BARRA', d.barra) + seccionIng('COCINA', d.cocina) +
-      seccionVacias('BARRA', d.barra) + seccionVacias('COCINA', d.cocina) +
-      seccionComp('BARRA', d.barra) + seccionComp('COCINA', d.cocina);
-  }).catch(() => { cont.innerHTML = '<p style="color:#c62828;">Error al cargar los informes.</p>'; });
+  api('GET', '/api/informes/recetas').then(d => renderInformesZona(cont, 'BARRA', d.barra)).catch(() => { cont.innerHTML = '<p style="color:#c62828;">Error al cargar los informes.</p>'; });
+}
+
+function cargarInformesCocina() {
+  const cont = document.getElementById('informes-cocina-container');
+  if (!cont) return;
+  cont.innerHTML = '<p style="color:#888;">Cargando informes...</p>';
+  api('GET', '/api/informes/recetas').then(d => renderInformesZona(cont, 'COCINA', d.cocina)).catch(() => { cont.innerHTML = '<p style="color:#c62828;">Error al cargar los informes.</p>'; });
 }
 
 // --- BARRA: Stock ---

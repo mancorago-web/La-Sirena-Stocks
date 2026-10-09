@@ -131,6 +131,7 @@
       <button class="sub-tab" data-subtab="salidas" onclick="cambiarSubTab('salidas','cocina')">Salidas</button>
       <button class="sub-tab" data-subtab="ventas" onclick="cambiarSubTab('ventas','cocina')">Ventas</button>
       <button class="sub-tab active" data-subtab="recetas" onclick="cambiarSubTab('recetas','cocina')">Recetas</button>
+      <button class="sub-tab" data-subtab="informes" onclick="cambiarSubTab('informes','cocina')">Informes</button>
       <button class="sub-tab" data-subtab="stock" onclick="cambiarSubTab('stock','cocina')">Stock</button>
       <button class="sub-tab" data-subtab="stocks" onclick="cambiarSubTab('stocks','cocina')">Stocks Min</button>
       <button class="sub-tab" data-subtab="basedatos" style="display:none" onclick="cambiarSubTab('basedatos','cocina')">Base de Datos</button>
@@ -530,6 +531,16 @@
           <button onclick="guardarRecetaCocina()">AGREGAR RECETA</button>
         </div>
         <div id="cocina-recetas-container"></div>
+      </div>
+
+      <div id="sub-cocina-informes" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>📊 Informes — Recetas</h2>
+          <div class="controles-dia" style="display:flex;align-items:center;gap:0.5rem;">
+            <button onclick="cargarInformesCocina()">ACTUALIZAR</button>
+          </div>
+        </div>
+        <div id="informes-cocina-container" style="margin-top:1rem;"></div>
       </div>
 
       <div id="sub-cocina-stock" class="sub-tab-content">

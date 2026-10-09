@@ -5583,6 +5583,9 @@ app.get('/api/informes/recetas', async (req, res) => {
         }
       }
       const ingredientesSinPrecio = [...ingMap.values()];
+      // Primero las recetas POR DEBAJO (rojo), luego las que están en verde (encima/ok).
+      const ordEstado = { debajo: 0, encima: 1, ok: 2 };
+      comparacion.sort((a, b) => ordEstado[a.estado] - ordEstado[b.estado]);
       return {
         precios,
         ingredientesSinPrecio,
