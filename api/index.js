@@ -5559,10 +5559,10 @@ app.get('/api/informes/recetas', async (req, res) => {
         const pv = parseFloat(r.precio_venta) || 0;
         if (!base) {
           if (pv > 0) precios.conPv++;
-          else { precios.sinPv++; precios.faltantes.push({ nombre: r.nombre, categoria: r.categoria || '', oculta: !!r.oculta }); }
+          else { precios.sinPv++; precios.faltantes.push({ id: r.id, nombre: r.nombre, categoria: r.categoria || '', oculta: !!r.oculta }); }
         }
         const ings = r.ingredientes || [];
-        if (!ings.length) vacias.push({ zona: zonaNombre, nombre: r.nombre });
+        if (!ings.length) vacias.push({ id: r.id, zona: zonaNombre, nombre: r.nombre });
         for (const ing of ings) {
           const tienePrecio = ing.precioMatch === true && (parseFloat(ing.precioUnidad) || 0) > 0;
           if (!tienePrecio && (parseFloat(ing.cantidad) || 0) > 0) {
@@ -5570,7 +5570,7 @@ app.get('/api/informes/recetas', async (req, res) => {
             if (!ingMap.has(k)) ingMap.set(k, { item: String(ing.ingrediente || '').trim(), unidad: ing.unidad || '', total: 0, recetas: [] });
             const e = ingMap.get(k);
             e.total = red2(e.total + (parseFloat(ing.cantidad) || 0));
-            if (!e.recetas.some(x => x.nombre === r.nombre && x.zona === zonaNombre)) e.recetas.push({ nombre: r.nombre, zona: zonaNombre });
+            if (!e.recetas.some(x => x.nombre === r.nombre && x.zona === zonaNombre)) e.recetas.push({ id: r.id, nombre: r.nombre, zona: zonaNombre });
           }
         }
         if (!base && (parseFloat(r.costoTotal) || 0) > 0 && pv > 0) {
@@ -5579,7 +5579,7 @@ app.get('/api/informes/recetas', async (req, res) => {
           const carta = Math.ceil(sugerido * 2) / 2;
           const diff = red2(pv - carta);
           const estado = diff < -0.005 ? 'debajo' : (diff > 0.005 ? 'encima' : 'ok');
-          comparacion.push({ zona: zonaNombre, receta: r.nombre, costo: red2(r.costoTotal), pv, pvTabla: red2(pvTabla), sugerido: red2(sugerido), carta, estado, diff });
+          comparacion.push({ id: r.id, zona: zonaNombre, receta: r.nombre, costo: red2(r.costoTotal), pv, pvTabla: red2(pvTabla), sugerido: red2(sugerido), carta, estado, diff });
         }
       }
       const ingredientesSinPrecio = [...ingMap.values()];
