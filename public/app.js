@@ -5750,7 +5750,7 @@ function cargarInformesBarra() {
       const c = data.comparacion || [];
       const res = data.resumenComparacion || {};
       const filas = c.map(x => {
-        const color = x.estado === 'debajo' ? '#c62828' : (x.estado === 'encima' ? '#e65100' : '#2e7d32');
+        const color = x.estado === 'debajo' ? '#c62828' : '#2e7d32';
         const label = x.estado === 'debajo' ? 'POR DEBAJO' : (x.estado === 'encima' ? 'POR ENCIMA' : 'OK');
         return '<tr><td>' + esc(x.receta) + '</td><td style="text-align:center;">' + fmt(x.costo) + '</td><td style="text-align:center;">' + fmt(x.pv) + '</td><td style="text-align:center;">' + fmt(x.pvTabla) + '</td><td style="text-align:center;">' + fmt(x.sugerido) + '</td><td style="text-align:center;">' + fmt(x.carta) + '</td><td style="text-align:center;color:' + color + ';font-weight:700;">' + label + (Math.abs(x.diff) >= 0.005 ? ' (' + (x.diff > 0 ? '+' : '') + x.diff.toFixed(2) + ')' : '') + '</td></tr>';
       }).join('');
@@ -5758,7 +5758,7 @@ function cargarInformesBarra() {
         <div style="background:#0d47a1;color:#fff;padding:0.35rem 0.6rem;font-weight:700;font-size:0.85rem;">PV vs ESTRUCTURA DE COSTOS — ${nom}</div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;padding:0.6rem;background:#e3f2fd;">
           <div style="background:#ffebee;padding:0.5rem;border-radius:6px;text-align:center;"><div style="font-size:0.72rem;color:#666;">POR DEBAJO del precio carta</div><div style="font-size:1.15rem;font-weight:700;color:#c62828;">${res.debajo}</div></div>
-          <div style="background:#fff3e0;padding:0.5rem;border-radius:6px;text-align:center;"><div style="font-size:0.72rem;color:#666;">POR ENCIMA</div><div style="font-size:1.15rem;font-weight:700;color:#e65100;">${res.encima}</div></div>
+          <div style="background:#e8f5e9;padding:0.5rem;border-radius:6px;text-align:center;"><div style="font-size:0.72rem;color:#666;">POR ENCIMA</div><div style="font-size:1.15rem;font-weight:700;color:#2e7d32;">${res.encima}</div></div>
           <div style="background:#e8f5e9;padding:0.5rem;border-radius:6px;text-align:center;"><div style="font-size:0.72rem;color:#666;">EN EL RANGO</div><div style="font-size:1.15rem;font-weight:700;color:#2e7d32;">${res.ok}</div></div>
         </div>
         ${c.length ? `<div class="table-wrap"><table style="width:100%;font-size:0.78rem;">
