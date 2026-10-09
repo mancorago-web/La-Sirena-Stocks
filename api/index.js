@@ -2409,6 +2409,27 @@ function makeLookupRecetaBase(recetasList, normNombreFn) {
   };
 }
 
+// --- Items con retiro MANUAL desde ALMACENES (NO automático) ---
+// Estos items NO deben jalar botellas del almacén cuando BARRA/STOCK se termina (lo que descuadra
+// el conteo físico). Ej.: AGUA CON GAS (hay gasificadora: el consumo real de botellas es menor al
+// de las recetas) y GIN TANQUERAY. El sistema SOLO avisa "se terminó en BARRA/STOCK" y sugiere
+// cuánto hay en cada almacén para retirarlo manualmente.
+const ALMACEN_MANUALES = ['AGUA CON GAS SAN LUIS PLASTICO X 625 ML', 'GIN TANQUERAY X 700ML'];
+const normLista = s => String(s || '').trim().toUpperCase().replace(/\s+/g, '');
+function esAlmacenManual(nombre) {
+  const k = normLista(nombre);
+  return ALMACEN_MANUALES.some(x => normLista(x) === k);
+}
+// Sugerencia de dónde retirar manualmente (prioriza ALMACÉN GENERAL ABAJO = 4)
+function sugerirAlmacenManual(nombre, invSnap, alNombres) {
+  const k = normLista(nombre);
+  const cands = invSnap.docs.map(d => d.data()).filter(a => normLista(a.nombre) === k);
+  cands.sort((a, b) => (a.almacen_id === 4 ? 0 : 10) - (b.almacen_id === 4 ? 0 : 10));
+  const c = cands.find(x => (parseFloat(x.stock_apertura) || 0) > 0);
+  if (!c) return null;
+  return { almacen: alNombres[Number(c.almacen_id)] || ('Almacén ' + c.almacen_id), disponible: parseFloat(c.stock_apertura) || 0 };
+}
+
 async function descontarStockBarra(consumos, fecha, savedBy) {
   const stockSnap = await col('barra_stock').get();
   const allStock = stockSnap.docs.map(d => ({ ref: d.ref, id: Number(d.id) || 0, data: d.data() }));
@@ -2499,6 +2520,12 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
     //    (ej. AGUA BIDON X 20 LT: la barra lo agota y jala del ALMACÉN GENERAL). Solo si no existe
     //    en ninguna parte se reporta como no descontado (y se permite NEGATIVO).
     if (restante > 0.0001) {
+      // ITEMS DE ALMACÉN MANUAL: NO se descuenta de COCINA/STOCK ni de ALMACENES automáticamente.
+      // Solo se avisa (el retiro se hace a mano) para no descuadrar el conteo físico.
+      if (esAlmacenManual(nombre)) {
+        noDescontados.push({ ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: uRec, motivo: 'agotado_barra_manual' });
+        continue;
+      }
       const pendiente = { ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: c.unidad || 'unidad' };
       const cocinaSnap = await col('cocina_stock').get();
       const cocinaStock = cocinaSnap.docs.map(d => ({ ref: d.ref, key: d.id, data: d.data() }));
@@ -2662,6 +2689,12 @@ async function descontarStocksDesdeAlmacenes(consumos, fecha, savedBy, seleccion
     const cant = parseFloat(c.cantidad) || 0;
     if (cant <= 0) continue;
     const uRec = c.unidad || 'unidad';
+    // ITEMS DE ALMACÉN MANUAL (AGUA CON GAS / GIN TANQUERAY): NO deducir del almacén automáticamente.
+    // Se avisa "se terminó en BARRA/STOCK" y se sugiere dónde retirar manualmente.
+    if (esAlmacenManual(nombre)) {
+      restantes.push({ ingrediente: nombre, cantidad: Math.round(cant * 100) / 100, unidad: uRec, motivo: 'agotado_barra_manual', sugerencia: sugerirAlmacenManual(nombre, invSnap, alNombres) });
+      continue;
+    }
     const k = norm(nombre);
     let candidatos = invSnap.docs
       .map(d => d.data())
