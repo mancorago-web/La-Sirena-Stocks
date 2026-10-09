@@ -5359,13 +5359,16 @@ function htmlEstructuraCostos(costoTotal) {
 // --- BARRA: Recetas ---
 function renderReceta(r) {
   const costoTotal = r.costoTotal || 0;
-  const esBase = r.categoria === 'RECETAS BASE';
+  const esBase = r.categoria === 'RECETAS BASE' || /^(R\.B|RB\.)/i.test(String(r.nombre || '').trim());
+  // Recetas de PREPARACIÓN (RECETAS BASE / R.B y ALMUERZO PERSONAL / A.P): NO llevan PV
+  // ni las tablas de ESTRUCTURA DE COSTOS / PRECIO DE VENTA (no salen a la venta).
+  const esPreparacion = esBase || (String(r.categoria || '').toUpperCase() === 'ALMUERZO PERSONAL' && /^A\.P\b/i.test(String(r.nombre || '').trim()));
   const pv = parseFloat(r.precio_venta) || 0;
   return `<div class="accordion-item" data-receta-id="${r.id}"${esBase ? ' style="background:#e3f2fd;"' : ''}>
     <div class="accordion-header" onclick="toggleAcordeon(this)">
       <span class="accordion-title">${r.nombre}${costoTotal > 0 ? ` <span style="font-weight:400;font-size:0.85rem;color:#555">— COSTO: S/${costoTotal.toFixed(2)}</span>` : ''}</span>
       <span class="accordion-actions" onclick="event.stopPropagation()">
-        <label style="font-weight:700;color:#2e7d32;font-size:0.82rem;margin-right:0.4rem;white-space:nowrap;">PV S/ <input id="pv-${r.id}" type="number" step="0.01" min="0" value="${pv ? pv : ''}" placeholder="0.00" style="width:70px;padding:0.25rem;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;" onchange="guardarPrecioVenta(${r.id})"></label>
+        ${esPreparacion ? '' : `<label style="font-weight:700;color:#2e7d32;font-size:0.82rem;margin-right:0.4rem;white-space:nowrap;">PV S/ <input id="pv-${r.id}" type="number" step="0.01" min="0" value="${pv ? pv : ''}" placeholder="0.00" style="width:70px;padding:0.25rem;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;" onchange="guardarPrecioVenta(${r.id})"></label>`}
         <button onclick="editarReceta(${r.id})" style="margin-right:0.3rem">EDITAR</button>
         <button class="danger" onclick="eliminarReceta(${r.id})">ELIMINAR</button>
       </span>
@@ -5396,7 +5399,7 @@ function renderReceta(r) {
           </tr>` : ''}
         </tbody>
       </table>
-      ${htmlEstructuraCostos(costoTotal)}
+      ${esPreparacion ? '' : htmlEstructuraCostos(costoTotal)}
     </div>
   </div>`;
 }
@@ -7404,7 +7407,9 @@ function verDetallesCocina(tipo) {
 // --- COCINA: Recetas ---
 function renderRecetaCocina(r) {
   const costoTotal = r.costoTotal || 0;
-  const esBase = r.categoria === 'RECETAS BASE';
+  const esBase = r.categoria === 'RECETAS BASE' || /^(R\.B|RB\.)/i.test(String(r.nombre || '').trim());
+  // Recetas de PREPARACIÓN (RECETAS BASE / R.B): NO llevan PV ni tablas ESTRUCTURA/PRECIO DE VENTA.
+  const esPreparacion = esBase;
   const oculta = !!r.oculta;
   const pv = parseFloat(r.precio_venta) || 0;
   const estilo = [esBase ? 'background:#e3f2fd;' : '', oculta ? 'opacity:0.6;background:#f3f3f3;' : ''].join('');
@@ -7412,7 +7417,7 @@ function renderRecetaCocina(r) {
     <div class="accordion-header" onclick="toggleAcordeon(this)">
       <span class="accordion-title">${esc(r.nombre)}${oculta ? ' <span style="color:#c62828;font-weight:700;font-size:0.8rem;">(OCULTA)</span>' : ''}${costoTotal > 0 ? ` <span style="font-weight:400;font-size:0.85rem;color:#555">— COSTO: S/${costoTotal.toFixed(2)}</span>` : ''}</span>
       <span class="accordion-actions" onclick="event.stopPropagation()">
-        <label style="font-weight:700;color:#2e7d32;font-size:0.82rem;margin-right:0.4rem;white-space:nowrap;">PV S/ <input id="pv-cocina-${r.id}" type="number" step="0.01" min="0" value="${pv ? pv : ''}" placeholder="0.00" style="width:70px;padding:0.25rem;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;" onchange="guardarPrecioVentaCocina(${r.id})"></label>
+        ${esPreparacion ? '' : `<label style="font-weight:700;color:#2e7d32;font-size:0.82rem;margin-right:0.4rem;white-space:nowrap;">PV S/ <input id="pv-cocina-${r.id}" type="number" step="0.01" min="0" value="${pv ? pv : ''}" placeholder="0.00" style="width:70px;padding:0.25rem;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;" onchange="guardarPrecioVentaCocina(${r.id})"></label>`}
         <button onclick="editarRecetaCocina(${r.id})" style="margin-right:0.3rem">EDITAR</button>
         <button class="danger" onclick="eliminarRecetaCocina(${r.id})">ELIMINAR</button>
       </span>
@@ -7432,7 +7437,7 @@ function renderRecetaCocina(r) {
           <tr style="font-weight:700;background:#f0f0ff"><td colspan="4">COSTO TOTAL</td><td>S/${costoTotal.toFixed(2)}</td></tr>` : ''}
         </tbody>
       </table></div>
-      ${htmlEstructuraCostos(costoTotal)}
+      ${esPreparacion ? '' : htmlEstructuraCostos(costoTotal)}
     </div>
   </div>`;
 }

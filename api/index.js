@@ -5547,7 +5547,7 @@ app.get('/api/informes/recetas', async (req, res) => {
   try {
     const [barra, cocina] = await Promise.all([obtenerRecetasBarra(), obtenerRecetasCocina()]);
     const red2 = v => Math.round((parseFloat(v) || 0) * 100) / 100;
-    const esBase = r => /RECETA\s*BASE/i.test(String(r.categoria || '')) || /^R\.B(\s|$)/i.test(String(r.nombre || '').trim());
+    const esBase = r => /RECETA\s*BASE/i.test(String(r.categoria || '')) || /^R\.B(\s|$)/i.test(String(r.nombre || '').trim()) || /^RB\.\s/i.test(String(r.nombre || '').trim()) || (String(r.categoria || '').toUpperCase() === 'ALMUERZO PERSONAL' && /^A\.P\b/i.test(String(r.nombre || '').trim()));
     const procesar = (lista, zonaNombre) => {
       const precios = { total: 0, conPv: 0, sinPv: 0, faltantes: [] };
       const ingMap = new Map();
