@@ -10236,7 +10236,7 @@ function editarCompra(id) {
     <div id="edit-compra-muebles" style="display:none;margin-top:0.75rem;">
       <div style="font-size:0.82rem;color:#555;font-weight:600;">Muebles donde ingresa (BARRA)</div>
       <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.3rem;">
-        ${GRUPOS_BARRA_CON_COMPRAS.map(g => '<label style="font-size:0.82rem;display:inline-flex;align-items:center;gap:0.25rem;"><input type="checkbox" class="edit-compra-mueble" value="' + esc(g) + '"' + ((r.muebles || []).map(x => String(x).toUpperCase()).includes(g) ? ' checked' : '') + '> ' + esc(g) + '</label>').join('')}
+        ${GRUPOS_BARRA_CON_COMPRAS.map(g => '<label style="font-size:0.82rem;display:inline-flex;align-items:center;gap:0.25rem;margin-top:0;"><input type="checkbox" class="edit-compra-mueble" value="' + esc(g) + '" style="width:auto;flex:0 0 auto;"' + ((r.muebles || []).map(x => String(x).toUpperCase()).includes(g) ? ' checked' : '') + '> ' + esc(g) + '</label>').join('')}
       </div>
     </div>
     <p style="font-size:0.75rem;color:#888;margin-top:0.75rem;">Puedes cambiar el nombre, el <b>destino</b> y su <b>almacén/mueble</b>. El stock se ajusta automáticamente (revierte la ubicación anterior y aplica la nueva).</p>
@@ -10251,7 +10251,7 @@ function editarCompra(id) {
     const cont = document.getElementById('edit-compra-almacenes-lista');
     if (!cont) return;
     const sel = (r.almacenes || []).map(Number);
-    cont.innerHTML = (alms || []).map(al => '<label style="font-size:0.8rem;display:flex;align-items:center;gap:0.3rem;min-width:0;line-height:1.2;"><input type="checkbox" class="edit-compra-almacen" value="' + al.id + '"' + (sel.includes(Number(al.id)) ? ' checked' : '') + ' style="flex:0 0 auto;"> <span>' + esc(al.nombre) + '</span></label>').join('') || '<span style="color:#888;">Sin almacenes</span>';
+    cont.innerHTML = (alms || []).map(al => '<label style="font-size:0.8rem;display:flex;align-items:center;gap:0.3rem;min-width:0;line-height:1.2;margin-top:0;"><input type="checkbox" class="edit-compra-almacen" value="' + al.id + '"' + (sel.includes(Number(al.id)) ? ' checked' : '') + ' style="width:auto;flex:0 0 auto;"> <span>' + esc(al.nombre) + '</span></label>').join('') || '<span style="color:#888;">Sin almacenes</span>';
   }).catch(() => { const cont = document.getElementById('edit-compra-almacenes-lista'); if (cont) cont.innerHTML = '<span style="color:#c62828;">Error al cargar almacenes</span>'; });
 }
 
