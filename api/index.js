@@ -2880,10 +2880,10 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         if (almacenes.length) resumen.stocks.push({ nombre, cantidad, almacenes });
         else resumen.noEncontrados.push({ nombre, cantidad, destino: 'stocks' });
       } else if (destino === 'barra') {
-        ventasBarra.push({ nombre, cantidad, ingredientesStocks: it.ingredientesStocks });
+        ventasBarra.push({ nombre, cantidad, ingredientesStocks: it.ingredientesStocks, precio_venta: parseFloat(it.precio_venta) || 0 });
         resumen.barra.push({ nombre, cantidad });
       } else if (destino === 'cocina') {
-        cocinaVentas.push({ nombre, cantidad });
+        cocinaVentas.push({ nombre, cantidad, precio_venta: parseFloat(it.precio_venta) || 0 });
         resumen.cocina.push({ nombre, cantidad });
       } else {
         resumen.noEncontrados.push({ nombre, cantidad, destino });
@@ -2921,6 +2921,11 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         const rec = recetasMap[String(v.nombre).trim().toUpperCase()];
         const recNombre = rec ? rec.nombre : v.nombre;
         const recId = rec ? rec.id : null;
+        // El PV que llega por las VENTAS debe quedar también en la receta (evita perder el precio
+        // de venta del Excel: la receta SIEMPRE refleja el último precio vendido).
+        if (rec && parseFloat(v.precio_venta) > 0) {
+          batch.update(col('recetas').doc(rec.id), { precio_venta: Math.round(parseFloat(v.precio_venta) * 100) / 100, updated_at: new Date().toISOString() });
+        }
         // Paso 6: si no existe la receta, NO se registra como receta expandible (se avisa).
         if (!rec) resumen.sinReceta.push({ nombre: v.nombre, cantidad: v.cantidad, destino: 'barra' });
         batch.set(col('barra_movimientos').doc(), {
@@ -2943,6 +2948,8 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         }
       }
       await batch.commit();
+      // Los precios de venta actualizados en la receta deben reflejarse al instante.
+      invalidarCache('recetas');
       // Expandir RECETAS BASE en sus componentes crudos (ej. "R.B ZUMO DE LIMON - 1 ONZ" -> LIMON X UND)
       // El descuento va protegido: si falla no rompe el guardado ni oculta el aviso.
       try {
@@ -2974,6 +2981,10 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       for (const v of cocinaVentas) {
         const rec = crecetasMap[String(v.nombre).trim().toUpperCase()];
         const recNombre = rec ? rec.nombre : v.nombre;
+        // El PV que llega por las VENTAS de COCINA queda también en la receta de cocina.
+        if (rec && parseFloat(v.precio_venta) > 0) {
+          batch.update(col('cocina_recetas').doc(rec.id), { precio_venta: Math.round(parseFloat(v.precio_venta) * 100) / 100, updated_at: new Date().toISOString() });
+        }
         batch.set(col('cocina_ventas').doc(), { fecha, nombre: recNombre, cantidad: v.cantidad, unidad: 'unidad', saved_by: savedBy, created_at: new Date().toISOString() });
         if (rec) {
           (cingByRec[rec.id] || []).forEach(ing => {
@@ -2985,6 +2996,7 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         }
       }
       await batch.commit();
+      invalidarCache('cocina_recetas');
       // El descuento de COCINA/STOCK se hace con protección: si falla por cualquier motivo, NO
       // rompe el guardado ni oculta el aviso (se registra y sigue).
       try {
