@@ -119,6 +119,7 @@
       <button class="sub-tab" data-subtab="bajas" onclick="cambiarSubTab('bajas')">Bajas</button>
       <button class="sub-tab" data-subtab="stock" onclick="cambiarSubTab('stock')">Stock</button>
       <button class="sub-tab active" data-subtab="recetas" onclick="cambiarSubTab('recetas')">Recetas</button>
+      <button class="sub-tab" data-subtab="informes" onclick="cambiarSubTab('informes')">Informes</button>
       <button class="sub-tab" data-subtab="basedatos" style="display:none" onclick="cambiarSubTab('basedatos')">Base de Datos</button>
     </div>
   </div>
@@ -395,6 +396,16 @@
           <button onclick="guardarReceta()">AGREGAR RECETA</button>
         </div>
         <div id="recetas-container"></div>
+      </div>
+
+      <div id="sub-barra-informes" class="sub-tab-content">
+        <div class="header-actions">
+          <h2>📊 Informes — Recetas</h2>
+          <div class="controles-dia" style="display:flex;align-items:center;gap:0.5rem;">
+            <button onclick="cargarInformesBarra()">ACTUALIZAR</button>
+          </div>
+        </div>
+        <div id="informes-container" style="margin-top:1rem;"></div>
       </div>
 
       <div id="sub-barra-stock" class="sub-tab-content">

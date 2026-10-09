@@ -3904,10 +3904,10 @@ app.put('/api/precios', async (req, res) => {
 });
 
 // --- RECETAS ---
-app.get('/api/recetas', async (req, res) => {
+async function obtenerRecetasBarra() {
   // Cache corto (10s): el cálculo de costos es recursivo y se dispara al abrir recetas, editar,
   // importar ventas, etc. Un TTL breve evita recomputar cientos de veces sin datos obsoletos.
-  const data = await cached('recetas', 10000, async () => {
+  return cached('recetas', 10000, async () => {
     const [recSnap, precSnap, ingSnap, spSnap, cpSnap, comprasSnap] = await Promise.all([
       col('recetas').orderBy('nombre').get(),
       col('barra_precios').orderBy('ingrediente').get(),
@@ -4052,7 +4052,12 @@ app.get('/api/recetas', async (req, res) => {
   });
     return result;
   });
-  res.json(data);
+}
+app.get('/api/recetas', async (req, res) => {
+  try {
+    const data = await obtenerRecetasBarra();
+    res.json(data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/recetas', async (req, res) => {
@@ -5482,9 +5487,8 @@ function enriquecerCocinaRecetasConCostos(recetas, ingByRec, precios, precioGlob
   });
 }
 
-app.get('/api/cocina/recetas', async (req, res) => {
-  try {
-    const data = await cached('cocina_recetas', 10000, async () => {
+async function obtenerRecetasCocina() {
+  return cached('cocina_recetas', 10000, async () => {
       const [recSnap, ingSnap, precSnap, spSnap, bpSnap, comprasSnap] = await Promise.all([
         col('cocina_recetas').orderBy('nombre').get(),
         col('cocina_receta_ingredientes').orderBy('id').get(),
@@ -5517,7 +5521,69 @@ app.get('/api/cocina/recetas', async (req, res) => {
       Object.keys(compraUlt).forEach(k => addPrecioG(k, compraUlt[k].precio, 'unidad', 0, 0));
       return enriquecerCocinaRecetasConCostos(recetas, ingByRec, precios, precioGlobal);
     });
-    res.json(data);
+}
+app.get('/api/cocina/recetas', async (req, res) => {
+  try {
+    res.json(await obtenerRecetasCocina());
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- INFORMES de RECETAS (pestaña INFORMES de BARRA) ---
+// PRECIOS DE VENTA (cuántas recetas tienen PV / faltan), MAPEO de ingredientes sin precio
+// y COMPARACIÓN del PV real con la ESTRUCTURA DE COSTOS (PV=100%, Precio Carta).
+app.get('/api/informes/recetas', async (req, res) => {
+  try {
+    const [barra, cocina] = await Promise.all([obtenerRecetasBarra(), obtenerRecetasCocina()]);
+    const red2 = v => Math.round((parseFloat(v) || 0) * 100) / 100;
+    const esBase = r => /RECETA\s*BASE/i.test(String(r.categoria || '')) || /^R\.B(\s|$)/i.test(String(r.nombre || '').trim());
+    const procesar = (lista, zonaNombre) => {
+      const precios = { total: 0, conPv: 0, sinPv: 0, faltantes: [] };
+      const ingMap = new Map();
+      const vacias = [];
+      const comparacion = [];
+      for (const r of lista) {
+        const base = esBase(r);
+        precios.total++;
+        const pv = parseFloat(r.precio_venta) || 0;
+        if (!base) {
+          if (pv > 0) precios.conPv++;
+          else { precios.sinPv++; precios.faltantes.push({ nombre: r.nombre, categoria: r.categoria || '', oculta: !!r.oculta }); }
+        }
+        const ings = r.ingredientes || [];
+        if (!ings.length) vacias.push({ zona: zonaNombre, nombre: r.nombre });
+        for (const ing of ings) {
+          const tienePrecio = ing.precioMatch === true && (parseFloat(ing.precioUnidad) || 0) > 0;
+          if (!tienePrecio && (parseFloat(ing.cantidad) || 0) > 0) {
+            const k = String(ing.ingrediente || '').trim().toUpperCase().replace(/\s+/g, ' ');
+            if (!ingMap.has(k)) ingMap.set(k, { item: String(ing.ingrediente || '').trim(), unidad: ing.unidad || '', total: 0, recetas: [] });
+            const e = ingMap.get(k);
+            e.total = red2(e.total + (parseFloat(ing.cantidad) || 0));
+            if (!e.recetas.some(x => x.nombre === r.nombre && x.zona === zonaNombre)) e.recetas.push({ nombre: r.nombre, zona: zonaNombre });
+          }
+        }
+        if (!base && (parseFloat(r.costoTotal) || 0) > 0 && pv > 0) {
+          const pvTabla = (parseFloat(r.costoTotal) || 0) / 0.30;
+          const sugerido = pvTabla * 1.14;
+          const carta = Math.ceil(sugerido * 2) / 2;
+          const diff = red2(pv - carta);
+          const estado = diff < -0.005 ? 'debajo' : (diff > 0.005 ? 'encima' : 'ok');
+          comparacion.push({ zona: zonaNombre, receta: r.nombre, costo: red2(r.costoTotal), pv, pvTabla: red2(pvTabla), sugerido: red2(sugerido), carta, estado, diff });
+        }
+      }
+      const ingredientesSinPrecio = [...ingMap.values()];
+      return {
+        precios,
+        ingredientesSinPrecio,
+        vacias,
+        comparacion,
+        resumenComparacion: {
+          debajo: comparacion.filter(c => c.estado === 'debajo').length,
+          encima: comparacion.filter(c => c.estado === 'encima').length,
+          ok: comparacion.filter(c => c.estado === 'ok').length,
+        },
+      };
+    };
+    res.json({ barra: procesar(barra, 'BARRA'), cocina: procesar(cocina, 'COCINA') });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
