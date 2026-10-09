@@ -9852,6 +9852,7 @@ function enviarListaComprasPDF() {
 }
 
 function cargarCompras() {
+  cargarProveedoresCanonicos();
   const { ini, fin } = getFechasCompras();
   const fecha = ini; // para sugerencias de stock usar la fecha de inicio
   Promise.all([
@@ -10168,6 +10169,7 @@ function toggleCompararCompra() {
 }
 
 function editarCompra(id) {
+  cargarProveedoresCanonicos();
   const r = _comprasListaEditable.find(x => String(x.id) === String(id));
   if (!r) { alert('Registro no encontrado'); return; }
   if (String(id).startsWith('inv:')) { alert('Este ingreso manual se edita desde STOCK/INGRESOS'); return; }
