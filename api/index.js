@@ -2414,7 +2414,7 @@ function makeLookupRecetaBase(recetasList, normNombreFn) {
 // el conteo físico). Ej.: AGUA CON GAS (hay gasificadora: el consumo real de botellas es menor al
 // de las recetas) y GIN TANQUERAY. El sistema SOLO avisa "se terminó en BARRA/STOCK" y sugiere
 // cuánto hay en cada almacén para retirarlo manualmente.
-const ALMACEN_MANUALES = ['AGUA CON GAS SAN LUIS PLASTICO X 625 ML', 'GIN TANQUERAY X 700ML', 'PURE DE TOMATE MUTTI (BARRA) X 700 GR'];
+const ALMACEN_MANUALES = ['AGUA CON GAS SAN LUIS PLASTICO X 625 ML', 'GIN TANQUERAY X 700ML', 'PURE DE TOMATE MUTTI (BARRA) X 700 GR', 'VODKA SMIRNOFF X 700ML'];
 const normLista = s => String(s || '').trim().toUpperCase().replace(/\s+/g, '');
 function esAlmacenManual(nombre) {
   const k = normLista(nombre);
