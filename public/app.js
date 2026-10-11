@@ -1381,15 +1381,21 @@ function analizarVentas(esPrueba) {
       if (exacto) return { ...exacto, score: 1 };
       // Para items de grupo MENU: NO usar similitud difusa (evita inflar otro plato del menú)
       if (grupo) return null;
-      // Match DIFUSO seguro: exige al menos UNA palabra de contenido compartida (>=4 letras) con
-      // el item del Excel. Evita que "Pasta - roja con lomo a la parrila" se cargue a la receta
-      // "Lomo A La Parrilla Con Arroz -" por simple prefijo común.
+      // Match DIFUSO seguro: el candidato debe ser un SUBCONJUNTO de palabras del item del Excel
+      // (todas sus palabras significativas deben caber en el item). Evita que "Pasta - roja con
+      // lomo a la parrila" se cargue a "Lomo A La Parrilla Con Arroz -" (tiene "ARROZ" que el
+      // item no trae), pero permite variantes como "Cuba Libre - Con zacapa 23" -> "Cuba Libre -".
       const tokensPal = (t) => String(t || '').trim().toUpperCase().replace(/[^A-ZÁÉÍÓÚÑ0-9 ]/g, ' ').split(/\s+/).filter(w => w.length >= 4);
       const tokItem = tokensPal(nombre);
+      const coincideTok = (a, b) => a === b || (a.length >= 4 && b.length >= 4 && levenshtein(a, b) <= 1);
       let best = null, bestS = 0;
       pool.forEach(p => {
+        const pc = tokensPal(p.n);
+        if (!pc.length) return;
+        const esSubconjunto = pc.every(tc => tokItem.some(ti => coincideTok(ti, tc)));
+        if (!esSubconjunto) return;
         const s = similitud(nombre, p.n);
-        if (s > bestS && tokItem.some(pal => tokensPal(p.n).includes(pal))) { bestS = s; best = p; }
+        if (s > bestS) { bestS = s; best = p; }
       });
       return best && bestS >= 0.6 ? { ...best, score: bestS } : null;
     };
