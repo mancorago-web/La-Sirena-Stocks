@@ -10304,8 +10304,11 @@ function enviarVariacionWhatsapp() {
   });
   const filas = Object.values(subieron);
   if (!filas.length) { alert('No hay items que subieron de precio en este rango.'); return; }
-  let txt = '*VARIACION DE PRECIOS (' + d.fechaIni + ' a ' + d.fechaFin + ')*\n';
-  txt += 'Items que subieron vs última compra:\n';
+  let txt = '';
+  const fechas = (d.list || []).map(r => String(r.fecha || '')).filter(Boolean).sort();
+  const fechaTitulo = fechas.length ? fechas[fechas.length - 1] : d.fechaIni;
+  txt += '*VARIACION DE PRECIOS (' + fechaTitulo + ')*\n';
+  txt += 'Items que subieron en la última compra:\n';
   filas.sort((a, b) => b.variacion - a.variacion).forEach(f => {
     txt += '\n' + String(f.nombre).toUpperCase() + ' - S/ ' + f.precioUni.toFixed(2) + ' (+' + f.variacion.toFixed(2) + ')';
   });
