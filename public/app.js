@@ -10172,6 +10172,7 @@ function cargarComprasDetalle(ini, fin) {
     };
     const btnAcciones = r => '<td style="white-space:nowrap;width:70px;"><button onclick="editarCompra(\'' + r.id + '\')" style="background:#1565c0;color:#fff;border:none;padding:0.25rem 0.45rem;border-radius:4px;cursor:pointer;font-size:0.72rem;margin-right:0.2rem;" title="Editar">✎</button><button class="danger" onclick="confirmarEliminarCompra(\'' + r.id + '\')" style="padding:0.25rem 0.45rem;font-size:0.72rem;">✕</button></td>';
     const render = (anteriores) => {
+      window._comprasCompararWhatsapp = { fechaIni, fechaFin, list, anteriores: anteriores || {} };
       let contenido;
       if (_compararCompras) {
         const filas = list.map(r => {
@@ -10262,6 +10263,7 @@ function cargarComprasDetalle(ini, fin) {
       c.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;margin:0 0 0.5rem 0;">' +
         '<h3 style="margin:0;">DETALLE DE COMPRAS (' + fechaIni + ' a ' + fechaFin + ')</h3>' +
         '<button onclick="toggleCompararCompra()" style="padding:0.5rem 1rem;background:#e65100;color:#fff;border:none;border-radius:6px;font-size:0.85rem;font-weight:700;cursor:pointer;" title="Comparar con la última compra anterior de cada item">⚖️ COMPARAR COMPRA' + (_compararCompras ? ' ✓' : '') + '</button>' +
+        (_compararCompras ? '<button onclick="enviarVariacionWhatsapp()" style="padding:0.5rem 1rem;background:#25D366;color:#fff;border:none;border-radius:6px;font-size:0.85rem;font-weight:700;cursor:pointer;" title="Enviar por WhatsApp solo los items que subieron de precio">📲 WHATSAPP VARIACIÓN</button>' : '') +
       '</div>' +
       (_compararCompras ? '<p style="font-size:0.78rem;color:#888;margin:0 0 0.5rem 0;">Comparando cada item con su última compra <b>anterior al ' + fechaIni + '</b>.</p>' : '') +
       contenido +
@@ -10282,6 +10284,32 @@ function cargarComprasDetalle(ini, fin) {
 function toggleCompararCompra() {
   _compararCompras = !_compararCompras;
   cargarComprasDetalle();
+}
+
+// 📲 Envía por WhatsApp SOLO los items que subieron de precio contra su última compra
+function enviarVariacionWhatsapp() {
+  const d = window._comprasCompararWhatsapp;
+  if (!d || !Array.isArray(d.list)) { alert('Primero activa COMPARAR COMPRA.'); return; }
+  const subieron = {}; // por item: la mayor subida
+  (d.list || []).forEach(r => {
+    const prev = (d.anteriores || {})[r.nombre] || null;
+    const precioUni = parseFloat(r.precio) || 0;
+    const prevUni = prev ? (parseFloat(prev.precio) || 0) : 0;
+    const variacion = (precioUni > 0 && prevUni > 0) ? (precioUni - prevUni) : null;
+    if (variacion !== null && variacion > 0.004) {
+      if (!subieron[r.nombre] || variacion > subieron[r.nombre].variacion) {
+        subieron[r.nombre] = { nombre: r.nombre, precioUni, variacion };
+      }
+    }
+  });
+  const filas = Object.values(subieron);
+  if (!filas.length) { alert('No hay items que subieron de precio en este rango.'); return; }
+  let txt = '*VARIACION DE PRECIOS (' + d.fechaIni + ' a ' + d.fechaFin + ')*\n';
+  txt += 'Items que subieron vs última compra:\n';
+  filas.sort((a, b) => b.variacion - a.variacion).forEach(f => {
+    txt += '\n' + String(f.nombre).toUpperCase() + ' - S/ ' + f.precioUni.toFixed(2) + ' (+' + f.variacion.toFixed(2) + ')';
+  });
+  window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
 }
 
 function editarCompra(id) {
