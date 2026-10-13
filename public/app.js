@@ -945,13 +945,13 @@ function itemRow(i, a) {
   return `<tr data-item-id="${i.id}" data-almacen-id="${a.id}">
     <td>${i.nombre}${obs}</td>
     <td class="col-precio"><input type="number" class="input-num input-precio" value="${i.precio || 0}" step="0.01" readonly title="${i.precio ? 'Precio unitario de compra (se edita en BASE DE DATOS)' : 'SIN PRECIO - cargar en BASE DE DATOS'}" style="background:${i.precio ? '#fff9c4' : '#ffcdd2'};color:${i.precio ? '#555' : '#b71c1c'};cursor:not-allowed;font-weight:${i.precio ? 'normal' : '700'};"></td>
+    <td class="col-precio"><input type="number" class="input-num input-precio-total" value="${(((i.precio || 0) * (i.stock_cierre || 0))).toFixed(2)}" step="0.01" readonly title="Precio total = Precio U x Stock Total Cierre" style="background:#fff9c4;color:#555;cursor:not-allowed;font-weight:700;"></td>
     <td><input type="number" class="input-num input-apertura" value="${i.stock_apertura || 0}" step="0.01" ${aperturaReadonly} oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-ingreso" value="${i.stock_ingreso || 0}" step="0.01" oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-salida" value="${i.salida_almacen || 0}" step="0.01" oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-ventas" value="${i.total_ventas || 0}" step="0.01" oninput="calcCierre(this)"></td>
     <td><input type="number" class="input-num input-falta" value="${i.falta_almacen || 0}" step="0.01" oninput="calcCierre(this)"><input type="hidden" class="input-baja" value="${i.stock_baja || 0}"></td>
     <td><input type="number" class="input-num input-cierre" value="${i.stock_cierre || 0}" step="0.01" readonly></td>
-    <td class="col-precio"><input type="number" class="input-num input-precio-total" value="${(((i.precio || 0) * (i.stock_cierre || 0))).toFixed(2)}" step="0.01" readonly title="Precio total = Precio U x Stock Total Cierre" style="background:#fff9c4;color:#555;cursor:not-allowed;font-weight:700;"></td>
     <td style="white-space:nowrap">
       <button onclick="editarItemAlmacen(${i.id}, ${a.id})" style="background:#0f3460;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">EDITAR</button>
       <button onclick="eliminarItemAlmacen(${i.id}, ${a.id})" style="background:#c62828;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">✕</button>
@@ -2279,7 +2279,7 @@ function cargarAlmacenes(fecha, preservar) {
           ${a.items.length ? `
             <div class="table-wrap">
             <table>
-              <thead><tr><th>Item</th><th class="col-precio">PRECIO U</th><th>Stock Total Apertura</th><th>Ingreso</th><th>Salida Almacén</th><th>Total Ventas</th><th>Falta</th><th>Stock Total Cierre</th><th class="col-precio">PRECIO T</th><th></th></tr></thead>
+              <thead><tr><th>Item</th><th class="col-precio">PRECIO U</th><th class="col-precio">PRECIO T</th><th>Stock Total Apertura</th><th>Ingreso</th><th>Salida Almacén</th><th>Total Ventas</th><th>Falta</th><th>Stock Total Cierre</th><th></th></tr></thead>
               <tbody>
                 ${a.secciones.map(s => s.items.length ? `
                   <tr class="section-header"><td colspan="10">— ${s.label} —</td></tr>
@@ -5983,10 +5983,10 @@ function cargarStockBarra() {
       if (!esHoy) {
         return `<tr data-stock-id="${s.id}">
           <td class="stock-nombre">${nombreConNota}</td>
-          <td class="col-cant">${s.cantidad}</td>
-          <td>${s.unidad}</td>
           ${tdPrecioU}
           ${tdPrecioT}
+          <td class="col-cant">${s.cantidad}</td>
+          <td>${s.unidad}</td>
           ${tdOnzas}
           <td>${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
           <td></td>
@@ -5997,10 +5997,10 @@ function cargarStockBarra() {
       if (bloqueado) {
         return `<tr data-stock-id="${s.id}" data-bloqueado="1">
           <td class="stock-nombre">${nombreConNota}</td>
-          <td class="col-cant"><input type="number" class="input-num" value="${s.cantidad}" step="0.01" readonly title="Cantidad fija del conteo semanal (no editable)" style="background:#f0f0f0;color:#555;cursor:not-allowed;"></td>
-          <td>${s.unidad}</td>
           ${tdPrecioU}
           ${tdPrecioT}
+          <td class="col-cant"><input type="number" class="input-num" value="${s.cantidad}" step="0.01" readonly title="Cantidad fija del conteo semanal (no editable)" style="background:#f0f0f0;color:#555;cursor:not-allowed;"></td>
+          <td>${s.unidad}</td>
           ${tdOnzas}
           <td>${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
           <td>${btnPrecio}</td>
@@ -6011,10 +6011,10 @@ function cargarStockBarra() {
       const uniOpts = uniList.map(u => `<option value="${u}" ${s.unidad === u ? 'selected' : ''}>${u}</option>`).join('');
       return `<tr data-stock-id="${s.id}" data-orig-cantidad="${s.cantidad}" data-orig-unidad="${s.unidad}" data-orig-grupo="${(s.grupo || '').toUpperCase()}">
         <td class="stock-nombre">${nombreConNota}</td>
-        <td class="col-cant"><input type="number" class="input-num input-stock-cant" value="${s.cantidad}" step="0.01" oninput="actualizarOnzasFila(this); actualizarPrecioTotalBarra(this); marcarStockDirty()"></td>
-        <td><select class="select-stock-uni" onchange="onUnidadStockChange(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${uniOpts}</select></td>
         ${tdPrecioU}
         ${tdPrecioT}
+        <td class="col-cant"><input type="number" class="input-num input-stock-cant" value="${s.cantidad}" step="0.01" oninput="actualizarOnzasFila(this); actualizarPrecioTotalBarra(this); marcarStockDirty()"></td>
+        <td><select class="select-stock-uni" onchange="onUnidadStockChange(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${uniOpts}</select></td>
         ${tdOnzas}
         <td><select class="select-stock-grupo" onchange="marcarStockDirty()" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${opts}</select></td>
         <td>
@@ -6044,7 +6044,7 @@ function cargarStockBarra() {
           </div>
           <div class="accordion-body">
             <div class="table-wrap"><table>
-              <thead><tr><th>Ingrediente</th><th class="col-cant">Cantidad</th><th>Unidad</th>${colPrecio}${colOnzas}<th>Mueble</th><th></th></tr></thead>
+              <thead><tr><th>Ingrediente</th>${colPrecio}<th class="col-cant">Cantidad</th><th>Unidad</th>${colOnzas}<th>Mueble</th><th></th></tr></thead>
               <tbody>${items.map(i => fila(i, esCompras)).join('') || '<tr><td colspan="' + colSpan + '">Vacío.</td></tr>'}</tbody>
             </table></div>
           </div>
@@ -6058,7 +6058,7 @@ function cargarStockBarra() {
           </div>
           <div class="accordion-body">
             <div class="table-wrap"><table>
-              <thead><tr><th>Ingrediente</th><th>Cantidad</th><th>Unidad</th><th class="col-precio">PRECIO U</th><th class="col-precio">PRECIO T</th><th>Onzas</th><th>Mueble</th><th></th></tr></thead>
+              <thead><tr><th>Ingrediente</th><th class="col-precio">PRECIO U</th><th class="col-precio">PRECIO T</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th><th>Mueble</th><th></th></tr></thead>
               <tbody>${groups['SIN CLASIFICAR'].map(fila).join('')}</tbody>
             </table></div>
           </div>
