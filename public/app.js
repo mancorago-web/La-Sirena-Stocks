@@ -6957,8 +6957,7 @@ function cargarStockCocina(familiasAbrir) {
         <td><input type="number" class="input-num input-ingreso" value="${fmt3(i.stock_ingreso)}" step="0.001" oninput="calcCierre(this)"></td>
         <td><input type="number" class="input-num input-salida" value="${fmt3(i.salida_almacen)}" step="0.001" oninput="calcCierre(this)"></td>
         <td><input type="number" class="input-num input-ventas" value="${fmt3(i.total_ventas)}" step="0.001" oninput="calcCierre(this)"></td>
-        <td><input type="number" class="input-num input-falta" value="${fmt3(i.falta_almacen)}" step="0.001" oninput="calcCierre(this)"></td>
-        <td><input type="hidden" class="input-baja" value="${fmt3(i.stock_baja)}">
+        <td><input type="number" class="input-num input-falta" value="${fmt3(i.falta_almacen)}" step="0.001" oninput="calcCierre(this)"><input type="hidden" class="input-baja" value="${fmt3(i.stock_baja)}"></td>
         <td><input type="number" class="input-num input-cierre" value="${fmt3(i.stock_cierre)}" step="0.001" readonly></td>
         <td style="white-space:nowrap">
           <button class="btn-precio-cocina" onclick="editarPrecioCocina(${i.id})" title="Poner/editar el precio unitario" style="background:#e65100;color:#fff;border:none;padding:0.2rem 0.4rem;border-radius:3px;cursor:pointer;font-size:0.75rem;">💰</button>
