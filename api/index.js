@@ -928,10 +928,30 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
     await ajustarBarraStock(barraStockAjustes);
   }
 
+  // CADENA COMPLETA DEL DÍA: corregir TAMBIÉN los items del día que NO vinieron en este guardado
+  // (ej. importar ventas manda solo algunos items). Sin esto, tras un día sin datos (ej. martes),
+  // el resto de items del día quedaba con aperturas desincronizadas respecto al último cierre.
+  if (Object.keys(prevCierres).length) {
+    Object.keys(existentes).forEach(id => {
+      const prev = existentes[id];
+      if (!prev) return;
+      const clave = Number(prev.almacen_id) + '_' + Number(prev.item_id);
+      if (changedKeys.has(clave)) return;
+      if (prev.apertura_manual === true) return;
+      const pc = prevCierres[clave];
+      if (pc === undefined) return;
+      const apertura = parseFloat(prev.stock_apertura) || 0;
+      if (Math.abs(apertura - pc) < 0.001) return;
+      const cierre = pc + (parseFloat(prev.stock_ingreso) || 0) - (parseFloat(prev.salida_almacen) || 0) - (parseFloat(prev.total_ventas) || 0) - (parseFloat(prev.falta_almacen) || 0) - (parseFloat(prev.stock_baja) || 0);
+      batch.set(col('inventario_diario').doc(id), { stock_apertura: pc, stock_cierre: Math.round(cierre * 100) / 100 }, { merge: true });
+      changedKeys.add(clave);
+    });
+  }
+
   await batch.commit();
   invalidarCache('inv_diario_' + fecha, 'con_inv_' + fecha, 'inventario_snap'); // el guardado pudo crear items o cambiar stock_apertura
 
-  // Propagation: cadena hacia adelante SOLO de los items que realmente cambiaron
+  // Propagation: cadena hacia adelante de los items que realmente cambiaron
   const propErrors = [];
   try {
     if (changedKeys.size) {
