@@ -6412,7 +6412,7 @@ function renderConteoBarra() {
       const uniqId = s.id + '_' + norm(s.ingrediente);
       const valorPre = (s.conteo !== '' && s.conteo !== undefined && s.conteo !== null) ? parseFloat(s.conteo) : '';
       const ml = botellaParaMl(s.ingrediente);
-      const esBot = !!ml && (parseFloat(s.peso_vacia) > 0) && (parseFloat(s.peso_llena) > 0);
+      const esBot = !!ml;
       const pesoAnt = (s.peso_anterior !== undefined && s.peso_anterior !== null && s.peso_anterior !== '') ? parseFloat(s.peso_anterior) : null;
       const celdaPeso = esBot
         ? `<td style="text-align:center;color:#555;">${pesoAnt !== null ? pesoAnt : '—'}</td>
@@ -6435,6 +6435,7 @@ function renderConteoBarra() {
   body.innerHTML = `
     <h3>📋 CONTEO SEMANAL — BARRA</h3>
     <p style="color:#666;font-size:0.85rem;margin-top:0.5rem;">Compara el stock del sistema contra el conteo físico. <b>Diferencia = Conteo − Sistema</b>. <b>GUARDAR</b> solo registra el conteo de la fecha. <b>INFORME</b> muestra las diferencias. <b>AJUSTAR</b> registra y modifica el stock de la app.</p>
+    <div id="calendario-conteo" style="margin-top:0.75rem;"></div>
     <label style="display:block;margin-top:0.75rem;">Fecha del conteo:
       <input type="date" id="fecha-conteo-barra" value="${todayStr()}" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-left:0.5rem;">
     </label>
@@ -6448,6 +6449,7 @@ function renderConteoBarra() {
       <button onclick="cerrarModal()" style="flex:1;padding:0.6rem;background:#666;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancelar</button>
     </div>
     <p style="font-size:0.8rem;color:#999;margin-top:0.75rem;">Los items en 0 (vacíos) también aparecen: déjalos en vacío o 0 si siguen vacíos. El AJUSTAR ahora está en el INFORME.</p>`;
+  renderCalendarioInformes('calendario-conteo', todayStr());
 }
 
 function actualizarDiferenciaConteo(input) {
@@ -6771,8 +6773,18 @@ function renderCalendarioInformes(containerId, fechaActiva) {
 // Cambia el input de fecha a la fecha elegida en el calendario y carga ese informe
 function cargarInformeFecha(fecha) {
   const inp = document.getElementById('fecha-informe-conteo');
-  if (inp) inp.value = fecha;
-  cargarInformeConteo();
+  if (inp) { inp.value = fecha; cargarInformeConteo(); }
+  else { verInformeFecha(fecha); }
+}
+
+// Abre el INFORME guardado de una fecha directamente (usado desde el calendario del CONTEO)
+function verInformeFecha(fecha) {
+  api('GET', '/api/barra/conteo?fecha=' + encodeURIComponent(fecha)).then(list => {
+    const c = (list || [])[0];
+    if (!c || !Array.isArray(c.items) || !c.items.length) { alert('No hay informe guardado para el ' + fecha); return; }
+    const diferencias = (c.items || []).map(it => ({ ...it }));
+    mostrarResultadoConteo({ diferencias, ajustes: [], fecha_desde: c.fecha_desde || '' }, fecha, c.accion === 'ajustar', true);
+  }).catch(() => alert('Error cargando el informe'));
 }
 
 // Carga el INFORME guardado de una fecha (desde barra_conteos) y lo muestra
