@@ -5980,6 +5980,14 @@ function cargarStockBarra() {
       const tdPrecioT = `<td class="col-precio">${esHoy
         ? `<input type="number" class="input-num input-precio-total-barra" value="${pt}" step="0.01" readonly title="Precio total = Precio U x Cantidad" style="background:#fff9c4;color:#555;cursor:not-allowed;font-weight:700;width:82px;">`
         : pt.toFixed(2)}</td>`;
+      // PESO BOTELLA (solo licores/botellas con tamaño ml en el nombre)
+      const esBot = !!botellaParaMl(s.ingrediente);
+      const tdPesos = (editable) => esBot
+        ? (editable
+          ? `<td><input type="number" class="input-num input-peso-vacia" value="${s.peso_vacia || ''}" step="1" min="0" placeholder="—" title="Peso de la botella VACÍA (tara) en gramos" style="width:58px;padding:0.2rem;border:1px solid #ccc;border-radius:3px;" oninput="marcarStockDirty()"></td>
+             <td><input type="number" class="input-num input-peso-llena" value="${s.peso_llena || ''}" step="1" min="0" placeholder="—" title="Peso de la botella LLENA en gramos" style="width:58px;padding:0.2rem;border:1px solid #ccc;border-radius:3px;" oninput="marcarStockDirty()"></td>`
+          : `<td style="text-align:center;">${s.peso_vacia || '—'}</td><td style="text-align:center;">${s.peso_llena || '—'}</td>`)
+        : '<td></td><td></td>';
       if (!esHoy) {
         return `<tr data-stock-id="${s.id}">
           <td class="stock-nombre">${nombreConNota}</td>
@@ -5989,6 +5997,7 @@ function cargarStockBarra() {
           <td>${s.unidad}</td>
           ${tdOnzas}
           <td>${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
+          ${tdPesos(false)}
           <td></td>
         </tr>`;
       }
@@ -6003,13 +6012,14 @@ function cargarStockBarra() {
           <td>${s.unidad}</td>
           ${tdOnzas}
           <td>${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
+          ${tdPesos(true)}
           <td>${btnPrecio}</td>
         </tr>`;
       }
       const opts = GRUPOS_BARRA_CON_COMPRAS.map(g => `<option value="${g}" ${((s.grupo || '').toUpperCase() === g) ? 'selected' : ''}>${g}</option>`).join('');
       const uniList = UNIDADES_STOCK.includes(s.unidad) ? UNIDADES_STOCK : [...UNIDADES_STOCK, s.unidad];
       const uniOpts = uniList.map(u => `<option value="${u}" ${s.unidad === u ? 'selected' : ''}>${u}</option>`).join('');
-      return `<tr data-stock-id="${s.id}" data-orig-cantidad="${s.cantidad}" data-orig-unidad="${s.unidad}" data-orig-grupo="${(s.grupo || '').toUpperCase()}">
+      return `<tr data-stock-id="${s.id}" data-orig-cantidad="${s.cantidad}" data-orig-unidad="${s.unidad}" data-orig-grupo="${(s.grupo || '').toUpperCase()}" data-orig-peso-vacia="${s.peso_vacia || ''}" data-orig-peso-llena="${s.peso_llena || ''}">
         <td class="stock-nombre">${nombreConNota}</td>
         ${tdPrecioU}
         ${tdPrecioT}
@@ -6017,6 +6027,7 @@ function cargarStockBarra() {
         <td><select class="select-stock-uni" onchange="onUnidadStockChange(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${uniOpts}</select></td>
         ${tdOnzas}
         <td><select class="select-stock-grupo" onchange="marcarStockDirty()" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${opts}</select></td>
+        ${tdPesos(true)}
         <td>
           ${btnPrecio}
           <button class="danger" onclick="eliminarStockBarra(${s.id})">✕</button>
@@ -6034,7 +6045,7 @@ function cargarStockBarra() {
       const key = g.replace(/\s+/g, '-');
       const colOnzas = esCompras ? '' : '<th>Onzas</th>';
       const colPrecio = '<th class="col-precio">PRECIO U</th><th class="col-precio">PRECIO T</th>';
-      const colSpan = esCompras ? 7 : 8;
+      const colSpan = esCompras ? 9 : 10;
       return `
         <div class="accordion-item" data-grupo-key="${key}">
           <div class="accordion-header" onclick="toggleAcordeon(this)">
@@ -6044,7 +6055,7 @@ function cargarStockBarra() {
           </div>
           <div class="accordion-body">
             <div class="table-wrap"><table>
-              <thead><tr><th>Ingrediente</th>${colPrecio}<th class="col-cant">Cantidad</th><th>Unidad</th>${colOnzas}<th>Mueble</th><th></th></tr></thead>
+              <thead><tr><th>Ingrediente</th>${colPrecio}<th class="col-cant">Cantidad</th><th>Unidad</th>${colOnzas}<th>Mueble</th><th>PESO VACÍA (gr)</th><th>PESO LLENA (gr)</th><th></th></tr></thead>
               <tbody>${items.map(i => fila(i, esCompras)).join('') || '<tr><td colspan="' + colSpan + '">Vacío.</td></tr>'}</tbody>
             </table></div>
           </div>
@@ -6058,7 +6069,7 @@ function cargarStockBarra() {
           </div>
           <div class="accordion-body">
             <div class="table-wrap"><table>
-              <thead><tr><th>Ingrediente</th><th class="col-precio">PRECIO U</th><th class="col-precio">PRECIO T</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th><th>Mueble</th><th></th></tr></thead>
+              <thead><tr><th>Ingrediente</th><th class="col-precio">PRECIO U</th><th class="col-precio">PRECIO T</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th><th>Mueble</th><th>PESO VACÍA (gr)</th><th>PESO LLENA (gr)</th><th></th></tr></thead>
               <tbody>${groups['SIN CLASIFICAR'].map(fila).join('')}</tbody>
             </table></div>
           </div>
@@ -6345,6 +6356,10 @@ function guardarStockBarra() {
     if (cantN !== oCant) body.cantidad = cantN;
     if (uni !== oUni) body.unidad = uni;
     if (grp !== oGrp) body.grupo = grp;
+    const pvEl = tr.querySelector('.input-peso-vacia');
+    const plEl = tr.querySelector('.input-peso-llena');
+    if (pvEl) { const pv = parseFloat(pvEl.value) || 0; const oPv = parseFloat(tr.getAttribute('data-orig-peso-vacia')) || 0; if (pv !== oPv) body.peso_vacia = pv; }
+    if (plEl) { const pl = parseFloat(plEl.value) || 0; const oPl = parseFloat(tr.getAttribute('data-orig-peso-llena')) || 0; if (pl !== oPl) body.peso_llena = pl; }
     if (Object.keys(body).length) updates.push(api('PUT', '/api/barra/stock/' + id, body));
   });
   if (!updates.length) { showToast('Sin cambios por guardar'); return; }
@@ -6391,15 +6406,22 @@ function renderConteoBarra() {
   const gruposOrden = Object.keys(groups).sort();
   const filas = gruposOrden.map(g => {
     groups[g].sort((a, b) => String(a.ingrediente).localeCompare(String(b.ingrediente), 'es'));
-    const header = `<tr class="conteo-grupo-header"><td colspan="3" style="background:#e3f2fd;font-weight:700;color:#0f3460;padding:0.45rem 0.5rem;">${esc(g)}</td></tr>`;
+    const header = `<tr class="conteo-grupo-header"><td colspan="5" style="background:#e3f2fd;font-weight:700;color:#0f3460;padding:0.45rem 0.5rem;">${esc(g)}</td></tr>`;
     const rows = groups[g].map(s => {
       const sistema = parseFloat(s.cantidad) || 0;
       const uniqId = s.id + '_' + norm(s.ingrediente);
       const valorPre = (s.conteo !== '' && s.conteo !== undefined && s.conteo !== null) ? parseFloat(s.conteo) : '';
-      return `<tr data-conteo-id="${uniqId}">
+      const ml = botellaParaMl(s.ingrediente);
+      const esBot = !!ml && (parseFloat(s.peso_vacia) > 0) && (parseFloat(s.peso_llena) > 0);
+      const celdaPeso = esBot
+        ? `<td class="conteo-input"><input type="number" step="1" min="0" class="input-conteo-peso" placeholder="gr" oninput="actualizarPesoConteo(this)" style="width:70px;"></td>
+           <td class="td-conteo-peso-calc" style="font-size:0.78rem;color:#0f3460;white-space:nowrap;"></td>`
+        : '<td></td><td></td>';
+      return `<tr data-conteo-id="${uniqId}" data-peso-vacia="${s.peso_vacia || ''}" data-peso-llena="${s.peso_llena || ''}" data-ml="${ml || ''}">
         <td class="conteo-item">${esc(s.ingrediente)}</td>
         <td class="conteo-sistema">${sistema}</td>
         <td class="conteo-input"><input type="number" step="0.01" min="0" class="input-conteo-fisico" data-sistema="${sistema}" value="${valorPre}" placeholder="${sistema}" oninput="actualizarDiferenciaConteo(this)"></td>
+        ${celdaPeso}
       </tr>`;
     }).join('');
     return header + rows;
@@ -6414,7 +6436,7 @@ function renderConteoBarra() {
       <input type="date" id="fecha-conteo-barra" value="${todayStr()}" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-left:0.5rem;">
     </label>
     <div class="table-wrap"><table class="tabla-conteo">
-      <thead><tr><th style="text-align:left;">Item</th><th style="text-align:center;">Sistema</th><th style="text-align:center;">Conteo Físico</th></tr></thead>
+      <thead><tr><th style="text-align:left;">Item</th><th style="text-align:center;">Sistema</th><th style="text-align:center;">Conteo Físico</th><th style="text-align:center;">PESO (gr)</th><th style="text-align:left;">Alcohol restante</th></tr></thead>
       <tbody>${filas}</tbody>
     </table></div>
     <div style="margin-top:1.5rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
@@ -6437,6 +6459,23 @@ function actualizarDiferenciaConteo(input) {
   td.style.fontWeight = diff === 0 ? 'normal' : '700';
 }
 
+function actualizarPesoConteo(input) {
+  const tr = input.closest('tr');
+  const vacia = parseFloat(tr.getAttribute('data-peso-vacia')) || 0;
+  const llena = parseFloat(tr.getAttribute('data-peso-llena')) || 0;
+  const ml = parseFloat(tr.getAttribute('data-ml')) || 0;
+  const peso = parseFloat(input.value);
+  const calcEl = tr.querySelector('.td-conteo-peso-calc');
+  if (!calcEl) return;
+  if (isNaN(peso) || llena <= vacia || ml <= 0) { calcEl.innerHTML = ''; return; }
+  const gramos = Math.max(0, peso - vacia);
+  const frac = Math.min(1, gramos / (llena - vacia));
+  const mlRest = Math.round(frac * ml * 100) / 100;
+  const onzas = Math.round((mlRest / 30) * 100) / 100;
+  const pct = Math.round(frac * 1000) / 10;
+  calcEl.innerHTML = '<b>' + mlRest + '</b> ml · <b>' + onzas + '</b> onzas · ' + pct + '%';
+}
+
 function guardarConteoBarra(accion) {
   const fecha = document.getElementById('fecha-conteo-barra').value;
   if (!fecha) { alert('Selecciona la fecha del conteo'); return; }
@@ -6450,13 +6489,27 @@ function guardarConteoBarra(accion) {
     contados++;
     items.push({ id, conteo: parseFloat(val) || 0 });
   });
-  if (!contados) { alert('Ingresa al menos un conteo físico'); return; }
+  // Recolectar PESO (gr) por botella (independiente del conteo visual)
+  document.querySelectorAll('.input-conteo-peso').forEach(input => {
+    const tr = input.closest('tr');
+    const val = input.value.trim();
+    if (val === '') return;
+    const id = Number(tr.getAttribute('data-conteo-id').split('_')[0]);
+    const peso = parseFloat(val) || 0;
+    const existente = items.find(i => i.id === id);
+    if (existente) existente.peso = peso;
+    else {
+      const fisEl = tr.querySelector('.input-conteo-fisico');
+      items.push({ id, conteo: fisEl && fisEl.value.trim() !== '' ? (parseFloat(fisEl.value) || 0) : 0, peso });
+    }
+  });
+  if (!items.length) { alert('Ingresa al menos un conteo físico o un peso'); return; }
   if (accion === 'guardar') {
-    if (!confirm('Guardar el conteo de ' + contados + ' item(s) para el ' + fecha + '? (NO modifica el stock de la app)')) return;
+    if (!confirm('Guardar el conteo de ' + items.length + ' item(s) para el ' + fecha + '? (NO modifica el stock de la app)')) return;
   } else if (accion === 'informe') {
     // El informe no guarda ni modifica: solo compara y muestra
   } else if (accion === 'ajustar') {
-    if (!confirm('Ajustar ' + contados + ' item(s) al conteo físico del ' + fecha + '? El stock del sistema se sobrescribirá.')) return;
+    if (!confirm('Ajustar ' + items.length + ' item(s) al conteo físico del ' + fecha + '? El stock del sistema se sobrescribirá.')) return;
   }
   api('POST', '/api/barra/conteo', { fecha, items, accion }).then(r => {
     if (accion === 'guardar') {
@@ -6473,7 +6526,7 @@ function guardarConteoBarra(accion) {
 function mostrarResultadoConteo(r, fecha, ajustado, volver) {
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
-  const difs = (r.diferencias || []).filter(d => Math.abs(d.diff) > 0.0001);
+  const difs = (r.diferencias || []).filter(d => Math.abs(d.diff) > 0.0001 || (d.peso !== null && d.peso !== undefined));
   const faltantes = difs.filter(d => d.diff < -0.0001); // físico < sistema
   const sobrantes = difs.filter(d => d.diff > 0.0001);  // físico > sistema
   // Agrupar por MUEBLE en cajas (estilo COMPRAS) y dentro de cada caja: FALTANTES luego SOBRANTES
@@ -6485,13 +6538,19 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
     gruposMueble[g].push(d);
   });
   const filaInforme = (d) => {
+    const tieneDiff = Math.abs(d.diff) > 0.0001;
     const esFaltante = d.diff < -0.0001;
-    const estado = `<span style="display:inline-block;white-space:nowrap;background:${esFaltante ? '#ffebee' : '#e8f5e9'};color:${esFaltante ? '#c62828' : '#2e7d32'};font-weight:700;padding:0.15rem 0.6rem;border-radius:10px;font-size:0.78rem;">${esFaltante ? 'FALTANTE' : 'SOBRANTE'}</span>`;
+    const estado = tieneDiff
+      ? `<span style="display:inline-block;white-space:nowrap;background:${esFaltante ? '#ffebee' : '#e8f5e9'};color:${esFaltante ? '#c62828' : '#2e7d32'};font-weight:700;padding:0.15rem 0.6rem;border-radius:10px;font-size:0.78rem;">${esFaltante ? 'FALTANTE' : 'SOBRANTE'}</span>`
+      : '<span style="display:inline-block;white-space:nowrap;background:#e8eaf6;color:#283593;font-weight:700;padding:0.15rem 0.6rem;border-radius:10px;font-size:0.78rem;">PESADO</span>';
     const sem = `ventas: <b>${d.ventas}</b> | ingresos: <b>${d.ingresos}</b>`;
     const diffOz = calcularOnzas({ cantidad: d.diff, unidad: d.unidad || 'unidad', ingrediente: d.ingrediente });
     const ozCel = (diffOz === null || diffOz === undefined || isNaN(diffOz))
       ? '<td style="text-align:center;color:#aaa;">—</td>'
       : `<td style="text-align:center;font-weight:700;color:${esFaltante ? '#c62828' : '#2e7d32'};">${diffOz.toFixed(1)}</td>`;
+    const pesoCel = (d.onzas_restante !== null && d.onzas_restante !== undefined)
+      ? `<td style="text-align:center;font-weight:600;color:#0f3460;">${d.onzas_restante} onz<br><span style="font-size:0.72rem;color:#666;">${d.ml_restante} ml · ${d.pct_botella}%</span></td>`
+      : '<td style="text-align:center;color:#aaa;">—</td>';
     return `<tr>
       <td>${esc(d.ingrediente)}</td>
       <td style="text-align:center;">${d.sistema}</td>
@@ -6500,6 +6559,7 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
       ${ozCel}
       <td style="text-align:center;">${estado}</td>
       <td>${sem}</td>
+      ${pesoCel}
     </tr>`;
   };
   const muebleOrder = Object.keys(gruposMueble).sort((a, b) => {
@@ -6525,13 +6585,14 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
       </div>
       <div class="table-wrap"><table style="width:100%;table-layout:fixed;font-size:0.78rem;">
         <thead><tr>
-          <th style="width:30%;text-align:left;">Item</th>
-          <th style="width:7%;text-align:center;">Sistema</th>
-          <th style="width:7%;text-align:center;">Físico</th>
-          <th style="width:7%;text-align:center;">Dif.</th>
-          <th style="width:15%;text-align:center;">Dif. Onzas</th>
-          <th style="width:13%;text-align:center;">Estado</th>
-          <th style="width:18%;">Ventas/Ingresos</th>
+          <th style="width:27%;text-align:left;">Item</th>
+          <th style="width:6%;text-align:center;">Sistema</th>
+          <th style="width:6%;text-align:center;">Físico</th>
+          <th style="width:6%;text-align:center;">Dif.</th>
+          <th style="width:11%;text-align:center;">Dif. Onzas</th>
+          <th style="width:10%;text-align:center;">Estado</th>
+          <th style="width:17%;">Ventas/Ingresos</th>
+          <th style="width:17%;text-align:center;">Alcohol (peso)</th>
         </tr></thead>
         <tbody>${gRows.map(filaInforme).join('')}</tbody>
       </table></div>

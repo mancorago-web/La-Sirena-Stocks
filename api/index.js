@@ -4309,7 +4309,7 @@ app.post('/api/barra/stock', async (req, res) => {
 });
 
 app.put('/api/barra/stock/:id', async (req, res) => {
-  const { cantidad, ingrediente, unidad, grupo } = req.body;
+  const { cantidad, ingrediente, unidad, grupo, peso_vacia, peso_llena } = req.body;
   if (cantidad !== undefined) {
     const refDoc = col('barra_stock').doc(req.params.id);
     const docActual = await refDoc.get();
@@ -4326,6 +4326,8 @@ app.put('/api/barra/stock/:id', async (req, res) => {
   if (ingrediente) upd.ingrediente = ingrediente;
   if (unidad) upd.unidad = normalizeUnit(unidad);
   if (grupo !== undefined) upd.grupo = normalizeGrupo(grupo);
+  if (peso_vacia !== undefined) upd.peso_vacia = parseFloat(peso_vacia) || 0;
+  if (peso_llena !== undefined) upd.peso_llena = parseFloat(peso_llena) || 0;
   await col('barra_stock').doc(req.params.id).update(upd);
   res.json({ ok: true });
 });
@@ -4400,6 +4402,22 @@ app.post('/api/barra/conteo', authMiddleware, async (req, res) => {
       const fisico = parseFloat(it.conteo) || 0;
       const sistema = parseFloat(s.cantidad) || 0;
       const diff = Math.round((fisico - sistema) * 100) / 100;
+      // PESO BOTELLA (gr): se pesa la botella en el conteo y se calcula el alcohol restante
+      // usando el peso de la botella VACÍA (tara) y LLENA guardados en el item de licor.
+      const pesoRaw = it.peso;
+      const peso = (pesoRaw !== undefined && pesoRaw !== null && String(pesoRaw).trim() !== '') ? parseFloat(pesoRaw) : null;
+      const tara = parseFloat(s.peso_vacia) || 0;
+      const llena = parseFloat(s.peso_llena) || 0;
+      const equiv = parseEquivFromName(s.ingrediente);
+      const mlTotal = equiv.equiv_ml || 0;
+      let mlRest = null, onzasRest = null, pctBotella = null;
+      if (peso !== null && llena > tara && mlTotal > 0) {
+        const gramosAlc = Math.max(0, peso - tara);
+        const frac = Math.min(1, gramosAlc / (llena - tara));
+        mlRest = Math.round(frac * mlTotal * 100) / 100;
+        onzasRest = Math.round((mlRest / 30) * 100) / 100;
+        pctBotella = Math.round(frac * 1000) / 10;
+      }
       // Solo ajustar si cambió (solo en accion 'ajustar')
       if (accionFinal === 'ajustar' && Math.abs(diff) > 0.0001) {
         batch.update(col('barra_stock').doc(String(id)), { cantidad: fisico, updated_at: new Date().toISOString() });
@@ -4409,7 +4427,9 @@ app.post('/api/barra/conteo', authMiddleware, async (req, res) => {
         id, ingrediente: s.ingrediente, grupo: s.grupo || '', unidad: s.unidad || 'unidad',
         sistema, fisico, diff,
         ventas: movPorItem[String(s.ingrediente || '').trim().toUpperCase()]?.ventas || 0,
-        ingresos: movPorItem[String(s.ingrediente || '').trim().toUpperCase()]?.ingresos || 0
+        ingresos: movPorItem[String(s.ingrediente || '').trim().toUpperCase()]?.ingresos || 0,
+        peso, peso_vacia: tara || null, peso_llena: llena || null,
+        ml_restante: mlRest, onzas_restante: onzasRest, pct_botella: pctBotella
       });
     });
 
@@ -4423,7 +4443,8 @@ app.post('/api/barra/conteo', authMiddleware, async (req, res) => {
         accion: accionFinal,
         items: diferencias.map(d => ({
           id: d.id, ingrediente: d.ingrediente, grupo: d.grupo, unidad: d.unidad,
-          sistema: d.sistema, fisico: d.fisico, diff: d.diff, ventas: d.ventas, ingresos: d.ingresos
+          sistema: d.sistema, fisico: d.fisico, diff: d.diff, ventas: d.ventas, ingresos: d.ingresos,
+          peso: d.peso, ml_restante: d.ml_restante, onzas_restante: d.onzas_restante, pct_botella: d.pct_botella
         })),
         saved_by: savedBy,
         created_at: new Date().toISOString()
@@ -4431,7 +4452,7 @@ app.post('/api/barra/conteo', authMiddleware, async (req, res) => {
     }
 
     invalidarCachesLectura();
-    res.json({ ok: true, accion: accionFinal, fecha_desde: fechaDesde, ajustes, diferencias: diferencias.filter(d => Math.abs(d.diff) > 0.0001) });
+    res.json({ ok: true, accion: accionFinal, fecha_desde: fechaDesde, ajustes, diferencias: diferencias.filter(d => Math.abs(d.diff) > 0.0001 || d.peso !== null) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
