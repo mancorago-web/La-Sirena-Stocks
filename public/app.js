@@ -1465,7 +1465,7 @@ function renderVentasAsignacion(items, containerId) {
     // KOMBUCHA y platos nuevos puntuales (ej. "Fondo Menu - Atun al curry con arroz"): siempre
     // mostrar el selector editable para emparejarlos manualmente o crear la receta nueva si no existe.
     const normMatch = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
-    const esSiempreEditable = /KOMBUCHA/i.test(i.nombre) || /ATUN AL CURRY CON ARROZ/i.test(i.nombre);
+    const esSiempreEditable = /KOMBUCHA/i.test(i.nombre) || /KEFIR/i.test(i.nombre) || /ATUN AL CURRY CON ARROZ/i.test(i.nombre);
     if (i.emparejado && !esSiempreEditable) return '<span style="color:#2e7d32;">✓ ' + esc(i.matched) + '</span><input type="hidden" class="match-ya" value="' + esc(i.matched) + '">';
     const candidatos = candidatosTodos(i.nombre, i.destino);
     const ya = i.emparejado ? i.matched : '';
@@ -1629,17 +1629,17 @@ function candidatosTodos(nombre, destino) {
   } else {
     (ctx.stockNombres || []).forEach(n => { if (!esBasura(n)) pool.push({ n, zona: 'STOCKS' }); });
   }
-  // KOMBUCHA → KEFIR: a veces los meseros anotan KOMBUCHA de un sabor cuando en realidad vendieron
-  // un KEFIR del mismo sabor. Garantizamos que los KEFIRs aparezcan como opción para emparejarlos
-  // manualmente (flexibilidad en VENTAS al importar el Excel).
-  const esKombucha = /KOMBUCHA/i.test(String(nombre || ''));
-  if (esKombucha) {
-    (ctx.stockNombres || []).forEach(n => { if (/KEFIR/i.test(n) && !pool.some(p => p.n === n)) pool.push({ n, zona: 'STOCKS' }); });
+  // KEFIR ↔ KOMBUCHA: los meseros a veces anotan KOMBUCHA de un sabor cuando en realidad vendieron
+  // un KEFIR (y viceversa). Garantizamos que AMBOS grupos aparezcan como opción para emparejarlos
+  // manualmente en la importación de VENTAS.
+  const esKefirOKombucha = /KEFIR|KOMBUCHA/i.test(String(nombre || ''));
+  if (esKefirOKombucha) {
+    (ctx.stockNombres || []).forEach(n => { if (/KEFIR|KOMBUCHA/i.test(n) && !pool.some(p => p.n === n)) pool.push({ n, zona: 'STOCKS' }); });
   }
   const scored = pool.map(p => ({ p, s: similitud(nombre, p.n) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 15).map(x => x.p);
-  if (esKombucha) {
-    // Asegurar que los 3 KEFIRs queden en la lista aunque su similitud no entre al top
-    (ctx.stockNombres || []).forEach(n => { if (/KEFIR/i.test(n) && !scored.some(x => x.n === n)) scored.push({ n, zona: 'STOCKS' }); });
+  if (esKefirOKombucha) {
+    // Asegurar que todos los KEFIR/KOMBUCHA queden en la lista aunque su similitud no entre al top
+    (ctx.stockNombres || []).forEach(n => { if (/KEFIR|KOMBUCHA/i.test(n) && !scored.some(x => x.n === n)) scored.push({ n, zona: 'STOCKS' }); });
   }
   return scored;
 }
