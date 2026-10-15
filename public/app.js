@@ -6406,7 +6406,7 @@ function renderConteoBarra() {
   const gruposOrden = Object.keys(groups).sort();
   const filas = gruposOrden.map(g => {
     groups[g].sort((a, b) => String(a.ingrediente).localeCompare(String(b.ingrediente), 'es'));
-    const header = `<tr class="conteo-grupo-header"><td colspan="7" style="background:#e3f2fd;font-weight:700;color:#0f3460;padding:0.45rem 0.5rem;">${esc(g)}</td></tr>`;
+    const header = `<tr class="conteo-grupo-header"><td colspan="5" style="background:#e3f2fd;font-weight:700;color:#0f3460;padding:0.45rem 0.5rem;">${esc(g)}</td></tr>`;
     const rows = groups[g].map(s => {
       const sistema = parseFloat(s.cantidad) || 0;
       const uniqId = s.id + '_' + norm(s.ingrediente);
@@ -6415,15 +6415,13 @@ function renderConteoBarra() {
       const esBot = !!ml;
       const pesoAnt = (s.peso_anterior !== undefined && s.peso_anterior !== null && s.peso_anterior !== '') ? parseFloat(s.peso_anterior) : null;
       const celdaPeso = esBot
-        ? `<td style="text-align:center;color:#555;">${pesoAnt !== null ? pesoAnt : '—'}</td>
-           <td class="conteo-input"><input type="number" step="1" min="0" class="input-conteo-peso" placeholder="gr" oninput="actualizarPesoConteo(this)" style="width:70px;"></td>
-           <td class="td-conteo-peso-var" style="text-align:center;font-weight:700;white-space:nowrap;"></td>
-           <td class="td-conteo-peso-calc" style="font-size:0.78rem;color:#0f3460;white-space:nowrap;"></td>`
-        : '<td></td><td></td><td></td><td></td>';
-      return `<tr data-conteo-id="${uniqId}" data-peso-vacia="${s.peso_vacia || ''}" data-peso-llena="${s.peso_llena || ''}" data-ml="${ml || ''}" data-peso-anterior="${pesoAnt !== null ? pesoAnt : ''}">
+        ? `<td style="text-align:center;color:#555;font-weight:700;">${pesoAnt !== null ? pesoAnt : '—'}</td>
+           <td class="conteo-input"><input type="number" step="1" min="0" class="input-conteo-peso" placeholder="gr" style="width:80px;"></td>`
+        : '<td></td><td></td>';
+      return `<tr data-conteo-id="${uniqId}">
         <td class="conteo-item">${esc(s.ingrediente)}</td>
         <td class="conteo-sistema">${sistema}</td>
-        <td class="conteo-input"><input type="number" step="0.01" min="0" class="input-conteo-fisico" data-sistema="${sistema}" value="${valorPre}" placeholder="${sistema}" oninput="actualizarDiferenciaConteo(this)"></td>
+        <td class="conteo-input"><input type="number" step="0.01" min="0" class="input-conteo-fisico" data-sistema="${sistema}" value="${valorPre}" placeholder="${sistema}"></td>
         ${celdaPeso}
       </tr>`;
     }).join('');
@@ -6441,15 +6439,13 @@ function renderConteoBarra() {
     </label>
     <div class="table-wrap"><table class="tabla-conteo" style="width:100%;table-layout:fixed;font-size:0.82rem;">
       <colgroup>
-        <col style="width:26%;">
-        <col style="width:7%;">
-        <col style="width:9%;">
-        <col style="width:10%;">
-        <col style="width:10%;">
-        <col style="width:10%;">
-        <col style="width:28%;">
+        <col style="width:36%;">
+        <col style="width:12%;">
+        <col style="width:14%;">
+        <col style="width:16%;">
+        <col style="width:16%;">
       </colgroup>
-      <thead><tr><th style="text-align:left;">Item</th><th style="text-align:center;">Sistema</th><th style="text-align:center;">Conteo Físico</th><th style="text-align:center;">PESO ANT. (gr)</th><th style="text-align:center;">PESO (gr)</th><th style="text-align:center;">Variación (gr)</th><th style="text-align:left;">Alcohol restante</th></tr></thead>
+      <thead><tr><th style="text-align:left;">Item</th><th style="text-align:center;">Sistema</th><th style="text-align:center;">Conteo Físico</th><th style="text-align:center;">PESO ANT. (gr)</th><th style="text-align:center;">PESO (gr)</th></tr></thead>
       <tbody>${filas}</tbody>
     </table></div>
     <div style="margin-top:1.5rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
@@ -6471,36 +6467,6 @@ function actualizarDiferenciaConteo(input) {
   td.textContent = diff;
   td.style.color = diff > 0.0001 ? '#2e7d32' : (diff < -0.0001 ? '#c62828' : '#666');
   td.style.fontWeight = diff === 0 ? 'normal' : '700';
-}
-
-function actualizarPesoConteo(input) {
-  const tr = input.closest('tr');
-  const vacia = parseFloat(tr.getAttribute('data-peso-vacia')) || 0;
-  const llena = parseFloat(tr.getAttribute('data-peso-llena')) || 0;
-  const ml = parseFloat(tr.getAttribute('data-ml')) || 0;
-  const peso = parseFloat(input.value);
-  const calcEl = tr.querySelector('.td-conteo-peso-calc');
-  const varEl = tr.querySelector('.td-conteo-peso-var');
-  // Variación de peso semana a semana
-  if (varEl) {
-    const pesoAntRaw = tr.getAttribute('data-peso-anterior');
-    const pesoAnt = (pesoAntRaw !== '' && pesoAntRaw !== null) ? parseFloat(pesoAntRaw) : null;
-    if (isNaN(peso) || pesoAnt === null || isNaN(pesoAnt)) { varEl.innerHTML = ''; }
-    else {
-      const dif = Math.round((peso - pesoAnt) * 10) / 10;
-      const col = dif < -0.01 ? '#c62828' : (dif > 0.01 ? '#2e7d32' : '#666');
-      varEl.innerHTML = (dif > 0 ? '+' : '') + dif;
-      varEl.style.color = col;
-    }
-  }
-  if (!calcEl) return;
-  if (isNaN(peso) || llena <= vacia || ml <= 0) { calcEl.innerHTML = ''; return; }
-  const gramos = Math.max(0, peso - vacia);
-  const frac = Math.min(1, gramos / (llena - vacia));
-  const mlRest = Math.round(frac * ml * 100) / 100;
-  const onzas = Math.round((mlRest / 30) * 100) / 100;
-  const pct = Math.round(frac * 1000) / 10;
-  calcEl.innerHTML = '<b>' + mlRest + '</b> ml · <b>' + onzas + '</b> onzas · ' + pct + '%';
 }
 
 function guardarConteoBarra(accion) {
