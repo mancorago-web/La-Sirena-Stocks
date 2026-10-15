@@ -6439,7 +6439,16 @@ function renderConteoBarra() {
     <label style="display:block;margin-top:0.75rem;">Fecha del conteo:
       <input type="date" id="fecha-conteo-barra" value="${todayStr()}" style="padding:0.5rem;border:1px solid #ccc;border-radius:4px;margin-left:0.5rem;">
     </label>
-    <div class="table-wrap"><table class="tabla-conteo">
+    <div class="table-wrap"><table class="tabla-conteo" style="width:100%;table-layout:fixed;font-size:0.82rem;">
+      <colgroup>
+        <col style="width:26%;">
+        <col style="width:7%;">
+        <col style="width:9%;">
+        <col style="width:10%;">
+        <col style="width:10%;">
+        <col style="width:10%;">
+        <col style="width:28%;">
+      </colgroup>
       <thead><tr><th style="text-align:left;">Item</th><th style="text-align:center;">Sistema</th><th style="text-align:center;">Conteo Físico</th><th style="text-align:center;">PESO ANT. (gr)</th><th style="text-align:center;">PESO (gr)</th><th style="text-align:center;">Variación (gr)</th><th style="text-align:left;">Alcohol restante</th></tr></thead>
       <tbody>${filas}</tbody>
     </table></div>
