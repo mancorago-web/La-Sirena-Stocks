@@ -714,7 +714,7 @@ function exportarInformePreciosPDF() {
   const el = document.getElementById('informe-precios-imprimible');
   if (!el) { alert('Primero genera el informe'); return; }
   const w = window.open('', '_blank');
-  w.document.write('<html><head><title>Informe de Variación de Precios</title><style>@page{margin:1.2cm;}body{font-family:Arial,sans-serif;padding:0.5rem;}html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}table{border-collapse:collapse;width:100%;}.informe-precio-item{page-break-inside:avoid;break-inside:avoid;}h2,h3{page-break-after:avoid;break-after:avoid;}tr{page-break-inside:avoid;break-inside:avoid;}</style></head><body>' + el.innerHTML + '<script>window.onload=function(){window.print();};<\/script></body></html>');
+  w.document.write('<html><head><title>Informe de Variación de Precios</title><style>@page{margin:1.2cm;margin-bottom:1.6cm;}body{font-family:Arial,sans-serif;padding:0.5rem;}html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}table{border-collapse:collapse;width:100%;}.informe-precio-item{page-break-inside:avoid;break-inside:avoid;}h2,h3{page-break-after:avoid;break-after:avoid;}tr{page-break-inside:avoid;break-inside:avoid;}.pie-blakbox{position:fixed;bottom:0;left:0;right:0;text-align:center;font-size:11px;color:#888;font-weight:700;letter-spacing:1px;}</style></head><body>' + el.innerHTML + '<div class="pie-blakbox">BLAKBOX</div><script>window.onload=function(){window.print();};<\/script></body></html>');
   w.document.close();
 }
 
