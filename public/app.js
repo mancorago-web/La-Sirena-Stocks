@@ -596,10 +596,10 @@ function abrirCrearInformePrecios() {
     </div>
     <div style="background:#f5f7fa;border:1px solid #e0e0e0;border-radius:8px;padding:0.6rem;margin:0.5rem 0;">
       <div style="font-weight:700;color:#0f3460;font-size:0.82rem;margin-bottom:0.4rem;">Items a incluir (uno o varios)</div>
-      <div style="display:flex;gap:0.4rem;">
-        <input type="text" id="informe-item-buscar" list="informe-item-dl" placeholder="Escribe y elige un item..." autocomplete="off" style="flex:1;padding:0.5rem;border:1px solid #ccc;border-radius:4px;" onchange="agregarItemInforme()">
+      <div style="display:flex;gap:0.4rem;align-items:stretch;">
+        <input type="text" id="informe-item-buscar" list="informe-item-dl" placeholder="Escribe y elige un item..." autocomplete="off" style="flex:1;min-width:0;padding:0.6rem;border:1px solid #ccc;border-radius:4px;font-size:0.95rem;" onchange="agregarItemInforme()">
         <datalist id="informe-item-dl"></datalist>
-        <button onclick="agregarItemInforme()" style="padding:0.5rem 0.9rem;background:#1565c0;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700;">+ AGREGAR</button>
+        <button onclick="agregarItemInforme()" style="flex:0 0 auto;width:auto;margin:0;padding:0.6rem 0.8rem;background:#1565c0;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700;white-space:nowrap;font-size:0.9rem;">＋ AGREGAR</button>
       </div>
       <div id="informe-items-sel" style="margin-top:0.5rem;display:flex;flex-wrap:wrap;gap:0.3rem;"></div>
     </div>
