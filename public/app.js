@@ -697,12 +697,19 @@ function generarInformePrecios() {
     });
     const botonPDF = '<div style="margin-top:0.75rem;"><button onclick="exportarInformePreciosPDF()" style="width:100%;padding:0.6rem;background:#c62828;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">🖨️ EXPORTAR A PDF</button></div>';
     const itemsParam = items.map(x => x.nombre).join('|');
-    api('GET', '/api/compras/mejor-precio?items=' + encodeURIComponent(itemsParam)).then(mejores => {
+    const mesActual = todayStr().slice(0, 7);
+    const MESES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+    const mesNombre = MESES[parseInt(mesActual.slice(5, 7), 10) - 1] || '';
+    api('GET', '/api/compras/resumen-precios?items=' + encodeURIComponent(itemsParam) + '&proveedor=' + encodeURIComponent(prov) + '&mes=' + encodeURIComponent(mesActual)).then(resumen => {
       let block = '<div style="page-break-inside:avoid;margin-top:1rem;border-top:2px solid #0f3460;padding-top:0.5rem;">';
       block += '<p style="font-size:0.8rem;margin:0.3rem 0;text-align:justify;"><b>OBSERVACION:</b> LOS PRECIOS DE LOS ITEMS MENCIONADOS ESTAN TENIENDO VARIACIONES DE PRECIOS FUERTES POR LA FALTA DE PESO DE VENTA DEL PROVEEDOR, SE ENTIENDE QUE EL PROVEEDOR VENDE POR "MANOJO".</p>';
       block += '<p style="font-size:0.8rem;margin:0.3rem 0;text-align:justify;"><b>RECOMENDACION:</b> LLEGAR A UN PESO JUSTO DE VENTA, PARA QUE EVITAR LAS VARIACIONES CONSTANTES DE PRECIO.</p>';
       block += '<p style="font-size:0.8rem;margin:0.6rem 0 0.2rem 0;"><b>POR EJEMPLO:</b></p><ul style="font-size:0.8rem;margin:0;padding-left:1.3rem;">';
-      (mejores || []).forEach(m => { block += '<li>' + esc(m.nombre) + ': <b>S/ ' + m.precio.toFixed(2) + '</b>' + (m.fecha ? ' <span style="color:#888;">(' + esc(m.fecha) + ')</span>' : '') + '</li>'; });
+      (resumen || []).forEach(m => {
+        const prom = (m.promedio_mes !== null && m.promedio_mes !== undefined) ? '<b>S/ ' + m.promedio_mes.toFixed(2) + '</b>' : '—';
+        const mejor = (m.mejor_proveedor !== null && m.mejor_proveedor !== undefined) ? '<b>S/ ' + m.mejor_proveedor.toFixed(2) + '</b>' : '—';
+        block += '<li>' + esc(m.nombre) + ': ' + prom + ' (promedio de ' + mesNombre + ') y mejor precio del proveedor: ' + mejor + '</li>';
+      });
       block += '</ul></div>';
       html += block + '</div>';
       cont.innerHTML = html + botonPDF;

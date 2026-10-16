@@ -1794,8 +1794,42 @@ app.get('/api/compras/mejor-precio', authMiddleware, async (req, res) => {
     res.json(Object.values(porItem).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-// El administrador pone las cantidades de lo que se pide y la lista queda guardada por fecha.
-// Se usa la colección `lista_compras` con un doc por (fecha, zona) que contiene los items.
+// --- COMPRAS: resumen por item -> promedio del mes + mejor precio del proveedor ---
+app.get('/api/compras/resumen-precios', authMiddleware, async (req, res) => {
+  try {
+    const items = String(req.query.items || '').split('|').map(s => s.trim().toUpperCase()).filter(Boolean);
+    const provQ = normProveedor(req.query.proveedor || '');
+    const mes = String(req.query.mes || '').trim(); // YYYY-MM
+    if (!items.length) return res.json([]);
+    const snap = await col('compras').get();
+    const porItem = {};
+    snap.docs.forEach(d => {
+      const a = d.data();
+      const nom = String(a.nombre || '').trim();
+      if (!nom) return;
+      const key = nom.toUpperCase();
+      if (!items.some(s => key === s || key.includes(s) || s.includes(key))) return;
+      const cant = parseFloat(a.cantidad) || 0;
+      let pu = parseFloat(a.precio) || 0;
+      if (!(pu > 0) && cant > 0 && parseFloat(a.precio_total) > 0) pu = parseFloat(a.precio_total) / cant;
+      if (!(pu > 0)) return;
+      if (!porItem[key]) porItem[key] = { nombre: nom, sumaMes: 0, nMes: 0, mejor: null, mejorFecha: '' };
+      const o = porItem[key];
+      const fecha = String(a.fecha || '');
+      if (mes && fecha.slice(0, 7) === mes) { o.sumaMes += pu; o.nMes++; }
+      const coincideProv = !provQ || mismoProveedor(normProveedor(a.proveedor), provQ);
+      if (coincideProv) { if (o.mejor === null || pu < o.mejor) { o.mejor = pu; o.mejorFecha = fecha; } }
+    });
+    res.json(Object.values(porItem).map(o => ({
+      nombre: o.nombre,
+      promedio_mes: o.nMes ? Math.round((o.sumaMes / o.nMes) * 100) / 100 : null,
+      mejor_proveedor: o.mejor !== null ? Math.round(o.mejor * 100) / 100 : null,
+      mejor_fecha: o.mejorFecha || ''
+    })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- LISTA DE COMPRAS: lista de items de COCINA/BARRA con cantidades para una fecha (día siguiente).
 app.get('/api/lista-compras', authMiddleware, async (req, res) => {
   try {
     const fecha = String(req.query.fecha || '').trim();
