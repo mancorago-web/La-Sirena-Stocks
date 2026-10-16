@@ -581,6 +581,121 @@ function unificarItemsBaseDatos() {
   }).catch(() => alert('Error al unificar'));
 }
 
+// --- CREAR INFORME DE VARIACIÓN DE PRECIOS (multi-item + rango + exportar PDF) ---
+let _informePreciosItems = [];
+
+function abrirCrearInformePrecios() {
+  _informePreciosItems = [];
+  const body = document.getElementById('modal-body');
+  body.innerHTML = `
+    <h3>📄 CREAR INFORME DE VARIACIÓN DE PRECIOS</h3>
+    <p style="font-size:0.82rem;color:#666;margin:0.4rem 0;">Elige el rango de fechas y los items (uno o varios) para generar el informe con los precios de compra realizados.</p>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin:0.5rem 0;">
+      <label style="font-size:0.82rem;color:#555;">Desde: <input type="date" id="informe-fecha-ini" style="padding:0.35rem;border:1px solid #ccc;border-radius:4px;"></label>
+      <label style="font-size:0.82rem;color:#555;">Hasta: <input type="date" id="informe-fecha-fin" style="padding:0.35rem;border:1px solid #ccc;border-radius:4px;"></label>
+    </div>
+    <div style="background:#f5f7fa;border:1px solid #e0e0e0;border-radius:8px;padding:0.6rem;margin:0.5rem 0;">
+      <div style="font-weight:700;color:#0f3460;font-size:0.82rem;margin-bottom:0.4rem;">Items a incluir (uno o varios)</div>
+      <div style="display:flex;gap:0.4rem;">
+        <input type="text" id="informe-item-buscar" list="informe-item-dl" placeholder="Escribe y elige un item..." autocomplete="off" style="flex:1;padding:0.5rem;border:1px solid #ccc;border-radius:4px;" onchange="agregarItemInforme()">
+        <datalist id="informe-item-dl"></datalist>
+        <button onclick="agregarItemInforme()" style="padding:0.5rem 0.9rem;background:#1565c0;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700;">+ AGREGAR</button>
+      </div>
+      <div id="informe-items-sel" style="margin-top:0.5rem;display:flex;flex-wrap:wrap;gap:0.3rem;"></div>
+    </div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem;">
+      <button onclick="generarInformePrecios()" style="flex:1;padding:0.6rem;background:#6a1b9a;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">GENERAR INFORME</button>
+      <button onclick="cerrarModal()" style="flex:1;padding:0.6rem;background:#666;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cerrar</button>
+    </div>
+    <div id="informe-precios-resultado" style="margin-top:1rem;"></div>`;
+  const mc = document.querySelector('.modal-content');
+  if (mc) mc.classList.add('modal-wide');
+  document.getElementById('modal').style.display = 'block';
+  renderItemsInformeSel();
+  api('GET', '/api/basedatos/unificada').then(uni => {
+    const dl = document.getElementById('informe-item-dl');
+    if (!dl) return;
+    const seen = new Set();
+    dl.innerHTML = (uni || []).map(x => { const n = String(x.nombre || '').trim(); if (!n || seen.has(n.toUpperCase())) return ''; seen.add(n.toUpperCase()); return '<option value="' + n.replace(/"/g, '&quot;') + '">'; }).join('');
+  }).catch(() => {});
+}
+
+function agregarItemInforme() {
+  const inp = document.getElementById('informe-item-buscar');
+  if (!inp) return;
+  const val = inp.value.trim();
+  if (!val) return;
+  if (!_informePreciosItems.some(x => x.toUpperCase() === val.toUpperCase())) _informePreciosItems.push(val);
+  inp.value = '';
+  renderItemsInformeSel();
+}
+
+function quitarItemInforme(nombre) {
+  _informePreciosItems = _informePreciosItems.filter(x => x !== nombre);
+  renderItemsInformeSel();
+}
+
+function renderItemsInformeSel() {
+  const cont = document.getElementById('informe-items-sel');
+  if (!cont) return;
+  cont.innerHTML = _informePreciosItems.length
+    ? _informePreciosItems.map(n => '<span style="display:inline-flex;align-items:center;gap:0.3rem;background:#e3f2fd;color:#0f3460;padding:0.2rem 0.5rem;border-radius:12px;font-size:0.78rem;font-weight:600;">' + esc(n) + '<button onclick="quitarItemInforme(\'' + n.replace(/'/g, "\\'") + '\')" style="background:none;border:none;color:#c62828;cursor:pointer;font-weight:700;padding:0;margin:0;">×</button></span>').join('')
+    : '<span style="color:#999;font-size:0.8rem;">Ningún item seleccionado.</span>';
+}
+
+function generarInformePrecios() {
+  const ini = document.getElementById('informe-fecha-ini')?.value || '';
+  const fin = document.getElementById('informe-fecha-fin')?.value || '';
+  const cont = document.getElementById('informe-precios-resultado');
+  if (!ini || !fin) { alert('Elige fecha desde y hasta'); return; }
+  if (!_informePreciosItems.length) { alert('Agrega al menos un item'); return; }
+  cont.innerHTML = '<p style="color:#888;">Generando...</p>';
+  api('GET', '/api/compras/buscar?fecha_inicio=' + encodeURIComponent(ini) + '&fecha_fin=' + encodeURIComponent(fin)).then(list => {
+    const selNorm = _informePreciosItems.map(n => n.toUpperCase());
+    const porItem = {};
+    (list || []).forEach(r => {
+      const nom = String(r.nombre || '').trim();
+      if (!nom) return;
+      const key = nom.toUpperCase();
+      const match = selNorm.some(s => key === s || key.includes(s) || s.includes(key));
+      if (!match) return;
+      if (!porItem[key]) porItem[key] = { nombre: nom, compras: [] };
+      porItem[key].compras.push(r);
+    });
+    const items = Object.values(porItem);
+    if (!items.length) { cont.innerHTML = '<p style="color:#c62828;">No hay compras de los items seleccionados en ese rango.</p>'; return; }
+    let html = '<div id="informe-precios-imprimible" style="background:#fff;color:#000;">';
+    html += '<h2 style="text-align:center;margin:0.2rem 0;">INFORME DE VARIACIÓN DE PRECIOS</h2>';
+    html += '<p style="text-align:center;font-size:0.82rem;color:#555;margin:0 0 0.6rem 0;">Rango: <b>' + esc(ini) + '</b> a <b>' + esc(fin) + '</b> · Generado: ' + todayStr() + '</p>';
+    items.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    items.forEach(it => {
+      it.compras.sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
+      html += '<h3 style="font-size:0.9rem;margin:0.7rem 0 0.2rem 0;border-bottom:2px solid #0f3460;color:#0f3460;">' + esc(it.nombre) + '</h3>';
+      html += '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;margin-bottom:0.5rem;"><thead><tr style="background:#eef2ff;"><th style="text-align:left;padding:0.25rem 0.4rem;border:1px solid #ccc;">Fecha</th><th style="text-align:right;padding:0.25rem 0.4rem;border:1px solid #ccc;">Cantidad</th><th style="text-align:right;padding:0.25rem 0.4rem;border:1px solid #ccc;">P. Unit</th><th style="text-align:right;padding:0.25rem 0.4rem;border:1px solid #ccc;">P. Total</th><th style="text-align:right;padding:0.25rem 0.4rem;border:1px solid #ccc;">Variación</th></tr></thead><tbody>';
+      let prev = null;
+      it.compras.forEach(c => {
+        const pu = parseFloat(c.precio) || 0;
+        const pt = parseFloat(c.precio_total) || (pu * (parseFloat(c.cantidad) || 0));
+        let varTxt = '—', varCol = '#666';
+        if (prev !== null) { const dif = pu - prev; varTxt = (dif > 0 ? '+' : '') + 'S/' + dif.toFixed(2) + (prev ? ' (' + (dif / prev * 100).toFixed(1) + '%)' : ''); varCol = dif > 0 ? '#c62828' : (dif < 0 ? '#2e7d32' : '#666'); }
+        html += '<tr><td style="padding:0.2rem 0.4rem;border:1px solid #eee;">' + esc(c.fecha || '') + '</td><td style="text-align:right;padding:0.2rem 0.4rem;border:1px solid #eee;">' + (parseFloat(c.cantidad) || 0) + '</td><td style="text-align:right;padding:0.2rem 0.4rem;border:1px solid #eee;">S/ ' + pu.toFixed(2) + '</td><td style="text-align:right;padding:0.2rem 0.4rem;border:1px solid #eee;">S/ ' + pt.toFixed(2) + '</td><td style="text-align:right;padding:0.2rem 0.4rem;border:1px solid #eee;font-weight:700;color:' + varCol + ';">' + varTxt + '</td></tr>';
+        prev = pu;
+      });
+      html += '</tbody></table>';
+    });
+    html += '</div>';
+    cont.innerHTML = html + '<div style="margin-top:0.75rem;"><button onclick="exportarInformePreciosPDF()" style="width:100%;padding:0.6rem;background:#c62828;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">🖨️ EXPORTAR A PDF</button></div>';
+  }).catch(() => { cont.innerHTML = '<p style="color:#c62828;">Error al generar el informe.</p>'; });
+}
+
+function exportarInformePreciosPDF() {
+  const el = document.getElementById('informe-precios-imprimible');
+  if (!el) { alert('Primero genera el informe'); return; }
+  const w = window.open('', '_blank');
+  w.document.write('<html><head><title>Informe de Variación de Precios</title><style>body{font-family:Arial,sans-serif;padding:1rem;}table{border-collapse:collapse;}</style></head><body>' + el.innerHTML + '<script>window.onload=function(){window.print();};<\/script></body></html>');
+  w.document.close();
+}
+
 function verVariacionPrecios() {
   return api('GET', '/api/compras/variacion').then(conVariacion => {
     const body = document.getElementById('modal-body');
@@ -617,7 +732,7 @@ function verVariacionPrecios() {
       + '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Precio anterior (fecha)</th><th>Último precio (fecha)</th><th>Variación</th></tr></thead><tbody id="variacion-precios-body">' + filas + '</tbody></table></div>'
       + '<div id="variacion-historial" style="margin-top:0.75rem;"></div>'
       + '<div id="variacion-historial" style="margin-top:0.75rem;"></div>'
-      + '<div style="margin-top:1rem;display:flex;gap:0.5rem;"><button onclick="refrescarVariacion()" style="flex:1;padding:0.5rem;background:#1565c0;color:#fff;border:none;border-radius:4px;cursor:pointer;">🔄 Actualizar</button><button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
+      + '<div style="margin-top:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;"><button onclick="abrirCrearInformePrecios()" style="flex:1;padding:0.5rem;background:#6a1b9a;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700;">📄 CREAR INFORME</button><button onclick="refrescarVariacion()" style="flex:1;padding:0.5rem;background:#1565c0;color:#fff;border:none;border-radius:4px;cursor:pointer;">🔄 Actualizar</button><button onclick="cerrarModal()" style="flex:1;padding:0.5rem;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cerrar</button></div>';
     const mc = document.querySelector('.modal-content');
     if (mc) mc.classList.add('modal-wide');
     document.getElementById('modal').style.display = 'block';
