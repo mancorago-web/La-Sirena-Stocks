@@ -5847,6 +5847,14 @@ function botellaParaMl(nombre) {
   return (m[2] === 'ml' || m[2] === 'cc') ? v : v * 1000;
 }
 
+// Es un ENVASE pesable (botella/garrafa/envase de líquido o sólido) aunque el nombre NO traiga
+// número (ej. "MIEL DE ABEJA X LT") o traiga peso ("PURE DE TOMATE MUTTI (BARRA) X 700 GR").
+// Sirve para mostrar PESO VACÍA/LLENA y el PESO en el conteo.
+function esBotellaPeso(nombre) {
+  if (botellaParaMl(nombre)) return true;
+  return /\bx\s*(\d+(?:[.,]\d+)?)?\s*(lt|ml|kg|gr|g|l|litro|litros|kilo|kilos|gramo|gramos|onza|onzas)\b/i.test(String(nombre || ''));
+}
+
 function calcularOnzas(item) {
   const cant = parseFloat(item.cantidad) || 0;
   const u = (item.unidad || '').toLowerCase();
@@ -5981,7 +5989,7 @@ function cargarStockBarra() {
         ? `<input type="number" class="input-num input-precio-total-barra" value="${pt}" step="0.01" readonly title="Precio total = Precio U x Cantidad" style="background:#fff9c4;color:#555;cursor:not-allowed;font-weight:700;width:82px;">`
         : pt.toFixed(2)}</td>`;
       // PESO BOTELLA (solo licores/botellas con tamaño ml en el nombre)
-      const esBot = !!botellaParaMl(s.ingrediente);
+      const esBot = esBotellaPeso(s.ingrediente);
       const tdPesos = (editable) => esBot
         ? (editable
           ? `<td><input type="number" class="input-num input-peso-vacia" value="${s.peso_vacia || ''}" step="1" min="0" placeholder="—" title="Peso de la botella VACÍA (tara) en gramos" style="width:58px;padding:0.2rem;border:1px solid #ccc;border-radius:3px;" oninput="marcarStockDirty()"></td>
@@ -6411,13 +6419,12 @@ function renderConteoBarra() {
       const sistema = parseFloat(s.cantidad) || 0;
       const uniqId = s.id + '_' + norm(s.ingrediente);
       const valorPre = (s.conteo !== '' && s.conteo !== undefined && s.conteo !== null) ? parseFloat(s.conteo) : '';
-      const ml = botellaParaMl(s.ingrediente);
-      const esBot = !!ml;
+      const esBot = esBotellaPeso(s.ingrediente);
       const pesoAnt = (s.peso_anterior !== undefined && s.peso_anterior !== null && s.peso_anterior !== '') ? parseFloat(s.peso_anterior) : null;
       const celdaPeso = esBot
-        ? `<td style="text-align:center;color:#555;font-weight:700;">${pesoAnt !== null ? pesoAnt : '—'}</td>
-           <td class="conteo-input"><input type="number" step="1" min="0" class="input-conteo-peso" placeholder="gr" style="width:80px;"></td>`
-        : '<td></td><td></td>';
+        ? `<td style="text-align:center;color:#555;font-weight:700;">${pesoAnt !== null && pesoAnt !== undefined ? Number(pesoAnt).toFixed(2) : '0.00'}</td>
+           <td class="conteo-input"><input type="number" step="0.1" min="0" class="input-conteo-peso" placeholder="0.00" style="width:100px;padding:0.4rem;border:1px solid #bbb;border-radius:4px;text-align:center;font-weight:600;"></td>`
+        : '<td style="text-align:center;color:#aaa;">—</td><td style="text-align:center;color:#aaa;">—</td>';
       return `<tr data-conteo-id="${uniqId}">
         <td class="conteo-item">${esc(s.ingrediente)}</td>
         <td class="conteo-sistema">${sistema}</td>
