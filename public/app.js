@@ -670,6 +670,7 @@ function generarInformePrecios() {
     items.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
     items.forEach(it => {
       it.compras.sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
+      html += '<div class="informe-precio-item" style="page-break-inside:avoid;break-inside:avoid;padding-top:0.35rem;">';
       html += '<h3 style="font-size:0.9rem;margin:0.7rem 0 0.2rem 0;border-bottom:2px solid #0f3460;color:#0f3460;">' + esc(it.nombre) + '</h3>';
       html += '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;margin-bottom:0.5rem;"><thead><tr style="background:#eef2ff;"><th style="text-align:left;padding:0.25rem 0.4rem;border:1px solid #ccc;">Fecha</th><th style="text-align:right;padding:0.25rem 0.4rem;border:1px solid #ccc;">Cantidad</th><th style="text-align:right;padding:0.25rem 0.4rem;border:1px solid #ccc;">P. Unit</th><th style="text-align:right;padding:0.25rem 0.4rem;border:1px solid #ccc;">P. Total</th><th style="text-align:right;padding:0.25rem 0.4rem;border:1px solid #ccc;">Variación</th></tr></thead><tbody>';
       let prev = null;
@@ -681,7 +682,7 @@ function generarInformePrecios() {
         html += '<tr><td style="padding:0.2rem 0.4rem;border:1px solid #eee;">' + esc(c.fecha || '') + '</td><td style="text-align:right;padding:0.2rem 0.4rem;border:1px solid #eee;">' + (parseFloat(c.cantidad) || 0) + '</td><td style="text-align:right;padding:0.2rem 0.4rem;border:1px solid #eee;">S/ ' + pu.toFixed(2) + '</td><td style="text-align:right;padding:0.2rem 0.4rem;border:1px solid #eee;">S/ ' + pt.toFixed(2) + '</td><td style="text-align:right;padding:0.2rem 0.4rem;border:1px solid #eee;font-weight:700;color:' + varCol + ';">' + varTxt + '</td></tr>';
         prev = pu;
       });
-      html += '</tbody></table>';
+      html += '</tbody></table></div>';
     });
     html += '</div>';
     cont.innerHTML = html + '<div style="margin-top:0.75rem;"><button onclick="exportarInformePreciosPDF()" style="width:100%;padding:0.6rem;background:#c62828;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">🖨️ EXPORTAR A PDF</button></div>';
@@ -692,7 +693,7 @@ function exportarInformePreciosPDF() {
   const el = document.getElementById('informe-precios-imprimible');
   if (!el) { alert('Primero genera el informe'); return; }
   const w = window.open('', '_blank');
-  w.document.write('<html><head><title>Informe de Variación de Precios</title><style>body{font-family:Arial,sans-serif;padding:1rem;}table{border-collapse:collapse;}</style></head><body>' + el.innerHTML + '<script>window.onload=function(){window.print();};<\/script></body></html>');
+  w.document.write('<html><head><title>Informe de Variación de Precios</title><style>@page{margin:1.2cm;}body{font-family:Arial,sans-serif;padding:0.5rem;}html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}table{border-collapse:collapse;width:100%;}.informe-precio-item{page-break-inside:avoid;break-inside:avoid;}h2,h3{page-break-after:avoid;break-after:avoid;}tr{page-break-inside:avoid;break-inside:avoid;}</style></head><body>' + el.innerHTML + '<script>window.onload=function(){window.print();};<\/script></body></html>');
   w.document.close();
 }
 
