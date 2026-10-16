@@ -594,6 +594,12 @@ function abrirCrearInformePrecios() {
       <label style="font-size:0.82rem;color:#555;">Desde: <input type="date" id="informe-fecha-ini" style="padding:0.35rem;border:1px solid #ccc;border-radius:4px;"></label>
       <label style="font-size:0.82rem;color:#555;">Hasta: <input type="date" id="informe-fecha-fin" style="padding:0.35rem;border:1px solid #ccc;border-radius:4px;"></label>
     </div>
+    <div style="margin:0.5rem 0;">
+      <label style="font-size:0.82rem;color:#555;display:block;">Proveedor (opcional — deja vacío para todos):
+        <input type="text" id="informe-proveedor" list="informe-proveedor-dl" placeholder="Escribe para filtrar por proveedor..." autocomplete="off" style="width:100%;margin-top:0.2rem;padding:0.5rem;border:1px solid #ccc;border-radius:4px;">
+      </label>
+      <datalist id="informe-proveedor-dl"></datalist>
+    </div>
     <div style="background:#f5f7fa;border:1px solid #e0e0e0;border-radius:8px;padding:0.6rem;margin:0.5rem 0;">
       <div style="font-weight:700;color:#0f3460;font-size:0.82rem;margin-bottom:0.4rem;">Items a incluir (uno o varios)</div>
       <div style="display:flex;gap:0.4rem;align-items:stretch;">
@@ -617,6 +623,10 @@ function abrirCrearInformePrecios() {
     if (!dl) return;
     const seen = new Set();
     dl.innerHTML = (uni || []).map(x => { const n = String(x.nombre || '').trim(); if (!n || seen.has(n.toUpperCase())) return ''; seen.add(n.toUpperCase()); return '<option value="' + n.replace(/"/g, '&quot;') + '">'; }).join('');
+  }).catch(() => {});
+  api('GET', '/api/compras/facetas').then(r => {
+    const dl = document.getElementById('informe-proveedor-dl');
+    if (dl) dl.innerHTML = (r.proveedores || []).map(p => '<option value="' + String(p).replace(/"/g, '&quot;') + '">').join('');
   }).catch(() => {});
 }
 
@@ -649,8 +659,9 @@ function generarInformePrecios() {
   const cont = document.getElementById('informe-precios-resultado');
   if (!ini || !fin) { alert('Elige fecha desde y hasta'); return; }
   if (!_informePreciosItems.length) { alert('Agrega al menos un item'); return; }
+  const prov = (document.getElementById('informe-proveedor')?.value || '').trim();
   cont.innerHTML = '<p style="color:#888;">Generando...</p>';
-  api('GET', '/api/compras/buscar?fecha_inicio=' + encodeURIComponent(ini) + '&fecha_fin=' + encodeURIComponent(fin)).then(list => {
+  api('GET', '/api/compras/buscar?fecha_inicio=' + encodeURIComponent(ini) + '&fecha_fin=' + encodeURIComponent(fin) + '&proveedor=' + encodeURIComponent(prov)).then(list => {
     const selNorm = _informePreciosItems.map(n => n.toUpperCase());
     const porItem = {};
     (list || []).forEach(r => {
@@ -666,7 +677,7 @@ function generarInformePrecios() {
     if (!items.length) { cont.innerHTML = '<p style="color:#c62828;">No hay compras de los items seleccionados en ese rango.</p>'; return; }
     let html = '<div id="informe-precios-imprimible" style="background:#fff;color:#000;">';
     html += '<h2 style="text-align:center;margin:0.2rem 0;">INFORME DE VARIACIÓN DE PRECIOS</h2>';
-    html += '<p style="text-align:center;font-size:0.82rem;color:#555;margin:0 0 0.6rem 0;">Rango: <b>' + esc(ini) + '</b> a <b>' + esc(fin) + '</b> · Generado: ' + todayStr() + '</p>';
+    html += '<p style="text-align:center;font-size:0.82rem;color:#555;margin:0 0 0.6rem 0;">Rango: <b>' + esc(ini) + '</b> a <b>' + esc(fin) + '</b>' + (prov ? ' · Proveedor: <b>' + esc(prov) + '</b>' : '') + ' · Generado: ' + todayStr() + '</p>';
     items.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
     items.forEach(it => {
       it.compras.sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
