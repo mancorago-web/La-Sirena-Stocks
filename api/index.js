@@ -1772,7 +1772,28 @@ app.get('/api/compras/buscar', authMiddleware, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- LISTA DE COMPRAS: lista de items de COCINA/BARRA con cantidades para una fecha (día siguiente).
+// --- COMPRAS: MENOR precio unitario registrado por item (el "mejor precio" histórico para la empresa) ---
+app.get('/api/compras/mejor-precio', authMiddleware, async (req, res) => {
+  try {
+    const items = String(req.query.items || '').split('|').map(s => s.trim().toUpperCase()).filter(Boolean);
+    if (!items.length) return res.json([]);
+    const snap = await col('compras').get();
+    const porItem = {};
+    snap.docs.forEach(d => {
+      const a = d.data();
+      const nom = String(a.nombre || '').trim();
+      if (!nom) return;
+      const key = nom.toUpperCase();
+      if (!items.some(s => key === s || key.includes(s) || s.includes(key))) return;
+      const cant = parseFloat(a.cantidad) || 0;
+      let pu = parseFloat(a.precio) || 0;
+      if (!(pu > 0) && cant > 0 && parseFloat(a.precio_total) > 0) pu = parseFloat(a.precio_total) / cant;
+      if (!(pu > 0)) return;
+      if (!porItem[key] || pu < porItem[key].precio) porItem[key] = { nombre: nom, precio: Math.round(pu * 100) / 100, fecha: a.fecha || '', proveedor: a.proveedor || '' };
+    });
+    res.json(Object.values(porItem).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 // El administrador pone las cantidades de lo que se pide y la lista queda guardada por fecha.
 // Se usa la colección `lista_compras` con un doc por (fecha, zona) que contiene los items.
 app.get('/api/lista-compras', authMiddleware, async (req, res) => {
