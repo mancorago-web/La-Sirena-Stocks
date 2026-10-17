@@ -7248,10 +7248,12 @@ function cargarMinimosCocina() {
     const byFam = {};
     FAMILIAS_COCINA.forEach(f => { byFam[f] = []; });
     byFam['SIN CLASIFICAR'] = [];
+    // Solo se muestran los items POR DEBAJO de su cantidad mínima (es un listado de lo que falta reponer).
+    const esBajo = i => { const min = parseFloat(i.cantidad_minima) || 0; return min > 0 && (parseFloat(i.stock_cierre) || 0) < min; };
     (grupos || []).forEach(g => {
       const fam = (g.familia || 'SIN CLASIFICAR').toUpperCase();
       const target = byFam[fam] || byFam['SIN CLASIFICAR'];
-      (g.items || []).forEach(i => target.push(i));
+      (g.items || []).forEach(i => { if (esBajo(i)) target.push(i); });
     });
     // Filas editables: cada item con su cantidad mínima
     function fila(i) {
@@ -7276,7 +7278,13 @@ function cargarMinimosCocina() {
         </table></div></div>
       </div>`;
     }
-    container.innerHTML = FAMILIAS_COCINA.map(f => familiaAccordionMin(f, byFam[f])).join('') +
+    const totalBajos = Object.values(byFam).reduce((s, a) => s + a.length, 0);
+    if (!totalBajos) {
+      container.innerHTML = '<p style="color:#2e7d32;font-weight:700;margin-top:0.75rem;">✅ No hay items por debajo de su cantidad mínima en COCINA.</p>';
+      _cocinaMinimosData = { grupos };
+      return;
+    }
+    container.innerHTML = FAMILIAS_COCINA.map(f => byFam[f].length ? familiaAccordionMin(f, byFam[f]) : '').join('') +
       (byFam['SIN CLASIFICAR'].length ? familiaAccordionMin('SIN CLASIFICAR', byFam['SIN CLASIFICAR']) : '');
     _cocinaMinimosData = { grupos };
   }).catch(() => { container.innerHTML = '<p style="color:#c62828;">Error cargando COCINA/STOCK.</p>'; });
