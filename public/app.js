@@ -4213,11 +4213,9 @@ function verReporteStocksBajos() {
     });
     const bajos = [];
     porNombre.forEach(g => {
-      // Aparece si el stock TOTAL del restaurante < mínima, O si ALGÚN almacén quedó por debajo
-      // de su propia cantidad mínima (aunque el total parezca OK por otros almacenes).
-      const algunAlmacenBajo = g.detalles.some(d => d.min > 0 && d.cantidad < d.min);
+      // Se considera SOLO el stock TOTAL del item (suma de los almacenes generales) contra su mínimo.
       const totalBajo = g.min > 0 && g.total < g.min;
-      if (algunAlmacenBajo || totalBajo) bajos.push(g);
+      if (totalBajo) bajos.push(g);
     });
     // Prioridad de grupos: CERVEZAS → AGUAS → LÁCTEOS → COCINA → SERVICIO → resto → VINOS (al final)
     const gruposPrioridad = [
