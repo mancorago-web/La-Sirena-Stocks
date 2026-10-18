@@ -6557,9 +6557,11 @@ let _conteoBarraItems = [];
 function abrirConteoBarra() {
   api('GET', '/api/barra/stock').then(data => {
     _conteoBarraItems = data.map(s => ({ ...s, conteo: '' }));
-    // Pre-cargar el último conteo guardado (para que los montos físicos ya queden anotados)
+    // Pre-cargar el último conteo guardado (para que los montos físicos ya queden anotados).
+    // Se elige el MÁS RECIENTE por created_at (no por fecha), porque puede haber varios el mismo día.
     return api('GET', '/api/barra/conteo').then(list => {
-      const ult = (list || [])[0];
+      const arr = (list || []).slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+      const ult = arr[0];
       if (ult && Array.isArray(ult.items)) {
         ult.items.forEach(it => {
           const item = _conteoBarraItems.find(x => Number(x.id) === Number(it.id));
