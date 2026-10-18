@@ -1345,6 +1345,8 @@ function exportarBusquedaVentasTotal() {
 let ventasImportRows = [];
 let ventasPruebaRows = [];
 let ventasImportDescuentoGlobal = 0;
+let ventasImportImporteExcel = null; // Importe de productos (neto) leido del RESUMEN del Excel, para validar
+let ventasImportTotalExcel = null;   // (=) TOTAL DEL INFORME del Excel
 
 function onVentasExcelSeleccionado(input) {
   const file = input.files[0];
@@ -1417,6 +1419,8 @@ function parseVentasExcel(file, esPrueba) {
       // DESCUENTO GLOBAL = "Total Dsct" - "Total de descuentos por item".
       // El descuento por item ya se aplicó en el precio efectivo; lo que queda es el global.
       let totalDsct = null, descItem = 0;
+      ventasImportImporteExcel = null;
+      ventasImportTotalExcel = null;
       const normCelda = (v) => String(v === null || v === undefined ? '' : v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '');
       rows.forEach(r => {
         const celdas = Object.values(r).map(v => String(v === null || v === undefined ? '' : v).trim());
@@ -1430,6 +1434,10 @@ function parseVentasExcel(file, esPrueba) {
           if (n.includes('descuentosporitem') || n.includes('totaldedescuentosporitem')) {
             const num = siguienteNum(); if (num) descItem = num;
           }
+          // IMPORTE DE PRODUCTOS (neto) y TOTAL DEL INFORME del resumen: sirven para VALIDAR que el
+          // total que calculamos cuadre con el Excel (detecta errores de precio/consolidación).
+          if (n.includes('importedeproductos')) { const num = siguienteNum(); if (num) ventasImportImporteExcel = num; }
+          if (n.includes('totaldelinforme')) { const num = siguienteNum(); if (num) ventasImportTotalExcel = num; }
         });
       });
       ventasImportDescuentoGlobal = (totalDsct !== null) ? Math.max(0, totalDsct - descItem) : 0;
@@ -1648,7 +1656,21 @@ function renderVentasAsignacion(items, containerId) {
     const nombre = i.matched || i.nombre;
     return '<td class="celda-almacen">' + buildAlmacenSelect(nombre) + '</td>';
   };
+  // VALIDACIÓN del importe contra el RESUMEN del Excel (detecta errores de precio/consolidación solos)
+  const sumaItems = items.reduce((s, i) => s + (parseFloat(i.cantidad) || 0) * (parseFloat(i.precio_venta) || 0), 0);
+  const totalSistema = sumaItems - (ventasImportDescuentoGlobal || 0);
+  let avisoValidacion = '';
+  if (ventasImportImporteExcel !== null && ventasImportImporteExcel !== undefined) {
+    const difImp = Math.round((sumaItems - ventasImportImporteExcel) * 100) / 100;
+    const okImp = Math.abs(difImp) < 0.5;
+    avisoValidacion = '<div style="margin:0.5rem 0;padding:0.55rem 0.7rem;border-radius:8px;font-size:0.85rem;font-weight:700;background:' + (okImp ? '#e8f5e9' : '#ffebee') + ';border:1px solid ' + (okImp ? '#a5d6a7' : '#ef9a9a') + ';color:' + (okImp ? '#2e7d32' : '#c62828') + ';">'
+      + (okImp ? '✅' : '⚠') + ' Importe Excel: S/ ' + ventasImportImporteExcel.toFixed(2) + ' · Suma en la app: S/ ' + sumaItems.toFixed(2)
+      + (okImp ? ' (cuadra)' : ' → DIFERENCIA S/ ' + difImp.toFixed(2) + ' — revisa los precios/items antes de guardar')
+      + (ventasImportTotalExcel !== null && ventasImportTotalExcel !== undefined ? '<br><span style="font-weight:600;">TOTAL Excel: S/ ' + ventasImportTotalExcel.toFixed(2) + ' · TOTAL app: S/ ' + totalSistema.toFixed(2) + '</span>' : '')
+      + '</div>';
+  }
   cont.innerHTML = '<p style="margin:0.5rem 0;">Fecha: <b>' + fecha + '</b> — Items: <b>' + items.length + '</b> — Total unidades: <b>' + total + '</b></p>' +
+    avisoValidacion +
     '<div style="margin:0.5rem 0;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:0.5rem 0.6rem;">' +
       '<label style="font-weight:700;">DESCUENTO GLOBAL (S/):</label>' +
       '<input id="' + (containerId.includes('prueba') ? 'ventas-descuento-global-prueba' : 'ventas-descuento-global') + '" type="number" step="0.01" min="0" value="' + (ventasImportDescuentoGlobal || 0) + '" style="width:100px;padding:0.35rem;border:1px solid #ccc;border-radius:4px;">' +
