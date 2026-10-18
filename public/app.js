@@ -6719,8 +6719,9 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
     const ozCel = (diffOz === null || diffOz === undefined || isNaN(diffOz))
       ? '<td style="text-align:center;color:#aaa;">—</td>'
       : `<td style="text-align:center;font-weight:700;color:${esFaltante ? '#c62828' : '#2e7d32'};">${diffOz.toFixed(1)}</td>`;
-    const pesoCel = (d.onzas_restante !== null && d.onzas_restante !== undefined)
-      ? `<td style="text-align:center;font-weight:600;color:#0f3460;">${d.onzas_restante} onz<br><span style="font-size:0.72rem;color:#666;">${d.ml_restante} ml · ${d.pct_botella}%</span></td>`
+    const tienePeso = (d.peso !== null && d.peso !== undefined && d.peso !== '');
+    const pesoCel = tienePeso
+      ? `<td style="text-align:center;font-weight:700;color:#0f3460;">${d.peso} gr${(d.onzas_restante !== null && d.onzas_restante !== undefined) ? '<br><span style="font-size:0.72rem;color:#666;">' + d.onzas_restante + ' onz · ' + d.pct_botella + '%</span>' : ''}</td>`
       : '<td style="text-align:center;color:#aaa;">—</td>';
     return `<tr>
       <td>${esc(d.ingrediente)}</td>
@@ -6763,7 +6764,7 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
           <th style="width:11%;text-align:center;">Dif. Onzas</th>
           <th style="width:10%;text-align:center;">Estado</th>
           <th style="width:17%;">Ventas/Ingresos</th>
-          <th style="width:17%;text-align:center;">Alcohol (peso)</th>
+          <th style="width:17%;text-align:center;">Peso (gr)</th>
         </tr></thead>
         <tbody>${gRows.map(filaInforme).join('')}</tbody>
       </table></div>
@@ -6773,7 +6774,7 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
     '<p style="color:#2e7d32;font-weight:700;margin-top:0.75rem;">✅ Sin diferencias: el stock del sistema coincide con el conteo físico.</p>';
   const periodo = r.fecha_desde ? ' (desde el conteo del <b>' + r.fecha_desde + '</b>)' : '';
   const volverBtn = volver
-    ? '<button onclick="renderConteoBarra()" style="flex:1;padding:0.6rem;background:#455a64;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">⬅ VOLVER AL CONTEO</button>'
+    ? '<button onclick="abrirConteoBarra()" style="flex:1;padding:0.6rem;background:#455a64;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">⬅ VOLVER AL CONTEO</button>'
     : '';
   abrirModalDesdeArriba();
   const mc = modal.querySelector('.modal-content');
