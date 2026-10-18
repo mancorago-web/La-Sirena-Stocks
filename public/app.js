@@ -6594,7 +6594,7 @@ function renderConteoBarra() {
       const pesoAnt = (s.peso_anterior !== undefined && s.peso_anterior !== null && s.peso_anterior !== '') ? parseFloat(s.peso_anterior) : null;
       const celdaPeso = esBot
         ? `<td style="text-align:center;color:#555;font-weight:700;">${pesoAnt !== null && pesoAnt !== undefined ? Number(pesoAnt).toFixed(2) : '0.00'}</td>
-           <td class="conteo-input"><input type="number" step="0.1" min="0" class="input-conteo-peso" placeholder="0.00" style="width:100px;padding:0.4rem;border:1px solid #bbb;border-radius:4px;text-align:center;font-weight:600;"></td>`
+           <td class="conteo-input"><input type="number" step="0.1" min="0" class="input-conteo-peso" value="${pesoAnt !== null && pesoAnt !== undefined ? pesoAnt : ''}" placeholder="0.00" style="width:100px;padding:0.4rem;border:1px solid #bbb;border-radius:4px;text-align:center;font-weight:600;"></td>`
         : '<td style="text-align:center;color:#aaa;">—</td><td style="text-align:center;color:#aaa;">—</td>';
       return `<tr data-conteo-id="${uniqId}">
         <td class="conteo-item">${esc(s.ingrediente)}</td>
