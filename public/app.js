@@ -1496,9 +1496,16 @@ function analizarVentas(esPrueba) {
     const uniq = {};
     filas.forEach(r => {
       const k = norm(r.item);
-      if (!uniq[k]) uniq[k] = { nombre: r.item, cantidad: 0, precio_venta: 0 };
+      if (!uniq[k]) uniq[k] = { nombre: r.item, cantidad: 0, precio_venta: 0, _importe: 0 };
       uniq[k].cantidad += r.cantidad;
-      if (parseFloat(r.precio_venta) > 0) uniq[k].precio_venta = parseFloat(r.precio_venta) || 0;
+      uniq[k]._importe += r.cantidad * (parseFloat(r.precio_venta) || 0);
+    });
+    // PRECIO EFECTIVO PONDERADO: si el mismo item aparece en varias líneas con precios distintos
+    // (ej. unas unidades con promo y otras a precio normal), el precio = IMPORTE TOTAL / CANTIDAD.
+    // Así el detalle (cantidad × precio) respeta el TOTAL del Excel.
+    Object.values(uniq).forEach(u => {
+      u.precio_venta = u.cantidad > 0 ? Math.round((u._importe / u.cantidad) * 100) / 100 : 0;
+      delete u._importe;
     });
     const items = Object.values(uniq).map((i, idx) => { i.idx = idx; return i; });
     // Busca el mejor candidato existente (COCINA/BARRA/STOCKS) por similitud de nombre.
