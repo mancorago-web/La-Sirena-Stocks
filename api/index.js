@@ -2517,6 +2517,13 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
   let ops = 0;
   const noDescontados = [];
   const COUNT_UNITS = new Set(['unidad', 'unidades', 'und', 'hojas', 'hoja', 'gotas', 'gota', 'copas', 'copa']);
+  // Cache de inventario/almacenes para sugerir el retiro MANUAL cuando se agota en BARRA/STOCK.
+  let _invSnap = null, _alNombres = null;
+  const sugerirRetiro = async (nombre) => {
+    if (!_invSnap) _invSnap = await col('inventario').get();
+    if (!_alNombres) { const a = await col('almacenes').get(); _alNombres = {}; a.docs.forEach(d => { _alNombres[Number(d.id)] = d.data().nombre; }); }
+    return sugerirAlmacenManual(nombre, _invSnap, _alNombres);
+  };
   // Agregar consumos por item ANTES de descontar: un solo descuento por item evita que varias
   // líneas del mismo ingrediente se sobrescriban (batch con snapshot viejo) y evita avisos falsos.
   const agg = {};
@@ -2587,19 +2594,14 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
         }
       }
     }
-    // 3) BARRA/STOCK no alcanza: SIEMPRE que el item exista en COCINA/STOCK, consumir de ahí
-    //    (evita falsos faltantes cuando el item es compartido, ej. HUEVOS X UND). Luego, si tampoco
-    //    está en COCINA, se consume de STOCK/ALMACENES (inventario) registrando una SALIDA a BARRA
-    //    (ej. AGUA BIDON X 20 LT: la barra lo agota y jala del ALMACÉN GENERAL). Solo si no existe
-    //    en ninguna parte se reporta como no descontado (y se permite NEGATIVO).
+    // 3) BARRA/STOCK no alcanza: SOLO se consume de COCINA/STOCK si el item es compartido (ej. HUEVOS).
+    //    NUNCA se toma de STOCK/ALMACENES automáticamente: si se terminó, solo se avisa en el mensaje de
+    //    alerta y se sugiere de qué almacén retirarlo MANUALMENTE (así no se descuadra el conteo físico).
     if (restante > 0.0001) {
-      // ITEMS DE ALMACÉN MANUAL: NO se descuenta de COCINA/STOCK ni de ALMACENES automáticamente.
-      // Solo se avisa (el retiro se hace a mano) para no descuadrar el conteo físico.
       if (esAlmacenManual(nombre)) {
-        noDescontados.push({ ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: uRec, motivo: 'agotado_barra_manual' });
+        noDescontados.push({ ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: uRec, motivo: 'agotado_barra_manual', sugerencia: await sugerirRetiro(nombre) });
         continue;
       }
-      const pendiente = { ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: c.unidad || 'unidad' };
       const cocinaSnap = await col('cocina_stock').get();
       const cocinaStock = cocinaSnap.docs.map(d => ({ ref: d.ref, key: d.id, data: d.data() }));
       const cByNombre = {};
@@ -2626,52 +2628,18 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
           ajustados++;
         }
         if (cRest > 0.0001) {
-          noDescontados.push({ ingrediente: nombre, cantidad: Math.round(cRest * 100) / 100, unidad: uRec, motivo: 'sin_conversion_o_insuficiente' });
+          noDescontados.push({ ingrediente: nombre, cantidad: Math.round(cRest * 100) / 100, unidad: uRec, motivo: 'agotado_barra_manual', sugerencia: await sugerirRetiro(nombre) });
         }
       } else {
-        // Fallback a STOCK/ALMACENES: si el item está en inventario, se registra una SALIDA a BARRA
-        // (la barra agota su envase y jala del almacén). El consumo se convierte según el tamaño del
-        // envase (ej. "X 20 LT" -> equiv_ml 20000) usando la unidad de la receta (ml/lt/onzas).
-        const invSnap = await col('inventario').get();
-        const invByNombre = {};
-        invSnap.docs.forEach(d => { const a = d.data(); const k = String(a.nombre || '').trim().toUpperCase(); if (!invByNombre[k]) invByNombre[k] = []; invByNombre[k].push(a); });
-        let invMatches = invByNombre[key] || [];
-        if (!invMatches.length) {
-          const invStock = invSnap.docs.map(d => ({ data: d.data() }));
-          invMatches = matchStockFuzzy(nombre, invStock).map(x => x.item);
-        }
-        if (invMatches.length && fecha) {
-          // Consumir de los almacenes (prioridad: el que tenga stock). La cantidad pedida viene en
-          // la unidad de la receta (uRec, ej. ml); la convertimos a unidades del envase.
-          const registrosSalida = [];
-          let iRest = restante;
-          for (const inv of invMatches) {
-            if (iRest <= 0.0001) break;
-            const eqInv = parseEquivFromName(inv.nombre || nombre);
-            const uInv = normalizeUnit('unidad'); // inventario siempre en unidades
-            const convInv = cocinaAjustar(iRest, uRec, uInv, eqInv);
-            if (convInv === null || convInv === undefined) continue;
-            const dispInv = parseFloat(inv.stock_apertura) || 0;
-            const aSalir = Math.min(dispInv, Math.ceil(convInv * 100) / 100);
-            if (aSalir <= 0) continue;
-            registrosSalida.push({ item_id: Number(inv.item_id), almacen_id: Number(inv.almacen_id), salida_almacen: aSalir, destino_salida: 'barra' });
-            iRest = Math.max(0, Math.round((iRest - cocinaAjustar(aSalir, uInv, uRec, eqInv)) * 100) / 100);
-            ajustados++;
-          }
-          if (registrosSalida.length) {
-            try { await guardarDiaInterno(fecha, registrosSalida, savedBy); } catch (e) { console.error('fallback stock->barra:', e.message); }
-          }
-          if (iRest > 0.0001) {
-            noDescontados.push({ ingrediente: nombre, cantidad: Math.round(iRest * 100) / 100, unidad: uRec, motivo: 'sin_conversion_o_insuficiente' });
-          }
-        } else {
-          noDescontados.push({ ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: uRec, motivo: 'sin_conversion_o_insuficiente' });
-        }
+        // NO se toma de STOCK/ALMACENES: solo aviso + sugerencia de retiro manual.
+        noDescontados.push({ ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: uRec, motivo: 'agotado_barra_manual', sugerencia: await sugerirRetiro(nombre) });
       }
     }
   }
   if (ops) await batch.commit();
-  return noDescontados;
+  // Lo que no se pudo descontar en BARRA/STOCK queda marcado con zona='barra' para que NUNCA se
+  // tome de STOCK/ALMACENES automáticamente (el retiro es MANUAL; solo se avisa).
+  return noDescontados.map(nd => ({ ...nd, zona: 'barra' }));
 }
 
 async function descontarStockCocina(consumos) {
@@ -3084,18 +3052,17 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       }
     }
 
-    // FALLBACK A ALMACENES: los consumos que NO se pudieron descontar de BARRA/COCINA STOCK
-    // (por ejemplo AGUA BIDON X 20 LT) se toman de los STOCKS/ALMACENES, priorizando el que
-    // tenga stock (ej. ALMACÉN GENERAL ARRIBA). Se reporta en `deducidosDeAlmacenes` para avisar
-    // "se tomó X de ALMACÉN ... porque en BARRA/STOCK se terminó".
+    // FALLBACK A ALMACENES (solo COCINA/otros): las ventas de BARRA NUNCA toman de STOCK/ALMACENES
+    // automáticamente; sus faltantes se quedan en resumen.noDescontados (con sugerencia de retiro MANUAL).
     try {
+      const barraND = (resumen.noDescontados || []).filter(nd => nd && nd.zona === 'barra');
       const pendientes = (resumen.noDescontados || [])
-        .filter(nd => nd && (parseFloat(nd.cantidad) || 0) > 0)
+        .filter(nd => nd && (parseFloat(nd.cantidad) || 0) > 0 && nd.zona !== 'barra')
         .map(nd => ({ ingrediente: nd.ingrediente, cantidad: parseFloat(nd.cantidad) || 0, unidad: nd.unidad }));
       if (pendientes.length) {
         const { deducidos, restantes } = await descontarStocksDesdeAlmacenes(pendientes, fecha, savedBy, req.body.almacenes_seleccionados);
         if (deducidos.length) resumen.deducidosDeAlmacenes = deducidos;
-        resumen.noDescontados = restantes;
+        resumen.noDescontados = barraND.concat(restantes || []);
       }
     } catch (eAlm) {
       console.error('Fallback a ALMACENES (no bloquea):', eAlm.message);
