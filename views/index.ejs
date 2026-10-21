@@ -105,6 +105,7 @@
       <button class="tab" data-tab="reportes">Reportes</button>
       <button class="tab" data-tab="bajas">Bajas</button>
       <button class="tab" data-tab="juan">Juan</button>
+      <button class="tab" data-tab="cortesias">Cortesías</button>
       <button class="tab" data-tab="precioventa">Precio Venta</button>
       <button class="tab" data-tab="precios" style="display:none">Base de Datos</button>
       <button class="tab" data-tab="busquedaventas" style="display:none">Búsqueda Ventas</button>
@@ -272,6 +273,20 @@
         </div>
       </div>
       <div id="accordion-juan"></div>
+    </div>
+
+    <div id="tab-cortesias" class="tab-content">
+      <div class="header-actions">
+        <h2>Cortesías — Faltantes enviados a CORTESÍA</h2>
+        <div class="controles-dia">
+          <label>Desde: <input type="date" id="fecha-cortesias-stocks-ini" onchange="cargarCortesiasStocks()"></label>
+          <label>Hasta: <input type="date" id="fecha-cortesias-stocks-fin" onchange="cargarCortesiasStocks()"></label>
+          <input type="text" id="buscar-cortesias-stocks" placeholder="Buscar item..." oninput="renderCortesiasStocks()">
+          <button class="btn-detalles" onclick="cargarCortesiasStocksMes()" style="background:#0f3460;color:#fff;font-weight:700;">📅 ESTE MES</button>
+        </div>
+        <div style="font-size:0.8rem;color:#888;margin-top:0.3rem;">Aquí llegan los faltantes marcados como <strong>CORTESÍA</strong> desde REPORTES → ACCIONES. No se cobran.</div>
+      </div>
+      <div id="accordion-cortesias-stocks"></div>
     </div>
 
     <div id="tab-stocks" class="tab-content">

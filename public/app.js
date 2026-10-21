@@ -117,6 +117,7 @@ document.querySelectorAll('.tab').forEach(tab => {
       stocks: () => cargarStocks(),
       reportes: () => cargarReportes(),
       juan: () => cargarJuan(),
+      cortesias: () => cargarCortesiasStocks(),
       precioventa: () => cargarPrecioVentaStocks(),
       precios: () => cargarBaseDatosStocks(),
       busquedaventas: () => cargarSugerenciasBusquedaVentas()
@@ -188,6 +189,7 @@ function refrescarVista() {
       stocks: () => cargarStocks(),
       reportes: () => cargarReportes(),
       juan: () => cargarJuan(),
+      cortesias: () => cargarCortesiasStocks(),
       precioventa: () => cargarPrecioVentaStocks(),
       precios: () => cargarBaseDatosStocks()
     };
@@ -3192,6 +3194,57 @@ function cargarJuanMes() {
   cargarJuan(ini, fin);
 }
 
+// --- STOCKS: pestaña CORTESÍAS (faltantes enviados desde REPORTES/ACCIONES/CORTESÍA) ---
+let _cortesiasStocksData = null;
+
+function cargarCortesiasStocks(fechaIni, fechaFin) {
+  const iniEl = document.getElementById('fecha-cortesias-stocks-ini');
+  const finEl = document.getElementById('fecha-cortesias-stocks-fin');
+  if (!iniEl || !finEl) return;
+  if (!iniEl.value) iniEl.value = todayStr();
+  if (!finEl.value) finEl.value = todayStr();
+  const ini = fechaIni || iniEl.value;
+  const fin = fechaFin || finEl.value;
+  const container = document.getElementById('accordion-cortesias-stocks');
+  if (!container) return;
+  container.innerHTML = '<p>Cargando...</p>';
+  api('GET', '/api/stocks/salidas-cortesias?fecha_inicio=' + encodeURIComponent(ini) + '&fecha_fin=' + encodeURIComponent(fin)).then(list => {
+    _cortesiasStocksData = { ini, fin, lista: list || [] };
+    renderCortesiasStocks();
+  }).catch(() => { container.innerHTML = '<p style="color:#c62828;">Error cargando cortesías.</p>'; });
+}
+
+function cargarCortesiasStocksMes() {
+  const hoy = new Date();
+  const ini = hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0') + '-01';
+  const fin = hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0') + '-31';
+  const iniEl = document.getElementById('fecha-cortesias-stocks-ini');
+  const finEl = document.getElementById('fecha-cortesias-stocks-fin');
+  if (iniEl) iniEl.value = ini;
+  if (finEl) finEl.value = fin;
+  cargarCortesiasStocks(ini, fin);
+}
+
+function renderCortesiasStocks() {
+  const container = document.getElementById('accordion-cortesias-stocks');
+  if (!container || !_cortesiasStocksData) return;
+  const lista = _cortesiasStocksData.lista || [];
+  const q = (document.getElementById('buscar-cortesias-stocks')?.value || '').trim().toLowerCase();
+  const filtrados = q ? lista.filter(x => String(x.nombre || '').toLowerCase().includes(q)) : lista;
+  let html = '<div style="margin-bottom:0.6rem;padding:0.6rem 0.8rem;background:#6a1b9a;color:#fff;border-radius:6px;font-weight:700;">'
+    + '🎁 CORTESÍAS — ' + _cortesiasStocksData.ini + ' a ' + _cortesiasStocksData.fin + ' · ' + filtrados.length + ' salida(s)</div>';
+  if (!filtrados.length) {
+    html += '<p style="color:#888;">No hay cortesías en el rango seleccionado.</p>';
+  } else {
+    html += '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Item</th><th>Almacén</th><th>Cantidad</th><th>Registró</th></tr></thead><tbody>';
+    filtrados.slice().sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).forEach(x => {
+      html += '<tr><td>' + esc(x.fecha) + '</td><td>' + esc(x.nombre) + '</td><td>' + esc(x.almacen) + '</td><td style="font-weight:700;">' + x.cantidad + '</td><td>' + esc(x.saved_by) + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+  container.innerHTML = html;
+}
+
 function renderJuan() {
   const container = document.getElementById('accordion-juan');
   if (!container || !_juanData) return;
@@ -4484,10 +4537,10 @@ function abrirAccionesReportes() {
       return;
     }
     let html = '<h3>ACCIONES</h3>';
-    html += '<p style="font-size:0.8rem;color:#888;margin-bottom:0.6rem;">Para cada faltante: <strong>→ COCINA</strong>, <strong>→ BARRA</strong>, <strong>JUAN</strong>, <strong>BAJA</strong>, <strong>OBSERVAR</strong> o <strong>INTERCAMBIO</strong>. Para cada cierre negativo: <strong>BAJA</strong> (registra la pérdida en STOCK/BAJAS).</p>';
+    html += '<p style="font-size:0.8rem;color:#888;margin-bottom:0.6rem;">Para cada faltante: <strong>→ COCINA</strong>, <strong>→ BARRA</strong>, <strong>JUAN</strong>, <strong>CORTESÍA</strong>, <strong>BAJA</strong>, <strong>OBSERVAR</strong> o <strong>INTERCAMBIO</strong>. Para cada cierre negativo: <strong>BAJA</strong> (registra la pérdida en STOCK/BAJAS).</p>';
     if (faltantes.length) {
       html += '<div style="font-weight:700;color:#c62828;margin:0.6rem 0 0.3rem;">ITEMS CON FALTA</div>';
-      html += '<div class="table-wrap"><table><thead><tr><th>Fecha Falta</th><th>Item</th><th>Almacén</th><th>Falta</th><th>Fecha Real Salida</th><th>→ COCINA</th><th>→ BARRA</th><th>JUAN</th><th>BAJA</th><th>OBSERVAR</th><th>INTERCAMBIO</th></tr></thead><tbody>';
+      html += '<div class="table-wrap"><table><thead><tr><th>Fecha Falta</th><th>Item</th><th>Almacén</th><th>Falta</th><th>Fecha Real Salida</th><th>→ COCINA</th><th>→ BARRA</th><th>JUAN</th><th>CORTESÍA</th><th>BAJA</th><th>OBSERVAR</th><th>INTERCAMBIO</th></tr></thead><tbody>';
       faltantes.forEach(f => {
         html += `<tr data-accion-item="${f.item_id}" data-accion-al="${f.almacen_id}" data-accion-falta="${f.falta}" data-accion-fecha="${f.fecha}">
           <td>${f.fecha}</td>
@@ -4498,6 +4551,7 @@ function abrirAccionesReportes() {
           <td><button class="btn-detalles" onclick="convertirFaltaACocina(this)" style="background:#2e7d32;color:#fff;">→ COCINA</button></td>
           <td><button class="btn-detalles" onclick="convertirFaltaABarra(this)" style="background:#00695c;color:#fff;">→ BARRA</button></td>
           <td><button class="btn-detalles" onclick="convertirFaltaAJuan(this)" style="background:#4e342e;color:#fff;">JUAN</button></td>
+          <td><button class="btn-detalles" onclick="convertirFaltaACortesia(this)" style="background:#6a1b9a;color:#fff;">CORTESÍA</button></td>
           <td><button class="btn-detalles" onclick="darDeBajaFalta(this)" style="background:#b71c1c;color:#fff;">BAJA</button></td>
           <td><button class="btn-detalles" onclick="observarFalta(this)" style="background:#e65100;color:#fff;">OBSERVAR</button></td>
           <td><button class="btn-detalles" onclick="intercambiarFalta(this)" style="background:#6a1b9a;color:#fff;">INTERCAMBIO</button></td>
@@ -4713,6 +4767,32 @@ function convertirFaltaAJuan(btn) {
     refrescarAcciones();
   }).catch(() => {
     btn.disabled = false; btn.textContent = 'JUAN';
+    alert('Error al registrar');
+  });
+}
+
+// Convierte la falta en una SALIDA con destino CORTESÍA (producto entregado sin cobro)
+function convertirFaltaACortesia(btn) {
+  const tr = btn.closest('tr');
+  const item_id = parseInt(tr.dataset.accionItem);
+  const almacen_id = parseInt(tr.dataset.accionAl);
+  const cantidad = parseFloat(tr.dataset.accionFalta);
+  const fecha_falta = tr.dataset.accionFecha;
+  const fecha_salida = tr.querySelector('.input-fecha-salida').value;
+  if (!fecha_salida) { alert('Indica la fecha real de la cortesía'); return; }
+  const cantidadOk = prompt('¿Cuánto se entregó de CORTESÍA el ' + fecha_salida + '?\n(El faltante detectado fue ' + cantidad + ' — verifica antes de registrar)', cantidad);
+  if (cantidadOk === null) { btn.disabled = false; return; }
+  const cantidadFinal = parseFloat(cantidadOk);
+  if (isNaN(cantidadFinal) || cantidadFinal <= 0) { alert('Cantidad inválida'); btn.disabled = false; return; }
+  if (!confirm('¿Registrar ' + cantidadFinal + ' como CORTESÍA el ' + fecha_salida + '? Se enviará a la pestaña CORTESÍAS de STOCKS.')) return;
+  btn.disabled = true; btn.textContent = 'Procesando...';
+  api('POST', '/api/reportes/accion/salida-cortesia', {
+    fecha_falta, fecha_salida, item_id, almacen_id, cantidad: cantidadFinal, saved_by: currentUserName
+  }).then(() => {
+    showToast('Registrado: CORTESÍA');
+    refrescarAcciones();
+  }).catch(() => {
+    btn.disabled = false; btn.textContent = 'CORTESÍA';
     alert('Error al registrar');
   });
 }

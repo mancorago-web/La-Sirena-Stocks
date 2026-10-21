@@ -784,6 +784,9 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
     // (cocina/barra). Solo un cambio explícito consciente lo puede modificar.
     const prevDestinoJuan = String((prev && prev.destino_salida) || '').toLowerCase() === 'juan';
     if (prevDestinoJuan) r.destino_salida = 'juan';
+    // BLINDAJE CORTESÍA: mismo criterio que JUAN (la salida a CORTESÍA es permanente).
+    const prevDestinoCortesia = String((prev && prev.destino_salida) || '').toLowerCase() === 'cortesia';
+    if (prevDestinoCortesia) r.destino_salida = 'cortesia';
     const esTransferStocks = destinoPrim === 'stocks' || (Array.isArray(r.transferencias) && r.transferencias.length > 0);
     // AUTOMATIZACIÓN: los items del GRUPO BARRA van a BARRA/STOCK; TODO el resto va a COCINA/STOCK
     // por defecto (se puede cambiar manualmente). Se respetan destinos explícitos y transferencias.
@@ -5107,6 +5110,40 @@ app.get('/api/stocks/salidas-juan', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Salidas de STOCKS con destino CORTESÍA (faltantes enviados desde REPORTES/ACCIONES/CORTESÍA)
+app.get('/api/stocks/salidas-cortesias', async (req, res) => {
+  try {
+    const { fecha_inicio, fecha_fin } = req.query;
+    if (!fecha_inicio || !fecha_fin) return res.json([]);
+    const invSnap = await col('inventario').get();
+    const byKey = {};
+    invSnap.docs.forEach(d => { const a = d.data(); byKey[Number(a.item_id) + '_' + Number(a.almacen_id)] = a.nombre; });
+    const almsSnap = await col('almacenes').get();
+    const alNombres = {};
+    almsSnap.docs.forEach(d => { alNombres[Number(d.id)] = d.data().nombre; });
+    let ini = String(fecha_inicio).trim(), fin = String(fecha_fin).trim();
+    if (ini > fin) { [ini, fin] = [fin, ini]; }
+    const diaSnap = await col('inventario_diario').where('fecha', '>=', ini).where('fecha', '<=', fin).get();
+    const out = [];
+    diaSnap.docs.forEach(d => {
+      const a = d.data();
+      if (!((a.salida_almacen || 0) > 0)) return;
+      if (String(a.destino_salida || '').toLowerCase() !== 'cortesia') return;
+      out.push({
+        fecha: a.fecha,
+        nombre: byKey[Number(a.item_id) + '_' + Number(a.almacen_id)] || String(a.item_id),
+        cantidad: a.salida_almacen,
+        unidad: 'unidad',
+        almacen: alNombres[Number(a.almacen_id)] || String(a.almacen_id),
+        saved_by: a.saved_by || '-',
+        created_at: a.updated_at || ''
+      });
+    });
+    out.sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Bajas de STOCKS por FECHA en un rango (para ver en qué fecha se dio de baja cada item)
 app.get('/api/stocks/bajas', async (req, res) => {
   try {
@@ -7456,6 +7493,66 @@ app.post('/api/reportes/accion/salida-juan', async (req, res) => {
       item_id: item, almacen_id: al,
       salida_almacen: redondear(curSalida + aMover),
       destino_salida: 'juan',
+    };
+    if (stockApertura !== null) regSalida.stock_apertura = stockApertura;
+    await guardarDiaInterno(fecha_salida, [regSalida], savedBy);
+
+    // 2) Quitar la falta del día donde se detectó
+    await guardarDiaInterno(fecha_falta, [{
+      item_id: item, almacen_id: al,
+      falta_almacen: redondear(curFalta - aMover),
+    }], savedBy);
+
+    res.json({ ok: true, movido: aMover, nueva_falta: redondear(curFalta - aMover) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- ACCION en REPORTES: convertir FALTA en SALIDA con destino CORTESÍA (producto entregado sin cobro) ---
+app.post('/api/reportes/accion/salida-cortesia', async (req, res) => {
+  try {
+    const { fecha_falta, fecha_salida, item_id, almacen_id, cantidad, saved_by } = req.body;
+    if (!fecha_falta || !fecha_salida || !item_id || !almacen_id || !(Number(cantidad) > 0)) {
+      return res.status(400).json({ error: 'fecha_falta, fecha_salida, item_id, almacen_id y cantidad son requeridos' });
+    }
+    const savedBy = saved_by || (req.user ? (req.user.name || req.user.email || req.user.uid) : 'unknown');
+    const al = Number(almacen_id);
+    const item = Number(item_id);
+    const redondear = n => Math.round(n * 100) / 100;
+
+    const diaSalidaId = docId('invdiario', fecha_salida, al, item);
+    const diaFaltaId = docId('invdiario', fecha_falta, al, item);
+    const [diaSalidaSnap, diaFaltaSnap] = await Promise.all([
+      col('inventario_diario').doc(diaSalidaId).get(),
+      col('inventario_diario').doc(diaFaltaId).get(),
+    ]);
+    const curSalida = diaSalidaSnap.exists ? (diaSalidaSnap.data().salida_almacen || 0) : 0;
+    const curFalta = diaFaltaSnap.exists ? (diaFaltaSnap.data().falta_almacen || 0) : 0;
+    const aMover = redondear(Math.min(Number(cantidad), curFalta));
+    if (aMover <= 0) return res.status(400).json({ error: 'El item no tiene falta en la fecha indicada' });
+
+    // Apertura para el día real de salida si aún no tiene registro diario
+    let stockApertura = null;
+    if (!diaSalidaSnap.exists) {
+      let prevF = prevWorkingDay(fecha_salida);
+      for (let i = 0; i < 8; i++) {
+        const p = await col('inventario_diario').doc(docId('invdiario', prevF, al, item)).get();
+        if (p.exists) { stockApertura = p.data().stock_cierre ?? 0; break; }
+        prevF = prevWorkingDay(prevF);
+      }
+      if (stockApertura === null) {
+        const invSnap = await col('inventario').get();
+        const inv = invSnap.docs.find(d => Number(d.data().item_id) === item && Number(d.data().almacen_id) === al);
+        stockApertura = inv ? (inv.data().stock_apertura || 0) : 0;
+      }
+    }
+
+    // 1) Registrar la salida con destino CORTESÍA en el día real
+    const regSalida = {
+      item_id: item, almacen_id: al,
+      salida_almacen: redondear(curSalida + aMover),
+      destino_salida: 'cortesia',
     };
     if (stockApertura !== null) regSalida.stock_apertura = stockApertura;
     await guardarDiaInterno(fecha_salida, [regSalida], savedBy);
