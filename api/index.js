@@ -5296,9 +5296,13 @@ async function ajustarBarraStock(ajustes) {
     if (!key || !aj.delta) continue;
     const grupo = aj.grupo ? String(aj.grupo).toUpperCase() : null;
     if (grupo) {
-      // Grupo específico: buscar el item SOLO en ese grupo, o crearlo ahí (aunque exista en otro mueble).
-      // Así el → BARRA siempre deja el item en el mueble pedido (ej. MUEBLE DE ABAJO).
-      const existente = (byNameGrupo[key] || {})[grupo];
+      // 1) Preferir el item en el mueble pedido.
+      let existente = (byNameGrupo[key] || {})[grupo];
+      // 2) Si NO está en ese mueble pero SÍ en otro mueble, SUMAR al existente (NO crear duplicado).
+      if (!existente) {
+        const otrosMuebles = Object.entries(byNameGrupo[key] || {}).filter(([g]) => g !== 'COMPRAS DIARIAS');
+        if (otrosMuebles.length) existente = otrosMuebles[0][1];
+      }
       if (existente) {
         const nueva = cantDeItem(existente) + aj.delta;
         if (nueva === 0 && aj.delta < 0) batch.delete(existente.ref);
