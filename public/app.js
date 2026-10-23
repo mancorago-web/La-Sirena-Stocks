@@ -4159,10 +4159,12 @@ function cerrarModal() {
   const mc = document.querySelector('.modal-content');
   if (mc) mc.classList.remove('modal-wide');
   document.getElementById('modal').style.display = 'none';
+  _modalConteoAbierto = false;
 }
 
 // Fuerza que el modal se muestre desde el inicio (scroll arriba)
 function abrirModalDesdeArriba() {
+  _modalConteoAbierto = false;
   const modal = document.getElementById('modal');
   modal.style.display = 'block';
   // Scroll del fondo del modal al inicio + scroll de la página al inicio
@@ -5573,7 +5575,7 @@ initPicker('reporte-fecha-fin');
   const el = document.getElementById(id);
   if (el) el.value = todayStr();
 });
-window.addEventListener('click', e => { if (e.target === document.getElementById('modal')) cerrarModal(); });
+window.addEventListener('click', e => { if (e.target === document.getElementById('modal') && !_modalConteoAbierto) cerrarModal(); });
 
 // --- ESTRUCTURA DE COSTOS (formula: COSTO TOTAL = ALIMENTOS = 30% del PV) ---
 function htmlEstructuraCostos(costoTotal) {
@@ -6639,6 +6641,7 @@ function guardarStockBarra() {
 
 // --- BARRA: CONEO FÍSICO SEMANAL ---
 let _conteoBarraItems = [];
+let _modalConteoAbierto = false;
 
 function abrirConteoBarra() {
   api('GET', '/api/barra/stock').then(data => {
@@ -6719,7 +6722,14 @@ function renderConteoBarra() {
       <button onclick="verInformeConteo()" style="flex:1;padding:0.6rem;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">📊 INFORME</button>
       <button onclick="cerrarModal()" style="flex:1;padding:0.6rem;background:#666;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancelar</button>
     </div>
-    <p style="font-size:0.8rem;color:#999;margin-top:0.75rem;">Los items en 0 (vacíos) también aparecen: déjalos en vacío o 0 si siguen vacíos. El AJUSTAR ahora está en el INFORME.</p>`;
+    <p style="font-size:0.8rem;color:#999;margin-top:0.75rem;">Los items en 0 (vacíos) también aparecen: déjalos en vacío o 0 si siguen vacíos. El AJUSTAR ahora está en el INFORME.</p>
+    <div style="position:fixed;bottom:0;left:0;right:0;z-index:1100;display:flex;justify-content:center;padding:0.5rem;pointer-events:none;">
+      <div style="pointer-events:auto;background:#0f3460;color:#fff;border-radius:10px;padding:0.55rem 0.9rem;display:flex;align-items:center;gap:0.5rem;box-shadow:0 3px 12px rgba(0,0,0,0.4);">
+        <button onclick="guardarConteoRapido()" style="background:#2e7d32;color:#fff;border:none;padding:0.6rem 1.4rem;border-radius:6px;cursor:pointer;font-weight:700;">💾 GUARDAR</button>
+        <button onclick="cerrarModal(); cargarStockBarra();" style="background:#666;color:#fff;border:none;padding:0.6rem 1rem;border-radius:6px;cursor:pointer;font-weight:700;">CERRAR</button>
+      </div>
+    </div>`;
+  _modalConteoAbierto = true;
   renderCalendarioInformes('calendario-conteo', todayStr());
 }
 
@@ -6735,17 +6745,14 @@ function actualizarDiferenciaConteo(input) {
   td.style.fontWeight = diff === 0 ? 'normal' : '700';
 }
 
-function guardarConteoBarra(accion) {
-  const fecha = document.getElementById('fecha-conteo-barra').value;
-  if (!fecha) { alert('Selecciona la fecha del conteo'); return; }
+// Recolecta los valores del modal de conteo (físico + peso por botella)
+function recolectarConteoItems() {
   const items = [];
-  let contados = 0;
   document.querySelectorAll('.input-conteo-fisico').forEach(input => {
     const tr = input.closest('tr');
     const id = Number(tr.getAttribute('data-conteo-id').split('_')[0]);
     const val = input.value.trim();
     if (val === '') return; // vacío = no contado
-    contados++;
     items.push({ id, conteo: parseFloat(val) || 0 });
   });
   // Recolectar PESO (gr) por botella (independiente del conteo visual)
@@ -6762,6 +6769,24 @@ function guardarConteoBarra(accion) {
       items.push({ id, conteo: fisEl && fisEl.value.trim() !== '' ? (parseFloat(fisEl.value) || 0) : 0, peso });
     }
   });
+  return items;
+}
+
+// GUARDAR flotante: guarda el avance SIN cerrar ni reemplazar el modal (para seguir contando)
+function guardarConteoRapido() {
+  const fecha = document.getElementById('fecha-conteo-barra')?.value;
+  if (!fecha) { alert('Selecciona la fecha del conteo'); return; }
+  const items = recolectarConteoItems();
+  if (!items.length) { alert('Ingresa al menos un conteo físico o un peso'); return; }
+  api('POST', '/api/barra/conteo', { fecha, items, accion: 'guardar' }).then(() => {
+    showToast('Conteo guardado (' + items.length + ' item(s)). Puedes seguir contando.');
+  }).catch(() => alert('Error al guardar el conteo'));
+}
+
+function guardarConteoBarra(accion) {
+  const fecha = document.getElementById('fecha-conteo-barra').value;
+  if (!fecha) { alert('Selecciona la fecha del conteo'); return; }
+  const items = recolectarConteoItems();
   if (!items.length) { alert('Ingresa al menos un conteo físico o un peso'); return; }
   if (accion === 'guardar') {
     if (!confirm('Guardar el conteo de ' + items.length + ' item(s) para el ' + fecha + '? (NO modifica el stock de la app)')) return;
