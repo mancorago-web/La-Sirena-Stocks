@@ -6562,10 +6562,16 @@ function cargarConsumoNoRegistrado(fecha, container) {
 // Lee cantidad/unidad/grupo de una fila de BARRA/STOCK (funciona en filas editables, bloqueadas e históricas)
 function leerFilaStock(tr) {
   const tds = tr.querySelectorAll('td');
-  const cantEl = tr.querySelector('.input-stock-cant') || tr.querySelector('.input-num');
+  // La CANTIDAD está SIEMPRE en la celda .col-cant (editable, bloqueada o histórica). NO usar
+  // '.input-num' genérico: las columnas de PRECIO U/T también lo son y antes se guardaba el precio.
+  const cantTd = tr.querySelector('td.col-cant');
+  const cantInput = cantTd ? cantTd.querySelector('input') : tr.querySelector('.input-stock-cant');
+  const cantidad = cantInput
+    ? (cantInput.value || 0)
+    : (cantTd ? (cantTd.textContent || '').trim() : (tr.getAttribute('data-orig-cantidad') || 0));
   return {
-    cantidad: cantEl ? (cantEl.value || 0) : (tds[1]?.textContent || 0),
-    unidad: (tr.querySelector('.select-stock-uni')?.value || (tds[2]?.textContent || '')).trim(),
+    cantidad,
+    unidad: (tr.querySelector('.select-stock-uni')?.value || (tds[4]?.textContent || '')).trim(),
     grupo: (tr.querySelector('.select-stock-grupo')?.value || (tds[6]?.textContent || '')).trim()
   };
 }
