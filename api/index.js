@@ -4424,8 +4424,8 @@ app.post('/api/barra/conteo', authMiddleware, async (req, res) => {
       const doc = stockById[id];
       if (!doc) return;
       const s = doc.data();
-      const fisico = parseFloat(it.conteo) || 0;
-      const sistema = parseFloat(s.cantidad) || 0;
+      const fisico = Math.round((parseFloat(it.conteo) || 0) * 100) / 100;
+      const sistema = Math.round((parseFloat(s.cantidad) || 0) * 100) / 100;
       const diff = Math.round((fisico - sistema) * 100) / 100;
       // PESO BOTELLA (gr): se pesa la botella en el conteo y se calcula el alcohol restante
       // usando el peso de la botella VACÍA (tara) y LLENA guardados en el item de licor.

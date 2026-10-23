@@ -6679,7 +6679,7 @@ function renderConteoBarra() {
     groups[g].sort((a, b) => String(a.ingrediente).localeCompare(String(b.ingrediente), 'es'));
     const header = `<tr class="conteo-grupo-header"><td colspan="5" style="background:#e3f2fd;font-weight:700;color:#0f3460;padding:0.45rem 0.5rem;">${esc(g)}</td></tr>`;
     const rows = groups[g].map(s => {
-      const sistema = parseFloat(s.cantidad) || 0;
+      const sistema = Math.round((parseFloat(s.cantidad) || 0) * 100) / 100;
       const uniqId = s.id + '_' + norm(s.ingrediente);
       const valorPre = (s.conteo !== '' && s.conteo !== undefined && s.conteo !== null) ? parseFloat(s.conteo) : '';
       const esBot = esBotellaPeso(s.ingrediente);
@@ -6754,7 +6754,7 @@ function recolectarConteoItems() {
     const id = Number(tr.getAttribute('data-conteo-id').split('_')[0]);
     const val = input.value.trim();
     if (val === '') return; // vacío = no contado
-    items.push({ id, conteo: parseFloat(val) || 0 });
+    items.push({ id, conteo: Math.round((parseFloat(val) || 0) * 100) / 100 });
   });
   // Recolectar PESO (gr) por botella (independiente del conteo visual)
   document.querySelectorAll('.input-conteo-peso').forEach(input => {
@@ -6811,6 +6811,8 @@ function guardarConteoBarra(accion) {
 function mostrarResultadoConteo(r, fecha, ajustado, volver) {
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
+  // Muestra solo 2 decimales (evita 1.3599999999999999 por punto flotante)
+  const fmt2 = (n) => { const v = parseFloat(n); return isNaN(v) ? n : (Math.round(v * 100) / 100); };
   const difs = (r.diferencias || []).filter(d => (Math.abs(d.diff) > 0.0001 || (d.peso !== null && d.peso !== undefined)) && String(d.grupo || '').toUpperCase() !== 'COMPRAS DIARIAS');
   const faltantes = difs.filter(d => d.diff < -0.0001); // físico < sistema
   const sobrantes = difs.filter(d => d.diff > 0.0001);  // físico > sistema
@@ -6839,9 +6841,9 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
       : '<td style="text-align:center;color:#aaa;">—</td>';
     return `<tr>
       <td>${esc(d.ingrediente)}</td>
-      <td style="text-align:center;">${d.sistema}</td>
-      <td style="text-align:center;font-weight:700;">${d.fisico}</td>
-      <td style="text-align:center;color:${esFaltante ? '#c62828' : '#2e7d32'};font-weight:700;">${d.diff}</td>
+      <td style="text-align:center;">${fmt2(d.sistema)}</td>
+      <td style="text-align:center;font-weight:700;">${fmt2(d.fisico)}</td>
+      <td style="text-align:center;color:${esFaltante ? '#c62828' : '#2e7d32'};font-weight:700;">${fmt2(d.diff)}</td>
       ${ozCel}
       <td style="text-align:center;">${estado}</td>
       <td>${sem}</td>
