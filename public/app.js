@@ -6668,6 +6668,7 @@ function renderConteoBarra() {
   const groups = {};
   _conteoBarraItems.forEach(s => {
     const g = (s.grupo || 'SIN CLASIFICAR').toUpperCase();
+    if (g === 'COMPRAS DIARIAS') return; // el admin solo quiere ver las botellas/muebles
     if (!groups[g]) groups[g] = [];
     groups[g].push(s);
   });
@@ -6810,7 +6811,7 @@ function guardarConteoBarra(accion) {
 function mostrarResultadoConteo(r, fecha, ajustado, volver) {
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
-  const difs = (r.diferencias || []).filter(d => Math.abs(d.diff) > 0.0001 || (d.peso !== null && d.peso !== undefined));
+  const difs = (r.diferencias || []).filter(d => (Math.abs(d.diff) > 0.0001 || (d.peso !== null && d.peso !== undefined)) && String(d.grupo || '').toUpperCase() !== 'COMPRAS DIARIAS');
   const faltantes = difs.filter(d => d.diff < -0.0001); // físico < sistema
   const sobrantes = difs.filter(d => d.diff > 0.0001);  // físico > sistema
   // Agrupar por MUEBLE en cajas (estilo COMPRAS) y dentro de cada caja: FALTANTES luego SOBRANTES
