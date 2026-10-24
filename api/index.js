@@ -2506,7 +2506,7 @@ function sugerirAlmacenManual(nombre, invSnap, alNombres) {
   return { almacen: alNombres[Number(c.almacen_id)] || ('Almacén ' + c.almacen_id), disponible: parseFloat(c.stock_apertura) || 0 };
 }
 
-async function descontarStockBarra(consumos, fecha, savedBy) {
+async function descontarStockBarra(consumos, fecha, savedBy, seleccionAlmacenes) {
   const stockSnap = await col('barra_stock').get();
   const allStock = stockSnap.docs.map(d => ({ ref: d.ref, id: Number(d.id) || 0, data: d.data() }));
   const byNombre = {};
@@ -2550,10 +2550,8 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
     if (cant <= 0) continue;
     let matches = byNombre[key] || [];
     if (!matches.length) matches = matchStockFuzzy(c.ingrediente, allStock);
-    if (!matches.length) {
-      noDescontados.push({ ingrediente: nombre, cantidad: Math.round(cant * 100) / 100, unidad: uRec, motivo: 'sin_stock' });
-      continue;
-    }
+    // Si NO está en BARRA/STOCK NO se corta aquí: el paso 3 lo busca en COCINA/STOCK o en el
+    // almacén elegido manualmente; si no hay, se reporta como no descontado.
     const esConteo = COUNT_UNITS.has(uRec);
     // 1) Descuento DIRECTO 1:1 SOLO cuando la receta y el stock usan la MISMA unidad de conteo.
     //    Para unidades de conteo DISTINTAS (ej. la receta usa GOTAS y el stock es una BOTELLA),
@@ -2603,6 +2601,13 @@ async function descontarStockBarra(consumos, fecha, savedBy) {
     if (restante > 0.0001) {
       if (esAlmacenManual(nombre)) {
         noDescontados.push({ ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: uRec, motivo: 'agotado_barra_manual', sugerencia: await sugerirRetiro(nombre) });
+        continue;
+      }
+      // Si el usuario eligió MANUALMENTE un almacén para este ingrediente, NO buscar en COCINA:
+      // se deja como no descontado para que el fallback lo tome del almacén elegido.
+      const selAlm = seleccionAlmacenes && seleccionAlmacenes[String(nombre || '').trim().toUpperCase().replace(/\s+/g, '')];
+      if (Array.isArray(selAlm) && selAlm.length) {
+        noDescontados.push({ ingrediente: nombre, cantidad: Math.round(restante * 100) / 100, unidad: uRec, motivo: 'sin_stock' });
         continue;
       }
       const cocinaSnap = await col('cocina_stock').get();
@@ -2950,6 +2955,18 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       if (registrosStocks.length) await guardarDiaInterno(fecha, registrosStocks, savedBy);
     }
 
+    // Selección MANUAL de almacén por ingrediente (elegida en la importación de ventas).
+    // Si el usuario eligió de qué almacén sacar un ingrediente de BARRA, se respeta (aunque
+    // por defecto las ventas de BARRA no tomen de almacenes automáticamente).
+    const ingAlmacenesSel = {};
+    const normKey = s => String(s || '').trim().toUpperCase().replace(/\s+/g, '');
+    for (const v of ventasBarra) {
+      (v.ingredientesStocks || []).forEach(s => {
+        if (s && s.nombre && Array.isArray(s.almacenes) && s.almacenes.length) {
+          ingAlmacenesSel[normKey(s.nombre)] = s.almacenes.map(Number);
+        }
+      });
+    }
     // Aplicar a BARRA (movimientos de venta de recetas + descontar stock)
     if (ventasBarra.length) {
       const recSnap = await col('recetas').get();
@@ -2998,7 +3015,7 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       // El descuento va protegido: si falla no rompe el guardado ni oculta el aviso.
       try {
         const consumosExpandidos = expandirRecetasBase(consumos, n => recetasMap[String(n || '').trim().toUpperCase()], ingByRec);
-        resumen.noDescontados = await descontarStockBarra(consumosExpandidos, fecha, savedBy);
+        resumen.noDescontados = await descontarStockBarra(consumosExpandidos, fecha, savedBy, ingAlmacenesSel);
       } catch (e) {
         console.error('Error descontando BARRA/STOCK:', e.message);
         resumen.errorBarra = e.message;
@@ -3055,15 +3072,20 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       }
     }
 
-    // FALLBACK A ALMACENES (solo COCINA/otros): las ventas de BARRA NUNCA toman de STOCK/ALMACENES
-    // automáticamente; sus faltantes se quedan en resumen.noDescontados (con sugerencia de retiro MANUAL).
+    // FALLBACK A ALMACENES: por defecto las ventas de BARRA NO toman de STOCK/ALMACENES (solo avisan).
+    // EXCEPCIÓN: si en la importación el usuario eligió MANUALMENTE un almacén para ese ingrediente
+    // (ingredientesStocks), se descuenta de ahí. Lo de COCINA/otros sigue igual.
     try {
-      const barraND = (resumen.noDescontados || []).filter(nd => nd && nd.zona === 'barra');
+      const tieneSel = (nd) => {
+        const s = ingAlmacenesSel[normKey(nd && nd.ingrediente)];
+        return Array.isArray(s) && s.length > 0;
+      };
+      const barraND = (resumen.noDescontados || []).filter(nd => nd && nd.zona === 'barra' && !tieneSel(nd));
       const pendientes = (resumen.noDescontados || [])
-        .filter(nd => nd && (parseFloat(nd.cantidad) || 0) > 0 && nd.zona !== 'barra')
+        .filter(nd => nd && (parseFloat(nd.cantidad) || 0) > 0 && (nd.zona !== 'barra' || tieneSel(nd)))
         .map(nd => ({ ingrediente: nd.ingrediente, cantidad: parseFloat(nd.cantidad) || 0, unidad: nd.unidad }));
       if (pendientes.length) {
-        const { deducidos, restantes } = await descontarStocksDesdeAlmacenes(pendientes, fecha, savedBy, req.body.almacenes_seleccionados);
+        const { deducidos, restantes } = await descontarStocksDesdeAlmacenes(pendientes, fecha, savedBy, ingAlmacenesSel);
         if (deducidos.length) resumen.deducidosDeAlmacenes = deducidos;
         resumen.noDescontados = barraND.concat(restantes || []);
       }
