@@ -6654,9 +6654,21 @@ function abrirConteoBarra() {
       if (ult && Array.isArray(ult.items)) {
         ult.items.forEach(it => {
           const item = _conteoBarraItems.find(x => Number(x.id) === Number(it.id));
-          if (item) { item.conteo = it.fisico; item.peso_anterior = it.peso; }
+          if (item) item.conteo = it.fisico;
         });
       }
+      // PESO ANTERIOR: último peso NO nulo por item. Puede estar en un conteo anterior
+      // (ej. el "AJUSTAR" no guarda pesos), así que se recorre del más antiguo al más reciente.
+      const pesoPorItem = {};
+      for (let i = arr.length - 1; i >= 0; i--) {
+        (arr[i].items || []).forEach(it => {
+          if (it.peso !== null && it.peso !== undefined && it.peso !== '') pesoPorItem[Number(it.id)] = it.peso;
+        });
+      }
+      _conteoBarraItems.forEach(item => {
+        const p = pesoPorItem[Number(item.id)];
+        if (p !== undefined) item.peso_anterior = p;
+      });
       renderConteoBarra();
     });
   }).catch(e => alert('Error cargando stock: ' + (e && e.message ? e.message : e)));
@@ -6997,8 +7009,8 @@ function ajustarDesdeInforme(fecha) {
   api('GET', '/api/barra/conteo?fecha=' + encodeURIComponent(fecha)).then(list => {
     const c = (list || [])[0];
     const items = (c && Array.isArray(c.items) && c.items.length)
-      ? c.items.map(it => ({ id: Number(it.id), conteo: it.fisico }))
-      : ((window._conteoInformeData && window._conteoInformeData.difs || []).map(d => ({ id: Number(d.id), conteo: d.fisico })));
+      ? c.items.map(it => ({ id: Number(it.id), conteo: it.fisico, peso: it.peso }))
+      : ((window._conteoInformeData && window._conteoInformeData.difs || []).map(d => ({ id: Number(d.id), conteo: d.fisico, peso: d.peso })));
     if (!items.length) { alert('No hay items para ajustar'); return; }
     api('POST', '/api/barra/conteo', { fecha, items, accion: 'ajustar' }).then(r => {
       mostrarResultadoConteo(r, fecha, true, false);
