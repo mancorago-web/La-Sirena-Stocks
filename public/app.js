@@ -7098,7 +7098,7 @@ function cargarInformeConteo() {
       mostrarSinInformeConteo(fecha);
       return;
     }
-    const diferencias = (c.items || []).map(it => ({ ...it, estado: it.diff < 0 ? 'FALTANTE' : 'SOBRANTE' }));
+    const diferencias = (c.items || []).map(it => ({ ...it, estado: it.estado || (it.diff < 0 ? 'FALTANTE' : 'SOBRANTE') }));
     mostrarResultadoConteo({
       diferencias,
       ajustes: [],
@@ -7114,7 +7114,7 @@ function verInformeConteo() {
   api('GET', '/api/barra/conteo?fecha=' + encodeURIComponent(fecha)).then(list => {
     const c = (list || [])[0];
     if (c && Array.isArray(c.items) && c.items.length) {
-      const diferencias = (c.items || []).map(it => ({ ...it, estado: it.diff < 0 ? 'FALTANTE' : 'SOBRANTE' }));
+      const diferencias = (c.items || []).map(it => ({ ...it, estado: it.estado || (it.diff < 0 ? 'FALTANTE' : 'SOBRANTE') }));
       mostrarResultadoConteo({
         diferencias,
         ajustes: [],
