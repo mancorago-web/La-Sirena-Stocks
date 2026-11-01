@@ -6674,6 +6674,21 @@ function abrirConteoBarra() {
   }).catch(e => alert('Error cargando stock: ' + (e && e.message ? e.message : e)));
 }
 
+// Items que NO se muestran en el CONTEO SEMANAL ni en el INFORME (no interesan sus diferencias)
+const ITEMS_OCULTOS_CONTEO = [
+  'MIEL DE ABEJA X LT',
+  'PURE DE TOMATE MUTTI (BARRA) X 700 GR',
+  'BELLS JUGO CRANBERRY 1L',
+  'AGUA CON GAS SAN LUIS PLASTICO X 625 ML',
+  'AGUA BIDON X 20 LT',
+  'LÍQUIDO MARRASQUINO X 283 GR',
+  'GINGER ALE EVERVESS 1.5L'
+];
+function esItemOcultoConteo(nombre) {
+  const k = String(nombre || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  return ITEMS_OCULTOS_CONTEO.some(x => x === k);
+}
+
 function renderConteoBarra() {
   const modal = document.getElementById('modal');
   const body = document.getElementById('modal-body');
@@ -6681,6 +6696,7 @@ function renderConteoBarra() {
   _conteoBarraItems.forEach(s => {
     const g = (s.grupo || 'SIN CLASIFICAR').toUpperCase();
     if (g === 'COMPRAS DIARIAS') return; // el admin solo quiere ver las botellas/muebles
+    if (esItemOcultoConteo(s.ingrediente)) return; // items que ya no interesan
     if (!groups[g]) groups[g] = [];
     groups[g].push(s);
   });
@@ -6825,7 +6841,7 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
   const body = document.getElementById('modal-body');
   // Muestra solo 2 decimales (evita 1.3599999999999999 por punto flotante)
   const fmt2 = (n) => { const v = parseFloat(n); return isNaN(v) ? n : (Math.round(v * 100) / 100); };
-  const difs = (r.diferencias || []).filter(d => (Math.abs(d.diff) > 0.0001 || (d.peso !== null && d.peso !== undefined)) && String(d.grupo || '').toUpperCase() !== 'COMPRAS DIARIAS');
+  const difs = (r.diferencias || []).filter(d => (Math.abs(d.diff) > 0.0001 || (d.peso !== null && d.peso !== undefined)) && String(d.grupo || '').toUpperCase() !== 'COMPRAS DIARIAS' && !esItemOcultoConteo(d.ingrediente));
   const faltantes = difs.filter(d => d.diff < -0.0001); // físico < sistema
   const sobrantes = difs.filter(d => d.diff > 0.0001);  // físico > sistema
   // Agrupar por MUEBLE en cajas (estilo COMPRAS) y dentro de cada caja: FALTANTES luego SOBRANTES
