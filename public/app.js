@@ -6855,7 +6855,8 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
   const filaInforme = (d) => {
     const tieneDiff = Math.abs(d.diff) > 0.0001;
     const esFaltante = d.diff < -0.0001;
-    const etiquetaManual = String(d.estado || '').trim();
+    const estRaw = String(d.estado || '').trim();
+    const etiquetaManual = (estRaw && estRaw.toUpperCase() !== 'FALTANTE' && estRaw.toUpperCase() !== 'SOBRANTE') ? estRaw : '';
     let estBg, estColor, estTexto;
     if (etiquetaManual.toUpperCase() === 'BAJA') { estBg = '#ffebee'; estColor = '#c62828'; estTexto = etiquetaManual; }
     else if (etiquetaManual) { estBg = '#fff3e0'; estColor = '#e65100'; estTexto = etiquetaManual; }
