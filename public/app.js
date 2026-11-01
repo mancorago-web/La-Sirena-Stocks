@@ -6856,11 +6856,12 @@ function mostrarResultadoConteo(r, fecha, ajustado, volver) {
     const tieneDiff = Math.abs(d.diff) > 0.0001;
     const esFaltante = d.diff < -0.0001;
     const etiquetaManual = String(d.estado || '').trim();
-    const estado = etiquetaManual
-      ? `<span style="display:inline-block;white-space:nowrap;background:#fff3e0;color:#e65100;font-weight:700;padding:0.15rem 0.6rem;border-radius:10px;font-size:0.78rem;">${esc(etiquetaManual)}</span>`
-      : (tieneDiff
-        ? `<span style="display:inline-block;white-space:nowrap;background:${esFaltante ? '#ffebee' : '#e8f5e9'};color:${esFaltante ? '#c62828' : '#2e7d32'};font-weight:700;padding:0.15rem 0.6rem;border-radius:10px;font-size:0.78rem;">${esFaltante ? 'FALTANTE' : 'SOBRANTE'}</span>`
-        : '<span style="display:inline-block;white-space:nowrap;background:#e8eaf6;color:#283593;font-weight:700;padding:0.15rem 0.6rem;border-radius:10px;font-size:0.78rem;">PESADO</span>');
+    let estBg, estColor, estTexto;
+    if (etiquetaManual.toUpperCase() === 'BAJA') { estBg = '#ffebee'; estColor = '#c62828'; estTexto = etiquetaManual; }
+    else if (etiquetaManual) { estBg = '#fff3e0'; estColor = '#e65100'; estTexto = etiquetaManual; }
+    else if (tieneDiff) { estBg = esFaltante ? '#fff3e0' : '#e8f5e9'; estColor = esFaltante ? '#e65100' : '#2e7d32'; estTexto = esFaltante ? 'FALTANTE' : 'SOBRANTE'; }
+    else { estBg = '#e8eaf6'; estColor = '#283593'; estTexto = 'PESADO'; }
+    const estado = `<span style="display:inline-block;white-space:nowrap;background:${estBg};color:${estColor};font-weight:700;padding:0.15rem 0.6rem;border-radius:10px;font-size:0.78rem;">${esc(estTexto)}</span>`;
     const sem = `ventas: <b>${d.ventas}</b> | ingresos: <b>${d.ingresos}</b>`;
     const diffOz = calcularOnzas({ cantidad: d.diff, unidad: d.unidad || 'unidad', ingrediente: d.ingrediente });
     const ozCel = (diffOz === null || diffOz === undefined || isNaN(diffOz))
