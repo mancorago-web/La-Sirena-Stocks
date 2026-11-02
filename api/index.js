@@ -4640,6 +4640,20 @@ app.delete('/api/cocina/porcionamientos/:id', async (req, res) => {
         }
       });
       if (ajustes.length) await ajustarCocinaStock(ajustes);
+      // Revertir también el DIARIO de cocina (la vista COCINA/STOCK usa el diario, no solo el stock maestro):
+      // se deshace la salida del peso bruto y los ingresos de las porciones.
+      try {
+        const csSnap = await col('cocina_stock').get();
+        if (pb > 0 && p.nombre) {
+          const orig = csSnap.docs.find(d => String(d.data().ingrediente || '').trim().toUpperCase() === String(p.nombre).trim().toUpperCase());
+          if (orig) await ajustarDiarioCocina(p.fecha, Number(orig.id), { salida_almacen: -pb });
+        }
+        for (const s of salidas) {
+          if (!s || !s.item || !((parseFloat(s.peso) || 0) > 0)) continue;
+          const sItem = csSnap.docs.find(d => String(d.data().ingrediente || '').trim().toUpperCase() === String(s.item).trim().toUpperCase());
+          if (sItem) await ajustarDiarioCocina(p.fecha, Number(sItem.id), { stock_ingreso: -(parseFloat(s.peso) || 0) });
+        }
+      } catch (e) { console.error('revertir diario porcionamiento:', e.message); }
       await col('porcionamientos').doc(req.params.id).delete();
     } else {
       await col('porcionamientos').doc(req.params.id).delete();
