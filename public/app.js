@@ -6265,7 +6265,7 @@ function cargarStockBarra() {
       const bloqueado = _barraBloqueo.bloqueado && GRUPOS_BARRA.includes((s.grupo || '').toUpperCase());
       const btnPrecio = `<button class="btn-precio-barra" onclick="editarPrecioBarra(${s.id})" title="Poner/editar el precio unitario" style="padding:0.3rem 0.6rem;background:#e65100;color:#fff;border:none;border-radius:4px;cursor:pointer;">💰 PRECIO</button>`;
       if (bloqueado) {
-        return `<tr data-stock-id="${s.id}" data-bloqueado="1">
+        return `<tr data-stock-id="${s.id}" data-bloqueado="1" data-orig-peso-vacia="${s.peso_vacia || ''}" data-orig-peso-llena="${s.peso_llena || ''}">
           <td class="stock-nombre">${nombreConNota}</td>
           ${tdPrecioU}
           ${tdPrecioT}
@@ -6611,18 +6611,22 @@ function guardarStockBarra() {
   const rows = document.querySelectorAll('#barra-stock-container tr[data-stock-id]');
   const updates = [];
   rows.forEach(tr => {
-    if (tr.getAttribute('data-bloqueado') === '1') return;
+    const bloqueado = tr.getAttribute('data-bloqueado') === '1';
     const id = Number(tr.getAttribute('data-stock-id'));
-    const cantN = parseFloat(tr.querySelector('.input-stock-cant').value) || 0;
-    const uni = tr.querySelector('.select-stock-uni').value;
-    const grp = tr.querySelector('.select-stock-grupo').value;
-    const oCant = parseFloat(tr.getAttribute('data-orig-cantidad')) || 0;
-    const oUni = tr.getAttribute('data-orig-unidad');
-    const oGrp = tr.getAttribute('data-orig-grupo');
     const body = {};
-    if (cantN !== oCant) body.cantidad = cantN;
-    if (uni !== oUni) body.unidad = uni;
-    if (grp !== oGrp) body.grupo = grp;
+    // La CANTIDAD/UNIDAD/MUEBLE no se tocan si la fila está bloqueada (conteo semanal pendiente),
+    // pero los PESOS de botella SÍ se pueden guardar siempre.
+    if (!bloqueado) {
+      const cantN = parseFloat(tr.querySelector('.input-stock-cant').value) || 0;
+      const uni = tr.querySelector('.select-stock-uni').value;
+      const grp = tr.querySelector('.select-stock-grupo').value;
+      const oCant = parseFloat(tr.getAttribute('data-orig-cantidad')) || 0;
+      const oUni = tr.getAttribute('data-orig-unidad');
+      const oGrp = tr.getAttribute('data-orig-grupo');
+      if (cantN !== oCant) body.cantidad = cantN;
+      if (uni !== oUni) body.unidad = uni;
+      if (grp !== oGrp) body.grupo = grp;
+    }
     const pvEl = tr.querySelector('.input-peso-vacia');
     const plEl = tr.querySelector('.input-peso-llena');
     if (pvEl) { const pv = parseFloat(pvEl.value) || 0; const oPv = parseFloat(tr.getAttribute('data-orig-peso-vacia')) || 0; if (pv !== oPv) body.peso_vacia = pv; }
