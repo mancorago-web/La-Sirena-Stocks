@@ -5396,8 +5396,26 @@ function buscarSmart(term, containerId, selector) {
   });
 }
 
+// Detecta qué atributo usan las filas del contenedor. COCINA/STOCK usa tr[data-cocina-id],
+// COCINA/EVENTOS/LIMPIEZA (ingresos y salidas) usan tr[data-ing] y los stocks extra tr[data-stock-id].
+// Antes buscarEnTabla asumía siempre tr[data-item-id] y por eso el buscador ocultaba todo.
+function detectarSelectorFilas(containerId) {
+  const c = document.getElementById(containerId);
+  if (!c) return 'tr[data-item-id]';
+  const candidatos = [
+    'tr[data-item-id]', 'tr[data-cocina-id]', 'tr[data-ing]', 'tr[data-stock-id]',
+    'tr[data-receta]', 'tr[data-pv-id]', 'tr[data-precio-id]', 'tr[data-baja-id]'
+  ];
+  for (const sel of candidatos) {
+    if (c.querySelector(sel)) return sel;
+  }
+  // Último recurso: cualquier fila de cuerpo con datos (omite filas de "Vacío.")
+  const filas = Array.from(c.querySelectorAll('tbody tr')).filter(tr => tr.children.length > 1);
+  return filas.length ? 'tbody tr' : 'tr';
+}
+
 function buscarEnTabla(term, containerId) {
-  buscarSmart(term, containerId, 'tr[data-item-id]');
+  buscarSmart(term, containerId, detectarSelectorFilas(containerId));
 }
 
 function buscarTablaBarra(term, containerId, selector) {
