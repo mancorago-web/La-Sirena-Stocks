@@ -6259,14 +6259,13 @@ function cargarStockBarra() {
       const tdPrecioT = `<td class="col-precio">${esHoy
         ? `<input type="number" class="input-num input-precio-total-barra" value="${pt}" step="0.01" readonly title="Precio total = Precio U x Cantidad" style="background:#fff9c4;color:#555;cursor:not-allowed;font-weight:700;width:82px;">`
         : pt.toFixed(2)}</td>`;
-      // PESO BOTELLA (solo licores/botellas con tamaño ml en el nombre)
+      // PESO VACÍA de la botella (tara) — solo licores/botellas con tamaño en el nombre
       const esBot = esBotellaPeso(s.ingrediente);
-      const tdPesos = (editable) => esBot
+      const tdPesoVacia = (editable) => esBot
         ? (editable
-          ? `<td><input type="number" class="input-num input-peso-vacia" value="${s.peso_vacia || ''}" step="1" min="0" placeholder="—" title="Peso de la botella VACÍA (tara) en gramos" style="width:58px;padding:0.2rem;border:1px solid #ccc;border-radius:3px;" oninput="marcarStockDirty()"></td>
-             <td><input type="number" class="input-num input-peso-llena" value="${s.peso_llena || ''}" step="1" min="0" placeholder="—" title="Peso de la botella LLENA en gramos" style="width:58px;padding:0.2rem;border:1px solid #ccc;border-radius:3px;" oninput="marcarStockDirty()"></td>`
-          : `<td style="text-align:center;">${s.peso_vacia || '—'}</td><td style="text-align:center;">${s.peso_llena || '—'}</td>`)
-        : '<td></td><td></td>';
+          ? `<td><input type="number" class="input-num input-peso-vacia" value="${s.peso_vacia || ''}" step="1" min="0" placeholder="—" title="Peso de la botella VACÍA (tara) en gramos" style="width:58px;padding:0.2rem;border:1px solid #ccc;border-radius:3px;" oninput="marcarStockDirty()"></td>`
+          : `<td style="text-align:center;">${s.peso_vacia || '—'}</td>`)
+        : '<td></td>';
       // ÚLTIMO PESO: el último peso medido en el CONTEO SEMANAL (solo lectura).
       const up = parseFloat(s.ultimo_peso) || 0;
       const tdUltimoPeso = esBot
@@ -6281,7 +6280,7 @@ function cargarStockBarra() {
           <td>${s.unidad}</td>
           ${tdOnzas}
           <td>${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
-          ${tdPesos(false)}
+          ${tdPesoVacia(false)}
           ${tdUltimoPeso}
           <td></td>
         </tr>`;
@@ -6289,7 +6288,7 @@ function cargarStockBarra() {
       const bloqueado = _barraBloqueo.bloqueado && GRUPOS_BARRA.includes((s.grupo || '').toUpperCase());
       const btnPrecio = `<button class="btn-precio-barra" onclick="editarPrecioBarra(${s.id})" title="Poner/editar el precio unitario" style="padding:0.3rem 0.6rem;background:#e65100;color:#fff;border:none;border-radius:4px;cursor:pointer;">💰 PRECIO</button>`;
       if (bloqueado) {
-        return `<tr data-stock-id="${s.id}" data-bloqueado="1" data-orig-peso-vacia="${s.peso_vacia || ''}" data-orig-peso-llena="${s.peso_llena || ''}">
+        return `<tr data-stock-id="${s.id}" data-bloqueado="1" data-orig-peso-vacia="${s.peso_vacia || ''}">
           <td class="stock-nombre">${nombreConNota}</td>
           ${tdPrecioU}
           ${tdPrecioT}
@@ -6297,7 +6296,7 @@ function cargarStockBarra() {
           <td>${s.unidad}</td>
           ${tdOnzas}
           <td>${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
-          ${tdPesos(true)}
+          ${tdPesoVacia(true)}
           ${tdUltimoPeso}
           <td>${btnPrecio}</td>
         </tr>`;
@@ -6305,7 +6304,7 @@ function cargarStockBarra() {
       const opts = GRUPOS_BARRA_CON_COMPRAS.map(g => `<option value="${g}" ${((s.grupo || '').toUpperCase() === g) ? 'selected' : ''}>${g}</option>`).join('');
       const uniList = UNIDADES_STOCK.includes(s.unidad) ? UNIDADES_STOCK : [...UNIDADES_STOCK, s.unidad];
       const uniOpts = uniList.map(u => `<option value="${u}" ${s.unidad === u ? 'selected' : ''}>${u}</option>`).join('');
-      return `<tr data-stock-id="${s.id}" data-orig-cantidad="${s.cantidad}" data-orig-unidad="${s.unidad}" data-orig-grupo="${(s.grupo || '').toUpperCase()}" data-orig-peso-vacia="${s.peso_vacia || ''}" data-orig-peso-llena="${s.peso_llena || ''}">
+      return `<tr data-stock-id="${s.id}" data-orig-cantidad="${s.cantidad}" data-orig-unidad="${s.unidad}" data-orig-grupo="${(s.grupo || '').toUpperCase()}" data-orig-peso-vacia="${s.peso_vacia || ''}">
         <td class="stock-nombre">${nombreConNota}</td>
         ${tdPrecioU}
         ${tdPrecioT}
@@ -6313,7 +6312,7 @@ function cargarStockBarra() {
         <td><select class="select-stock-uni" onchange="onUnidadStockChange(this)" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${uniOpts}</select></td>
         ${tdOnzas}
         <td><select class="select-stock-grupo" onchange="marcarStockDirty()" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${opts}</select></td>
-        ${tdPesos(true)}
+        ${tdPesoVacia(true)}
         ${tdUltimoPeso}
         <td>
           ${btnPrecio}
@@ -6332,7 +6331,7 @@ function cargarStockBarra() {
       const key = g.replace(/\s+/g, '-');
       const colOnzas = esCompras ? '' : '<th>Onzas</th>';
       const colPrecio = '<th class="col-precio">PRECIO U</th><th class="col-precio">PRECIO T</th>';
-      const colSpan = esCompras ? 10 : 11;
+      const colSpan = esCompras ? 9 : 10;
       return `
         <div class="accordion-item" data-grupo-key="${key}">
           <div class="accordion-header" onclick="toggleAcordeon(this)">
@@ -6342,7 +6341,7 @@ function cargarStockBarra() {
           </div>
           <div class="accordion-body">
             <div class="table-wrap"><table>
-              <thead><tr><th>Ingrediente</th>${colPrecio}<th class="col-cant">Cantidad</th><th>Unidad</th>${colOnzas}<th>Mueble</th><th>PESO VACÍA (gr)</th><th>PESO LLENA (gr)</th><th>ÚLTIMO PESO (gr)</th><th></th></tr></thead>
+              <thead><tr><th>Ingrediente</th>${colPrecio}<th class="col-cant">Cantidad</th><th>Unidad</th>${colOnzas}<th>Mueble</th><th>PESO VACÍA (gr)</th><th>ÚLTIMO PESO (gr)</th><th></th></tr></thead>
               <tbody>${items.map(i => fila(i, esCompras)).join('') || '<tr><td colspan="' + colSpan + '">Vacío.</td></tr>'}</tbody>
             </table></div>
           </div>
@@ -6356,7 +6355,7 @@ function cargarStockBarra() {
           </div>
           <div class="accordion-body">
             <div class="table-wrap"><table>
-              <thead><tr><th>Ingrediente</th><th class="col-precio">PRECIO U</th><th class="col-precio">PRECIO T</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th><th>Mueble</th><th>PESO VACÍA (gr)</th><th>PESO LLENA (gr)</th><th>ÚLTIMO PESO (gr)</th><th></th></tr></thead>
+              <thead><tr><th>Ingrediente</th><th class="col-precio">PRECIO U</th><th class="col-precio">PRECIO T</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th><th>Mueble</th><th>PESO VACÍA (gr)</th><th>ÚLTIMO PESO (gr)</th><th></th></tr></thead>
               <tbody>${groups['SIN CLASIFICAR'].map(fila).join('')}</tbody>
             </table></div>
           </div>
@@ -6654,9 +6653,7 @@ function guardarStockBarra() {
       if (grp !== oGrp) body.grupo = grp;
     }
     const pvEl = tr.querySelector('.input-peso-vacia');
-    const plEl = tr.querySelector('.input-peso-llena');
     if (pvEl) { const pv = parseFloat(pvEl.value) || 0; const oPv = parseFloat(tr.getAttribute('data-orig-peso-vacia')) || 0; if (pv !== oPv) body.peso_vacia = pv; }
-    if (plEl) { const pl = parseFloat(plEl.value) || 0; const oPl = parseFloat(tr.getAttribute('data-orig-peso-llena')) || 0; if (pl !== oPl) body.peso_llena = pl; }
     if (Object.keys(body).length) updates.push(api('PUT', '/api/barra/stock/' + id, body));
   });
   if (!updates.length) { showToast('Sin cambios por guardar'); return; }

@@ -4327,7 +4327,10 @@ app.get('/api/barra/stock', async (req, res) => {
     const k = normNombre(s.ingrediente || '');
     const p = precBy[k] || {};
     const pu = parseFloat(p.ultimo_precio_compra) || parseFloat(p.precio_compra) || parseFloat(p.precio) || precioGlobal[k] || compraUlt[k] || 0;
-    const up = ultimoPesoConteo[k] || null;
+    const upPersistido = parseFloat(s.ultimo_peso) || 0;
+    const up = upPersistido > 0
+      ? { peso: upPersistido, fecha: String(s.ultimo_peso_fecha || '') }
+      : (ultimoPesoConteo[k] || null);
     return {
       id: Number(d.id), ...s,
       precio: Math.round(pu * 100) / 100,
@@ -4460,7 +4463,7 @@ app.post('/api/barra/conteo', authMiddleware, async (req, res) => {
       else if (a.tipo === 'ingresos') movPorItem[n].ingresos += cant;
     });
 
-    const batch = db.batch();
+    const updPorId = {};
     const ajustes = [];
     const diferencias = [];
 
@@ -4488,9 +4491,24 @@ app.post('/api/barra/conteo', authMiddleware, async (req, res) => {
         onzasRest = Math.round((mlRest / 30) * 100) / 100;
         pctBotella = Math.round(frac * 1000) / 10;
       }
-      // Solo ajustar si cambió (solo en accion 'ajustar')
+      // ÚLTIMO PESO: se guarda en el item (barra_stock) al GUARDAR o AJUSTAR, para que
+      // BARRA/STOCK lo muestre actualizado al instante. No se pisa con un conteo de fecha anterior.
+      if ((accionFinal === 'guardar' || accionFinal === 'ajustar') && peso !== null && peso > 0) {
+        const fechaPrev = String(s.ultimo_peso_fecha || '');
+        if (!fechaPrev || String(fecha) >= fechaPrev) {
+          updPorId[id] = Object.assign(updPorId[id] || {}, {
+            ultimo_peso: peso,
+            ultimo_peso_fecha: String(fecha),
+            updated_at: new Date().toISOString()
+          });
+        }
+      }
+      // Solo ajustar la CANTIDAD si cambió (solo en accion 'ajustar')
       if (accionFinal === 'ajustar' && Math.abs(diff) > 0.0001) {
-        batch.update(col('barra_stock').doc(String(id)), { cantidad: fisico, updated_at: new Date().toISOString() });
+        updPorId[id] = Object.assign(updPorId[id] || {}, {
+          cantidad: fisico,
+          updated_at: new Date().toISOString()
+        });
         ajustes.push({ id, ingrediente: s.ingrediente, grupo: s.grupo || '', sistema, fisico, diff });
       }
       diferencias.push({
@@ -4503,7 +4521,11 @@ app.post('/api/barra/conteo', authMiddleware, async (req, res) => {
       });
     });
 
-    if (ajustes.length) await batch.commit();
+    if (Object.keys(updPorId).length) {
+      const batch = db.batch();
+      Object.keys(updPorId).forEach(k => batch.update(col('barra_stock').doc(String(k)), updPorId[k]));
+      await batch.commit();
+    }
 
     // Guardar el conteo (histórico) - solo en 'guardar' o 'ajustar'
     if (accionFinal === 'guardar' || accionFinal === 'ajustar') {
