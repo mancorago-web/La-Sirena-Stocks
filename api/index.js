@@ -301,7 +301,7 @@ function invalidarCache(...claves) {
 // Limpia las cachés de LECTURA pesadas (precios + datos derivados) tras una escritura.
 function invalidarCachesLectura() {
   invalidarCache('precios_barra', 'precios_cocina', 'precios_stock', 'basedatos_unificada',
-    'ventas_detalle_*', 'cocina_inv_*', 'compras_detalle_*', 'porcionamientos_*');
+    'ventas_detalle_*', 'cocina_inv_*', 'compras_detalle_*', 'porcionamientos_*', 'barra_ultimo_peso');
 }
 
 // --- ALMACENES ---
@@ -4305,12 +4305,35 @@ app.get('/api/barra/stock', async (req, res) => {
   spSnap.docs.forEach(d => { const p = d.data(); const k = normNombre(p.nombre || ''); if (k && parseFloat(p.ultimo_precio_compra || p.precio || 0) > 0 && !precioGlobal[k]) precioGlobal[k] = parseFloat(p.ultimo_precio_compra || p.precio); });
   const compraUlt = {};
   comprasSnap.docs.forEach(d => { const a = d.data(); const k = normNombre(a.nombre || ''); const cant = parseFloat(a.cantidad) || 0; const pu = cant > 0 && parseFloat(a.precio_total) > 0 ? (parseFloat(a.precio_total) / cant) : (parseFloat(a.precio) || 0); if (pu > 0 && (!compraUlt[k] || (a.fecha || '') > compraUlt[k].fecha)) compraUlt[k] = pu; });
+  // ÚLTIMO PESO registrado en el CONTEO SEMANAL (se muestra en BARRA/STOCK como referencia).
+  const ultimoPesoConteo = await cached('barra_ultimo_peso', 5000, async () => {
+    const conteosSnap = await col('barra_conteos').get();
+    const docs = conteosSnap.docs.map(d => d.data())
+      .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+    const map = {};
+    docs.forEach(c => {
+      (Array.isArray(c.items) ? c.items : []).forEach(i => {
+        const p = i ? i.peso : null;
+        if (p === null || p === undefined || String(p).trim() === '') return;
+        const n = parseFloat(p);
+        if (!(n > 0)) return;
+        map[normNombre(i.ingrediente)] = { peso: n, fecha: String(c.fecha || ''), created_at: String(c.created_at || '') };
+      });
+    });
+    return map;
+  });
   res.json(snap.docs.map(d => {
     const s = d.data();
     const k = normNombre(s.ingrediente || '');
     const p = precBy[k] || {};
     const pu = parseFloat(p.ultimo_precio_compra) || parseFloat(p.precio_compra) || parseFloat(p.precio) || precioGlobal[k] || compraUlt[k] || 0;
-    return { id: Number(d.id), ...s, precio: Math.round(pu * 100) / 100 };
+    const up = ultimoPesoConteo[k] || null;
+    return {
+      id: Number(d.id), ...s,
+      precio: Math.round(pu * 100) / 100,
+      ultimo_peso: up ? up.peso : null,
+      ultimo_peso_fecha: up ? up.fecha : null
+    };
   }));
 });
 

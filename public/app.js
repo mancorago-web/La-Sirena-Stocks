@@ -6267,6 +6267,11 @@ function cargarStockBarra() {
              <td><input type="number" class="input-num input-peso-llena" value="${s.peso_llena || ''}" step="1" min="0" placeholder="—" title="Peso de la botella LLENA en gramos" style="width:58px;padding:0.2rem;border:1px solid #ccc;border-radius:3px;" oninput="marcarStockDirty()"></td>`
           : `<td style="text-align:center;">${s.peso_vacia || '—'}</td><td style="text-align:center;">${s.peso_llena || '—'}</td>`)
         : '<td></td><td></td>';
+      // ÚLTIMO PESO: el último peso medido en el CONTEO SEMANAL (solo lectura).
+      const up = parseFloat(s.ultimo_peso) || 0;
+      const tdUltimoPeso = esBot
+        ? `<td style="text-align:center;font-weight:700;color:${up ? '#0d47a1' : '#aaa'};" title="${up ? 'Último peso registrado en el CONTEO SEMANAL' + (s.ultimo_peso_fecha ? ' del ' + s.ultimo_peso_fecha : '') : 'Sin peso registrado en el conteo semanal'}">${up ? up.toFixed(1) : '—'}</td>`
+        : '<td></td>';
       if (!esHoy) {
         return `<tr data-stock-id="${s.id}">
           <td class="stock-nombre">${nombreConNota}</td>
@@ -6277,6 +6282,7 @@ function cargarStockBarra() {
           ${tdOnzas}
           <td>${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
           ${tdPesos(false)}
+          ${tdUltimoPeso}
           <td></td>
         </tr>`;
       }
@@ -6292,6 +6298,7 @@ function cargarStockBarra() {
           ${tdOnzas}
           <td>${(s.grupo || 'SIN CLASIFICAR').toUpperCase()}</td>
           ${tdPesos(true)}
+          ${tdUltimoPeso}
           <td>${btnPrecio}</td>
         </tr>`;
       }
@@ -6307,6 +6314,7 @@ function cargarStockBarra() {
         ${tdOnzas}
         <td><select class="select-stock-grupo" onchange="marcarStockDirty()" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">${opts}</select></td>
         ${tdPesos(true)}
+        ${tdUltimoPeso}
         <td>
           ${btnPrecio}
           <button class="danger" onclick="eliminarStockBarra(${s.id})">✕</button>
@@ -6324,7 +6332,7 @@ function cargarStockBarra() {
       const key = g.replace(/\s+/g, '-');
       const colOnzas = esCompras ? '' : '<th>Onzas</th>';
       const colPrecio = '<th class="col-precio">PRECIO U</th><th class="col-precio">PRECIO T</th>';
-      const colSpan = esCompras ? 9 : 10;
+      const colSpan = esCompras ? 10 : 11;
       return `
         <div class="accordion-item" data-grupo-key="${key}">
           <div class="accordion-header" onclick="toggleAcordeon(this)">
@@ -6334,7 +6342,7 @@ function cargarStockBarra() {
           </div>
           <div class="accordion-body">
             <div class="table-wrap"><table>
-              <thead><tr><th>Ingrediente</th>${colPrecio}<th class="col-cant">Cantidad</th><th>Unidad</th>${colOnzas}<th>Mueble</th><th>PESO VACÍA (gr)</th><th>PESO LLENA (gr)</th><th></th></tr></thead>
+              <thead><tr><th>Ingrediente</th>${colPrecio}<th class="col-cant">Cantidad</th><th>Unidad</th>${colOnzas}<th>Mueble</th><th>PESO VACÍA (gr)</th><th>PESO LLENA (gr)</th><th>ÚLTIMO PESO (gr)</th><th></th></tr></thead>
               <tbody>${items.map(i => fila(i, esCompras)).join('') || '<tr><td colspan="' + colSpan + '">Vacío.</td></tr>'}</tbody>
             </table></div>
           </div>
@@ -6348,7 +6356,7 @@ function cargarStockBarra() {
           </div>
           <div class="accordion-body">
             <div class="table-wrap"><table>
-              <thead><tr><th>Ingrediente</th><th class="col-precio">PRECIO U</th><th class="col-precio">PRECIO T</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th><th>Mueble</th><th>PESO VACÍA (gr)</th><th>PESO LLENA (gr)</th><th></th></tr></thead>
+              <thead><tr><th>Ingrediente</th><th class="col-precio">PRECIO U</th><th class="col-precio">PRECIO T</th><th>Cantidad</th><th>Unidad</th><th>Onzas</th><th>Mueble</th><th>PESO VACÍA (gr)</th><th>PESO LLENA (gr)</th><th>ÚLTIMO PESO (gr)</th><th></th></tr></thead>
               <tbody>${groups['SIN CLASIFICAR'].map(fila).join('')}</tbody>
             </table></div>
           </div>
