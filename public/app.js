@@ -64,23 +64,25 @@ firebase.auth().onAuthStateChanged(user => {
       }).catch(() => {});
     });
   }
-  // Auto-repair propagation for today
-  user.getIdToken().then(token => {
-    fetch('/api/repair/propagar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ fecha: todayStr() })
-    }).catch(() => {});
-  });
-  // Auto-migrate (one-time setup, no re-sync on every load)
-  user.getIdToken().then(async token => {
-    const opts = { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token } };
-    await fetch('/api/migrate/normalize-units', opts).catch(() => {});
-    await fetch('/api/migrate/import-recetas-base', opts).catch(() => {});
-    await fetch('/api/migrate/fix-receta-ingredientes', opts).catch(e => console.error('fix-receta-ingredientes error:', e));
-    await fetch('/api/migrate/rename-mantgras', opts).catch(e => console.error('rename-mantgras error:', e));
-    await fetch('/api/migrate/fix-montgrass-name', opts).catch(e => console.error('fix-montgrass-name error:', e));
-  });
+  // REPARACIÓN DIARIA (máximo 1 vez al día por equipo): propaga la cadena si el día está vacío.
+  // Antes se ejecutaba en CADA carga de página y leía todo `inventario_diario`.
+  try {
+    const hoy = todayStr();
+    if (localStorage.getItem('sirena_propagar_' + hoy) !== '1') {
+      user.getIdToken().then(token => {
+        fetch('/api/repair/propagar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({ fecha: hoy })
+        }).then(() => localStorage.setItem('sirena_propagar_' + hoy, '1')).catch(() => {});
+      });
+    }
+  } catch (e) { /* localStorage no disponible */ }
+  // IMPORTANTE: las MIGRACIONES automáticas se quitaron de la carga de página.
+  // Antes se ejecutaban en cada inicio (normalize-units, import-recetas-base, fix-receta-ingredientes,
+  // rename-mantgras, fix-montgrass-name). `rename-mantgras` y `fix-montgrass-name` leían los
+  // 48,008 documentos de `inventario_diario` CADA VEZ (≈98,000 lecturas por carga de página).
+  // Ya estaban aplicadas desde hace meses. Los endpoints siguen existiendo para uso manual.
   // Register service worker for PWA (sin recargar la página al actualizar para no molestar al usuario)
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').then(reg => {
@@ -240,9 +242,10 @@ function actualizarContadoresMenu() {
     requestAnimationFrame(dibujarFlujoMenu);
   }).catch(() => { window._actualizandoContadores = false; });
 }
-// Actualización automática del menú (cada 60s, solo con pestaña visible) para que los montos estén
-// al día sin gastar CPU. Al volver a la pestaña se refresca de inmediato.
-setInterval(actualizarContadoresMenu, 60000);
+// Actualización automática del menú (cada 5 min, solo con pestaña visible). Antes era cada 60 s y
+// generaba ~1.9 millones de lecturas/día por pestaña en Firestore (el mayor costo de Google Cloud).
+// Al volver a la pestaña se refresca de inmediato.
+setInterval(actualizarContadoresMenu, 300000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') actualizarContadoresMenu(); });
 window.addEventListener('resize', dibujarFlujoMenu);
 setTimeout(dibujarFlujoMenu, 300);

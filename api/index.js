@@ -301,7 +301,9 @@ function invalidarCache(...claves) {
 // Limpia las cachés de LECTURA pesadas (precios + datos derivados) tras una escritura.
 function invalidarCachesLectura() {
   invalidarCache('precios_barra', 'precios_cocina', 'precios_stock', 'basedatos_unificada',
-    'ventas_detalle_*', 'cocina_inv_*', 'compras_detalle_*', 'porcionamientos_*', 'barra_ultimo_peso');
+    'ventas_detalle_*', 'cocina_inv_*', 'compras_detalle_*', 'porcionamientos_*', 'barra_ultimo_peso',
+    'resumen_items_*', 'receta_ingredientes_all', 'compras_ultimas_barra', 'compras_ultimas_precio',
+    'stock_items_nombres', 'ventas_items_vendidos', 'stock_precios_snap');
 }
 
 // --- ALMACENES ---
@@ -315,13 +317,15 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
   const fecha = req.query.fecha;
   if (!fecha) return res.json([]);
   try {
-    const result = await cached('con_inv_' + fecha, 0, async () => {
+    // Caché 30 s: al navegar entre pestañas no se re-lee todo (`con_inv_*` se invalida tras cada guardado).
+    const result = await cached('con_inv_' + fecha, 30000, async () => {
       const [almsSnap, allItemsSnap, spSnap] = await Promise.all([
         col('almacenes').orderBy('orden').get(),
         // Caché corto (2s) de la colección inventario: reduce lecturas/CPU al navegar.
         // Se invalida tras cada escritura a inventario (guardar día, compras, ventas, items, precios).
         cached('inventario_snap', 2000, () => col('inventario').get()),
-        col('stock_precios').get(),
+        // Caché 60 s del respaldo de precios de STOCKS (se invalida al cambiar precios/compras).
+        cached('stock_precios_snap', 60000, () => col('stock_precios').get()),
       ]);
       // Mapa de precios de STOCKS (Base de Datos) por nombre normalizado
       const spBy = {};
@@ -567,10 +571,10 @@ app.get('/api/almacenes/ventas-rango', async (req, res) => {
 app.get('/api/resumen/items', async (req, res) => {
   try {
     const fecha = String(req.query.fecha || '').trim();
-    // Cache corto (25s): el contador del menú se consulta cada 30s desde cada pestaña/equipo.
-    // Con caché, todas las peticiones dentro de la ventana de tiempo usan el mismo resultado y no
-    // re-leen miles de documentos de Firestore (reduce mucho el CPU de Vercel).
-    const data = await cached('resumen_items_' + fecha, 25000, async () => {
+    // Caché de 5 min: el contador del menú ya no necesita precisión al segundo y así se evita
+    // re-leer ~1,300 documentos de Firestore cada minuto por cada pestaña abierta.
+    // Se invalida al instante tras cualquier escritura (invalidarCachesLectura → resumen_items_*).
+    const data = await cached('resumen_items_' + fecha, 300000, async () => {
       const [almSnap, allItemsSnap, diaSnap] = await Promise.all([
         col('almacenes').get(),
         col('inventario').get(),
@@ -952,7 +956,7 @@ async function guardarDiaInterno(fecha, registros, savedBy, opts = {}) {
   }
 
   await batch.commit();
-  invalidarCache('inv_diario_' + fecha, 'con_inv_' + fecha, 'inventario_snap'); // el guardado pudo crear items o cambiar stock_apertura
+  invalidarCache('inv_diario_' + fecha, 'con_inv_' + fecha, 'inventario_snap', 'resumen_items_*'); // el guardado pudo crear items o cambiar stock_apertura
 
   // Propagation: cadena hacia adelante de los items que realmente cambiaron
   const propErrors = [];
@@ -1229,6 +1233,32 @@ async function consolidarDuplicadosStock() {
   return fusionados;
 }
 
+// Variante con GUARDIA DIARIA: la consolidación completa lee TODA la colección `inventario`
+// (~398 docs) y se ejecutaba en CADA compra/venta. Ahora corre como máximo 1 vez por día
+// (control en config/mantenimiento_consolidacion), ahorrando cientos de lecturas por guardado.
+// No se pierde protección: las altas de items validan nombre y los ajustes de BARRA/COCINA
+// reutilizan el item existente en cualquier mueble antes de crear uno nuevo.
+async function consolidarDuplicadosStockSiNecesario() {
+  const hoy = new Date().toISOString().slice(0, 10);
+  try {
+    const snap = await col('config').doc('mantenimiento_consolidacion').get();
+    if (snap.exists && String(snap.data().fecha || '') === hoy) return 0;
+  } catch (e) {
+    // Si no se puede leer el control, se consolida igual (no romper el guardado).
+    try { return await consolidarDuplicadosStock(); } catch (e2) { console.error('consolidar duplicados:', e2.message); return 0; }
+  }
+  try {
+    const fusionados = await consolidarDuplicadosStock();
+    try {
+      await col('config').doc('mantenimiento_consolidacion').set({ fecha: hoy, updated_at: new Date().toISOString() }, { merge: true });
+    } catch (e) { /* el control es opcional */ }
+    return fusionados;
+  } catch (e) {
+    console.error('consolidar duplicados:', e.message);
+    return 0;
+  }
+}
+
 // --- BARRA: CAMBIO DE PRESENTACIÓN / TAMAÑO DE BOTELLA ---
 // Reconoce que dos nombres son el MISMO licor aunque cambie el tamaño (750 ML, 1000 ML, 1 LT...).
 // Se quita el tamaño del nombre y se compara el resto (marca + tipo).
@@ -1256,7 +1286,12 @@ function esRecetaBaseNombre(nombre) {
 // unidad de la fórmula se mantienen intactas). Así el descuento de stock y el costo usan la
 // botella que realmente se está usando. No toca recetas base (R.B) ni items sin tamaño.
 async function sincronizarRecetasPorTamanoBotella() {
-  const [cSnap, iSnap] = await Promise.all([col('compras').get(), col('receta_ingredientes').get()]);
+  // Solo las compras MÁS RECIENTES (600): la última presentación de cada licor está ahí.
+  // Antes se leían las 2,454 compras completas en cada compra de BARRA.
+  const [cSnap, iSnap] = await Promise.all([
+    cached('compras_ultimas_barra', 60000, () => col('compras').orderBy('created_at', 'desc').limit(600).get()),
+    cached('receta_ingredientes_all', 60000, () => col('receta_ingredientes').get()),
+  ]);
   // Última compra de BARRA por licor (base sin tamaño), ordenada por fecha + created_at.
   const ultima = {};
   cSnap.docs.forEach(d => {
@@ -1297,8 +1332,9 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
     if (!fecha || !Array.isArray(items)) return res.status(400).json({ error: 'fecha e items requeridos' });
     const savedBy = req.user?.name || req.user?.email || 'unknown';
 
-    // Consolidar duplicados antes de procesar (la compra debe SUMAR al item existente, no duplicar)
-    try { await consolidarDuplicadosStock(); } catch (e) { console.error('consolidar duplicados (compras):', e.message); }
+    // Consolidar duplicados antes de procesar (la compra debe SUMAR al item existente, no duplicar).
+    // Con guardia diaria: no se re-lee toda la colección en cada compra.
+    try { await consolidarDuplicadosStockSiNecesario(); } catch (e) { console.error('consolidar duplicados (compras):', e.message); }
 
     // Índice para enrutar a STOCKS (inventario), normalizado (sin espacios, mayúsculas)
     const invSnap = await col('inventario').get();
@@ -1563,7 +1599,11 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
     resumen.cocina.forEach(r => comprasConPrecio.push({ nombre: r.nombre, precio: r.precio, destino: 'cocina' }));
     (resumen.eventos || []).forEach(r => comprasConPrecio.push({ nombre: r.nombre, precio: r.precio, destino: 'eventos' }));
     (resumen.limpieza || []).forEach(r => comprasConPrecio.push({ nombre: r.nombre, precio: r.precio, destino: 'limpieza' }));
-    await Promise.all(comprasConPrecio.map(c => registrarUltimoPrecioCompra(c.nombre, c.precio, c.destino, fecha)));
+    if (comprasConPrecio.length) {
+      // Prefetch de las 4 colecciones de precios UNA vez por compra (no una vez por item).
+      const preloadedPrecios = await cargarSnapshotsPrecios();
+      await Promise.all(comprasConPrecio.map(c => registrarUltimoPrecioCompra(c.nombre, c.precio, c.destino, fecha, preloadedPrecios)));
+    }
 
     invalidarCachesLectura();
     res.json({ ok: true, resumen });
@@ -1602,17 +1642,29 @@ function calcularPrecioVenta(nombre, ultimoPrecioCompra, unidadVenta) {
   return null;
 }
 
-async function registrarUltimoPrecioCompra(nombre, precio, destino, fechaCompra) {
+// Colecciones donde vive el último precio de compra de un item (Base de Datos Unificada).
+const PRECIOS_COLLS = { stock_precios: 'nombre', barra_precios: 'ingrediente', cocina_precios: 'ingrediente', base_unificada: 'nombre' };
+
+// Lee UNA sola vez cada colección de precios y devuelve los snapshots para reutilizarlos en
+// todos los items de una misma compra. Antes se leían las 4 colecciones POR CADA ITEM
+// (~857 lecturas por item); con esto una compra de 10 items pasa de ~8,570 a ~857 lecturas.
+async function cargarSnapshotsPrecios() {
+  const out = {};
+  await Promise.all(Object.keys(PRECIOS_COLLS).map(async c => { out[c] = await col(c).get(); }));
+  return out;
+}
+
+async function registrarUltimoPrecioCompra(nombre, precio, destino, fechaCompra, preloaded) {
   const precioVal = Math.round((parseFloat(precio) || 0) * 100) / 100;
   if (precioVal <= 0) return;
   const key = normNombre(nombre);
   if (!key) return;
   // Actualiza TODAS las colecciones donde exista el item (stock/barra/cocina/base), para que
   // la BASE DE DATOS UNIFICADA muestre el último precio de compra sin importar qué zona use.
-  const map = { stock_precios: 'nombre', barra_precios: 'ingrediente', cocina_precios: 'ingrediente', base_unificada: 'nombre' };
+  const map = PRECIOS_COLLS;
   const batch = db.batch();
   for (const [coll, campo] of Object.entries(map)) {
-    const snap = await col(coll).get();
+    const snap = (preloaded && preloaded[coll]) || await col(coll).get();
     let candidates = snap.docs.filter(d => normNombre(String(d.data()[campo] || '')) === key);
     // Fallback seguro: si no hay match exacto y hay UN SOLO candidato cuyo nombre contiene el
     // buscado (o viceversa), se usa (ej. compra "VODKA SMIRNOFF 700 ML" vs item "VODKA SMIRNOFF X 700ML").
@@ -2932,8 +2984,9 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
     if (!fecha || !Array.isArray(items)) return res.status(400).json({ error: 'fecha e items requeridos' });
     const savedBy = req.user?.name || req.user?.email || 'unknown';
 
-    // Consolidar duplicados antes de procesar (evita que un duplicado divida el stock)
-    try { await consolidarDuplicadosStock(); } catch (e) { console.error('consolidar duplicados (ventas):', e.message); }
+    // Consolidar duplicados antes de procesar (evita que un duplicado divida el stock).
+    // Con guardia diaria: no se re-lee toda la colección en cada venta.
+    try { await consolidarDuplicadosStockSiNecesario(); } catch (e) { console.error('consolidar duplicados (ventas):', e.message); }
 
     const invSnap = await col('inventario').get();
     const stocksNorm = {};
@@ -3696,15 +3749,20 @@ function claveNombre(s) {
 
 app.get('/api/ventas/items-vendidos', async (req, res) => {
   try {
-    const porClave = {};
-    const add = (n) => { const k = String(n || '').trim(); if (!k) return; const c = claveNombre(k); if (!(c in porClave)) porClave[c] = k; };
-    const log = await col('ventas').get(); log.docs.forEach(d => add(d.data().nombre));
-    const bm = await col('barra_movimientos').where('tipo', '==', 'ventas').get(); bm.docs.forEach(d => { if (d.data().es_receta !== false) add(d.data().ingrediente); });
-    const cv = await col('cocina_ventas').get(); cv.docs.forEach(d => add(d.data().nombre));
-    const inv = await col('inventario').get(); inv.docs.forEach(d => add(d.data().nombre));
-    const rec = await col('recetas').get(); rec.docs.forEach(d => add(d.data().nombre));
-    const crec = await col('cocina_recetas').get(); crec.docs.forEach(d => add(d.data().nombre));
-    res.json(Object.values(porClave).sort((a, b) => a.localeCompare(b)));
+    // Cache 5 min: se pedía al abrir VENTAS y leía `ventas` (4,029) + `barra_movimientos`,
+    // `cocina_ventas`, `inventario`, `recetas` y `cocina_recetas` completos (≈5,000 lecturas).
+    const names = await cached('ventas_items_vendidos', 300000, async () => {
+      const porClave = {};
+      const add = (n) => { const k = String(n || '').trim(); if (!k) return; const c = claveNombre(k); if (!(c in porClave)) porClave[c] = k; };
+      const log = await col('ventas').get(); log.docs.forEach(d => add(d.data().nombre));
+      const bm = await col('barra_movimientos').where('tipo', '==', 'ventas').get(); bm.docs.forEach(d => { if (d.data().es_receta !== false) add(d.data().ingrediente); });
+      const cv = await col('cocina_ventas').get(); cv.docs.forEach(d => add(d.data().nombre));
+      const inv = await col('inventario').get(); inv.docs.forEach(d => add(d.data().nombre));
+      const rec = await col('recetas').get(); rec.docs.forEach(d => add(d.data().nombre));
+      const crec = await col('cocina_recetas').get(); crec.docs.forEach(d => add(d.data().nombre));
+      return Object.values(porClave).sort((a, b) => a.localeCompare(b));
+    });
+    res.json(names);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -4120,14 +4178,15 @@ app.put('/api/precios', async (req, res) => {
 async function obtenerRecetasBarra() {
   // Cache corto (10s): el cálculo de costos es recursivo y se dispara al abrir recetas, editar,
   // importar ventas, etc. Un TTL breve evita recomputar cientos de veces sin datos obsoletos.
-  return cached('recetas', 10000, async () => {
+  return cached('recetas', 60000, async () => {
     const [recSnap, precSnap, ingSnap, spSnap, cpSnap, comprasSnap] = await Promise.all([
       col('recetas').orderBy('nombre').get(),
       col('barra_precios').orderBy('ingrediente').get(),
       col('receta_ingredientes').orderBy('id').get(),
       col('stock_precios').get(),
       col('cocina_precios').get(),
-      col('compras').get(),
+      // Solo compras recientes para el respaldo de precio (antes se leían las 2,454 completas).
+      cached('compras_ultimas_precio', 300000, () => col('compras').orderBy('created_at', 'desc').limit(800).get()),
     ]);
   const precios = precSnap.docs.map(d => d.data());
 
@@ -4432,7 +4491,8 @@ app.get('/api/barra/stock', async (req, res) => {
   const [precSnap, spSnap, comprasSnap] = await Promise.all([
     col('barra_precios').get(),
     col('stock_precios').get(),
-    col('compras').get(),
+    // Solo las compras recientes para el respaldo de precio (antes se leían las 2,454 completas).
+    cached('compras_ultimas_precio', 300000, () => col('compras').orderBy('created_at', 'desc').limit(800).get()),
   ]);
   const precBy = {};
   precSnap.docs.forEach(d => { const p = d.data(); const k = normNombre(p.ingrediente || ''); if (k && !precBy[k]) precBy[k] = p; });
@@ -4442,8 +4502,9 @@ app.get('/api/barra/stock', async (req, res) => {
   const compraUlt = {};
   comprasSnap.docs.forEach(d => { const a = d.data(); const k = normNombre(a.nombre || ''); const cant = parseFloat(a.cantidad) || 0; const pu = cant > 0 && parseFloat(a.precio_total) > 0 ? (parseFloat(a.precio_total) / cant) : (parseFloat(a.precio) || 0); if (pu > 0 && (!compraUlt[k] || (a.fecha || '') > compraUlt[k].fecha)) compraUlt[k] = pu; });
   // ÚLTIMO PESO registrado en el CONTEO SEMANAL (se muestra en BARRA/STOCK como referencia).
-  const ultimoPesoConteo = await cached('barra_ultimo_peso', 5000, async () => {
-    const conteosSnap = await col('barra_conteos').get();
+  const ultimoPesoConteo = await cached('barra_ultimo_peso', 300000, async () => {
+    // Solo los últimos 60 conteos (antes se leían todos los `barra_conteos` completos).
+    const conteosSnap = await col('barra_conteos').orderBy('created_at', 'desc').limit(60).get();
     const docs = conteosSnap.docs.map(d => d.data())
       .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
     const map = {};
@@ -4571,8 +4632,9 @@ app.post('/api/barra/conteo', authMiddleware, async (req, res) => {
     const stockById = {};
     stockSnap.docs.forEach(d => { stockById[Number(d.id)] = d; });
 
-    // Buscar la fecha del ÚLTIMO conteo guardado anterior a este (para VENTAS/INGRESOS desde ese día)
-    const conteoHist = await col('barra_conteos').get();
+    // Buscar la fecha del ÚLTIMO conteo guardado anterior a este (para VENTAS/INGRESOS desde ese día).
+    // Solo los 20 más recientes: antes se leían todos los `barra_conteos` completos.
+    const conteoHist = await col('barra_conteos').orderBy('fecha', 'desc').limit(20).get();
     let fechaDesde = '';
     conteoHist.docs.forEach(d => {
       const f = String(d.data().fecha || '');
@@ -4585,8 +4647,12 @@ app.post('/api/barra/conteo', authMiddleware, async (req, res) => {
       fechaDesde = d.toISOString().split('T')[0];
     }
 
-    // Cargar movimientos de venta/ingreso del item entre el último conteo y este conteo
-    const bmSnap = await col('barra_movimientos').get();
+    // Cargar SOLO los movimientos del rango del conteo (antes se leían los 7,368 completos
+    // y se filtraba en memoria).
+    const bmSnap = await col('barra_movimientos')
+      .where('fecha', '>=', fechaDesde)
+      .where('fecha', '<=', fecha)
+      .get();
     const movPorItem = {};
     bmSnap.docs.forEach(d => {
       const a = d.data();
@@ -4690,10 +4756,11 @@ app.get('/api/barra/conteo', async (req, res) => {
     const { fecha } = req.query;
     let snap;
     if (fecha) {
-      // Último conteo registrado para esa fecha (el más reciente en el tiempo)
-      const all = await col('barra_conteos').get();
-      const filtrados = all.docs.filter(d => String(d.data().fecha || '') === String(fecha));
-      filtrados.sort((a, b) => String(b.data().created_at || '').localeCompare(String(a.data().created_at || '')));
+      // Último conteo registrado para esa fecha. Se filtra en Firestore (antes se leían los 86+
+      // conteos completos y se filtraba en memoria).
+      const filtradosSnap = await col('barra_conteos').where('fecha', '==', String(fecha)).limit(20).get();
+      const filtrados = [...filtradosSnap.docs]
+        .sort((a, b) => String(b.data().created_at || '').localeCompare(String(a.data().created_at || '')));
       snap = { docs: filtrados.slice(0, 1) };
     } else {
       snap = await col('barra_conteos').orderBy('fecha', 'desc').limit(30).get();
@@ -5491,7 +5558,7 @@ async function ajustarCocinaStock(ajustes) {
     }
   }
   await batch.commit();
-  invalidarCache('inventario_snap'); // cambió el total de BARRA/COCINA del menú
+  invalidarCache('inventario_snap', 'resumen_items_*'); // cambió el total de BARRA/COCINA del menú
 }
 
 // Suma (o resta) cantidades al stock de BARRA; crea el item si no existe
@@ -5558,7 +5625,7 @@ async function ajustarBarraStock(ajustes) {
     }
   }
   await batch.commit();
-  invalidarCache('inventario_snap'); // cambió el total de BARRA del menú
+  invalidarCache('inventario_snap', 'resumen_items_*'); // cambió el total de BARRA del menú
 }
 
 app.post('/api/cocina/movimientos', authMiddleware, async (req, res) => {
@@ -5819,14 +5886,15 @@ function enriquecerCocinaRecetasConCostos(recetas, ingByRec, precios, precioGlob
 }
 
 async function obtenerRecetasCocina() {
-  return cached('cocina_recetas', 10000, async () => {
+  return cached('cocina_recetas', 60000, async () => {
       const [recSnap, ingSnap, precSnap, spSnap, bpSnap, comprasSnap] = await Promise.all([
         col('cocina_recetas').orderBy('nombre').get(),
         col('cocina_receta_ingredientes').orderBy('id').get(),
         col('cocina_precios').get(),
         col('stock_precios').get(),
         col('barra_precios').get(),
-        col('compras').get(),
+        // Solo compras recientes para el respaldo de precio (antes se leían las 2,454 completas).
+        cached('compras_ultimas_precio', 300000, () => col('compras').orderBy('created_at', 'desc').limit(800).get()),
       ]);
       const ingByRec = {};
       ingSnap.docs.forEach(idoc => {
@@ -6152,15 +6220,20 @@ app.get('/api/stock/precios', async (req, res) => {
 // Nombres únicos de items de STOCKS/ALMACENES (fuente para la base de datos, sin duplicados)
 app.get('/api/stock/precios/items', async (req, res) => {
   try {
-    const snap = await col('inventario').get();
-    const seen = new Set();
-    const names = [];
-    snap.docs.forEach(d => {
-      const n = String(d.data().nombre || '').trim();
-      const k = n.toUpperCase();
-      if (n && !seen.has(k)) { seen.add(k); names.push(n); }
+    // Cache 5 min: se pedía en cada carga de página para las sugerencias del buscador de ventas
+    // y leía los ~398 items de `inventario` cada vez.
+    const names = await cached('stock_items_nombres', 300000, async () => {
+      const snap = await col('inventario').get();
+      const seen = new Set();
+      const namesArr = [];
+      snap.docs.forEach(d => {
+        const n = String(d.data().nombre || '').trim();
+        const k = n.toUpperCase();
+        if (n && !seen.has(k)) { seen.add(k); namesArr.push(n); }
+      });
+      namesArr.sort((a, b) => a.localeCompare(b));
+      return namesArr;
     });
-    names.sort((a, b) => a.localeCompare(b));
     res.json(names);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -6338,7 +6411,7 @@ app.post('/api/stock/precios/upsert', async (req, res) => {
         created_at: now, updated_at: now
       });
     }
-    invalidarCache('inventario_snap');
+    invalidarCache('inventario_snap', 'resumen_items_*');
     invalidarCachesLectura();
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -6751,7 +6824,7 @@ app.post('/api/barra/precios/upsert', async (req, res) => {
         created_at: now, updated_at: now
       });
     }
-    invalidarCache('inventario_snap');
+    invalidarCache('inventario_snap', 'resumen_items_*');
     invalidarCachesLectura();
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -8653,7 +8726,9 @@ app.post('/api/migrate/parse-equiv', authMiddleware, async (req, res) => {
 // --- Rename MANTGRAS → MONTGRASS in inventario and inventario_diario ---
 app.post('/api/migrate/rename-mantgras', authMiddleware, async (req, res) => {
   try {
-    const invSnap = await col('inventario').get();
+    // Solo los docs cuyo nombre empieza con MANTGRAS (antes se leían las 48,008 filas de
+    // inventario_diario completas en cada llamada).
+    const invSnap = await col('inventario').where('nombre', '>=', 'MANTGRAS').where('nombre', '<', 'MANTGRAT').get();
     const batch = db.batch();
     let count = 0;
     invSnap.docs.forEach(d => {
@@ -8663,7 +8738,7 @@ app.post('/api/migrate/rename-mantgras', authMiddleware, async (req, res) => {
         count++;
       }
     });
-    const diaSnap = await col('inventario_diario').get();
+    const diaSnap = await col('inventario_diario').where('nombre', '>=', 'MANTGRAS').where('nombre', '<', 'MANTGRAT').get();
     const diaBatch = db.batch();
     let diaCount = 0;
     diaSnap.docs.forEach(d => {
@@ -8684,7 +8759,9 @@ app.post('/api/migrate/rename-mantgras', authMiddleware, async (req, res) => {
 // --- Fix specific item name in STOCK DECORATIVO ENTRADA ---
 app.post('/api/migrate/fix-montgrass-name', authMiddleware, async (req, res) => {
   try {
-    const invSnap = await col('inventario').get();
+    // Solo los 2 nombres exactos (antes se leían las 48,008 filas de inventario_diario completas).
+    const nombresObjetivo = ['MONTGRASS DE VINE RESERVA CABERNET', 'MANTGRAS DE VINE RESERVA CABERNET'];
+    const invSnap = await col('inventario').where('nombre', 'in', nombresObjetivo).get();
     const batch = db.batch();
     let count = 0;
     invSnap.docs.forEach(d => {
@@ -8694,7 +8771,7 @@ app.post('/api/migrate/fix-montgrass-name', authMiddleware, async (req, res) => 
         count++;
       }
     });
-    const diaSnap = await col('inventario_diario').get();
+    const diaSnap = await col('inventario_diario').where('nombre', 'in', nombresObjetivo).get();
     const diaBatch = db.batch();
     let diaCount = 0;
     diaSnap.docs.forEach(d => {
@@ -9453,7 +9530,7 @@ async function ajustarExtraStock(zona, ajustes) {
     }
   }
   await batch.commit();
-  invalidarCache('inventario_snap');
+  invalidarCache('inventario_snap', 'resumen_items_*');
 }
 
 app.get('/api/extra/:zona/stock', async (req, res) => {
@@ -9478,7 +9555,7 @@ app.post('/api/extra/:zona/stock', authMiddleware, async (req, res) => {
       unidad: normalizeUnit(unidad), grupo: ZONAS_EXTRA[z],
       created_at: new Date().toISOString(), updated_at: new Date().toISOString()
     });
-    invalidarCache('inventario_snap');
+    invalidarCache('inventario_snap', 'resumen_items_*');
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -9493,7 +9570,7 @@ app.put('/api/extra/:zona/stock/:id', authMiddleware, async (req, res) => {
     if (ingrediente) upd.ingrediente = String(ingrediente).trim();
     if (unidad) upd.unidad = normalizeUnit(unidad);
     await colExtra(z, 'stock').doc(req.params.id).update(upd);
-    invalidarCache('inventario_snap');
+    invalidarCache('inventario_snap', 'resumen_items_*');
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -9503,7 +9580,7 @@ app.delete('/api/extra/:zona/stock/:id', authMiddleware, async (req, res) => {
     const z = String(req.params.zona || '').toLowerCase();
     if (!esZonaExtra(z)) return res.status(400).json({ error: 'Zona inválida' });
     await colExtra(z, 'stock').doc(req.params.id).delete();
-    invalidarCache('inventario_snap');
+    invalidarCache('inventario_snap', 'resumen_items_*');
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
