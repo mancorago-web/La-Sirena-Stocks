@@ -1229,6 +1229,67 @@ async function consolidarDuplicadosStock() {
   return fusionados;
 }
 
+// --- BARRA: CAMBIO DE PRESENTACIÓN / TAMAÑO DE BOTELLA ---
+// Reconoce que dos nombres son el MISMO licor aunque cambie el tamaño (750 ML, 1000 ML, 1 LT...).
+// Se quita el tamaño del nombre y se compara el resto (marca + tipo).
+function nombreSinTamano(nombre) {
+  let n = String(nombre || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  // "X 750 ML", "X 1LT", "X 1.5 L" -> se elimina la "X" y el tamaño
+  n = n.replace(/\bX\s*(?=\d+(?:[.,]\d+)?\s*(?:ML|MLS|LT|LTS|LITROS?|L|CC|OZ|ONZAS?)\b)/g, ' ');
+  // "X ML", "X LT" (sin número)
+  n = n.replace(/\bX\s*(?:ML|MLS|LT|LTS|LITROS?|L|CC|OZ|ONZAS?)\b/g, ' ');
+  // "750 ML", "1000ML", "1 LT", "700 ML." (con o sin número)
+  n = n.replace(/\b\d+(?:[.,]\d+)?\s*(?:ML|MLS|LT|LTS|LITROS?|L|CC|OZ|ONZAS?)\b\.?/g, ' ');
+  return n.replace(/[^A-Z0-9Ñ ]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function tieneTamanoBotella(nombre) {
+  const s = String(nombre || '');
+  return /\b\d+(?:[.,]\d+)?\s*(?:ML|MLS|LT|LTS|LITROS?|L|CC)\b/i.test(s) || /\bX\s*(?:ML|LT|L|LTS)\b/i.test(s);
+}
+function esRecetaBaseNombre(nombre) {
+  return /^\s*R\.?\s*B\.?\b/i.test(String(nombre || ''));
+}
+
+// Sincroniza los ingredientes de las RECETAS de BARRA con la ÚLTIMA presentación comprada de
+// cada licor. Ej.: receta "RON BACARDI ... 750 ML" + última compra "RON BACARDI ... 1000 ML"
+// => el ingrediente pasa a "RON BACARDI ... 1000 ML" (cambia SOLO el nombre; la cantidad y la
+// unidad de la fórmula se mantienen intactas). Así el descuento de stock y el costo usan la
+// botella que realmente se está usando. No toca recetas base (R.B) ni items sin tamaño.
+async function sincronizarRecetasPorTamanoBotella() {
+  const [cSnap, iSnap] = await Promise.all([col('compras').get(), col('receta_ingredientes').get()]);
+  // Última compra de BARRA por licor (base sin tamaño), ordenada por fecha + created_at.
+  const ultima = {};
+  cSnap.docs.forEach(d => {
+    const a = d.data();
+    if (String(a.destino || '').toLowerCase() !== 'barra') return;
+    const nombre = String(a.nombre || '').trim();
+    if (!nombre || !tieneTamanoBotella(nombre) || esRecetaBaseNombre(nombre)) return;
+    const base = nombreSinTamano(nombre);
+    if (!base) return;
+    const orden = String(a.fecha || '') + '|' + String(a.created_at || '');
+    if (!ultima[base] || orden >= ultima[base].orden) ultima[base] = { nombre, orden };
+  });
+  if (!Object.keys(ultima).length) return [];
+  const batch = db.batch();
+  const cambios = [];
+  iSnap.docs.forEach(d => {
+    const a = d.data();
+    const actual = String(a.ingrediente || '').trim();
+    if (!actual || !tieneTamanoBotella(actual) || esRecetaBaseNombre(actual)) return;
+    const base = nombreSinTamano(actual);
+    const u = ultima[base];
+    if (!u) return;
+    if (actual.toUpperCase() === String(u.nombre).trim().toUpperCase()) return;
+    batch.update(d.ref, { ingrediente: u.nombre });
+    cambios.push({ viejo: actual, nuevo: u.nombre });
+  });
+  if (cambios.length) {
+    await batch.commit();
+    invalidarCache('recetas');
+  }
+  return cambios;
+}
+
 // --- COMPRAS: guardado centralizado (enruta a STOCKS o BARRA según el item) ---
 app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
   try {
@@ -1370,6 +1431,14 @@ app.post('/api/compras/guardar', authMiddleware, async (req, res) => {
         grupos.forEach(g => ajustesBarra.push({ nombre: m.ingrediente, delta: m.cantidad, unidad: m.unidad || 'unidad', grupo: g }));
       }
       await ajustarBarraStock(ajustesBarra);
+
+      // Cambio de PRESENTACIÓN (ej. 750 ML -> 1000 ML): las recetas de BARRA deben apuntar a la
+      // última botella comprada del mismo licor, para que el descuento y el costo sean correctos.
+      // Va protegido: si falla, no rompe el guardado de la compra.
+      try {
+        const cambiosTamano = await sincronizarRecetasPorTamanoBotella();
+        if (cambiosTamano.length) console.log('Recetas actualizadas por cambio de botella:', cambiosTamano.length);
+      } catch (e) { console.error('Sync tamaño de botella (recetas):', e.message); }
 
       // Asegurar que los items nuevos existan en barra_precios (Base de Datos de BARRA)
       // para que aparezcan automáticamente en la BASE DE DATOS UNIFICADA.
