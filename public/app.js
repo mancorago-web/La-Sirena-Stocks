@@ -2399,6 +2399,10 @@ function cargarAlmacenes(fecha, preservar) {
         { label: 'CERVEZAS', test: i => /CUSQUE|CORONA|HEINEKEN|PILSEN|^CERVEZA/i.test(i.nombre) },
         { label: 'VINOS', test: i => /MONTGRAS|FAUSTINO|LA CELIA|LUIGI BOSCA|CAROLINA RESERVA|SAUVIGNON|CHARDONNAY|CHARDONAY|PINOT|ALBARIÑO|PROTOS/i.test(i.nombre) },
       ],
+      // REFRIGERADOR DE POSTRES: todos los items van en la sección POSTRES.
+      9: [
+        { label: 'POSTRES', test: () => true },
+      ],
     };
     const defaultCategorias = [
       { label: 'AGUAS', test: i => /^AGUA\s|SAN CARLOS SIN GAS|SAN MATEO SIN GAS|TONIC WATER BRITVIC/i.test(i.nombre) },
@@ -3952,7 +3956,7 @@ function cargarReportes() {
 }
 
 // Grupos internos disponibles para los items de STOCKS (mismos que usa la vista STOCKS).
-const _CATEGORIAS_ITEM = ['VINOS', 'AGUAS', 'GASEOSAS', 'CERVEZAS', 'KOMBUCHAS', 'LECHES', 'LACTEOS', 'BARRA', 'SERVICIO', 'DELIVERY', 'COCINA'];
+const _CATEGORIAS_ITEM = ['VINOS', 'AGUAS', 'GASEOSAS', 'CERVEZAS', 'KOMBUCHAS', 'LECHES', 'LACTEOS', 'BARRA', 'SERVICIO', 'DELIVERY', 'POSTRES', 'COCINA'];
 
 // Unidades de compra y de venta (desplegables con TODAS las opciones visibles).
 const _UNIDADES_COMPRA = ['KILOS', 'GRAMOS', 'LITRO', 'LITROS', 'ML', 'ONZAS', 'UNIDAD', 'BOTELLA', 'GALON', 'HOJAS'];

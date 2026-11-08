@@ -2946,6 +2946,21 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       stocksNorm[norm].push({ item_id: a.item_id, almacen_id: a.almacen_id });
       if (Number(a.item_id) > maxItemId) maxItemId = Number(a.item_id);
     });
+    // Items de STOCK terminados que TAMBIÉN son una receta de COCINA (ej. los postres del
+    // REFRIGERADOR DE POSTRES). El item de inventario guarda `recetas_asociadas` con el/los
+    // nombres exactos de la receta; al vender esa receta se descuenta el postre del almacén.
+    const invPorReceta = {};
+    invSnap.docs.forEach(d => {
+      const a = d.data();
+      const recs = Array.isArray(a.recetas_asociadas)
+        ? a.recetas_asociadas
+        : (a.receta_asociada ? [a.receta_asociada] : []);
+      recs.forEach(n => {
+        const k = normItemName(n);
+        if (k) invPorReceta[k] = { almacen_id: Number(a.almacen_id), item_id: Number(a.item_id), nombre: a.nombre };
+      });
+    });
+    const postresStockVentas = {};
     const matchStocks = (nombre) => {
       const norm = String(nombre || '').trim().toUpperCase().replace(/\s+/g, '');
       if (!norm) return [];
@@ -3111,6 +3126,16 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       for (const v of cocinaVentas) {
         const rec = crecetasMap[String(v.nombre).trim().toUpperCase()];
         const recNombre = rec ? rec.nombre : v.nombre;
+        // Si la receta vendida tiene un POSTRE terminado en STOCK, se acumula para descontarlo
+        // del REFRIGERADOR DE POSTRES (además de sus insumos, que siguen igual que antes).
+        const vinculoPostre = invPorReceta[normItemName(recNombre)] || invPorReceta[normItemName(v.nombre)];
+        if (vinculoPostre) {
+          const vk = vinculoPostre.almacen_id + '_' + vinculoPostre.item_id;
+          if (!postresStockVentas[vk]) postresStockVentas[vk] = { ...vinculoPostre, cantidad: 0 };
+          postresStockVentas[vk].cantidad = Math.round((postresStockVentas[vk].cantidad + (parseFloat(v.cantidad) || 0)) * 100) / 100;
+          if (!Array.isArray(resumen.postresStock)) resumen.postresStock = [];
+          resumen.postresStock.push({ nombre: vinculoPostre.nombre, cantidad: v.cantidad, almacen_id: vinculoPostre.almacen_id });
+        }
         // El PV que llega por las VENTAS de COCINA queda también en la receta de cocina.
         if (rec && parseFloat(v.precio_venta) > 0) {
           batch.update(col('cocina_recetas').doc(rec.id), { precio_venta: Math.round(parseFloat(v.precio_venta) * 100) / 100, updated_at: new Date().toISOString() });
@@ -3127,6 +3152,26 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       }
       await batch.commit();
       invalidarCache('cocina_recetas');
+      // Descontar del REFRIGERADOR DE POSTRES los postres terminados vendidos.
+      // Va protegido: si falla, no rompe el guardado de la venta ni el descuento de insumos.
+      try {
+        const regsPostres = [];
+        for (const vk of Object.keys(postresStockVentas)) {
+          const p = postresStockVentas[vk];
+          const diaIdP = docId('invdiario', fecha, p.almacen_id, p.item_id);
+          const diaP = await col('inventario_diario').doc(diaIdP).get();
+          const curP = diaP.exists ? (parseFloat(diaP.data().total_ventas) || 0) : 0;
+          regsPostres.push({ almacen_id: p.almacen_id, item_id: p.item_id, total_ventas: Math.round((curP + p.cantidad) * 100) / 100 });
+        }
+        if (regsPostres.length) {
+          await guardarDiaInterno(fecha, regsPostres, savedBy);
+          invalidarCache('con_inv_' + fecha, 'inventario_snap');
+        }
+      } catch (ePostre) {
+        console.error('Descuento de postres en STOCK:', ePostre.message);
+        if (!Array.isArray(resumen.errorPostres)) resumen.errorPostres = [];
+        resumen.errorPostres.push(ePostre.message);
+      }
       // El descuento de COCINA/STOCK se hace con protección: si falla por cualquier motivo, NO
       // rompe el guardado ni oculta el aviso (se registra y sigue).
       try {
@@ -3878,6 +3923,28 @@ app.delete('/api/ventas/:id', authMiddleware, async (req, res) => {
         }
       });
       if (borrado) await batch.commit();
+      // Devolver al REFRIGERADOR DE POSTRES el postre terminado asociado a la receta eliminada.
+      try {
+        const nkPostre = normItemName(nombre);
+        const invSnapP = await col('inventario').get();
+        const regsP = [];
+        for (const d of invSnapP.docs) {
+          const a = d.data();
+          const recs = Array.isArray(a.recetas_asociadas) ? a.recetas_asociadas : (a.receta_asociada ? [a.receta_asociada] : []);
+          if (!recs.some(n => normItemName(n) === nkPostre)) continue;
+          const alP = Number(a.almacen_id), itP = Number(a.item_id);
+          const diaIdP = docId('invdiario', fecha, alP, itP);
+          const diaP = await col('inventario_diario').doc(diaIdP).get();
+          const curP = diaP.exists ? (parseFloat(diaP.data().total_ventas) || 0) : 0;
+          regsP.push({ almacen_id: alP, item_id: itP, total_ventas: Math.max(0, Math.round((curP - cantidad) * 100) / 100) });
+        }
+        if (regsP.length) {
+          await guardarDiaInterno(fecha, regsP, savedBy);
+          invalidarCache('con_inv_' + fecha, 'inventario_snap');
+        }
+      } catch (eRevPostre) {
+        console.error('Reverso de postres en STOCK:', eRevPostre.message);
+      }
     }
 
     await logRef.delete();
