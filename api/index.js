@@ -431,6 +431,12 @@ app.get('/api/almacenes/con-inventario', async (req, res) => {
             precio: Math.round(precioItem * 100) / 100,
             saved_by: dia.saved_by || null,
             updated_at: dia.updated_at || null,
+            // Recetas de cocina vinculadas a este item de almacén (ej. los postres del
+            // REFRIGERADOR DE POSTRES). El import de VENTAS las usa para mostrar el almacén
+            // y descontar la cantidad correcta.
+            recetas_asociadas: Array.isArray(inv.recetas_asociadas)
+              ? inv.recetas_asociadas
+              : (inv.receta_asociada ? [inv.receta_asociada] : []),
           };
         });
         return { id: alId, nombre: alDoc.data().nombre, items };
@@ -1163,6 +1169,16 @@ app.get('/api/compras/destino', async (req, res) => {
 // Normaliza el nombre de un item (mayúsculas, sin tildes, sin espacios) para comparar igualdad.
 function normItemName(n) {
   return String(n || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '');
+}
+
+// Multiplicador de PORCIONES de una receta ENTERA: "R.B ... ENTERO X 8 UND" = 8 porciones.
+// Los postres del REFRIGERADOR DE POSTRES llevan su stock en porciones, así que una venta
+// de la torta ENTERA debe descontar 8 (no 1). Las recetas de porción devuelven 1.
+function multiplicadorPorciones(nombre) {
+  const m = String(nombre || '').match(/ENTERO\s*X\s*(\d+(?:[.,]\d+)?)\s*UND/i);
+  if (!m) return 1;
+  const n = parseFloat(String(m[1]).replace(',', '.'));
+  return n > 0 ? n : 1;
 }
 
 // Si existen 2+ items con el MISMO nombre (normalizado) en el MISMO almacén, los fusiona en el de
@@ -3010,7 +3026,9 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         : (a.receta_asociada ? [a.receta_asociada] : []);
       recs.forEach(n => {
         const k = normItemName(n);
-        if (k) invPorReceta[k] = { almacen_id: Number(a.almacen_id), item_id: Number(a.item_id), nombre: a.nombre };
+        if (!k) return;
+        if (!invPorReceta[k]) invPorReceta[k] = [];
+        invPorReceta[k].push({ almacen_id: Number(a.almacen_id), item_id: Number(a.item_id), nombre: a.nombre });
       });
     });
     const postresStockVentas = {};
@@ -3038,6 +3056,10 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       if (cantidad <= 0) continue;
       const destino = String(it.destino || 'stocks').toLowerCase();
       if (destino === 'stocks') {
+        // cantidad = unidades vendidas (lo que muestra el detalle).
+        // cantidad_stock = unidades a descontar del almacén (ej. torta ENTERA = 8 porciones).
+        const cantStockRaw = parseFloat(it.cantidad_stock);
+        const cantidadStock = cantStockRaw > 0 ? cantStockRaw : cantidad;
         const candidatos = matchStocks(nombre);
         let seleccionados;
         if (Array.isArray(it.almacenes) && it.almacenes.length) {
@@ -3060,10 +3082,10 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
           // mismo item en varias líneas el mismo día: ej. INKA COLA x4 y x1). La suma con lo ya
           // registrado se hace UNA sola vez al construir registrosStocks, tras el loop.
           const acumKey = Number(match.almacen_id) + '_' + Number(match.item_id);
-          ventasAcumStocks[acumKey] = Math.round(((ventasAcumStocks[acumKey] || 0) + cantidad) * 100) / 100;
+          ventasAcumStocks[acumKey] = Math.round(((ventasAcumStocks[acumKey] || 0) + cantidadStock) * 100) / 100;
           almacenes.push(match.almacen_id);
         }
-        if (almacenes.length) resumen.stocks.push({ nombre, cantidad, almacenes });
+        if (almacenes.length) resumen.stocks.push({ nombre, cantidad, cantidad_stock: cantidadStock, almacenes, precio_venta: parseFloat(it.precio_venta) || 0, precio_nombre: it.precio_nombre || null });
         else resumen.noEncontrados.push({ nombre, cantidad, destino: 'stocks' });
       } else if (destino === 'barra') {
         ventasBarra.push({ nombre, cantidad, ingredientesStocks: it.ingredientesStocks, precio_venta: parseFloat(it.precio_venta) || 0 });
@@ -3171,6 +3193,40 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       crecSnap.docs.forEach(d => { const a = d.data(); crecetasMap[String(a.nombre).trim().toUpperCase()] = { id: d.id, nombre: a.nombre, categoria: a.categoria || '' }; });
       const cingByRec = {};
       cingSnap.docs.forEach(d => { const a = d.data(); if (!cingByRec[a.receta_id]) cingByRec[a.receta_id] = []; cingByRec[a.receta_id].push(a); });
+      // RELACIÓN R.B -> RECETA DE COCINA: si se vende una receta base (ej. "R.B TARTA ... ENTERO
+      // X 8 UND"), buscamos la receta de cocina que la usa como ingrediente y que SÍ está
+      // asociada a un item de almacén (postre). Así se descuenta el postre aunque el Excel
+      // haya emparejado la línea con la receta base y no con el postre.
+      const crecNombreById = {};
+      crecSnap.docs.forEach(d => { crecNombreById[String(d.id)] = d.data().nombre; });
+      const usosDeIngrediente = {};
+      cingSnap.docs.forEach(d => {
+        const a = d.data();
+        const kIng = normItemName(a.ingrediente);
+        if (!kIng) return;
+        if (!usosDeIngrediente[kIng]) usosDeIngrediente[kIng] = [];
+        usosDeIngrediente[kIng].push({ receta: crecNombreById[String(a.receta_id)] || '', cantidad: parseFloat(a.cantidad) || 0 });
+      });
+      const primerPostre = (k) => {
+        const arr = invPorReceta[k];
+        if (Array.isArray(arr)) return arr.length ? arr[0] : null;
+        return arr || null;
+      };
+      const resolverPostre = (recNombre, nombreExcel) => {
+        // 1) Vínculo directo: la receta vendida está en `recetas_asociadas`.
+        const directo = primerPostre(normItemName(recNombre)) || primerPostre(normItemName(nombreExcel));
+        if (directo) return { ...directo, multiplicador: multiplicadorPorciones(recNombre) };
+        // 2) Vínculo indirecto: la receta vendida es ingrediente de un postre asociado.
+        const usos = usosDeIngrediente[normItemName(recNombre)] || [];
+        for (const u of usos) {
+          const v = primerPostre(normItemName(u.receta));
+          if (v) {
+            const mult = (u.cantidad > 0 ? u.cantidad : 1) * multiplicadorPorciones(recNombre);
+            return { ...v, multiplicador: mult > 0 ? mult : 1 };
+          }
+        }
+        return null;
+      };
       // Lookup de RECETAS BASE de cocina (exacto + prefijo común, ej. "R.B ARROZ COCIDO" -> "R.B ARROZ COCIDO X 1.930 GR")
       const lookupCocina = makeLookupRecetaBase(crecSnap.docs.map(d => ({ id: d.id, ...d.data() })), normNombre);
       const batch = db.batch();
@@ -3181,13 +3237,14 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         const recNombre = rec ? rec.nombre : v.nombre;
         // Si la receta vendida tiene un POSTRE terminado en STOCK, se acumula para descontarlo
         // del REFRIGERADOR DE POSTRES (además de sus insumos, que siguen igual que antes).
-        const vinculoPostre = invPorReceta[normItemName(recNombre)] || invPorReceta[normItemName(v.nombre)];
+        const vinculoPostre = resolverPostre(recNombre, v.nombre);
         if (vinculoPostre) {
           const vk = vinculoPostre.almacen_id + '_' + vinculoPostre.item_id;
+          const cantPostre = Math.round(((parseFloat(v.cantidad) || 0) * (vinculoPostre.multiplicador || 1)) * 100) / 100;
           if (!postresStockVentas[vk]) postresStockVentas[vk] = { ...vinculoPostre, cantidad: 0 };
-          postresStockVentas[vk].cantidad = Math.round((postresStockVentas[vk].cantidad + (parseFloat(v.cantidad) || 0)) * 100) / 100;
+          postresStockVentas[vk].cantidad = Math.round((postresStockVentas[vk].cantidad + cantPostre) * 100) / 100;
           if (!Array.isArray(resumen.postresStock)) resumen.postresStock = [];
-          resumen.postresStock.push({ nombre: vinculoPostre.nombre, cantidad: v.cantidad, almacen_id: vinculoPostre.almacen_id });
+          resumen.postresStock.push({ nombre: vinculoPostre.nombre, cantidad: v.cantidad, cantidad_stock: cantPostre, almacen_id: vinculoPostre.almacen_id });
         }
         // El PV que llega por las VENTAS de COCINA queda también en la receta de cocina.
         if (rec && parseFloat(v.precio_venta) > 0) {
@@ -3263,7 +3320,7 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
     // Log de ventas (detalle)
     if (resumen.stocks.length || resumen.barra.length || resumen.cocina.length) {
       const logBatch = db.batch();
-      resumen.stocks.forEach(r => logBatch.set(col('ventas').doc(), { fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: 'unidad', destino: 'stocks', almacenes: r.almacenes || [], saved_by: savedBy, created_at: new Date().toISOString() }));
+      resumen.stocks.forEach(r => logBatch.set(col('ventas').doc(), { fecha, nombre: r.nombre, cantidad: r.cantidad, cantidad_stock: r.cantidad_stock, unidad: 'unidad', destino: 'stocks', almacenes: r.almacenes || [], precio_venta: r.precio_venta || 0, precio_nombre: r.precio_nombre || null, saved_by: savedBy, created_at: new Date().toISOString() }));
       resumen.barra.forEach(r => logBatch.set(col('ventas').doc(), { fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: 'unidad', destino: 'barra', saved_by: savedBy, created_at: new Date().toISOString() }));
       resumen.cocina.forEach(r => logBatch.set(col('ventas').doc(), { fecha, nombre: r.nombre, cantidad: r.cantidad, unidad: 'unidad', destino: 'cocina', saved_by: savedBy, created_at: new Date().toISOString() }));
       await logBatch.commit();
@@ -3285,7 +3342,9 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
         let opsPv = 0;
         const ahora = new Date().toISOString();
         for (const it of preciosAVenta) {
-          const nombre = String(it.matched || it.nombre || '').trim();
+          // `precio_nombre` conserva el nombre ORIGINAL del Excel (ej. torta ENTERA) para que
+          // su PV no sobrescriba el de la porción ni el del item de almacén.
+          const nombre = String(it.precio_nombre || it.matched || it.nombre || '').trim();
           const pv = Math.round((parseFloat(it.precio_venta) || 0) * 100) / 100;
           if (!nombre || pv <= 0) continue;
           const nk = normV(nombre);
@@ -3302,14 +3361,14 @@ app.post('/api/ventas/guardar', authMiddleware, async (req, res) => {
       // Guardar PRECIOS POR FECHA: respeta EXACTAMENTE lo que trae el Excel del día
       // (incluye precio 0 -> promociones MENU 4x40, cortesías, etc.). Es la fuente
       // de verdad del TOTAL VENTAS de cada fecha. Se reemplaza por completo al reimportar.
-      const todosPrecios = (items || []).filter(i => i && String(i.matched || i.nombre || '').trim() && (parseFloat(i.precio_venta) || 0) >= 0);
+      const todosPrecios = (items || []).filter(i => i && String(i.precio_nombre || i.matched || i.nombre || '').trim() && (parseFloat(i.precio_venta) || 0) >= 0);
       if (todosPrecios.length) {
         const batchPf = db.batch();
         let opsPf = 0;
         const ahoraPf = new Date().toISOString();
         const normP = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
         for (const it of todosPrecios) {
-          const nombre = String(it.matched || it.nombre || '').trim();
+          const nombre = String(it.precio_nombre || it.matched || it.nombre || '').trim();
           const pv = Math.round((parseFloat(it.precio_venta) || 0) * 100) / 100;
           if (!nombre) continue;
           const docId = fecha + '_' + normP(nombre).replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '') || 'x';
@@ -3419,6 +3478,8 @@ app.get('/api/ventas/detalle', async (req, res) => {
     const invSnap = await col('inventario').get();
     const stocksNorm = {};
     const nombreByKey = {};
+    // Recetas de cocina asociadas a un item de almacén (postres del REFRIGERADOR DE POSTRES).
+    const postresAsociados = {};
     invSnap.docs.forEach(d => {
       const a = d.data();
       const norm = String(a.nombre || '').trim().toUpperCase().replace(/\s+/g, '');
@@ -3426,6 +3487,8 @@ app.get('/api/ventas/detalle', async (req, res) => {
       if (!stocksNorm[norm]) stocksNorm[norm] = [];
       stocksNorm[norm].push({ item_id: a.item_id, almacen_id: a.almacen_id });
       nombreByKey[a.item_id + '_' + a.almacen_id] = a.nombre;
+      const recs = Array.isArray(a.recetas_asociadas) ? a.recetas_asociadas : (a.receta_asociada ? [a.receta_asociada] : []);
+      recs.forEach(n => { postresAsociados[normAlfa(n)] = String(a.item_id) + '_' + String(a.almacen_id); });
     });
     const matchStocks = (nombre) => {
       const norm = String(nombre || '').trim().toUpperCase().replace(/\s+/g, '');
@@ -3437,6 +3500,18 @@ app.get('/api/ventas/detalle', async (req, res) => {
     };
 
     const log = await col('ventas').where('fecha', '==', fecha).get();
+    const logMap = {};
+    log.docs.forEach(d => { logMap[d.id] = d.data(); });
+
+    // Si un postre se descontó por una venta de COCINA (sin log propio de STOCKS), esa venta
+    // ya se muestra como COCINA: no se debe duplicar en el grupo de STOCKS del detalle.
+    const cocinaPostreKeys = new Set();
+    log.docs.forEach(d => {
+      const a = d.data();
+      if (a.destino !== 'cocina') return;
+      const kPostre = postresAsociados[normAlfa(a.nombre)];
+      if (kPostre) cocinaPostreKeys.add(kPostre);
+    });
 
     // STOCKS: agrupar por (item, almacen) usando el inventario diario como total
     const dia = await col('inventario_diario').where('fecha', '==', fecha).get();
@@ -3458,7 +3533,25 @@ app.get('/api/ventas/detalle', async (req, res) => {
     });
     Object.keys(stocksGroups).forEach(key => {
       const g = stocksGroups[key];
-      arr.push({ id: 'grp_stocks_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: g.cantidad, unidad: 'unidad', destino: 'stocks', almacenes: [g.almacen_id], item_id: g.item_id, log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at, precio_venta: lookupPrecio(g.nombre) });
+      // Postre descontado por una venta de COCINA: ya aparece en la sección COCINA.
+      if (!g.log_ids.length && cocinaPostreKeys.has(key)) return;
+      let cant = g.cantidad;
+      let precio = lookupPrecio(g.nombre);
+      if (g.log_ids.length) {
+        // La cantidad VENDIDA puede diferir de la descontada del stock (ej. torta entera = 1
+        // vendida / 8 porciones descontadas). El log guarda la cantidad real vendida.
+        const logs = g.log_ids.map(id => logMap[id]).filter(Boolean);
+        const cantLog = logs.reduce((s, l) => s + (parseFloat(l.cantidad) || 0), 0);
+        if (cantLog > 0) cant = Math.round(cantLog * 100) / 100;
+        // Precio real del día: el del log (permite distinguir ENTERA vs PORCIÓN del mismo item).
+        const conPrecio = logs.filter(l => l.precio_venta !== undefined && l.precio_venta !== null);
+        if (conPrecio.length) {
+          const tc = conPrecio.reduce((s, l) => s + (parseFloat(l.cantidad) || 0), 0);
+          const ti = conPrecio.reduce((s, l) => s + (parseFloat(l.cantidad) || 0) * (parseFloat(l.precio_venta) || 0), 0);
+          precio = tc > 0 ? Math.round((ti / tc) * 100) / 100 : (parseFloat(conPrecio[0].precio_venta) || 0);
+        }
+      }
+      arr.push({ id: 'grp_stocks_' + key, grupo: true, fecha, nombre: g.nombre, cantidad: cant, unidad: 'unidad', destino: 'stocks', almacenes: [g.almacen_id], item_id: g.item_id, log_ids: g.log_ids, saved_by: g.saved_by, created_at: g.created_at, precio_venta: precio });
     });
 
     // BARRA: agrupar por receta
@@ -3924,6 +4017,9 @@ app.delete('/api/ventas/:id', authMiddleware, async (req, res) => {
         }
       }
       const almacenes = Array.isArray(log.almacenes) && log.almacenes.length ? log.almacenes.map(Number) : [];
+      // Revertir la cantidad realmente descontada del stock (torta ENTERA = 8 porciones).
+      const cantStockLog = parseFloat(log.cantidad_stock);
+      const cantidadStock = cantStockLog > 0 ? cantStockLog : cantidad;
       const registros = [];
       for (const alId of almacenes) {
         const match = cands.find(c => Number(c.almacen_id) === alId);
@@ -3931,7 +4027,7 @@ app.delete('/api/ventas/:id', authMiddleware, async (req, res) => {
           const diaId = docId('invdiario', fecha, match.almacen_id, match.item_id);
           const diaSnap = await col('inventario_diario').doc(diaId).get();
           const cur = diaSnap.exists ? (parseFloat(diaSnap.data().total_ventas) || 0) : 0;
-          const nuevo = Math.max(0, cur - cantidad);
+          const nuevo = Math.max(0, cur - cantidadStock);
           registros.push({ almacen_id: match.almacen_id, item_id: match.item_id, total_ventas: nuevo });
         }
       }
@@ -3994,7 +4090,9 @@ app.delete('/api/ventas/:id', authMiddleware, async (req, res) => {
           const diaIdP = docId('invdiario', fecha, alP, itP);
           const diaP = await col('inventario_diario').doc(diaIdP).get();
           const curP = diaP.exists ? (parseFloat(diaP.data().total_ventas) || 0) : 0;
-          regsP.push({ almacen_id: alP, item_id: itP, total_ventas: Math.max(0, Math.round((curP - cantidad) * 100) / 100) });
+          // Devolver las PORCIONES descontadas (torta ENTERA = 8), no las unidades vendidas.
+          const cantPostreRev = cantidad * multiplicadorPorciones(nombre);
+          regsP.push({ almacen_id: alP, item_id: itP, total_ventas: Math.max(0, Math.round((curP - cantPostreRev) * 100) / 100) });
         }
         if (regsP.length) {
           await guardarDiaInterno(fecha, regsP, savedBy);

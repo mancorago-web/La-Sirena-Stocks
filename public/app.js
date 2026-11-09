@@ -1504,6 +1504,20 @@ function analizarVentas(esPrueba) {
       });
     });
     window._ventasImportStocks = stocksPorNombre;
+    // POSTRES del REFRIGERADOR: items de almacén vinculados a recetas de cocina (recetas_asociadas).
+    // Al vender una de esas recetas, la venta se registra en STOCKS y descuenta el postre.
+    const postrePorReceta = {};
+    (invData || []).forEach(a => {
+      (a.items || []).forEach(it => {
+        const recs = Array.isArray(it.recetas_asociadas) ? it.recetas_asociadas : [];
+        if (!recs.length) return;
+        const info = { almacen_id: a.id, almacen_nombre: a.nombre, item_nombre: it.nombre };
+        recs.forEach(n => { const k = norm(n); if (k && !postrePorReceta[k]) postrePorReceta[k] = info; });
+        const kItem = norm(it.nombre);
+        if (kItem && !postrePorReceta[kItem]) postrePorReceta[kItem] = info;
+      });
+    });
+    window._ventasImportPostres = postrePorReceta;
     window._ventasImportBarraRecetas = barraRec || [];
     const stockNombres = (stockItems || []).filter(n => !esBasura(n));
     const uniq = {};
@@ -1603,10 +1617,39 @@ function analizarVentas(esPrueba) {
         nuevos.push(i);
       }
       if (!i.emparejado && !i.sinEmparejar) i.matched = i.nombre;
+      // POSTRES del REFRIGERADOR: la receta vendida está asociada a un item de almacén.
+      // Se fuerza el destino STOCKS, se muestra el almacén/cantidad y se calcula cuántas
+      // PORCIONES descontar (torta ENTERA X 8 UND = 8; porción = 1).
+      const postreInfo = postrePorReceta[norm(i.matched || '')] || postrePorReceta[norm(i.nombre)];
+      if (postreInfo) {
+        i.destino = 'stocks';
+        i.postre = true;
+        i.stocks_item = postreInfo.item_nombre;
+        i.postre_almacen = postreInfo.almacen_id;
+        i.stock_por_und = multiplicadorPorciones(i.matched || i.nombre);
+        i.emparejado = true;
+        i.sinEmparejar = false;
+        i.nuevo = false;
+        const idxNuevo = nuevos.indexOf(i);
+        if (idxNuevo >= 0) nuevos.splice(idxNuevo, 1);
+      }
     });
     const byKey = {};
     items.forEach(i => { byKey[norm(i.nombre)] = i; });
-    filas.forEach(r => { const i = byKey[norm(r.item)]; if (i) { r.destino = i.destino; r.matched = i.matched || i.nombre; } });
+    filas.forEach(r => {
+      const i = byKey[norm(r.item)];
+      if (!i) return;
+      r.destino = i.destino;
+      r.matched = i.matched || i.nombre;
+      if (i.postre) {
+        // `stock_item`: item de almacén que se descuenta (para el selector de almacén y el log).
+        // `stock_por_und`: porciones a descontar por unidad vendida (ENTERA = 8).
+        // `precio_nombre`: nombre original del Excel para no mezclar el PV de entera y porción.
+        r.stock_item = i.stocks_item;
+        r.stock_por_und = i.stock_por_und || 1;
+        r.precio_nombre = r.item;
+      }
+    });
     window._ventasImportCtx = { barraNombres, cocinaNombres, stockNombres };
     window._ventasImportFecha = (filas[0] && filas[0].fecha) || todayStr();
     renderVentasAsignacion(items, esPrueba ? 'ventas-import-prueba-preview' : 'ventas-import-preview');
@@ -1658,8 +1701,12 @@ function renderVentasAsignacion(items, containerId) {
       }
       return '<td style="color:#999;">—</td>';
     }
-    const nombre = i.matched || i.nombre;
-    return '<td class="celda-almacen">' + buildAlmacenSelect(nombre) + '</td>';
+    const nombre = (i.postre && i.stocks_item) ? i.stocks_item : (i.matched || i.nombre);
+    const selAl = buildAlmacenSelect(nombre, i.postre ? i.postre_almacen : null);
+    const notaPostre = i.postre
+      ? '<div style="font-size:0.72rem;color:#6d4c41;margin-top:0.15rem;">Postre: descuenta <b>' + (i.stock_por_und || 1) + '</b> porción(es) por unidad vendida</div>'
+      : '';
+    return '<td class="celda-almacen">' + selAl + notaPostre + '</td>';
   };
   // VALIDACIÓN del importe contra el RESUMEN del Excel (detecta errores de precio/consolidación solos)
   const sumaItems = items.reduce((s, i) => s + (parseFloat(i.cantidad) || 0) * (parseFloat(i.precio_venta) || 0), 0);
@@ -1682,7 +1729,7 @@ function renderVentasAsignacion(items, containerId) {
       '<span style="color:#888;font-size:0.85rem;">(detectado del RESUMEN del informe; se resta del TOTAL VENTAS — ajústalo si hace falta)</span>' +
     '</div>' +
     '<div class="table-wrap ventas-import-wrap"><table class="tabla-import-ventas"><thead><tr><th>Item (Excel)</th><th>Cant.</th><th>P. Venta</th><th>Destino</th><th>Emparejar con</th><th>Almacén (STOCKS)</th></tr></thead><tbody>' +
-    items.map(i => `<tr>
+    items.map(i => `<tr data-stock-item="${i.postre ? esc(i.stocks_item) : ''}" data-postre="${i.postre ? '1' : ''}" data-stock-por-und="${i.postre ? (i.stock_por_und || 1) : ''}" data-stock-almacen="${i.postre ? (i.postre_almacen || '') : ''}">
       <td>${esc(i.nombre)}${i.sinEmparejar ? ' <span style="color:#c62828;" title="Sin emparejar">*</span>' : ''}</td>
       <td>${i.cantidad}</td>
       <td>${parseFloat(i.precio_venta) > 0 ? 'S/' + (parseFloat(i.precio_venta) || 0).toFixed(2) : '—'}</td>
@@ -1730,6 +1777,15 @@ function categoriaRecetaCocina(nombre) {
   if (up.startsWith('POSTRE MENU')) return 'POSTRES MENU';
   if (up.startsWith('LIMONADA MENU')) return 'LIMONADA MENU';
   return 'PLATOS';
+}
+
+// Multiplicador de PORCIONES de una receta ENTERA ("... ENTERO X 8 UND" = 8). Los postres del
+// REFRIGERADOR DE POSTRES llevan stock en porciones; una torta entera descuenta 8, no 1.
+function multiplicadorPorciones(nombre) {
+  const m = String(nombre || '').match(/ENTERO\s*X\s*(\d+(?:[.,]\d+)?)\s*UND/i);
+  if (!m) return 1;
+  const n = parseFloat(String(m[1]).replace(',', '.'));
+  return n > 0 ? n : 1;
 }
 
 // Nombres basura que vienen del EXCEL (artefactos) y no deben auto-emparejarse en STOCKS
@@ -1823,13 +1879,13 @@ function candidatosTodos(nombre, destino) {
 }
 
 // Selector de almacén para items de STOCKS (muestra cuántos hay en cada almacén)
-function buildAlmacenSelect(nombre) {
+function buildAlmacenSelect(nombre, defaultAlmacen) {
   const stocks = window._ventasImportStocks || {};
   const norm = (s) => String(s || '').trim().toUpperCase().replace(/[\u2018\u2019\u201A\u201C\u201D\u00B4]/g, "'").replace(/\s+/g, ' ');
-  const list = stocks[norm(nombre)] || [];
+  const list = (stocks[norm(nombre)] || []).slice().sort((a, b) => (Number(b.cantidad) || 0) - (Number(a.cantidad) || 0));
   if (!list.length) return '<span style="color:#c62828;">Sin stock</span>';
   return '<select class="select-almacen-import" style="padding:0.3rem;border:1px solid #ccc;border-radius:4px;">' +
-    list.map(al => '<option value="' + al.almacen_id + '">' + esc(al.almacen_nombre) + ' (' + al.cantidad + ')</option>').join('') + '</select>';
+    list.map(al => '<option value="' + al.almacen_id + '"' + (defaultAlmacen && Number(al.almacen_id) === Number(defaultAlmacen) ? ' selected' : '') + '>' + esc(al.almacen_nombre) + ' (' + al.cantidad + ')</option>').join('') + '</select>';
 }
 
 // Selector de almacén para un INGREDIENTE de receta que es item de STOCKS (ej. CORONA X 330 ML)
@@ -1852,9 +1908,15 @@ function actualizarAlmacenImport(tr) {
   const destino = radio ? radio.value : 'stocks';
   if (destino !== 'stocks') { cell.innerHTML = '<span style="color:#999;">—</span>'; return; }
   const sel = tr.querySelector('.select-match-import');
+  const stockItem = tr.dataset.stockItem || '';
   let nombre = tr.querySelector('td') ? tr.querySelector('td').textContent.replace(/ *\*?$/, '').trim() : '';
-  if (sel && sel.value && sel.value !== '__excel__' && sel.value !== '__nuevo__') nombre = sel.value;
-  cell.innerHTML = buildAlmacenSelect(nombre);
+  // En postres, el nombre para el selector de almacén es el ITEM de stock (no la receta vendida).
+  if (stockItem) nombre = stockItem;
+  else if (sel && sel.value && sel.value !== '__excel__' && sel.value !== '__nuevo__') nombre = sel.value;
+  const nota = tr.dataset.postre === '1'
+    ? '<div style="font-size:0.72rem;color:#6d4c41;margin-top:0.15rem;">Postre: descuenta <b>' + (tr.dataset.stockPorUnd || 1) + '</b> porción(es) por unidad vendida</div>'
+    : '';
+  cell.innerHTML = buildAlmacenSelect(nombre, tr.dataset.stockAlmacen || null) + nota;
 }
 
 function guardarVentasPrueba() {
@@ -2098,7 +2160,13 @@ function registrarVentasFilas(filas, onDone) {
     const destino = r.destino || 'stocks';
     const key = fecha + '|' + destino;
     if (!grupos[key]) grupos[key] = [];
-    grupos[key].push({ nombre: r.matched || r.item, cantidad: r.cantidad, destino, almacenes: r.almacenes, ingredientesStocks: r.ingredientesStocks, precio_venta: r.precio_venta || 0 });
+    const cantNum = parseFloat(r.cantidad) || 0;
+    const porUnd = parseFloat(r.stock_por_und);
+    const cantidadStock = (destino === 'stocks' && porUnd > 0) ? Math.round(cantNum * porUnd * 100) / 100 : undefined;
+    // En postres, el nombre que se descuenta es el ITEM de almacén; el nombre original del
+    // Excel viaja en `precio_nombre` para guardar su PV sin mezclarlo con la porción.
+    const nombreVenta = (destino === 'stocks' && r.stock_item) ? r.stock_item : (r.matched || r.item);
+    grupos[key].push({ nombre: nombreVenta, cantidad: r.cantidad, destino, almacenes: r.almacenes, ingredientesStocks: r.ingredientesStocks, precio_venta: r.precio_venta || 0, cantidad_stock: cantidadStock, precio_nombre: r.precio_nombre || undefined });
   });
   let keys = Object.keys(grupos);
   if (!keys.length) { if (onDone) onDone(); return; }
@@ -11066,7 +11134,7 @@ function agregarVenta() {
     // Venta de BARRA/STOCK: descontar directo el item de barra_stock
     items.push({ nombre, cantidad, destino: 'barra', desdeBarraStock: true });
   } else {
-    items.push({ nombre, cantidad, destino, almacenes });
+    items.push({ nombre, cantidad, destino, almacenes, cantidad_stock: Math.round(cantidad * multiplicadorPorciones(nombre) * 100) / 100 });
   }
   // Esta operación SUMA al valor actual (cur + cantidad), así que ante un timeout NO se
   // reintenta automáticamente (evita duplicar la venta). Solo se advierte con claridad.
