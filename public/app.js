@@ -2461,7 +2461,14 @@ function cargarAlmacenes(fecha, preservar) {
     // Si hay una busqueda activa, NO ocultar los items con stock 0 (para encontrarlos y evitar duplicados)
     const buscarTerm = (document.getElementById('buscar-item')?.value || '').trim();
     if (_ocultarCero && !buscarTerm) {
-      data = (data || []).map(a => ({ ...a, items: (a.items || []).filter(i => (i.stock_apertura || 0) !== 0 || (i.stock_cierre || 0) !== 0) }));
+      // Los POSTRES del REFRIGERADOR (items con recetas asociadas) se muestran SIEMPRE,
+      // incluso con stock 0: si se ocultan al venderse todo, no se pueden volver a contar
+      // ni cargar producción. El resto sigue respetando el filtro de stock 0.
+      const esPostre = (i) => Array.isArray(i.recetas_asociadas) && i.recetas_asociadas.length > 0;
+      data = (data || []).map(a => ({
+        ...a,
+        items: (a.items || []).filter(i => esPostre(i) || (i.stock_apertura || 0) !== 0 || (i.stock_cierre || 0) !== 0),
+      }));
     }
     const categoriasPorAlmacen = {
       1: [
